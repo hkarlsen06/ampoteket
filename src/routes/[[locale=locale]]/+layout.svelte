@@ -1,0 +1,288 @@
+<script lang="ts">
+	import Icon from '$lib/Icon.svelte';
+	import ShoppingCartIcon from 'phosphor-svelte/lib/ShoppingCartIcon';
+	import ListIcon from 'phosphor-svelte/lib/ListIcon';
+	import CpuIcon from 'phosphor-svelte/lib/CpuIcon';
+	import WrenchIcon from 'phosphor-svelte/lib/WrenchIcon';
+	import TranslateIcon from 'phosphor-svelte/lib/TranslateIcon';
+	import XIcon from 'phosphor-svelte/lib/XIcon';
+	import QrCodeIcon from 'phosphor-svelte/lib/QrCodeIcon';
+	import { onMount, setContext, untrack } from 'svelte';
+	import { AdminContext, setAdminContext } from '$lib/admin-context.svelte';
+	import { Button } from '$lib/components/ui/button';
+	import { Badge } from '$lib/components/ui/badge';
+	import { Separator } from '$lib/components/ui/separator';
+	import { pageContainer } from '$lib/ui';
+	import * as Collapsible from '$lib/components/ui/collapsible';
+	import * as Tooltip from '$lib/components/ui/tooltip';
+	import { createCartStore, setCartContext } from '$lib/cart';
+	import Scanner from '$lib/Scanner.svelte';
+	import { isPrivateRoute } from '$lib/private-route';
+	import { afterNavigate } from '$app/navigation';
+	import { page } from '$app/state';
+	import {
+		htmlLang,
+		localeFromPathname,
+		localizeCurrentUrl,
+		localizeHref,
+		locales,
+		messagesFor,
+		ogLocale,
+		PROD_ORIGIN,
+		SOCIAL_CARD,
+		setI18n,
+		stripLocale,
+		type I18n
+	} from '$lib/i18n';
+
+	let { data, children } = $props();
+
+	// One context for the whole tree: current locale, its messages, and a link
+	// rewriter. Getters keep it reactive across client-side navigation.
+	const i18n: I18n = setI18n({
+		get locale() {
+			return data.locale;
+		},
+		get m() {
+			return messagesFor(data.locale);
+		},
+		href: (path: string) => localizeHref(path, data.locale)
+	});
+	const m = $derived(i18n.m);
+	// One browser Auth client is shared by the header and all admin pages.
+	const admin = setAdminContext(untrack(() => new AdminContext(data.adminConfig, data.callbackOrigin)));
+	onMount(() => admin.start());
+	function checkAccess() { if (document.visibilityState === 'visible') void admin.refresh(); }
+
+	/** Current path with the locale prefix removed, so the picker can swap it. */
+	const bare = $derived(stripLocale(page.url.pathname));
+	const privatePage = $derived(isPrivateRoute(page.route.id, page.url.pathname));
+	const buyerScanPage = $derived(bare === '/' || bare === '/p' || bare.startsWith('/p/') || bare === '/cart');
+
+	/** Always the production URL, never a preview origin — see PROD_ORIGIN. */
+	const canonical = $derived(PROD_ORIGIN + localizeHref(bare, data.locale));
+
+	// A layout-owned store is shared with product/cart pages, never across SSR requests.
+	const cart = setCartContext(createCartStore());
+	onMount(() => cart.start());
+	const cartCount = $derived($cart.status === 'ready' ? $cart.lines.length : null);
+
+	// `<html lang>` is rendered by hooks.server.ts; keep it right after a
+	// client-side navigation between languages.
+	$effect(() => {
+		document.documentElement.lang = htmlLang[localeFromPathname(page.url.pathname)];
+	});
+
+	const nav = $derived([
+		{ href: '/p', label: m.header.parts, icon: CpuIcon },
+		{ href: '/cart', label: m.header.cart, icon: ShoppingCartIcon }
+	]);
+	const adminLink = $derived({ href: '/admin', label: m.header.admin, icon: WrenchIcon });
+	// Admin comes last in the phone menu and first in the desktop header row, so a
+	// session check never moves the catalog link.
+	const menuLinks = $derived(admin.status === 'ready' ? [nav[0], adminLink] : [nav[0]]);
+	const headerLinks = $derived(admin.status === 'ready' ? [adminLink, nav[0]] : [nav[0]]);
+
+	function isCurrent(href: string) {
+		return bare === href || bare.startsWith(href + '/');
+	}
+
+	// Above 40rem the header row holds the wordmark, catalog/admin/cart icons and the
+	// menu button; the menu holds the scanner and the language picker. On phones the
+	// destinations move into the menu and the scanner floats (Scanner.svelte).
+	// Pure enhancement — `html.no-js` (src/app.html) hides the button and leaves
+	// the menu open, so the links are reachable without JavaScript.
+	let menuOpen = $state(false);
+	let headerEl: HTMLElement | undefined = $state();
+	let menuButton = $state<HTMLButtonElement | null>(null);
+
+	// Following a link leaves the menu behind, including on client-side navigation.
+	afterNavigate(() => {
+		menuOpen = false;
+	});
+
+	function onKeydown(event: KeyboardEvent) {
+		if (event.key !== 'Escape' || !menuOpen) return;
+		menuOpen = false;
+		menuButton?.focus();
+	}
+
+	let scanner = $state<Scanner>();
+	// The home hero docks its own phone trigger for the same dialog.
+	setContext('scanner', () => scanner?.show());
+	function openScanner() {
+		// Focus the menu button first: the dialog returns focus there, not to the hidden menu row.
+		menuOpen = false;
+		menuButton?.focus();
+		scanner?.show();
+	}
+
+	function onPointerdown(event: PointerEvent) {
+		if (menuOpen && !headerEl?.contains(event.target as Node)) menuOpen = false;
+	}
+</script>
+
+<svelte:window onkeydown={onKeydown} onpointerdown={onPointerdown} onfocus={checkAccess} />
+<svelte:document onvisibilitychange={checkAccess} />
+
+<svelte:head>
+	{#if privatePage}
+		<meta name="robots" content="noindex, nofollow" />
+		<meta name="referrer" content="no-referrer" />
+	{:else}
+	<link rel="canonical" href={canonical} />
+	{#each locales as loc (loc)}
+		<link
+			rel="alternate"
+			hreflang={htmlLang[loc]}
+			href={PROD_ORIGIN + localizeHref(bare, loc)}
+		/>
+	{/each}
+	<link rel="alternate" hreflang="x-default" href={PROD_ORIGIN + bare} />
+
+	<!-- Link previews. Without these, ampoteket.no pasted into a chat renders as a
+	     bare grey link — the most-seen unstyled surface the site has. og:title and
+	     og:description are per page, beside that page's <title>. -->
+	<meta property="og:type" content="website" />
+	<meta property="og:site_name" content="Ampoteket" />
+	<meta property="og:url" content={canonical} />
+	<meta property="og:locale" content={ogLocale[data.locale]} />
+	{#each locales.filter((loc) => loc !== data.locale) as loc (loc)}
+		<meta property="og:locale:alternate" content={ogLocale[loc]} />
+	{/each}
+	<meta property="og:image" content={PROD_ORIGIN + SOCIAL_CARD} />
+	<meta property="og:image:type" content="image/jpeg" />
+	<meta property="og:image:width" content="1200" />
+	<meta property="og:image:height" content="630" />
+	<meta property="og:image:alt" content={m.social.imageAlt} />
+	<meta name="twitter:card" content="summary_large_image" />
+	{/if}
+</svelte:head>
+
+<a class="absolute -top-25 left-[var(--gutter)] z-100 rounded-md bg-warning px-4 py-3 font-bold text-on-warning no-underline focus:top-3" href="#main">{m.header.skip}</a>
+
+<header class="site-header sticky top-0 z-40 bg-card" bind:this={headerEl}>
+	<div class={pageContainer({ class: "max-w-none px-5 flex min-h-[var(--header-h)] items-center gap-4 py-2 phone:gap-3 phone:py-1 no-js:flex-wrap" })}>
+		<a class={['mr-auto inline-flex min-h-11 min-w-0 items-center rounded-md font-extrabold text-foreground no-underline', bare === '/' && 'lg:mr-0']} href={i18n.href('/')} aria-label={m.header.home}>
+			<img class="h-auto w-44 brightness-50 saturate-[1.9] dark:brightness-100 dark:saturate-100 phone:w-36" src="/brand/wordmark-flat.png" alt="Ampoteket" width="756" height="139" />
+		</a>
+		{#if bare === '/'}
+			<!-- Homepage only: a short LED bar graph beside the wordmark that lights up as the page scrolls. Decorative. -->
+			<span class="relative mr-auto ml-8 hidden h-6 w-40 lg:block" aria-hidden="true">
+				<span class="absolute inset-0 bg-[repeating-linear-gradient(90deg,var(--border)_0_2px,transparent_2px_6px)]"></span>
+				<span class="scroll-meter absolute inset-0 bg-[repeating-linear-gradient(90deg,var(--primary)_0_2px,transparent_2px_6px)] motion-reduce:hidden"></span>
+			</span>
+		{/if}
+		<Tooltip.Provider>
+			{#each headerLinks as item (item.href)}
+				<Tooltip.Root>
+					<Tooltip.Trigger>
+						{#snippet child({ props })}
+							<Button {...props} href={i18n.href(item.href)} variant={isCurrent(item.href) ? 'secondary' : 'ghost'} size="icon-sm"
+								class="shrink-0 aria-[current=page]:border-border phone:hidden"
+								aria-label={item.label}
+								aria-current={isCurrent(item.href) ? 'page' : undefined}><Icon icon={item.icon} class="size-5" aria-hidden="true" /></Button>
+						{/snippet}
+					</Tooltip.Trigger>
+					<Tooltip.Content side="bottom">{item.label}</Tooltip.Content>
+				</Tooltip.Root>
+			{/each}
+			<Tooltip.Root>
+				<Tooltip.Trigger>
+					{#snippet child({ props })}
+						<Button {...props} href={i18n.href('/cart')} variant={isCurrent('/cart') ? 'secondary' : 'ghost'} size="icon-sm"
+							class="header-cart shrink-0 aria-[current=page]:border-border"
+							aria-current={isCurrent('/cart') ? 'page' : undefined}>
+							<span class="relative inline-flex" aria-hidden="true">
+								<Icon icon={ShoppingCartIcon} class="size-5" />
+								<!-- A neutral count, only when there is something to count; red means error or empty stock. -->
+								{#if $cart.status !== 'initializing' && cartCount !== 0}<Badge class="absolute -top-2.5 -right-3.5 h-6 min-w-6 border-2 border-card bg-foreground px-1 font-mono text-background">{cartCount ?? '?'}</Badge>{/if}
+							</span>
+							<span class="sr-only">{m.header.cart}{cartCount !== null
+								? m.header.cartLines(cartCount)
+								: $cart.status === 'initializing' ? m.header.cartLoading : m.header.cartUnavailable}</span>
+						</Button>
+					{/snippet}
+				</Tooltip.Trigger>
+				<Tooltip.Content side="bottom">{m.header.cart}</Tooltip.Content>
+			</Tooltip.Root>
+		</Tooltip.Provider>
+		{#if buyerScanPage}<Scanner bind:this={scanner} config={data.adminConfig} />{/if}
+		<!-- Desktop: a floating panel hanging from the header under the button. Phone: a full-width panel under the header bar. -->
+		<Collapsible.Root bind:open={menuOpen} class="relative flex phone:static no-js:contents">
+			<Collapsible.Trigger>
+				{#snippet child({ props })}
+					<Button {...props} variant="ghost" size="icon" class="menu-toggle no-js:hidden" bind:ref={menuButton} aria-label={m.header.menuToggle}>
+						{#if menuOpen}<Icon icon={XIcon} class="size-5" aria-hidden="true" />{:else}<Icon icon={ListIcon} class="size-5" aria-hidden="true" />{/if}
+					</Button>
+				{/snippet}
+			</Collapsible.Trigger>
+			<Collapsible.Content forceMount id="site-menu" class="menu absolute top-[calc(50%+var(--header-h)/2+1px)] right-0 z-10 hidden w-64 rounded-lg border bg-card p-2 shadow-card data-[state=open]:block phone:inset-x-0 phone:top-full phone:w-auto phone:rounded-none phone:border-0 phone:px-[calc(var(--gutter)-0.75rem)] phone:pt-2 phone:pb-3 phone:shadow-none no-js:relative no-js:inset-auto no-js:block no-js:w-full no-js:rounded-none no-js:border-0 no-js:px-0 no-js:pt-2 no-js:pb-3 no-js:shadow-none">
+			<Separator class="absolute inset-x-0 top-0 hidden no-js:block" />
+			<!-- Desktop has these links in the header row. -->
+			<nav class="site-nav hidden phone:block" aria-label={m.header.menu}>
+				<ul class="m-0 flex list-none flex-col p-0">
+					{#each menuLinks as item (item.href)}
+						<li>
+							<Button
+								href={i18n.href(item.href)}
+								variant={isCurrent(item.href) ? 'secondary' : 'ghost'}
+								class="w-full justify-start px-3 aria-[current=page]:border-border"
+								aria-current={isCurrent(item.href) ? 'page' : undefined}
+							><Icon icon={item.icon} class="size-5" />{item.label}</Button>
+						</li>
+					{/each}
+				</ul>
+			</nav>
+			{#if buyerScanPage}
+				<Button variant="ghost" class="w-full justify-start px-3 phone:hidden no-js:hidden" aria-haspopup="dialog" onclick={openScanner}>
+					<Icon icon={QrCodeIcon} class="size-5" aria-hidden="true" />{m.scanner.open}
+				</Button>
+			{/if}
+			<!-- Divided from whatever is visible above it: the phone links, or the desktop scanner row. -->
+			<nav class={['relative flex items-center', buyerScanPage ? 'mt-2 pt-2 no-js:not-phone:mt-0 no-js:not-phone:pt-0' : 'phone:mt-2 phone:pt-2']} aria-label={m.header.language}>
+				<Separator class={['absolute inset-x-0 top-0', buyerScanPage ? 'no-js:not-phone:hidden' : 'hidden phone:block']} />
+				<Icon icon={TranslateIcon} class="mx-3 size-5" />
+				<ul class="m-0 flex list-none items-center gap-1 p-0">
+					{#each locales as loc (loc)}
+						<li>
+							<Button
+								variant="ghost"
+								class="px-3 aria-[current=true]:underline aria-[current=true]:decoration-2 aria-[current=true]:underline-offset-4"
+								href={localizeCurrentUrl(bare, privatePage ? '' : page.url.search, loc)}
+								hreflang={htmlLang[loc]}
+								lang={htmlLang[loc]}
+								aria-current={loc === data.locale ? 'true' : undefined}
+							>{messagesFor(loc).locale.name}</Button>
+						</li>
+					{/each}
+				</ul>
+			</nav>
+			<Separator class="absolute inset-x-0 bottom-0 hidden phone:block no-js:phone:hidden" />
+			</Collapsible.Content>
+		</Collapsible.Root>
+	</div>
+	<Separator />
+</header>
+
+<main id="main" tabindex="-1" class="min-h-[calc(100dvh-var(--header-h))] flex-[1_0_auto] outline-none">
+	{@render children()}
+</main>
+
+<footer class="site-footer bg-card text-sm text-muted-foreground">
+	<Separator />
+	<div class={pageContainer({ class: "max-w-none px-5 flex flex-wrap items-center gap-x-8 gap-y-1 py-3" })}>
+		<div class="inline-flex items-center gap-2.5 font-extrabold text-foreground">
+			<img class="rounded-sm" src="/brand/mark-square-64.png" alt="" width="28" height="28" />
+			<span>Ampoteket</span>
+		</div>
+		<nav aria-label={m.footer.links}>
+			<ul class="m-0 flex list-none flex-wrap gap-x-5 p-0 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:items-center [&_a]:text-foreground">
+				{#each nav as item (item.href)}
+					<li><a href={i18n.href(item.href)}>{item.label}</a></li>
+				{/each}
+				<li><a href={i18n.href('/admin')}>{m.header.admin}</a></li>
+			</ul>
+		</nav>
+	</div>
+</footer>

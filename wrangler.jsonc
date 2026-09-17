@@ -1,0 +1,19 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "ampoteket",
+	"compatibility_date": "2026-09-18",
+	"compatibility_flags": ["nodejs_als"],
+	"main": ".svelte-kit/cloudflare/_worker.js",
+	"assets": {
+		"binding": "ASSETS",
+		"directory": ".svelte-kit/cloudflare"
+	},
+	"workers_dev": false,
+	"preview_urls": true,
+	"ratelimits": [
+		{ "name": "CHECKOUT_SESSION_LIMIT", "namespace_id": "4732201", "simple": { "limit": 20, "period": 60 } },
+		{ "name": "CHECKOUT_OPERATION_LIMIT", "namespace_id": "4732202", "simple": { "limit": 120, "period": 60 } }
+	]
+	// Secrets (SUPABASE_SECRET_KEY, …) are never written here: use `wrangler secret put`
+	// in production and `.dev.vars` locally. See docs/website-guide.md §1.1.
+}

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="%lang%" class="no-js">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<!-- Dark first, light when the operating system asks for it. No in-page toggle. -->
+		<meta name="color-scheme" content="dark light" />
+		<!-- Browser chrome on phones, matching --card (the header) in each
+		     scheme. app.html cannot read CSS custom properties, so these two are
+		     the one place outside app.css that repeats a token value; change them
+		     together with --card. -->
+		<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0d0d0e" />
+		<meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+		<!-- Scripting is a given for almost everyone, so the phone header collapses
+		     into a menu button. This runs before the first paint, so the header is
+		     never drawn in the wrong state; without it the menu stays open and the
+		     button stays hidden (see the header styles in the locale layout). -->
+		<script>
+			document.documentElement.classList.remove('no-js');
+		</script>
+		<link rel="icon" href="%sveltekit.assets%/brand/mark-square-64.png" type="image/png" sizes="64x64" />
+		<link rel="apple-touch-icon" href="%sveltekit.assets%/brand/mark-square-180.png" />
+		<link rel="preload" href="%sveltekit.assets%/fonts/DSEG7Classic-Bold.woff2" as="font" type="font/woff2" crossorigin />
+		%sveltekit.head%
+	</head>
+	<body data-sveltekit-preload-data="hover">
+		<div style="display: contents">%sveltekit.body%</div>
+		<div id="safari-chin" aria-hidden="true"></div>
+	</body>
+</html>

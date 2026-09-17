@@ -1,0 +1,64 @@
+name: Validation
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  database:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3
+        with:
+          version: 2.116.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - run: bun run check
+      - run: bun run check:scripts
+      - run: bun run lint
+      - name: Validate database in disposable PostgreSQL
+        run: ./scripts/test-database.sh
+
+  web:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        proof: [boundary, shop, checkout, admin, scanner, labels, statistics]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3
+        with:
+          version: 2.116.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - name: Install local proof prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client libnss3-tools python3-venv
+          bunx --no-install playwright install --with-deps firefox
+      - if: matrix.proof == 'scanner'
+        run: bunx --no-install playwright install --with-deps webkit
+      - if: matrix.proof == 'labels'
+        run: |
+          python3 -m venv .venv-proof
+          .venv-proof/bin/pip install PyMuPDF==1.28.2
+          echo "$PWD/.venv-proof/bin" >> "$GITHUB_PATH"
+      - name: Build and run disposable browser acceptance
+        env:
+          PROOF: ${{ matrix.proof }}
+        run: |
+          if [ "$PROOF" = boundary ]; then
+            ./scripts/test-web.sh
+          else
+            ./scripts/test-web.sh "--$PROOF"
+          fi

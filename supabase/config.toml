@@ -1,0 +1,16 @@
+project_id = "ampoteket"
+
+[api]
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+
+[db]
+major_version = 17
+
+[auth.email.template.invite]
+subject = "Ampoteket: Invitasjon / Invitation"
+content_path = "./supabase/templates/invite.html"
+
+[auth.email.template.recovery]
+subject = "Ampoteket: Tilbakestill passord / Reset password"
+content_path = "./supabase/templates/recovery.html"

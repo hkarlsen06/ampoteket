@@ -1,0 +1,412 @@
+/* Ampoteket's shadcn-svelte theme. Component recipes live in src/lib/components/ui.
+   Keep ordinary UI there; this file owns tokens, document typography and accessibility. */
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn-svelte/tailwind.css";
+
+/* Both tokens and dark: utilities follow the OS, with no persisted override. */
+@custom-variant dark (@media (prefers-color-scheme: dark));
+@custom-variant phone (@media (max-width: 40rem));
+@custom-variant no-js (.no-js &);
+
+@font-face {
+  font-family: 'DSEG7';
+  src: url('/fonts/DSEG7Classic-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: dark light;
+  --content-width: 72rem;
+  --gutter: 1.25rem;
+  --header-h: 64px;
+  --radius: .125rem;
+  --measure: 62ch;
+  --measure-lede: 42ch;
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --font-led: 'DSEG7', monospace;
+
+  --background: #000000;
+  --foreground: #edf1f6;
+  --card: #0d0d0e;
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #ff3c33;
+  --primary-foreground: #000000;
+  /* Primary-coloured text on a light primary tint (wireframe buttons). */
+  --primary-ink: #ff3c33;
+  --secondary: #1a1a1c;
+  --secondary-foreground: var(--foreground);
+  --muted: var(--secondary);
+  --muted-foreground: #a1a1a8;
+  --accent: var(--secondary);
+  --accent-foreground: var(--foreground);
+  --destructive: #ff3c33;
+  --border: #2a2a2d;
+  --input: #707078;
+  --ring: var(--link);
+  --overlay: #000000;
+  --green: #37d964;
+  --link: #8fbbff;
+  --metal: linear-gradient(160deg, #2c2c30, #161618);
+  --shadow-card-color: rgb(0 0 0 / .22);
+  --focus-contrast: #000000;
+
+  --sidebar: var(--card);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+
+  /* Stable aliases for the specialized shelf illustrations and brand art. */
+  --bg: var(--background);
+  --text: var(--foreground);
+  --yellow: #ffdc00;
+  --on-yellow: #000000;
+  --paper: #ffffff;
+  --ink: #14181f;
+  --led-cell: #000000;
+  --led-red: #ff3c33;
+  --led-green: #2ee05a;
+  --led-off: #1c1c1c;
+  /* The night surface: the landing page's photograph stages keep the dark scheme
+     in both colour schemes, like the LED cells and the printed label. True black,
+     so the night photographs fade into it without a grey veil. */
+  --night: #000000;
+  --night-foreground: #edf1f6;
+  --night-muted: #a1a1a8;
+  --night-border: #2a2a2d;
+  /* The lit accent on the night surface: the sign's red, in both schemes. */
+  --night-accent: #ff3c33;
+  /* The shelf graphic: a quiet Raaco-blue tint for the cabinet steel, its
+     hairlines, and the drawer fronts. */
+  --steel: #0c1424;
+  --steel-seam: #22304b;
+  --drawer: #15203a;
+  --drawer-edge: #33446a;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --background: #ffffff;
+    --foreground: #0f141b;
+    --card: #ffffff;
+    --primary: #c63933;
+    --primary-foreground: #ffffff;
+    --primary-ink: #a8231c;
+    --secondary: #e7ebf0;
+    --muted-foreground: #4b586a;
+    --destructive: #b7221b;
+    --border: #c9d1db;
+    --input: #75808e;
+    --green: #1b6a31;
+    --link: #0a4dc8;
+    --metal: linear-gradient(160deg, #c6d3de, #9eaab6);
+    --shadow-card-color: rgb(0 0 0 / .12);
+    --focus-contrast: #0f141b;
+    --steel: #dde5ef;
+    --steel-seam: #b7c4d6;
+    --drawer: #ffffff;
+    --drawer-edge: #93a5bf;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-ink: var(--primary-ink);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-overlay: var(--overlay);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-success: var(--green);
+  --color-warning: var(--yellow);
+  --color-on-warning: var(--on-yellow);
+  --color-link: var(--link);
+  --color-night: var(--night);
+  --color-night-foreground: var(--night-foreground);
+  --color-night-muted: var(--night-muted);
+  --color-night-border: var(--night-border);
+  --color-night-accent: var(--night-accent);
+  --color-steel: var(--steel);
+  --color-steel-seam: var(--steel-seam);
+  --color-drawer: var(--drawer);
+  --color-drawer-edge: var(--drawer-edge);
+  --shadow-card: 0 8px 24px var(--shadow-card-color);
+  /* Machined, not soft: controls, chips and menus share one 2px corner; cards,
+     dialogs and photo frames take 4px. The framed buttons stay square. */
+  --radius-xs: 1px;
+  --radius-sm: var(--radius);
+  --radius-md: var(--radius);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 2);
+}
+
+/* The homepage header meter lights up with document scroll where the browser
+   supports scroll-driven animations; elsewhere it stays unlit. */
+@utility scroll-meter {
+  clip-path: inset(0 100% 0 0);
+  @supports (animation-timeline: scroll()) {
+    animation: meter-fill linear both;
+    animation-timeline: scroll(root);
+  }
+}
+@keyframes meter-fill { to { clip-path: inset(0); } }
+
+/* A night stage for a photograph: the subtree reads the night palette through
+   the ordinary tokens, so headings, rows and LED steps need no special colours
+   and the stage looks the same in both schemes. */
+@utility scheme-night {
+  --background: var(--night);
+  --foreground: var(--night-foreground);
+  --muted-foreground: var(--night-muted);
+  --border: var(--night-border);
+  --primary: var(--night-accent);
+  color: var(--foreground);
+  color-scheme: dark;
+}
+
+/* Landing-page photo motion (docs/page-home.md §2.2, §2.4). Everything below
+   applies only through `scroll-motion:`, so browsers without scroll-driven
+   animations and reduced-motion visitors get the still, stacked layout.
+   The hero section is the --walk timeline: while its stage is pinned, the
+   storefront grows toward the window and fades into the room inside. */
+@custom-variant scroll-motion {
+  @media (prefers-reduced-motion: no-preference) {
+    @supports (animation-timeline: view()) { @slot; }
+  }
+}
+@utility walk-scene { view-timeline: --walk block; }
+@utility walk-approach {
+  animation: walk-approach cubic-bezier(.5, 0, .75, .4) both;
+  animation-timeline: --walk;
+  animation-range: contain 0% contain 58%;
+}
+@utility walk-away {
+  animation: walk-away linear both;
+  animation-timeline: --walk;
+  animation-range: contain 0% contain 18%;
+}
+/* Faded actions must not catch taps or focus under the room photograph. */
+@utility walk-hide {
+  animation: walk-hide linear both;
+  animation-timeline: --walk;
+  animation-range: contain 0% contain 18%;
+}
+@utility walk-inside {
+  animation: walk-inside linear both;
+  animation-timeline: --walk;
+  animation-range: contain 34% contain 100%;
+}
+@utility walk-quote {
+  animation: walk-quote ease-out both;
+  animation-timeline: --walk;
+  animation-range: contain 58% contain 80%;
+}
+/* A dark photograph switches on like a CRT while its middle rises through
+   the lower half of the viewport:
+   a dot, a line, then the picture. */
+@utility power-on {
+  animation: power-on ease-out both;
+  animation-timeline: view();
+  animation-range: cover 25% cover 45%;
+}
+@keyframes walk-approach { 60% { opacity: 1; } to { scale: 2.6; opacity: 0; } }
+@keyframes walk-away { to { opacity: 0; translate: 0 -2.5rem; } }
+@keyframes walk-hide { to { visibility: hidden; } }
+@keyframes walk-inside { from { opacity: 0; } 35% { opacity: 1; } to { opacity: 1; scale: 1.1; } }
+@keyframes walk-quote { from { opacity: 0; translate: 0 1.5rem; } }
+@keyframes power-on {
+  from { clip-path: inset(49.6% 50%); filter: brightness(4); }
+  25% { clip-path: inset(49.6% 0); filter: brightness(4); }
+  70% { clip-path: inset(0); filter: brightness(1.5); }
+  to { clip-path: inset(0); filter: none; }
+}
+
+@media (min-width: 48rem) { :root { --gutter: 2rem; } }
+@media (max-width: 40rem) { :root { --header-h: 56px; } }
+
+/* The floating buyer scanner must leave room to reach the end of its pages
+   and stay out of the way of editing and modal focus containment. The room is
+   footer padding so the footer surface reaches the bottom of the page. */
+@media (max-width: 40rem) {
+	html:not(.no-js):has(.scanner-trigger) .site-footer { padding-bottom: calc(5rem + env(safe-area-inset-bottom)); }
+	html:not(.no-js):has(.scanner-trigger) { scroll-padding-bottom: calc(5rem + env(safe-area-inset-bottom)); }
+	body:has(input:focus, textarea:focus, select:focus, [contenteditable="true"]:focus, [aria-modal="true"][data-state="open"]) .scanner-trigger {
+		visibility: hidden;
+	}
+	/* The home hero's docked trigger stands in until it scrolls away. */
+	/* It becomes visible at once (so a closing dialog can return focus to it) and
+	   stays visible until its fade-out has finished when it docks. */
+	.scanner-trigger { transition: opacity 200ms, translate 200ms, background-color 150ms, visibility 0s; }
+	body:has([data-scanner-dock]) .scanner-trigger {
+		visibility: hidden; opacity: 0; translate: 0 1rem;
+		transition: opacity 200ms, translate 200ms, background-color 150ms, visibility 0s 200ms;
+	}
+}
+@media (max-width: 40rem) and (prefers-reduced-motion: reduce) {
+	.scanner-trigger { transition: none; }
+}
+
+/* Safari 26 on iOS shows the page through its floating bottom toolbar. CSS
+   cannot reach that area, but Safari fills it with the background-color of a
+   real fixed element touching the bottom edge (not a pseudo-element, no
+   backdrop-filter, ≥ 80% wide, ≥ 3px tall, within 3px of the edge; it may
+   hang up to 8px below). #safari-chin in app.html is that element. It sits
+   under the header's stacking context (z-40), which holds the scanner trigger. */
+#safari-chin { display: none; }
+@supports (-webkit-touch-callout: none) {
+	#safari-chin {
+		display: block;
+		position: fixed;
+		inset: auto 0 -8px;
+		z-index: 30;
+		height: 12px;
+		pointer-events: none;
+		background-color: var(--background);
+	}
+}
+
+@layer base {
+/* Base ------------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html {
+	-webkit-text-size-adjust: 100%;
+	/* In-page anchors and focus scrolls must land below the sticky header. */
+	scroll-padding-top: calc(var(--header-h) + 0.5rem);
+	/* With classic desktop scrollbars, a short → long page navigation must not
+	   nudge the centred content sideways. */
+	scrollbar-gutter: stable;
+}
+
+* { border-color: var(--border); }
+
+body {
+	margin: 0;
+	min-height: 100dvh;
+	display: flex;
+	flex-direction: column;
+	background: var(--bg);
+	color: var(--text);
+	font-family: var(--font-sans);
+	font-size: 1rem;
+	line-height: 1.55;
+	-webkit-font-smoothing: antialiased;
+}
+
+@media (min-width: 48rem) {
+	body {
+		font-size: 1.0625rem;
+	}
+}
+
+h1,
+h2,
+h3 {
+	margin: 0;
+	text-wrap: balance;
+}
+
+h1 {
+	font-size: clamp(2.5rem, 2rem + 3.6vw, 4.5rem);
+	font-weight: 800;
+	overflow-wrap: break-word;
+	letter-spacing: -0.02em;
+	line-height: 1.02;
+}
+
+h2 {
+	font-size: clamp(1.5rem, 1.2rem + 1.2vw, 2rem);
+	font-weight: 700;
+	letter-spacing: -0.01em;
+	line-height: 1.15;
+}
+
+h3 {
+	font-size: clamp(1.125rem, 1.05rem + 0.3vw, 1.25rem);
+	font-weight: 650;
+	line-height: 1.3;
+}
+
+p {
+	margin: 0;
+	max-width: var(--measure);
+	text-wrap: pretty;
+}
+
+a {
+	color: var(--link);
+	text-underline-offset: 0.15em;
+	text-decoration: underline;
+}
+
+a:hover {
+	text-decoration-thickness: 2px;
+}
+
+code {
+	font-family: var(--font-mono);
+	font-size: 0.95em;
+}
+
+img {
+	max-width: 100%;
+	height: auto;
+}
+
+}
+
+/* Focus uses the accessible link blue; yellow stays with warnings and shelf
+   selection. The dark companion ring keeps focus distinct on mixed surfaces. */
+:focus-visible:not([data-slot="input-group-control"]),
+[data-slot="input-group"]:has([data-slot="input-group-control"]:focus-visible) {
+	outline: 2px solid var(--ring);
+	outline-offset: 2px;
+	box-shadow: 0 0 0 2px var(--focus-contrast);
+}
+
+/* Motion ----------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
+}

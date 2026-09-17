@@ -1,0 +1,22 @@
+{
+	admin 127.0.0.1:20199
+	persist_config off
+	skip_install_trust
+	auto_https disable_redirects
+	storage file_system {
+		root .local-https
+	}
+}
+
+# Run from the repository root. This is an optional, loopback-only dev proxy.
+https://localhost:8443 {
+	bind 127.0.0.1
+	tls internal
+	@supabase path /auth/v1/* /rest/v1/*
+	handle @supabase {
+		reverse_proxy 127.0.0.1:54329
+	}
+	handle {
+		reverse_proxy 127.0.0.1:5174
+	}
+}

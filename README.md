@@ -1,0 +1,127 @@
+# Ampoteket
+
+Web shop and stock system for the student-run electronics workshop at
+`ampoteket.no`. Buyers need no account: they browse stock, fill a cart, pay with
+trust-based Vipps and register the purchase, which withdraws stock. Staff maintain
+products, placement, purchasing and counts with a full audit trail.
+
+SvelteKit 2 / Svelte 5 on Cloudflare Workers, Supabase (Postgres + Auth), Bun,
+shadcn-svelte and Tailwind CSS 4. Norwegian at `/`, English at `/en`.
+
+**Status:** validated locally, not deployed. [VALIDATION.md](VALIDATION.md) lists
+what has been run and what is still needed before launch.
+
+## Where to read
+
+Start with the [project overview](docs/prosjektoversikt.md). Then read only the
+document for the area you are changing:
+
+| Area | Document |
+| --- | --- |
+| Tables, RPCs, permissions, money and quantities | [datamodell.md](docs/datamodell.md) |
+| Website architecture, checkout, staff screens, error catalog | [website-guide.md](docs/website-guide.md) |
+| One page's behavior | `docs/page-*.md` |
+| JSON numbers, pagination, checkout retries, scanner | [api-contract.md](docs/api-contract.md), [checkout-recovery.md](docs/checkout-recovery.md), [scanner.md](docs/scanner.md) |
+| Look and feel, UI copy and languages | [design-system.md](docs/design-system.md), [i18n.md](docs/i18n.md) |
+| Races that must stay correct | [concurrency-tests.md](docs/concurrency-tests.md) |
+| Running the workshop day to day | [operating-procedures.md](docs/operating-procedures.md) |
+| Deploy, backup and restore | [runbook-deploy.md](docs/runbook-deploy.md), [runbook-backup-restore.md](docs/runbook-backup-restore.md) |
+
+The migrations in `supabase/migrations/` are the final word on database rules.
+If a document disagrees with them, fix the document.
+
+## Setup
+
+Linux with Docker, `psql`, Python 3, curl, `flock`, Git LFS, **Bun 1.3.14** and
+**Supabase CLI 2.116.0**.
+
+```sh
+git lfs pull                  # original photos and Blender files (only needed to rebuild them)
+bun install --frozen-lockfile
+bun run development           # disposable database + test admin + dev server
+```
+
+Open <http://localhost:5174> and sign in at `/admin/login` as **`test@test.no` /
+`test`**. Every start creates a fresh, empty database, and Ctrl-C removes it.
+Useful options (after `--`):
+
+- `--workshop`: 174 sample products in the real shelf layout, with a year of
+  fictional orders and sales. The data is illustrative, not a real inventory.
+- `--count 30`: the synthetic catalog used by the browser tests.
+- `--sigkill`: take over the pinned ports from a stuck earlier run.
+
+Port **5174** is used by both `bun run dev` and `bun run preview`; run one at a time.
+
+### HTTPS (checkout and camera)
+
+Checkout cookies and the camera need trusted HTTPS. Use the local Caddy proxy:
+
+```sh
+caddy run --config Caddyfile.local --adapter caddyfile     # terminal 1
+caddy trust --address 127.0.0.1:20199                      # once, while Caddy runs
+
+NODE_EXTRA_CA_CERTS="$PWD/.local-https/pki/authorities/local/root.crt" \
+PUBLIC_SUPABASE_URL=https://localhost:8443 \
+CHECKOUT_ALLOWED_ORIGIN=https://localhost:8443 \
+bun run development -- --studio-port off                   # terminal 2
+```
+
+Open <https://localhost:8443>. Firefox may need
+`.local-https/pki/authorities/local/root.crt` imported as a trusted authority.
+Never commit `.local-https/`. If you get a 502, the frontend or database has not
+started yet. Make sure an old `.dev.vars` does not override these settings.
+Testing on a physical phone needs a trusted hostname on your network; the
+original developer used Tailscale with `dev.ampoteket.no`.
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `bun run dev` / `bun run preview` | Vite dev server / production build in the Workers runtime (needs `.env`, see `.env.example`) |
+| `bun run check` / `bun run check:scripts` | Type-check the app / the scripts and browser proofs |
+| `bun run lint` | oxlint + ESLint |
+| `bun test` | Unit tests (`src/lib/*.test.ts`) |
+| `bun run check:ink` | Catch clipped SVG/CSS edges |
+| `bun run i18n` | Side-by-side editor for the Norwegian and English strings, port 5175 ([i18n.md](docs/i18n.md)) |
+| `./scripts/test-database.sh` | Full database suite in a throwaway PostgreSQL |
+| `./scripts/test-web.sh [--mode]` | Real browser tests against a throwaway stack |
+| `./scripts/seed-test.sh` | A separate throwaway catalog for experiments (`--count N`, `--check`, `--workshop`) |
+
+## Tests
+
+`./scripts/test-database.sh` needs no credentials. It starts its own PostgreSQL
+17.6, applies the migrations through the Supabase CLI, then checks acceptance,
+permissions, concurrency, rollback/retry, backup/restore and real PostgREST HTTP.
+It removes everything it created when it finishes. GitHub Actions runs it on every
+push.
+
+`./scripts/test-web.sh` builds the real Worker and drives Firefox against a
+throwaway Supabase stack with real Auth. Modes: none (boundary checks), `--shop`,
+`--checkout`, `--admin`, `--statistics`, `--scanner`, `--labels`, `--shelf`,
+`--orders`. It also needs OpenSSL, `certutil` (`libnss3-tools`) and
+`bunx --no-install playwright install --with-deps firefox`. `--scanner` also needs
+WebKit. `--labels` needs PyMuPDF 1.28.2 on `PATH`, for example from a venv
+(`python3 -m venv .venv-proof && .venv-proof/bin/pip install PyMuPDF==1.28.2`).
+Screenshots go to `test-results/`, which is ignored by git.
+
+Manual proofs run against a running dev server: `scripts/admin-sidebar-proof.ts`,
+`scripts/home-printer-proof.ts` and `scripts/home-soldering-proof.ts`
+(`bun scripts/<name>`).
+
+## Changing the database
+
+- Change the schema only through a new migration in `supabase/migrations/`, and
+  apply it with the Supabase CLI. Migration files must not contain their own
+  top-level `BEGIN`/`COMMIT`.
+- A new privileged function must revoke execution from `PUBLIC`, `anon`,
+  `authenticated` and `service_role`, and grant it only to reviewed callers, in
+  the same migration. `supabase/tests/permissions.sql` fails until you add it there.
+- Keep the table definitions in [datamodell.md](docs/datamodell.md) Appendix A in
+  sync. The test suite compares them with the real schema.
+- Every error name the migrations raise must be listed in
+  [website-guide.md](docs/website-guide.md) §8.1. The test suite checks this too.
+- Afterwards, run `./scripts/test-database.sh` and update the hashes and counts in
+  [VALIDATION.md](VALIDATION.md).
+
+Never point any script at the hosted Supabase project. Deploying is a separate,
+explicit decision ([runbook](docs/runbook-deploy.md)).

@@ -1,0 +1,259 @@
+<script lang="ts">
+	import { Separator } from '$lib/components/ui/separator';
+	import * as Alert from '$lib/components/ui/alert';
+	import * as Item from '$lib/components/ui/item';
+	import * as Collapsible from '$lib/components/ui/collapsible';
+	import { Skeleton } from '$lib/components/ui/skeleton';
+	import { Button } from '$lib/components/ui/button';
+	import Icon from '$lib/Icon.svelte';
+	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
+	import CheckoutReferences from '$lib/CheckoutReferences.svelte';
+	import { codeText, formActions, itemTitle, nameWrap, pageContainer, pageHeader, pageHeading, section, sectionHeading } from '$lib/ui';
+	import { untrack } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { getI18n } from './i18n';
+	import { getCartContext, type ActiveAttempt } from './cart';
+	import {
+		canOpenPayment, checkoutErrorCode, confirmCheckout, findCheckoutAttempt, finishRegistration,
+		prepareCheckout, readCheckout, resumeCheckout, setAsideCheckout, type CheckoutErrorCode
+	} from './checkout';
+	import type { CheckoutSnapshot } from './checkout-contract';
+	import { formatDecimal, formatMeasurementText, formatMoney, unitLabel } from './format';
+
+	let { checkoutId }: { checkoutId?: string } = $props();
+	const i18n = getI18n();
+	const m = $derived(i18n.m.checkout);
+	const cart = getCartContext();
+	let attempt = $state<ActiveAttempt | null>(null);
+	let snapshot = $state<CheckoutSnapshot | null>(null);
+	let busy = $state<'loading' | 'preparing' | 'confirming' | null>('loading');
+	let error = $state<CheckoutErrorCode | null>(null);
+	let asideOpen = $state(false);
+	let asideDone = $state(false);
+	let paymentHeight = $state(0);
+	let linesHeight = $state(0);
+	let generation = 0;
+	const active = $derived($cart.activeAttempt?.requestId === attempt?.requestId ? $cart.activeAttempt : null);
+	const registered = $derived(snapshot?.status === 'confirmed');
+	const confirmationAttempted = $derived(attempt?.state === 'confirming' || active?.state === 'confirming' || active?.state === 'registered');
+	const canAct = $derived(!!snapshot && !registered && !busy && !error && $cart.status === 'ready' && !!active && active.checkoutId === snapshot.checkout_id);
+	const canPay = $derived(canAct && active?.state === 'prepared' && !confirmationAttempted);
+	const canRetryConfirm = $derived(!!snapshot && !registered && !busy && confirmationAttempted && !!active && !['credentials', 'missing', 'storage'].includes(error ?? ''));
+	const reference = $derived(checkoutId ?? attempt?.checkoutId);
+	const savedAttempt = $derived(attempt ?? (!checkoutId || $cart.activeAttempt?.checkoutId === checkoutId ? $cart.activeAttempt : null));
+	const lineCount = $derived(snapshot?.items.length ?? savedAttempt?.cartLines?.length ?? 1);
+
+	$effect(() => {
+		const id = checkoutId;
+		untrack(() => { attempt = null; snapshot = null; asideDone = false; void load(id); });
+		return () => { generation += 1; };
+	});
+	async function load(id = checkoutId) {
+		const run = ++generation;
+		busy = 'loading'; error = null; asideOpen = false;
+		try {
+			let saved = await findCheckoutAttempt(id);
+			if (run !== generation) return;
+			attempt = saved;
+			if (!saved) { error = 'missing'; return; }
+			if (!saved.checkoutId) {
+				busy = 'preparing';
+				saved = await prepareCheckout(saved);
+				if (run !== generation) return;
+				attempt = saved;
+			}
+			if (!id) {
+				await cart.refresh();
+				if (run === generation) await goto(i18n.href(`/checkout/${saved.checkoutId}`), { replaceState: true });
+				return;
+			}
+			const result = await readCheckout(saved);
+			if (run !== generation) return;
+			snapshot = result;
+			if (result.status === 'confirmed') {
+				const completed = await finishRegistration(saved, result);
+				if (run !== generation) return;
+				attempt = completed;
+			} else {
+				// A concurrent confirmation is never downgraded by an unconfirmed read.
+				const latest = await findCheckoutAttempt(id);
+				if (run !== generation) return;
+				attempt = latest ?? saved;
+			}
+		} catch (failure) {
+			if (run === generation) error = checkoutErrorCode(failure);
+		} finally {
+			await cart.refresh();
+			if (run === generation) busy = null;
+		}
+	}
+	async function register() {
+		if (!attempt || (!canAct && !canRetryConfirm)) return;
+		const saved = attempt;
+		const run = ++generation;
+		busy = 'confirming'; error = null; asideOpen = false;
+		try {
+			const result = await confirmCheckout(saved);
+			if (run !== generation) return;
+			snapshot = result;
+			const completed = await finishRegistration(saved, result);
+			if (run === generation) attempt = completed;
+		} catch (failure) {
+			if (run !== generation) return;
+			error = checkoutErrorCode(failure);
+			try {
+				const latest = await findCheckoutAttempt(saved.checkoutId);
+				if (run === generation && latest) attempt = latest;
+			} catch { /* Keep the original reference available when storage is denied. */ }
+		} finally {
+			await cart.refresh();
+			if (run === generation) busy = null;
+		}
+	}
+	async function openVipps(event: MouseEvent) {
+		event.preventDefault();
+		if (!attempt || !canPay || !snapshot?.payment_required) return;
+		try {
+			if (await canOpenPayment(attempt)) window.location.assign('https://qr.vipps.no/vp/swDrxGWcp');
+			else { error = 'conflict'; await cart.refresh(); }
+		} catch (failure) { error = checkoutErrorCode(failure); }
+	}
+	async function setAside() {
+		if (!attempt || !canPay) return;
+		busy = 'loading'; error = null;
+		try { await setAsideCheckout(attempt); asideDone = true; asideOpen = false; }
+		catch (failure) { error = checkoutErrorCode(failure); }
+		finally { await cart.refresh(); busy = null; }
+	}
+	async function resume() {
+		if (!attempt || busy) return;
+		busy = 'loading'; error = null;
+		try { attempt = await resumeCheckout(attempt); asideDone = false; await load(); }
+		catch (failure) { error = checkoutErrorCode(failure); }
+		finally { await cart.refresh(); busy = null; }
+	}
+	const money = (value: string) => formatMoney(value, i18n.locale);
+</script>
+
+<svelte:head>
+	<title>{m.title}</title>
+	<meta name="robots" content="noindex, nofollow" />
+	<meta name="referrer" content="no-referrer" />
+</svelte:head>
+
+<div class={pageContainer({ width: 'reading', padding: 'page' })}>
+	<header class={pageHeader}><h1 class={pageHeading}>{m.heading}</h1></header>
+	<Alert.Root appearance="inline" class="min-h-20 content-start gap-2 pb-4 text-base" role={undefined} aria-live="polite" aria-atomic="true">
+		{#if registered}<Alert.Title class="text-base font-semibold">{m.registered}</Alert.Title>{/if}
+		<Alert.Description class={registered ? undefined : 'text-base text-foreground'}>
+			{#if registered}{m.registeredNote}
+			{:else if busy === 'confirming'}{m.pending}
+			{:else if confirmationAttempted}{m.confirming}
+			{:else if busy === 'preparing'}{m.preparing}
+			{:else if busy}<span class="sr-only">{m.loading}</span>
+			{:else if error}{m.needsAttention}
+			{:else if asideDone}{m.setAsideDone}
+			{:else if snapshot && active}{m.prepared}
+			{:else if snapshot}{m.otherAttempt}{/if}
+		</Alert.Description>
+	</Alert.Root>
+	<CheckoutReferences checkoutId={reference} requestId={attempt?.requestId} class={['mb-4 md:grid-cols-2', (reference || attempt?.requestId || !error) && 'min-h-28 md:min-h-16']} />
+	<noscript><p>{m.noJavascript}</p><a href={i18n.href('/help')}>{m.help}</a></noscript>
+	<div class="saved-lines" style:min-height={!snapshot && !busy && !error && linesHeight ? `${linesHeight}px` : undefined} aria-busy={!snapshot && !!busy}>
+		{#if snapshot}
+			<Item.Group>
+				{#each snapshot.items as item, index (item.product_id)}
+						{#if index > 0}<Item.Separator />{/if}
+						<Item.Root variant="row" role="listitem">
+							<Item.Content class="gap-0">
+								<p class={[itemTitle, nameWrap]}>{formatMeasurementText(i18n.locale === 'nb' ? item.name_nb : item.name_en, i18n.locale)}</p>
+								<p class={[codeText, 'mt-1 text-muted-foreground']}>{item.code}</p>
+								<dl class="mt-3 mb-0 grid gap-x-6 gap-y-2 md:grid-cols-3">
+									{#each [
+										{ label: m.quantity, value: `${formatDecimal(item.quantity, i18n.locale)} ${unitLabel(item.unit, i18n.locale, item.quantity)}` },
+										{ label: m.unitPrice, value: money(item.unit_price_nok) },
+										{ label: m.lineTotal, value: money(item.line_total_nok) }
+									] as fact, index (fact.label)}
+										<div class={['flex min-w-0 flex-wrap items-baseline justify-between gap-x-4 gap-y-1 md:grid md:content-start', index === 2 && 'md:text-right']}>
+											<dt class="text-sm text-muted-foreground">{fact.label}</dt>
+											<dd class={['m-0 font-mono text-right tabular-nums md:text-left', index === 2 && 'font-semibold md:text-right']}>{fact.value}</dd>
+										</div>
+									{/each}
+								</dl>
+							</Item.Content>
+						</Item.Root>
+				{/each}
+			</Item.Group>
+			<Separator />
+			<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-6"><strong class="font-semibold">{m.total}</strong><strong class="font-mono text-xl font-semibold tabular-nums">{money(snapshot.total_nok)}</strong></div>
+		{:else if busy}
+			<div aria-hidden="true" bind:clientHeight={linesHeight}>
+				<Item.Group>
+					{#each Array(lineCount) as _, index (index)}
+						{#if index > 0}<Item.Separator />{/if}
+						<Item.Root variant="row">
+							<Item.Content class="gap-0">
+								<Skeleton class={`${itemTitle} h-lh w-3/4`} />
+								<Skeleton class={`${codeText} mt-1 h-lh w-1/3`} />
+								<dl class="mt-3 mb-0 grid gap-x-6 gap-y-2 md:grid-cols-3">
+									{#each [m.quantity, m.unitPrice, m.lineTotal] as label, index (label)}
+										<div class={['flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 md:grid md:content-start', index === 2 && 'md:text-right']}>
+											<dt class="text-sm text-muted-foreground">{label}</dt>
+											<dd class={['m-0', index === 2 && 'md:justify-self-end']}><Skeleton class="h-6 w-20" /></dd>
+										</div>
+									{/each}
+								</dl>
+							</Item.Content>
+						</Item.Root>
+					{/each}
+				</Item.Group>
+				<Separator />
+				<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-6"><strong class="font-semibold">{m.total}</strong><Skeleton class="h-7 w-28" /></div>
+			</div>
+		{/if}
+	</div>
+	<div class={['purchase-actions mt-4 grid justify-items-start gap-4', !error && 'min-h-20', (confirmationAttempted || busy === 'confirming') && 'content-end']} style:min-height={!registered && paymentHeight ? `${paymentHeight}px` : undefined}>
+		{#if registered && !busy && !error && !active}
+			<Button variant="default" href={i18n.href('/p')}>{m.newPurchase}</Button>
+		{:else if canPay && snapshot?.payment_required}
+			<section class="payment grid justify-items-start gap-4" aria-labelledby="payment-heading" bind:clientHeight={paymentHeight}>
+				<h2 class={sectionHeading} id="payment-heading">{m.paymentHeading}</h2>
+				<p>{m.recipient}: <strong class="font-mono">47322</strong></p>
+				<p>{m.paymentInstructions}</p>
+				<Button variant="default" href="https://qr.vipps.no/vp/swDrxGWcp" rel="noreferrer" onclick={openVipps}>{m.openVipps}</Button>
+				<img src="/payments/vipps-47322.svg" width="246" height="246" alt={m.qrAlt} />
+				<Button variant="outline" type="button" onclick={register}>{m.paid}</Button>
+			</section>
+		{:else if canPay && snapshot && !snapshot.payment_required}
+			<Button variant="default" type="button" onclick={register}>{m.free}</Button>
+		{:else if canRetryConfirm}
+			<Button variant="default" type="button" onclick={register}>{m.retryConfirm}</Button>
+		{:else if busy === 'confirming'}
+			<Button variant="default" type="button" disabled>{m.pending}</Button>
+		{:else if snapshot && !active && !$cart.activeAttempt && !busy && !error && attempt?.state === 'prepared'}
+			<Button variant="outline" type="button" onclick={resume}>{m.resumeSaved}</Button>
+		{/if}
+	</div>
+	<div class={section()}>
+		<Alert.Message appearance="inline" variant="destructive">{#if error}{m.errors[error]}{/if}</Alert.Message>
+		{#if error && !busy && !asideDone}
+			<Button variant="outline" type="button" onclick={() => load()}>{m.retry}</Button>
+		{/if}
+		{#if error || (confirmationAttempted && !registered)}
+			<p class="text-sm text-muted-foreground">{m.helpInstructions}</p>
+		{/if}
+		<p><a href={i18n.href('/help')}>{m.help}</a></p>
+		<Button variant="link" href={i18n.href('/cart')}><Icon icon={ArrowLeftIcon} />{m.backToCart}</Button>
+	</div>
+	{#if canPay}
+		<Collapsible.Root bind:open={asideOpen} class={section()}>
+			<Collapsible.Trigger>
+				{#snippet child({ props })}<Button variant="outline" {...props}>{m.setAside}</Button>{/snippet}
+			</Collapsible.Trigger>
+			<Collapsible.Content class="grid gap-4">
+				<p>{m.setAsideQuestion}</p>
+				<div class={formActions}><Button variant="outline" type="button" onclick={setAside}>{m.setAsideConfirm}</Button><Button variant="ghost" type="button" onclick={() => { asideOpen = false; }}>{i18n.m.cart.cancel}</Button></div>
+			</Collapsible.Content>
+		</Collapsible.Root>
+	{/if}
+</div>

@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="robots" content="noindex" />
+		<title>Ampoteket · i18n</title>
+		<style>
+			:root {
+				color-scheme: light dark;
+				--bg: #fbfaf8;
+				--surface: #ffffff;
+				--line: #dcd8d1;
+				--text: #1b1a18;
+				--muted: #6d6860;
+				--accent: #b4231f;
+				--warn: #8a5a00;
+				--ok: #2f6b3a;
+			}
+			@media (prefers-color-scheme: dark) {
+				:root {
+					--bg: #141412;
+					--surface: #1d1d1a;
+					--line: #35342f;
+					--text: #efece6;
+					--muted: #9b958a;
+					--accent: #e8635e;
+					--warn: #d7a13a;
+					--ok: #78c186;
+				}
+			}
+			* { box-sizing: border-box; }
+			body {
+				margin: 0;
+				background: var(--bg);
+				color: var(--text);
+				font: 15px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+			}
+			header {
+				position: sticky;
+				top: 0;
+				z-index: 3;
+				display: flex;
+				flex-wrap: wrap;
+				gap: 0.6rem;
+				align-items: center;
+				padding: 0.7rem 1rem;
+				background: var(--surface);
+				border-bottom: 1px solid var(--line);
+			}
+			h1 { font-size: 1rem; margin: 0 0.4rem 0 0; font-weight: 650; }
+			input[type='search'] {
+				flex: 1 1 18rem;
+				min-width: 12rem;
+				padding: 0.45rem 0.6rem;
+				font: inherit;
+				color: inherit;
+				background: var(--bg);
+				border: 1px solid var(--line);
+				border-radius: 6px;
+			}
+			label.toggle { display: inline-flex; gap: 0.35rem; align-items: center; color: var(--muted); font-size: 0.85rem; }
+			button {
+				font: inherit;
+				padding: 0.45rem 0.85rem;
+				border-radius: 6px;
+				border: 1px solid var(--line);
+				background: var(--bg);
+				color: inherit;
+				cursor: pointer;
+			}
+			button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+			button:disabled { opacity: 1; cursor: default; color: var(--muted); border-style: dashed; }
+			button.primary:disabled { background: transparent; color: var(--muted); border-color: var(--line); }
+			#status { color: var(--muted); font-size: 0.85rem; margin-left: auto; }
+			#status.error { color: var(--accent); font-weight: 600; }
+			#status.ok { color: var(--ok); }
+			main { padding: 0 1rem 6rem; }
+			section > h2 {
+				position: sticky;
+				top: 3.2rem;
+				margin: 1.6rem 0 0.4rem;
+				padding: 0.3rem 0;
+				background: var(--bg);
+				font-size: 0.8rem;
+				letter-spacing: 0.08em;
+				text-transform: uppercase;
+				color: var(--muted);
+				border-bottom: 1px solid var(--line);
+			}
+			.row {
+				display: grid;
+				grid-template-columns: minmax(11rem, 18rem) 1fr 1fr;
+				gap: 0.75rem;
+				padding: 0.6rem 0;
+				border-bottom: 1px solid var(--line);
+				align-items: start;
+			}
+			@media (max-width: 800px) { .row { grid-template-columns: 1fr; } }
+			.key { font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); word-break: break-all; padding-top: 0.35rem; }
+			.key b { color: var(--text); font-weight: 600; }
+			.badge {
+				display: inline-block;
+				margin-top: 0.3rem;
+				padding: 0.05rem 0.35rem;
+				border: 1px solid var(--line);
+				border-radius: 999px;
+				font-size: 10px;
+				color: var(--warn);
+			}
+			.note {
+				display: block;
+				margin-top: 0.3rem;
+				font-family: inherit;
+				font-size: 12px;
+				font-style: italic;
+				word-break: normal;
+				overflow-wrap: break-word;
+			}
+			.field { display: flex; flex-direction: column; gap: 0.2rem; }
+			.field > span { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+			textarea {
+				width: 100%;
+				min-height: 2.4rem;
+				padding: 0.4rem 0.5rem;
+				font: inherit;
+				color: inherit;
+				background: var(--surface);
+				border: 1px solid var(--line);
+				border-radius: 6px;
+				resize: vertical;
+				overflow: hidden;
+			}
+			textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+			.row.dirty { background: color-mix(in srgb, var(--warn) 10%, transparent); }
+			.row.dirty .key b::after { content: ' •'; color: var(--warn); }
+			textarea.missing { border-style: dashed; border-color: var(--accent); }
+			.empty { padding: 3rem 0; color: var(--muted); text-align: center; }
+			kbd { font: 12px ui-monospace, monospace; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 0.25rem; }
+		</style>
+	</head>
+	<body>
+		<header>
+			<h1>Ampoteket · i18n</h1>
+			<input type="search" id="q" placeholder="Search key, Norwegian or English…" autocomplete="off" autofocus />
+			<label class="toggle"><input type="checkbox" id="only-changed" /> changed only</label>
+			<label class="toggle"><input type="checkbox" id="only-missing" /> missing only</label>
+			<button id="reload" type="button">Reload</button>
+			<button id="save" class="primary" type="button" disabled>Save</button>
+			<span id="status"></span>
+		</header>
+		<main id="list"></main>
+
+		<script type="module">
+			const list = document.getElementById('list');
+			const status = document.getElementById('status');
+			const saveBtn = document.getElementById('save');
+			const q = document.getElementById('q');
+			const onlyChanged = document.getElementById('only-changed');
+			const onlyMissing = document.getElementById('only-missing');
+
+			let rows = [];
+			const edits = new Map(); // `${locale}\u0000${key}` -> value
+
+			function say(text, kind = '') {
+				status.textContent = text;
+				status.className = kind;
+			}
+
+			function grow(el) {
+				el.style.height = 'auto';
+				el.style.height = el.scrollHeight + 2 + 'px';
+			}
+
+			async function load() {
+				const res = await fetch('/api/rows');
+				const data = await res.json();
+				if (data.error) return say(data.error, 'error');
+				rows = data.rows;
+				edits.clear();
+				saveBtn.disabled = true;
+				render();
+				say(`${rows.length} strings`);
+			}
+
+			function matches(row, needle) {
+				if (onlyChanged.checked && !['nb', 'en'].some((l) => edits.has(l + '\u0000' + row.key))) return false;
+				if (onlyMissing.checked && row.nb !== null && row.en !== null && row.nb !== '' && row.en !== '') return false;
+				if (!needle) return true;
+				return (row.key + '\n' + (row.nb ?? '') + '\n' + (row.en ?? '')).toLowerCase().includes(needle);
+			}
+
+			function render() {
+				const needle = q.value.trim().toLowerCase();
+				const visible = rows.filter((r) => matches(r, needle));
+				list.textContent = '';
+
+				if (!visible.length) {
+					const p = document.createElement('p');
+					p.className = 'empty';
+					p.textContent = 'No strings match.';
+					list.append(p);
+					return;
+				}
+
+				let section = null;
+				let holder = null;
+				for (const row of visible) {
+					if (row.section !== section) {
+						section = row.section;
+						holder = document.createElement('section');
+						const h = document.createElement('h2');
+						h.textContent = section;
+						holder.append(h);
+						list.append(holder);
+					}
+					holder.append(rowEl(row));
+				}
+				for (const t of list.querySelectorAll('textarea')) grow(t);
+			}
+
+			function rowEl(row) {
+				const el = document.createElement('div');
+				el.className = 'row';
+
+				const key = document.createElement('div');
+				key.className = 'key';
+				const parts = row.key.split('.');
+				key.append(parts.slice(0, -1).join('.') + (parts.length > 1 ? '.' : ''));
+				const last = document.createElement('b');
+				last.textContent = parts.at(-1);
+				key.append(last);
+				if (row.fn) {
+					const b = document.createElement('span');
+					b.className = 'badge';
+					b.textContent = 'fn ' + row.fn;
+					key.append(document.createElement('br'), b);
+				} else if (row.kind === 'template') {
+					const b = document.createElement('span');
+					b.className = 'badge';
+					b.textContent = 'template';
+					key.append(document.createElement('br'), b);
+				}
+				if (row.note) {
+					const n = document.createElement('small');
+					n.className = 'note';
+					n.textContent = row.note;
+					key.append(n);
+				}
+				el.append(key);
+
+				for (const locale of ['nb', 'en']) {
+					const field = document.createElement('label');
+					field.className = 'field';
+					const label = document.createElement('span');
+					label.textContent = locale === 'nb' ? 'Norsk' : 'English';
+					const ta = document.createElement('textarea');
+					ta.rows = 1;
+					ta.spellcheck = true;
+					ta.lang = locale === 'nb' ? 'nb' : 'en';
+					const id = locale + '\u0000' + row.key;
+					const original = row[locale];
+					if (original === null) {
+						ta.value = '';
+						ta.disabled = true;
+						ta.placeholder = `not present in ${locale}.ts`;
+						ta.classList.add('missing');
+					} else {
+						ta.value = edits.has(id) ? edits.get(id) : original;
+						if (ta.value === '') ta.classList.add('missing');
+					}
+					ta.addEventListener('input', () => {
+						grow(ta);
+						if (ta.value === original) edits.delete(id);
+						else edits.set(id, ta.value);
+						ta.classList.toggle('missing', ta.value === '');
+						el.classList.toggle(
+							'dirty',
+							['nb', 'en'].some((l) => edits.has(l + '\u0000' + row.key))
+						);
+						saveBtn.disabled = edits.size === 0;
+						say(edits.size ? `${edits.size} unsaved` : `${rows.length} strings`);
+					});
+					field.append(label, ta);
+					el.append(field);
+				}
+
+				if (['nb', 'en'].some((l) => edits.has(l + '\u0000' + row.key))) el.classList.add('dirty');
+				return el;
+			}
+
+			async function save() {
+				if (!edits.size) return;
+				saveBtn.disabled = true;
+				say('Saving…');
+				const payload = [...edits].map(([id, value]) => {
+					const [locale, key] = id.split('\u0000');
+					return { locale, key, value };
+				});
+				const res = await fetch('/api/save', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({ edits: payload })
+				});
+				const data = await res.json();
+				if (data.error) {
+					saveBtn.disabled = false;
+					return say(data.error, 'error');
+				}
+				rows = data.rows;
+				edits.clear();
+				render();
+				say(data.written.length ? `Saved ${data.written.join(' and ')}` : 'Nothing to write', 'ok');
+			}
+
+			q.addEventListener('input', render);
+			onlyChanged.addEventListener('change', render);
+			onlyMissing.addEventListener('change', render);
+			document.getElementById('reload').addEventListener('click', () => {
+				if (edits.size && !confirm(`Discard ${edits.size} unsaved change(s)?`)) return;
+				load();
+			});
+			saveBtn.addEventListener('click', save);
+			document.addEventListener('keydown', (e) => {
+				if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+					e.preventDefault();
+					save();
+				}
+				if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+					e.preventDefault();
+					q.focus();
+					q.select();
+				}
+			});
+			window.addEventListener('beforeunload', (e) => {
+				if (edits.size) e.preventDefault();
+			});
+
+			load();
+		</script>
+	</body>
+</html>
