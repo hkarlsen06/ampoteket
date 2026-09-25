@@ -1,0 +1,23 @@
+# Slopo: embedding-based detector for non-exact code duplication (https://slopo.dev).
+# Local artifacts (slopo.db, slopo-report/, slopo.agent.log) are gitignored;
+# this file and slopo.ignore.txt are shared. Run from the repo root.
+# Key: SLOPO_EMBEDDING_API_KEY in .env (free non-commercial keys at https://jina.ai).
+# Usage: /slopo-review [base] | /slopo-analyze-ignore | /slopo-analyze-one [hash]
+source_dir: .
+source_dir_exclude:
+  - node_modules/
+  - .svelte-kit/
+  - .wrangler/
+  - build/
+  - test-results/
+  - "*.d.ts"
+  - "*.config.*"
+  - "eslint.config.mjs"
+
+embedding_model: jina_ai/jina-code-embeddings-0.5b
+embedding_dimensions: 256
+embedding_params:
+  task: code2code.query
+
+# Free-tier Jina key: 100k tokens/min, so pace requests.
+embedding_request_delay: 6

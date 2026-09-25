@@ -1,0 +1,26 @@
+# Slopo clusters judged not actionable (hash # reason). Regenerate with /slopo-analyze-ignore.
+711cc83d42fa # one-line page.evaluate callbacks in shop-proof
+ce11cb3222e7 # await animations finished, one-liners
+b565a3b21425 # getBoundingClientRect size mapper, trivial
+a5aa6c875100 # same as above
+224ee3c1a729 # route stubs in one proof script, intentional per-case
+fead393fe6a8 # click save button one-liners
+ddb35f302a96 # click confirm one-liners
+d5ddc8ed500a # cart quantity read one-liners
+bbd8eb006c63 # tiny sort comparator
+af28844bc8b0 # waitForResponse predicate one-liner
+8edb0b515a0c # waitForResponse predicate one-liner
+82a1a6032256 # same as af28844bc8b0
+7e4122b644c6 # camera orbit assertions with different tolerances
+6cffeb086a11 # camera orbit assertions, deliberately different sources
+6c1c2e626f17 # scroll helper in one proof script
+6a6f449d4519 # double rAF one-liner
+581bd4d18e22 # different error handling per harness
+4ab88b39661c # cart quantity read one-liners
+393867070523 # subprocess.run one-liner
+b35455e00b0c # await animations one-liner
+87c988ca3888 # two intentionally separate route interceptions in a test
+1eac52912033 # separate test cases
+64ef8bdde768 # similar shape, different outputs (display vs input)
+11cbd28c13bd # different geometry per scene
+96940653bfc6 # two SQL builders for two RPCs

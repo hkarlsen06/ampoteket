@@ -86,6 +86,7 @@ original developer used Tailscale with `dev.ampoteket.no`.
 | `./scripts/test-database.sh` | Full database suite in a throwaway PostgreSQL |
 | `./scripts/test-web.sh [--mode]` | Real browser tests against a throwaway stack |
 | `./scripts/seed-test.sh` | A separate throwaway catalog for experiments (`--count N`, `--check`, `--workshop`) |
+| `/slopo-review`, `/slopo-analyze-ignore`, `/slopo-analyze-one` | Claude Code skills that find non-exact duplicate code with [Slopo](https://slopo.dev) (`uv tool install slopo`, key in `.env` as `SLOPO_EMBEDDING_API_KEY`, config in `slopo.conf.yaml`) |
 
 ## Tests
 

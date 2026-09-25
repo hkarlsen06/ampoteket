@@ -120,3 +120,8 @@ worker-configuration.d.ts
 
 # Python bytecode
 __pycache__/
+
+# --- Slopo (kode-duplikat-analyse, lokal state) ---
+slopo.db
+slopo-report/
+slopo.agent.log
