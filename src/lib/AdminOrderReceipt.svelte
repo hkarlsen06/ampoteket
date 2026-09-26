@@ -221,12 +221,13 @@
 		onEscapeKeydown={(event) => { if (busy) event.preventDefault(); }}
 		onCloseAutoFocus={(event) => { event.preventDefault(); void tick().then(() => returnFocus?.focus({ preventScroll: true })); }}>
 		<Dialog.Header layout="bar">
-			<Dialog.Title id={`${id}-title`}>{m.receiveHeading}{detail?.order ? ` · ${detail.order.supplierName}` : ''}</Dialog.Title>
+			<Dialog.Title id={`${id}-title`}>{m.receiveHeading}</Dialog.Title>
 			<Dialog.Close>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" disabled={busy}><Icon icon={XIcon} /><span class="sr-only">{m.closeReceipt}</span></Button>{/snippet}</Dialog.Close>
 		</Dialog.Header>
 		<!-- svelte-ignore a11y_no_noninteractive_tabindex (Named sheet body supports native keyboard scrolling.) -->
 		<div class={sheetBody} role="region" aria-labelledby={`${id}-title`} tabindex="0">
 			<AdminAccessGate>
+			{#if detail?.order}<p class={[nameWrap, 'mb-4 font-medium']}>{detail.order.supplierName}</p>{/if}
 			{#if !storageReady}<Alert.Message appearance="inline" variant="destructive" role="status">{m.storageUnavailable}</Alert.Message>{/if}
 			{#if wrongIdentity}<Alert.Message appearance="inline" variant="destructive" role="status">{m.wrongIdentity}</Alert.Message>
 			{:else if command && !pendingHere}<Alert.Message appearance="inline" role="status">{m.pendingElsewhere}</Alert.Message><Button variant="link" href={i18n.href(orderCommandPath(command))}>{m.resumePending}</Button>{/if}

@@ -64,14 +64,24 @@ push it into the status strip. The catalog button stays in the first viewport do
 320 × 568. Holding it for 600 ms opens `/admin` instead: a hidden staff shortcut,
 not an access control (the admin layout still requires sign-in).
 
-**Walk-in.** With scroll-driven animation support and motion allowed (`scroll-motion:`
-in `app.css`), the section is a tall `view-timeline` with a pinned stage: the copy
-fades, the storefront grows and dissolves into the room photograph, and Eirik Holm's
-quote rises in. CSS only; no scroll listener. At the end the action row turns
+**Walk-in.** With scroll-driven animation support, motion allowed and a viewport at
+least 40rem high (`walk-motion:` in `app.css`), the walk is eligible only when its copy
+and padding fit the viewport space. The first render is static. The existing
+`ResizeObserver` measures natural copy height against the frame's CSS `min-height`,
+without animated transforms. This accessibility guard qualifies motion only; CSS
+still owns the breakpoints and the single DOM. The first row keeps the same geometry
+when motion becomes eligible, and font enlargement can restore the static layout.
+
+The animated section is a tall `view-timeline` with a pinned stage: the copy fades,
+the storefront grows and dissolves into the room photograph, and Eirik Holm's quote
+rises in. CSS drives the animation; no scroll listener. At the end the action row turns
 `visibility: hidden` so a faded button takes no taps or focus. On phones the scanner
 dock fades, so the floating trigger takes over when a mark 27svh below the section top
-passes the header. Without support or with reduced motion, the same DOM stacks as two
-still figures.
+passes the header. With insufficient room, without JavaScript or animation support,
+or with reduced motion, the same DOM stacks as two still figures and grows with its
+text. Actions remain reachable by
+ordinary document scrolling in landscape and at high zoom. Scanner docking follows
+the active CSS layout after rotation or a change in motion preferences.
 
 The frame is decorative (`aria-hidden`) except the clock link. The Oslo clock has a
 visible Open/Closed label at every width and includes its time in its accessible label.
@@ -185,7 +195,9 @@ in Discord (Server Settings, Engagement, Server Widget).
   «Utstyr og aktiviteter» panel pattern. One example code: `RES-00026`.
 - One `h1`, an `h2` per section, `h3` inside. No «staff» in user-facing copy.
 - Check both languages at 320 × 568, 360 × 640, 768 and 1280, both schemes, and with
-  JavaScript off. The hero headline breaks first.
+  JavaScript off. Also check short viewports at 320 × 256, 667 × 375 and 844 × 390,
+  enlarged text, and rotation between the still and animated layouts. The hero
+  headline breaks first.
 
 ## 4. Acceptance
 

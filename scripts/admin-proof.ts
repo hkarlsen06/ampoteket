@@ -375,6 +375,17 @@ try {
 
   await specs.getByRole('button', { name: m.newDefinition, exact: true }).click();
   const newType = page.getByRole('dialog', { name: m.newDefinition, exact: true });
+  const beforeSpecificationViewport = page.viewportSize()!;
+  for (const viewport of [{ width: 667, height: 375 }, { width: 360, height: 320 }]) {
+    await page.setViewportSize(viewport);
+    await expect(newType).toBeInViewport({ ratio: 1 });
+    for (const control of [newType.getByRole('button', { name: m.cancel, exact: true }), newType.getByLabel(fieldLabel(m.canonicalUnit)), newType.getByRole('button', { name: m.saveReference, exact: true })]) {
+      await control.scrollIntoViewIfNeeded();
+      await expect(control).toBeInViewport({ ratio: 1 });
+    }
+    await fits(page);
+  }
+  await page.setViewportSize(beforeSpecificationViewport);
   await newType.getByLabel(fieldLabel(m.definitionLabel)).fill('Browser custom frequency');
   // The value type is a segmented choice (number/text/yes-no), not a select.
   await newType.getByLabel(fieldLabel(m.valueType)).getByText(m.numberType, { exact: true }).click();
@@ -833,6 +844,26 @@ try {
   // Placement cases deliberately unpublish this product; publish it again for public-label checks.
   await sql(`UPDATE app.products SET bin_id='${binId}',is_active=true WHERE id='${productId}'`);
   const geometry = await context.newPage();
+  await geometry.addInitScript(() => Object.defineProperty(navigator.mediaDevices, 'getUserMedia', {
+    configurable: true, value: async () => { throw new DOMException('Denied for responsive proof', 'NotAllowedError'); }
+  }));
+  for (const viewport of [{ width: 667, height: 375 }, { width: 844, height: 390 }]) {
+    await geometry.setViewportSize(viewport);
+    await geometry.goto(`${origin}/en/admin/products`);
+    await geometry.getByRole('button', { name: m.scanProduct, exact: true }).click();
+    const scanner = geometry.getByRole('dialog', { name: m.scanProduct, exact: true });
+    const retry = scanner.getByRole('button', { name: en.scanner.retryCamera, exact: true });
+    await expect(retry).toBeVisible();
+    await expect(scanner).toBeInViewport({ ratio: 1 });
+    await retry.scrollIntoViewIfNeeded();
+    await expect(retry).toBeInViewport({ ratio: 1 });
+    const closeScanner = scanner.getByRole('button', { name: en.scanner.close, exact: true });
+    await closeScanner.scrollIntoViewIfNeeded();
+    await expect(closeScanner).toBeInViewport({ ratio: 1 });
+    await closeScanner.click();
+    await fits(geometry);
+  }
+  console.log('PASS: specification fields/actions and denied-camera retry/close remain reachable in short and landscape viewports');
   for (const locale of ['nb', 'en'] as const) for (const colorScheme of ['light', 'dark'] as const) for (const width of [360, 1280]) {
     const messages = locale === 'nb' ? nb : en;
     const prefix = locale === 'nb' ? '' : '/en';

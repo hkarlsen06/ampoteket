@@ -21,6 +21,20 @@
 	let open = $state(false);
 	let trigger = $state<HTMLButtonElement | null>(null);
 	const selected = $derived(products.find((product) => product.id === value));
+	// The keyboard can cover the trigger. Keep the anchor within the visible
+	// viewport so the picker can move above it instead of following it offscreen.
+	const anchor = $derived(trigger ? {
+		contextElement: trigger,
+		getBoundingClientRect: () => {
+			const rect = trigger!.getBoundingClientRect(), viewport = window.visualViewport;
+			if (!viewport) return rect;
+			// Convert document-relative viewport bounds to the trigger's client coordinates.
+			const viewportTop = viewport.pageTop + document.documentElement.getBoundingClientRect().top;
+			const top = Math.max(viewportTop, Math.min(rect.top, viewportTop + viewport.height));
+			const bottom = Math.max(top, Math.min(rect.bottom, viewportTop + viewport.height));
+			return new DOMRect(rect.x, top, rect.width, bottom - top);
+		}
+	} : null);
 
 	function choose(productId: string) {
 		value = productId;
@@ -42,10 +56,10 @@
 				</button>
 			{/snippet}
 		</Popover.Trigger>
-		<Popover.Content align="start" class="w-(--bits-popover-anchor-width) max-w-[calc(100vw-2rem)] p-0">
-			<Command.Root>
+		<Popover.Content align="start" customAnchor={anchor} collisionPadding={8} class="w-(--bits-popover-anchor-width) max-h-(--bits-popover-content-available-height) max-w-[calc(100vw-2rem)] p-0">
+			<Command.Root class="max-h-(--bits-popover-content-available-height)">
 				<Command.Input placeholder={m.searchProduct} aria-label={m.searchProduct} />
-				<Command.List class="overscroll-contain">
+				<Command.List class="min-h-0 overscroll-contain">
 					<Command.Empty>{m.noProductMatches}</Command.Empty>
 					<Command.Group>
 						{#each products as product (product.id)}

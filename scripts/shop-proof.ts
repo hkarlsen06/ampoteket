@@ -294,6 +294,48 @@ try {
 	const mapMessages = en.shelfMap;
 	const browser = context.browser()!;
 	const drawerCatalogUrl = `${api.origin}/rest/v1/rpc/amp_catalog`;
+	for (const [locale, messages] of [['', nb], ['/en', en]] as const) for (const reducedMotion of ['reduce', 'no-preference'] as const) {
+		await page.emulateMedia({ reducedMotion });
+		for (const viewport of [{ width: 667, height: 375 }, { width: 844, height: 390 }]) {
+			await page.setViewportSize(viewport);
+			await page.goto(origin + (locale || '/'));
+			await page.evaluate(() => document.fonts.ready);
+			const hero = page.locator('section[aria-labelledby="hero-title"]');
+			for (const content of [hero.locator('#hero-title'), hero.getByText(messages.home.hero.lede, { exact: true }), hero.getByRole('link', { name: messages.home.hero.parts, exact: true })]) {
+				await content.scrollIntoViewIfNeeded();
+				await expect(content).toBeInViewport({ ratio: 1 });
+			}
+			await fits(page);
+		}
+	}
+	await page.emulateMedia({ reducedMotion: 'no-preference' });
+	for (const [locale, messages] of [['', nb], ['/en', en]] as const) {
+		await page.setViewportSize({ width: 360, height: 900 });
+		await page.goto(origin + (locale || '/'));
+		await page.evaluate(() => document.fonts.ready);
+		const hero = page.locator('section[aria-labelledby="hero-title"]');
+		const catalog = hero.getByRole('link', { name: messages.home.hero.parts, exact: true });
+		await expect(hero).toHaveAttribute('data-walk-fits', 'true');
+		try {
+			await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+			await expect.poll(() => hero.getAttribute('data-walk-fits')).toBeNull();
+			for (const content of [hero.locator('#hero-title'), hero.getByText(messages.home.hero.lede, { exact: true }), catalog]) {
+				assert.ok(await content.evaluate(element => {
+					const frame = document.getElementById('hero-title')!.parentElement!.parentElement!.getBoundingClientRect();
+					const box = element.getBoundingClientRect();
+					return box.left >= frame.left && box.right <= frame.right && box.top >= frame.top && box.bottom <= frame.bottom;
+				}), 'Enlarged hero copy and actions remain inside the first row');
+			}
+			await catalog.scrollIntoViewIfNeeded();
+			await catalog.focus();
+			await page.keyboard.press('Tab');
+			await page.keyboard.press('Shift+Tab');
+			await expect(catalog).toBeFocused();
+			await expect(catalog).toBeInViewport({ ratio: 1 });
+		} finally { await page.evaluate(() => document.documentElement.style.removeProperty('font-size')); }
+		await expect(hero).toHaveAttribute('data-walk-fits', 'true');
+	}
+	console.log('PASS: landscape and enlarged-text hero copy/actions remain reachable; motion eligibility returns after font restoration');
 	// The home picker has no current product. Its contents come from a complete
 	// drawer-scoped catalog read only after a visitor selects an assigned drawer.
 	const homeDrawerCodes = Array.from({ length: 1000 }, (_, index) => index)
@@ -326,7 +368,9 @@ try {
 			await expect(shelfBody).toHaveAccessibleName(/\S/);
 			if (exerciseRecovery) {
 				await homePage.evaluate(() => window.dispatchEvent(new Event('online')));
+				// Every read has failed so far; there is no previous topology to retain.
 				await expect(homeMap.getByText(messages.shelfMap.unavailable, { exact: true })).toBeVisible();
+				await expect(homeMap.getByText(messages.shelfMap.previousRead, { exact: true })).toHaveCount(0);
 				await expect(homeMap.getByText(messages.shelfMap.noProducts, { exact: true })).toHaveCount(0);
 				await expect(homePage.getByRole('button', { name: messages.home.find.codeSubmit, exact: true, includeHidden: true })).toBeEnabled();
 				await homeContext.unroute(topologyUrl);
@@ -334,6 +378,17 @@ try {
 			}
 			const homeWall = homeMap.getByRole('group', { name: messages.shelfMap.wall, exact: true });
 			await expect(homeWall.getByRole('button')).toHaveCount(12);
+			if (exerciseRecovery) {
+				// A later failed refresh must retain the successfully loaded wall.
+				await homeContext.route(topologyUrl, route => route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }));
+				await homePage.evaluate(() => window.dispatchEvent(new Event('online')));
+				await expect(homeMap.getByText(messages.shelfMap.previousRead, { exact: true })).toBeVisible();
+				await expect(homeMap.getByText(messages.shelfMap.unavailable, { exact: true })).toHaveCount(0);
+				await expect(homeWall.getByRole('button')).toHaveCount(12);
+				await homeContext.unroute(topologyUrl);
+				await homeMap.getByRole('button', { name: messages.shelfMap.retry, exact: true }).click();
+				await expect(homeMap.getByText(messages.shelfMap.previousRead, { exact: true })).toHaveCount(0);
+			}
 			await expect(homeMap.locator('.drawer-contents, .loc, [aria-current], [aria-pressed="true"]')).toHaveCount(0);
 			await expect(homeMap.getByText(messages.shelfMap.locationUnavailable, { exact: true })).toHaveCount(0);
 			assert.deepEqual(homeCatalogRequests, [], 'The homepage reads topology without traversing the catalog');
@@ -1069,6 +1124,42 @@ try {
 		await freshContext.close();
 	}
 	console.log('PASS: product/cart refresh retains focused drafts and old facts on failure; changed sale steps get visible line errors; removal preserves keyboard focus; mobile placement stays visible');
+	// Valid long metadata and sparse wide topology must remain usable inside the
+	// phone filter dialog, where the page container cannot supply text wrapping.
+	const longCategory = 'W'.repeat(100);
+	await sql(`UPDATE app.categories SET name='${longCategory}' WHERE name='Resistors'; UPDATE app.cabinets SET outer_col=16 WHERE id='${catalogCabinetId}';`);
+	try {
+		await page.setViewportSize({ width: 360, height: 640 });
+		await page.goto(`${origin}/en/p`);
+		await page.getByRole('button', { name: en.catalog.filters, exact: true }).click();
+		const filters = page.getByRole('dialog', { name: en.catalog.filterTitle, exact: true });
+		const category = filters.getByRole('checkbox', { name: longCategory, exact: true });
+		await expect(category).toBeEnabled();
+		const label = category.locator('xpath=ancestor::label[1]');
+		await label.scrollIntoViewIfNeeded();
+		await expect(label).toBeInViewport({ ratio: 1 });
+		assert.ok(await label.evaluate(element => element.scrollWidth <= element.clientWidth), 'A 100-character category fits its label');
+		assert.ok(await filters.locator('.filter-dialog-body').evaluate(element => element.scrollWidth <= element.clientWidth), 'Long metadata does not cause sideways filter scrolling');
+		const selection = filters.locator('.label-shelf-selection');
+		const wall = selection.getByRole('group', { name: en.adminLabels.wall, exact: true });
+		const wallViewport = selection.getByRole('region', { name: en.adminLabels.wall, exact: true });
+		await wallViewport.scrollIntoViewIfNeeded();
+		await expect(wallViewport).toHaveAttribute('tabindex', '0');
+		await expect(wallViewport).toHaveCSS('overscroll-behavior', 'contain');
+		for (const box of await wall.getByRole('button').evaluateAll(elements => elements.map(element => { const { width, height } = element.getBoundingClientRect(); return { width, height }; }))) {
+			assert.ok(box.width >= 24 && box.height >= 24, 'Dense label walls preserve cabinet touch targets');
+		}
+		assert.ok(await wallViewport.evaluate(element => element.scrollWidth > element.clientWidth), 'A 16-column wall pans inside its named viewport');
+		const lastCabinet = wall.getByRole('checkbox', { name: en.adminLabels.selectCabinet('P1'), exact: true });
+		await lastCabinet.focus();
+		await expect.poll(() => wallViewport.evaluate(element => element.scrollLeft)).toBeGreaterThan(0);
+		await expect(lastCabinet).toBeInViewport({ ratio: 1 });
+		await fits(page);
+		await filters.getByRole('button', { name: en.catalog.closeFilters, exact: true }).click();
+	} finally {
+		await sql(`UPDATE app.categories SET name='Resistors' WHERE name='${longCategory}'; UPDATE app.cabinets SET outer_col=1 WHERE id='${catalogCabinetId}';`);
+	}
+	console.log('PASS: long category text wraps and a dense label wall retains 24px targets with local keyboard panning');
 	assert.deepEqual(errors, []);
 	console.log('PASS: no-JavaScript SSR paging/lookup, unavailable reads, denied storage, optional notifications and keyboard submission');
 	console.log(`PASS: catalog/product/cart acceptance; screenshots: ${artifacts}`);

@@ -69,21 +69,25 @@
 
 <Dialog.Root open={scanOpen} onOpenChange={(open) => { if (open) void startScanner(); else closeScanner(); }}>
 	<Dialog.Trigger>{#snippet child({ props })}<Button {...props} variant="outline" disabled={!products || disabled || admin.status !== 'ready'} class="no-js:hidden"><Icon icon={QrCodeIcon} />{m.scanProduct}</Button>{/snippet}</Dialog.Trigger>
-	<Dialog.Content preventScroll={false} aria-describedby={undefined} class="w-[26rem] max-w-[calc(100%-2rem)] grid-rows-[auto_minmax(0,1fr)] gap-0 p-0">
+	<Dialog.Content preventScroll={false} aria-describedby={undefined} class="w-[26rem] max-w-[calc(100%-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 p-0">
 		<Dialog.Header layout="bar">
 			<Dialog.Title id={`${uid}-title`}>{m.scanProduct}</Dialog.Title>
 			<Dialog.Close>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm"><Icon icon={XIcon} class="size-5" /><span class="sr-only">{i18n.m.scanner.close}</span></Button>{/snippet}</Dialog.Close>
 		</Dialog.Header>
 		<!-- svelte-ignore a11y_no_noninteractive_tabindex (Named scroll region supports native keyboard scrolling.) -->
-		<div class={[sheetBody, 'grid justify-items-start gap-4']} role="region" aria-labelledby={`${uid}-title`} tabindex="0">
+		<div class={[sheetBody, 'grid auto-rows-max justify-items-start gap-4']} role="region" aria-labelledby={`${uid}-title`} tabindex="0">
 		<AdminAccessGate>
 		<CameraFrame bind:video bind:canvas />
 		<p class="min-h-6 text-sm text-muted-foreground" role="status">{cameraState === 'starting' ? i18n.m.scanner.camera.starting : cameraState === 'scanning' ? '' : m.scanCameraUnavailable}</p>
-		{#if !['starting', 'scanning'].includes(cameraState)}<Button type="button" variant="outline" onclick={startScanner}>{i18n.m.scanner.retryCamera}</Button>{/if}
 		{#if scanResult === 'invalid'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.scanInvalid}</Alert.Message>{/if}
 		{#if scanResult === 'missing'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.scanMissing(scannedCode)}</Alert.Message>{/if}
-		{#if scanResult !== 'idle'}<Button type="button" variant="outline" onclick={scanAgain}>{m.scanAgain}</Button>{/if}
 		</AdminAccessGate>
 		</div>
+		{#if !['starting', 'scanning'].includes(cameraState) || scanResult !== 'idle'}
+		<Dialog.Footer variant="sheet">
+			{#if !['starting', 'scanning'].includes(cameraState)}<Button type="button" variant="outline" disabled={admin.status !== 'ready'} onclick={startScanner}>{i18n.m.scanner.retryCamera}</Button>{/if}
+			{#if scanResult !== 'idle'}<Button type="button" variant="outline" disabled={admin.status !== 'ready'} onclick={scanAgain}>{m.scanAgain}</Button>{/if}
+		</Dialog.Footer>
+		{/if}
 	</Dialog.Content>
 </Dialog.Root>

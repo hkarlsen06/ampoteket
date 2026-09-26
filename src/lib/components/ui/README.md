@@ -60,20 +60,26 @@ Keep these when comparing with or updating from upstream:
   `Field.Field orientation="horizontal"` keeps a 44px row.
 - **`Dialog`:** `Content` defaults to `preventScroll={false}` and no automatic close
   button; supply a localized close, or both `showCloseButton` and `closeLabel`.
+  Centered content is bounded to `100dvh - 2rem`; long text wraps, and bar-header
+  close controls do not shrink. Use `auto minmax(0,1fr) auto` rows and a named
+  `sheetBody` between header and footer when content can overflow.
   `Dialog.Title` is `text-xl`; `Content`/`Footer` take `variant="sheet"`;
   `Dialog.Header` has `layout="bar"` and `density="compact"` (the scanner at 360×640).
   Centered content is limited to the viewport minus 2rem. Put long content in a
   named, focusable `sheetBody` scroll region, with title and actions outside it.
 - **`AlertDialog`:** no close icon, `preventScroll={false}`, initial focus on the
   enabled `Cancel`. `Cancel` closes; `Action` leaves closing to the caller after
-  success.
-  Long descriptions form a contained scroll region with a caller-supplied
-  accessible name; title and actions remain visible.
+  success. Content fits the dynamic viewport; Description wraps its warning in a
+  contained, focusable scroll region between the title and actions. Supply its
+  localized `aria-label` or `aria-labelledby`; this names the wrapper so the warning
+  text still supplies the dialog's accessible description.
 - **`Sidebar`:** below 48rem the upstream mobile branch uses our shared `Dialog` as a
   left sheet with localized title/close. `Sidebar.Content` is the named navigation
   scroll region (`overflow-y-auto overscroll-contain`).
 - **`Command`/`Popover`** (admin order product combobox): search input on the shared
-  control surface; the result list is a contained scroll region; selected items keep
+  control surface, with a nonshrinking input row; the combobox caps content to the
+  popover's available height and lets the contained result list shrink. Its virtual
+  anchor clips the trigger to the visual viewport when a keyboard covers it. Selected items keep
   a visible check. `CommandDialog` and `CommandLinkItem` were removed.
 - **`Menubar`:** no interior scroll region; callers keep action lists short.
 - **`Sonner`:** `theme="system"`, semantic popover colours, localized container and

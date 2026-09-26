@@ -616,8 +616,11 @@
 <AlertDialog.Root open={confirmation !== null} onOpenChange={(open) => { if (!open) confirmation = null; }}>
 	<AlertDialog.Content preventScroll={false} onCloseAutoFocus={(event) => { event.preventDefault(); confirmationTrigger?.focus({ preventScroll: true }); }}>
 		<AlertDialog.Header>
-			<AlertDialog.Title>{confirmation?.kind === 'swap-bins' || confirmation?.kind === 'swap-cabinets' ? m.swapHeading : confirmation?.kind === 'bin' && !confirmation.after.is_archived ? m.moveDrawer : confirmation?.kind === 'archive-cabinet' ? m.archiveCabinetWithDrawers : confirmation?.kind === 'cabinet' ? m.archiveCabinet : m.archiveBin}</AlertDialog.Title>
-			<AlertDialog.Description aria-label={confirmation?.kind === 'swap-bins' || confirmation?.kind === 'swap-cabinets' ? m.swapHeading : confirmation?.kind === 'bin' && !confirmation.after.is_archived ? m.moveDrawer : confirmation?.kind === 'archive-cabinet' ? m.archiveCabinetWithDrawers : confirmation?.kind === 'cabinet' ? m.archiveCabinet : m.archiveBin}>{confirmation ? summary(confirmation) : ''}<span class="mt-2 block">{confirmation?.kind === 'swap-bins' || confirmation?.kind === 'swap-cabinets' ? m.swapHint : confirmation?.kind === 'bin' && !confirmation.after.is_archived ? m.moveHint : m.archiveHint}</span></AlertDialog.Description>
+			<AlertDialog.Title id={`${fieldId}-confirmation-title`}>{confirmation?.kind === 'swap-bins' || confirmation?.kind === 'swap-cabinets' ? m.swapHeading : confirmation?.kind === 'bin' && !confirmation.after.is_archived ? m.moveDrawer : confirmation?.kind === 'archive-cabinet' ? m.archiveCabinetWithDrawers : confirmation?.kind === 'cabinet' ? m.archiveCabinet : m.archiveBin}</AlertDialog.Title>
+			<AlertDialog.Description aria-labelledby={`${fieldId}-confirmation-title`}>
+				<span class="block">{confirmation ? summary(confirmation) : ''}</span>
+				<span class="mt-3 block text-foreground">{confirmation?.kind === 'swap-bins' || confirmation?.kind === 'swap-cabinets' ? m.swapHint : confirmation?.kind === 'bin' && !confirmation.after.is_archived ? m.moveHint : m.archiveHint}</span>
+			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel>{m.cancelAction}</AlertDialog.Cancel>

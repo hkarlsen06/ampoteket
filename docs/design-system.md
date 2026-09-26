@@ -164,11 +164,14 @@ or suppresses it.
   outside it. The current ones:
   - `ShelfDiagram`'s viewport (arrow/Home/End pan it to reveal the focused cell;
     the document stays still);
+  - `LabelShelfSelection`'s wall viewport, which preserves cabinet target and
+    coordinate widths on dense walls and reveals keyboard focus locally;
   - the homepage shelf sheet's `shelf-picker-body` and the admin placement sheet's
     `shelf-editor-body`;
-  - dialog bodies `count-body`, `placement-sheet-body`, `order-entry-body`, the
-    planned receipt review and new specification form;
-  - long confirmation descriptions in `AlertDialog`;
+  - dialog bodies `count-body`, `placement-sheet-body`, `order-entry-body` and the
+    planned receipt review, plus the new specification form, staff scanner and
+    drawer rename bodies;
+  - `AlertDialog.Description`, named by its confirmation title;
   - the catalog filter picker, and the scanner's last-resort overflow fallback;
   - the admin `Sidebar.Content` menu and the product combobox result list.
 - **The header never hides.** `position: sticky; top: 0`, constant height
@@ -184,7 +187,10 @@ or suppresses it.
   - header scroll meter, a primary hairline filling along the header's bottom edge
     (`scroll-meter` in `app.css`), unlit without support, hidden for reduced motion.
 
-  CSS lives in `app.css` (`scroll-motion:` variant, `walk-*`/`power-on`);
+  CSS lives in `app.css` (`scroll-motion:`/`walk-motion:` variants, `walk-*`/`power-on`).
+  The homepage observer enables the walk only when the natural copy fits its CSS
+  height budget; enlarged text otherwise retains the static layout. CSS owns the
+  breakpoints and reduced-motion fallback;
   details in [page-home.md](page-home.md). Nothing else moves with scroll.
 - **Anchors respect the header.** `scroll-padding-top` in `app.css` keeps anchors
   and focus targets below it. New sticky surfaces update the `--header-h` math.
@@ -322,10 +328,13 @@ finished first is an inline `Alert.Message` followed by a `link` resume button.
 **Disclosure and dialogs:** `Collapsible` with `DisclosureTrigger` for content that
 grows below its trigger, including inline confirmations and row edits (no native
 `<details>` or ad-hoc toggles). `Dialog` uses `preventScroll={false}` and a localized
-title and close control; it has no default close button. Keep Escape, outside
-interaction, return focus and in-flight guards. Centered dialogs stay inside the
-viewport; long content scrolls in a named body while the title and actions stay visible.
-Destructive or irreversible actions
+title and close control; it has no default close button. Centered content is bounded
+by the dynamic viewport height. Use header/body/footer rows with a named `sheetBody`
+scroll region when its content can exceed that height, keeping actions reachable in
+landscape. Portaled text wraps within the surface and close controls never shrink.
+Product comboboxes fit the popover's available height, retaining the search field
+above a shrinking result list. Keep Escape, outside
+interaction, return focus and in-flight guards. Destructive or irreversible actions
 (archiving, cancelling an order, finishing a count, clearing contacts) confirm with
 `AlertDialog`. An acknowledged shelf swap shows a localized `Sonner` toast;
 cancelled or uncertain requests do not.

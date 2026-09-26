@@ -38,6 +38,7 @@
 		};
 		const zoomingIn = !open, before = box(level.querySelector(zoomingIn ? `[data-zoom-face="${CSS.escape(id)}"]` : '[data-zoom-frame]'));
 		const fromHeight = stage.offsetHeight, copy = level.cloneNode(true) as HTMLElement;
+		const offsets = Array.from(level.querySelectorAll<HTMLElement>('[role="region"]'), (region) => ({ left: region.scrollLeft, top: region.scrollTop }));
 		for (const node of [copy, ...copy.querySelectorAll('[id]')]) node.removeAttribute('id');
 		onchange(next);
 		void tick().then(() => {
@@ -47,6 +48,8 @@
 			if (!stage || !level || !ghost || !wallFace || !frame || !wallFace.width) return;
 			// eslint-disable-next-line svelte/no-dom-manipulating -- Svelte renders no children into the ghost layer.
 			ghost.replaceChildren(copy);
+			// cloneNode omits scroll positions; keep panned walls aligned with the chosen cabinet.
+			copy.querySelectorAll<HTMLElement>('[role="region"]').forEach((region, index) => { region.scrollLeft = offsets[index].left; region.scrollTop = offsets[index].top; });
 			const wallLevel = zoomingIn ? copy : level, cabinetLevel = zoomingIn ? level : copy;
 			const scale = frame.width / wallFace.width;
 			wallLevel.style.transformOrigin = `${wallFace.x}px ${wallFace.y}px`;

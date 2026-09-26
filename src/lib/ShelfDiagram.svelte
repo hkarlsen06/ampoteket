@@ -10,6 +10,7 @@
 	import { cn } from '$lib/utils';
 	import ShelfCabinetFace from '$lib/ShelfCabinetFace.svelte';
 	import { diagramRect, raaco, type CabinetInner } from '$lib/shelf-map';
+	import { revealShelfFocus } from '$lib/shelf-focus';
 
 	// `inner` draws a wall cabinet's drawer layout on its face.
 	type Item = { id: string; row: number; col: number; rowSpan?: number; colSpan?: number; label: string; empty?: boolean; inner?: CabinetInner };
@@ -116,18 +117,6 @@
 		if (disabled || (event instanceof MouseEvent && event.detail > 0 && dragged)) return;
 		focusedId = id; onselect(id, event);
 	}
-	function reveal(element: HTMLElement) {
-		// Reveal focus within the diagram and any containing sheet. Never pan
-		// the document or animate keyboard moves.
-		for (let region: HTMLElement | null = viewport; region && region !== document.body; region = region.parentElement) {
-			if (!/(auto|scroll)/.test(getComputedStyle(region).overflow)) continue;
-			const frame = region.getBoundingClientRect(), target = element.getBoundingClientRect();
-			if (target.left < frame.left + 4) region.scrollLeft -= frame.left + 4 - target.left;
-			else if (target.right > frame.right - 4) region.scrollLeft += target.right - frame.right + 4;
-			if (target.top < frame.top + 4) region.scrollTop -= frame.top + 4 - target.top;
-			else if (target.bottom > frame.bottom - 4) region.scrollTop += target.bottom - frame.bottom + 4;
-		}
-	}
 	function neighbour(id: string, direction: string): Item | undefined {
 		const source = items.find((item) => item.id === id);
 		if (!source) return;
@@ -205,14 +194,15 @@
 				<Toggle.Root bind:pressed={() => active, () => {}} {disabled}
 					onclick={(event) => select(item.id, event)} onkeydown={(event) => key(event, item.id)}>
 					{#snippet child({ props })}
+						<!-- Touch pans the viewport; its drag gesture belongs to the dedicated move grip. -->
 						<Button {...props} variant="ghost" data-item-id={item.id}
-							class={['cell-hit group/cell relative h-full min-h-0 w-full min-w-0 rounded-none border-0 bg-transparent p-0 font-mono font-normal text-foreground hover:bg-transparent active:not-aria-[haspopup]:translate-y-0', item.empty && 'empty', active && 'selected', partial && 'partial', current === item.id && 'current', onswap && !disabled && 'touch-none cursor-grab', drag?.id === item.id && drag.moved && 'cursor-grabbing border border-dashed border-muted-foreground']}
+							class={['cell-hit group/cell relative h-full min-h-0 w-full min-w-0 rounded-none border-0 bg-transparent p-0 font-mono font-normal text-foreground hover:bg-transparent active:not-aria-[haspopup]:translate-y-0', item.empty && 'empty', active && 'selected', partial && 'partial', current === item.id && 'current', onswap && !disabled && 'cursor-grab', drag?.id === item.id && drag.moved && 'cursor-grabbing border border-dashed border-muted-foreground']}
 							tabindex={!disabled && tabId === item.id ? 0 : -1}
 							aria-current={current === item.id ? 'true' : undefined}
 							aria-label={item.empty && emptyLabel ? `${item.label} · ${emptyLabel}` : item.label}
 							aria-pressed={partial ? 'mixed' : active}
-							onpointerdown={(event) => { if (onswap) startDrag(event, item.id); }} onlostpointercapture={cancelDrag}
-								onfocus={(event) => { focusedId = item.id; reveal(event.currentTarget); }}
+							onpointerdown={(event) => { dragged = false; if (onswap && event.pointerType === 'mouse') startDrag(event, item.id); }} onlostpointercapture={cancelDrag}
+							onfocus={(event) => { focusedId = item.id; revealShelfFocus(event.currentTarget, viewport); }}
 							style={`grid-column: ${item.col} / span ${item.colSpan ?? 1}; grid-row: ${rows - item.row - (item.rowSpan ?? 1) + 2} / span ${item.rowSpan ?? 1};`}>
 							<!-- Assigned drawers are filled fronts with a label strip, as the
 							     real drawers carry one; unassigned drawers are hollow. Wall

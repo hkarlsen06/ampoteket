@@ -10,6 +10,7 @@
 	import ShelfCabinetFace from '$lib/ShelfCabinetFace.svelte';
 	import { cabinetInner, raaco, type ShelfTopology } from '$lib/shelf-map';
 	import { labelCabinets, labelDrawers, labelSelectionState, toggleLabelSelection } from '$lib/label-selection';
+	import { revealShelfFocus } from '$lib/shelf-focus';
 
 	let { topology, selected, onselection, onselectall, onclear, heading, disabled = false }: {
 		topology: ShelfTopology; selected: string[]; onselection: (ids: string[]) => void; disabled?: boolean;
@@ -67,8 +68,13 @@
 			title={openCabinet ? m.cabinet(gridCell(openCabinet.outer_row, openCabinet.outer_col)) : m.wall}>
 			{#snippet wall(zoomTo)}
 				<!-- The same steel faces as ShelfDiagram's wall: Raaco cabinets touching frame to frame. -->
-				<div class="wall-diagram relative grid p-1" role="group" aria-label={m.wall} data-zoom-frame
-					style:grid-template-columns={`repeat(${wallCols}, minmax(0, 1fr))`}>
+				<!-- svelte-ignore a11y_no_noninteractive_tabindex (The named shelf viewport supports native keyboard scrolling.) -->
+				<div class="wall-viewport min-w-0 max-h-[min(32rem,70dvh)] overflow-auto overscroll-contain p-1" role="region" aria-label={m.wall} tabindex="0"
+					onfocusin={(event) => { if (event.target !== event.currentTarget) revealShelfFocus(event.target as HTMLElement, event.currentTarget); }}>
+				<!-- Keep each checkbox inside its cabinet and leave room for the longest coordinate. -->
+				<div class="wall-diagram relative grid font-mono text-base md:text-2xl" role="group" aria-label={m.wall} data-zoom-frame
+					style:grid-template-columns={`repeat(${wallCols}, minmax(0, 1fr))`}
+					style:min-width={`max(${wallCols * 3}rem, ${wallCols * (gridCell(wallRows, wallCols).length + 2)}ch)`}>
 					{#each cabinets as cabinet (cabinet.id)}
 						{@const position = gridCell(cabinet.outer_row, cabinet.outer_col)}
 						{@const bins = labelDrawers(topology, cabinet.id)}
@@ -85,6 +91,7 @@
 								onkeydown={(event) => cabinetKey(event, cabinet.id)} />
 						</div>
 					{/each}
+				</div>
 				</div>
 			{/snippet}
 			{#snippet cabinet()}

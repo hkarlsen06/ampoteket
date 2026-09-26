@@ -203,13 +203,22 @@
 }
 
 /* Landing-page photo motion (docs/page-home.md §2.2, §2.4). Everything below
-   applies only through `scroll-motion:`, so browsers without scroll-driven
-   animations and reduced-motion visitors get the still, stacked layout.
+   applies only through `scroll-motion:` or `walk-motion:`, so browsers without
+   scroll-driven animations and reduced-motion visitors get the still layout.
    The hero section is the --walk timeline: while its stage is pinned, the
    storefront grows toward the window and fades into the room inside. */
 @custom-variant scroll-motion {
   @media (prefers-reduced-motion: no-preference) {
     @supports (animation-timeline: view()) { @slot; }
+  }
+}
+/* A pinned hero cannot grow with its copy. Short viewports and copy that does
+   not fit keep the static layout; the homepage measures only motion eligibility. */
+@custom-variant walk-motion {
+  @media (prefers-reduced-motion: no-preference) and (min-height: 40rem) {
+    @supports (animation-timeline: view()) {
+      &:where([data-walk-fits], [data-walk-fits] *) { @slot; }
+    }
   }
 }
 @utility walk-scene { view-timeline: --walk block; }

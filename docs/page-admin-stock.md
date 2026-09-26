@@ -45,6 +45,8 @@ sort because unlike units do not compare. Search includes a hyphen-free code ali
 (`res00026` finds `RES-00026`), here and in the count picker. **Scan product** opens a
 label's editor for any loaded product; unknown labels stay in the dialog. This scan
 never changes stock or the basket.
+Its camera/status body scrolls in short viewports while Close and retry actions
+remain outside the scrolling region.
 
 - The form reads top to bottom in working order: *Category and name*,
   *Specifications*, *Placement*, *Sales and stock*, then *Description and links*,
@@ -101,6 +103,8 @@ editor replaces the `/new` history entry with the product's route.
 Standard categories suggest fields; Miscellaneous, custom and uncategorized products
 show the full set. Staff can add a custom type (label, scalar type, optional unit).
 Existing values stay visible when the category changes.
+The new-type dialog keeps its title, Close and Save visible while its form body
+scrolls in short viewports.
 
 - Fields are edited in place and written by Save product. All are optional; clearing
   removes the value, and unknown values stay missing, never zero or false. An invalid
@@ -149,7 +153,8 @@ selected drawer. Save commits atomically. Rules, rechecked by the database:
   identity. Grid resizing fills uncovered cells and never removes assigned drawers.
 - Loading the map and ordinary moves never generate drawers.
 
-**Moves and swaps.** Drag a drawer, or use its move grip by tap or keyboard. A drop on
+**Moves and swaps.** A mouse can drag the drawer face; touch swipes on faces pan the
+diagram. Drag its move grip to move with touch, or use the grip by tap or keyboard. A drop on
 another drawer is a confirmed swap; on a vacant cell a confirmed guarded move. Unsaved
 layout edits must be saved or discarded first. Only an acknowledged swap shows the
 success toast. Moves keep a drawer's products and size.

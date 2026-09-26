@@ -62,17 +62,29 @@
 	// (Scanner.svelte) stays hidden until this one scrolls out of view.
 	let scanDock = $state<HTMLElement | null>(null);
 	let scanDocked = $state(true);
+	let heroCopy = $state<HTMLDivElement | null>(null), heroFrame = $state<HTMLDivElement | null>(null);
+	let walkFits = $state(false);
 	// Shown only while the hero runs its scroll scene (CSS decides).
 	let walkMark = $state<HTMLElement | null>(null);
 	$effect(() => {
-		if (!scanDock || !walkMark) return;
-		// Hand over as soon as the button starts sliding under the sticky header or,
-		// in the scroll scene, once it has faded out.
-		const header = getComputedStyle(document.documentElement).getPropertyValue('--header-h') || '0px';
-		const walking = getComputedStyle(walkMark).display !== 'none';
-		const observer = new IntersectionObserver(([entry]) => { scanDocked = walking ? entry.isIntersecting : entry.intersectionRatio === 1; }, { rootMargin: `-${header} 0px 0px`, threshold: walking ? 0 : 1 });
-		observer.observe(walking ? walkMark : scanDock);
-		return () => observer.disconnect();
+		if (!scanDock || !walkMark || !heroCopy || !heroFrame) return;
+		const dock = scanDock, mark = walkMark, copy = heroCopy, frame = heroFrame;
+		let observer: IntersectionObserver | undefined;
+		// CSS switches the mark on/off when height or motion preferences change.
+		// Reobserve after rotation so docking follows the currently visible layout.
+		const resize = new ResizeObserver(() => {
+			const style = getComputedStyle(frame);
+			// Natural height and CSS's viewport budget are identical in both layouts.
+			// Animated transforms never affect the fit test or cause observer feedback.
+			walkFits = copy.offsetHeight + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) <= parseFloat(style.minHeight);
+			observer?.disconnect();
+			const header = getComputedStyle(document.documentElement).getPropertyValue('--header-h') || '0px';
+			const walking = getComputedStyle(mark).display !== 'none';
+			observer = new IntersectionObserver(([entry]) => { scanDocked = walking ? entry.isIntersecting : entry.intersectionRatio === 1; }, { rootMargin: `-${header} 0px 0px`, threshold: walking ? 0 : 1 });
+			observer.observe(walking ? mark : dock);
+		});
+		resize.observe(dock); resize.observe(mark); resize.observe(copy); resize.observe(frame);
+		return () => { resize.disconnect(); observer?.disconnect(); };
 	});
 	// Discord's online members load through the Worker once their card is about a screen
 	// away. undefined: loading; null: unavailable, never shown as 0.
@@ -312,23 +324,23 @@
 	<meta property="og:description" content={m.description} />
 </svelte:head>
 
-<!-- The storefront act. Where scroll-driven animations run (and motion is
-     welcome) the section is a tall --walk timeline with a pinned stage: the
+<!-- The storefront act. Where scroll-driven animations run, motion is welcome
+     and the viewport is tall enough, a --walk timeline pins the stage: the
      storefront grows toward its window and dissolves into the room inside,
      where the quote appears. Elsewhere the same DOM stacks as two still
      figures: storefront with the copy, then the room with the quote. -->
-<section class="focus-night relative isolate bg-night scroll-motion:walk-scene scroll-motion:h-[250svh]" aria-labelledby="hero-title">
+<section class="focus-night relative isolate bg-night walk-motion:walk-scene walk-motion:h-[250svh]" data-walk-fits={walkFits || undefined} aria-labelledby="hero-title">
 	<!-- In the scene the scanner dock fades instead of scrolling away; the floating
 	     trigger takes over when this mark, placed where the fade ends, passes the header. -->
-	<div bind:this={walkMark} class="pointer-events-none absolute top-[calc(27svh+var(--header-h))] hidden size-px scroll-motion:block" aria-hidden="true"></div>
-	<div class="relative grid overflow-hidden scroll-motion:sticky scroll-motion:top-[var(--header-h)] scroll-motion:h-[calc(100svh-var(--header-h))]">
+	<div bind:this={walkMark} class="pointer-events-none absolute top-[calc(27svh+var(--header-h))] hidden size-px walk-motion:block" aria-hidden="true"></div>
+	<div class="relative grid overflow-hidden walk-motion:sticky walk-motion:top-[var(--header-h)] walk-motion:h-[calc(100svh-var(--header-h))]">
 		<!-- Film grain on the night surface only; the photograph above keeps clean blacks. -->
 		<div class="pointer-events-none absolute inset-0 bg-[url(/textures/grain.svg)] opacity-[.07]" aria-hidden="true"></div>
 		<!-- Phones: the window above the copy, fading into the night. From 64rem: the
 		     photograph fills the right of the stage, feathered on three sides, and is
 		     lowered 12% so the lit window is centred on the copy rather than riding high.
 		     The mask sits on the image, so the feather moves with it and the credit stays sharp. -->
-		<figure class="relative col-start-1 row-start-1 m-0 h-[56svh] origin-[46%_38%] lg:ml-[40%] lg:h-auto lg:origin-center scroll-motion:walk-approach">
+		<figure class="relative col-start-1 row-start-1 m-0 h-[56svh] origin-[46%_38%] lg:ml-[40%] lg:h-auto lg:origin-center walk-motion:walk-approach">
 			<img class="absolute inset-0 size-full object-cover object-[28%_50%] mask-b-from-55% lg:translate-y-[12%] lg:object-[0%_50%] lg:mask-l-from-75% lg:mask-y-from-75%"
 				srcset={photoSrcset('storefront')} sizes="(min-width: 64rem) 60vw, 130vw" src="/photos/storefront-1280.webp" width="4066" height="3100"
 				alt={m.photos.storefront} fetchpriority="high" />
@@ -336,30 +348,30 @@
 		</figure>
 		<!-- Viewfinder corners around the scene; artwork only. -->
 		<div class="pointer-events-none relative z-30 col-start-1 row-start-1 hidden lg:block" aria-hidden="true"><Brackets class="inset-4 text-night-muted" /></div>
-		<div class={pageContainer({ class: 'relative z-10 col-start-1 row-start-1 grid min-h-[calc(100svh-var(--header-h))] w-full content-end pt-16 pb-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:content-center lg:py-24 scroll-motion:walk-away' })}>
+		<div bind:this={heroFrame} class={pageContainer({ class: 'relative z-10 col-start-1 row-start-1 grid min-h-[calc(100svh-var(--header-h))] w-full grid-cols-[minmax(0,1fr)] content-end pt-16 pb-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:content-center lg:py-24 walk-motion:walk-away' })}>
 			<!-- Sized to its own column, so a wide fallback font cannot push the headline
 			     or lede into the photograph; smaller on short screens, where the pinned
 			     stage cannot grow and the copy would reach the status strip. -->
-			<div class="@container grid justify-items-start gap-5 md:gap-6">
-				<h1 id="hero-title" class="max-w-[16ch] text-[clamp(2.25rem,12.5cqi,5.25rem)] text-night-foreground [@media(max-height:40rem)]:text-[clamp(1.75rem,10cqi,3rem)] [text-shadow:0_0_2rem_var(--night)]">{m.hero.title}</h1>
-				<p class="max-w-[var(--measure-lede)] text-[clamp(1.125rem,1rem+0.6vw,1.375rem)] text-night-muted">{m.hero.lede}</p>
-				<div class={[formActions, 'phone:flex-nowrap phone:items-stretch scroll-motion:walk-hide']}>
-					<Button variant="night" class="min-w-42 px-6 phone:min-w-0 phone:flex-1 phone:px-4 [-webkit-touch-callout:none]" href={i18n.href('/p')} onpointerdown={startHold} onpointerup={cancelHold} onpointerleave={cancelHold} onpointercancel={cancelHold} oncontextmenu={(event) => event.preventDefault()} onclick={(event) => { if (held) { event.preventDefault(); held = false; } }}><Icon icon={CpuIcon} />{m.hero.parts}</Button>
+			<div bind:this={heroCopy} class="@container grid min-w-0 grid-cols-[minmax(0,1fr)] justify-items-start gap-5 md:gap-6">
+				<h1 id="hero-title" class="w-full min-w-0 max-w-[16ch] text-[clamp(2.25rem,12.5cqi,5.25rem)] text-night-foreground [@media(max-height:40rem)]:text-[clamp(1.75rem,10cqi,3rem)] [text-shadow:0_0_2rem_var(--night)]">{m.hero.title}</h1>
+				<p class="w-full min-w-0 max-w-[var(--measure-lede)] text-[clamp(1.125rem,1rem+0.6vw,1.375rem)] text-night-muted">{m.hero.lede}</p>
+				<div class={[formActions, 'min-w-0 max-w-full phone:items-stretch walk-motion:walk-hide']}>
+					<Button variant="night" class="min-w-42 px-6 phone:min-w-0 phone:flex-[1_1_10rem] phone:px-4 [-webkit-touch-callout:none]" href={i18n.href('/p')} onpointerdown={startHold} onpointerup={cancelHold} onpointerleave={cancelHold} onpointercancel={cancelHold} oncontextmenu={(event) => event.preventDefault()} onclick={(event) => { if (held) { event.preventDefault(); held = false; } }}><Icon icon={CpuIcon} />{m.hero.parts}</Button>
 					<Button variant="night" class="hidden shrink-0 px-4 no-js:hidden phone:inline-flex" aria-label={i18n.m.scanner.open} aria-haspopup="dialog" data-scanner-dock={scanDocked || undefined} bind:ref={scanDock} onclick={openScanner}><Icon icon={QrCodeIcon} />{i18n.m.scanner.action}</Button>
 				</div>
 			</div>
 		</div>
 		<!-- Inside: the room at night, and the page's best sentence over its dark floor.
 		     It holds nothing interactive, so while faded out it lets taps through. -->
-		<div class="relative z-20 col-start-1 row-start-2 grid min-h-[85svh] content-end scroll-motion:pointer-events-none scroll-motion:row-start-1 scroll-motion:min-h-0">
-			<figure class="absolute inset-0 m-0 scroll-motion:walk-inside">
+		<div class="relative z-20 col-start-1 row-start-2 grid min-h-[85svh] content-end walk-motion:pointer-events-none walk-motion:row-start-1 walk-motion:min-h-0">
+			<figure class="absolute inset-0 m-0 walk-motion:walk-inside">
 				<img class="absolute inset-0 size-full object-cover object-[30%_40%] lg:object-[50%_35%]"
 					srcset={photoSrcset('workshop')} sizes="(min-width: 64rem) 100vw, 230vw" src="/photos/workshop-1280.webp" width="5425" height="3876"
 					alt={m.photos.workshop} loading="lazy" decoding="async" />
 				<div class="absolute inset-0 bg-[linear-gradient(to_top,var(--night),color-mix(in_srgb,var(--night)_55%,transparent)_40%,transparent_70%)]" aria-hidden="true"></div>
 				{@render credit()}
 			</figure>
-			<figure class={pageContainer({ class: 'relative m-0 w-full pt-24 pb-24 max-md:pr-10 md:pb-16 lg:pb-24 scroll-motion:walk-quote' })}>
+			<figure class={pageContainer({ class: 'relative m-0 w-full pt-24 pb-24 max-md:pr-10 md:pb-16 lg:pb-24 walk-motion:walk-quote' })}>
 				<blockquote class="m-0 border-l-2 border-night-accent pl-6 md:pl-8"><p class="max-w-[24ch] text-[clamp(1.75rem,1.1rem+2.6vw,3.5rem)] leading-[1.1] font-light tracking-tight text-night-foreground">{m.about.quote}</p></blockquote>
 				<figcaption class="mt-5 pl-6 text-sm text-night-muted md:pl-8">{m.about.quoteBy}</figcaption>
 			</figure>

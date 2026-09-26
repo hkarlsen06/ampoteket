@@ -68,6 +68,43 @@ try {
 	await page.getByLabel(fieldLabel(m.supplier)).fill('Disposable parts supplier');
 	await page.getByLabel(fieldLabel(m.reference)).fill('WEB-ORDER-1');
 	await page.getByLabel(fieldLabel(`${m.additionalCost} (NOK)`)).fill('3.50');
+	for (const viewport of [{ width: 360, height: 640 }, { width: 667, height: 375 }]) {
+		await page.setViewportSize(viewport);
+		await page.getByRole('combobox', { name: m.product, exact: true }).click();
+		const search = page.getByRole('combobox', { name: m.searchProduct, exact: true });
+		await expect(page.getByRole('option').nth(10)).toBeAttached();
+		await expect(search).toBeInViewport({ ratio: 1 });
+		await expect(page.locator('[data-slot="popover-content"]')).toBeInViewport({ ratio: 1 });
+		if (viewport.width === 667) {
+			// Simulate the keyboard shrinking only the visual viewport; the layout
+			// stays 375px high and the product trigger remains behind the keyboard.
+			try {
+				await page.evaluate(() => {
+					const visible = window.visualViewport;
+					if (!visible) throw new Error('Visual viewport unavailable');
+					Object.defineProperty(visible, 'height', { configurable: true, value: 86 });
+					visible.dispatchEvent(new Event('resize'));
+				});
+				await expect.poll(() => search.evaluate(element => {
+					const popup = element.closest('[data-slot="popover-content"]');
+					return popup !== null && [element, popup].every(control => {
+						const box = control.getBoundingClientRect();
+						return box.height > 0 && box.top >= 0 && box.bottom <= 86;
+					});
+				})).toBe(true);
+			} finally {
+				await page.evaluate(() => {
+					const visible = window.visualViewport!;
+					Reflect.deleteProperty(visible, 'height');
+					visible.dispatchEvent(new Event('resize'));
+				});
+			}
+			await expect(search).toBeInViewport({ ratio: 1 });
+		}
+		await search.press('Escape');
+		await fits(page);
+	}
+	await page.setViewportSize({ width: 360, height: 900 });
 	await chooseProduct(page, 0);
 	await page.getByLabel(fieldLabel(`${m.quantity} (pcs)`)).first().fill('10');
 	await page.getByLabel(fieldLabel(`${m.unitCost} (NOK)`)).first().fill('1.25');
@@ -151,12 +188,12 @@ try {
 	await receivedQuantity.fill('4');
 	await sql(`UPDATE app.purchase_orders SET supplier_name='Supplier updated in another tab' WHERE id=${literal(orderId)}`);
 	await page.evaluate(() => window.dispatchEvent(new Event('online')));
-	await expect(receive.getByRole('heading', { name: `${m.receiveHeading} · Supplier updated in another tab`, exact: true })).toBeVisible();
+	await expect(receive.getByText('Supplier updated in another tab', { exact: true })).toBeVisible();
 	await expect(receivedQuantity).toHaveValue('4');
 	await expect(receivedQuantity).toBeFocused();
 	await sql(`UPDATE app.purchase_orders SET supplier_name='Disposable parts supplier' WHERE id=${literal(orderId)}`);
 	await page.evaluate(() => window.dispatchEvent(new Event('online')));
-	await expect(receive.getByRole('heading', { name: `${m.receiveHeading} · Disposable parts supplier`, exact: true })).toBeVisible();
+	await expect(receive.getByText('Disposable parts supplier', { exact: true })).toBeVisible();
 	await expect(receivedQuantity).toHaveValue('4');
 	console.log('PASS: planned receipt refreshes on reconnect while retaining selected quantity and focus');
 	const receiptRpc = `${api.origin}/rest/v1/rpc/amp_record_receipt`;
@@ -212,7 +249,38 @@ try {
 	await cancel.locator('input').first().fill('2');
 	await cancel.getByLabel(fieldLabel(m.cancelReason)).fill('Supplier short shipment');
 	await cancel.getByRole('button', { name: m.cancelSelected, exact: true }).click();
-	await page.getByRole('alertdialog').getByRole('button', { name: m.cancelSelected, exact: true }).click();
+	const cancellationDialog = page.getByRole('alertdialog', { name: m.cancelSelected, exact: true });
+	await expect(cancellationDialog).toHaveAccessibleDescription(m.cancelConfirm);
+	const confirmationBody = cancellationDialog.getByRole('region', { name: m.cancelSelected, exact: true });
+	const confirmationCopy = cancellationDialog.locator('[data-slot="alert-dialog-description"]');
+	const beforeConfirmationViewport = page.viewportSize()!;
+	const confirmationText = await confirmationCopy.textContent();
+	assert.ok(confirmationText);
+	// Stress long confirmation copy without changing the command or its fixture.
+	await confirmationCopy.evaluate((element, text) => { element.textContent = text.repeat(12); }, confirmationText);
+	for (const viewport of [{ width: 320, height: 256 }, { width: 667, height: 375 }]) {
+		await page.setViewportSize(viewport);
+		await expect(cancellationDialog).toBeInViewport({ ratio: 1 });
+		await cancellationDialog.evaluate(async element => { await Promise.all(element.getAnimations().map(animation => animation.finished)); });
+		const fixedContent = [cancellationDialog.getByRole('heading'), cancellationDialog.getByRole('button', { name: m.keepOrder, exact: true }), cancellationDialog.getByRole('button', { name: m.cancelSelected, exact: true })];
+		for (const control of fixedContent) await expect(control).toBeInViewport({ ratio: 1 });
+		const beforeScroll = await Promise.all(fixedContent.map(control => control.boundingBox()));
+		await expect(confirmationBody).toHaveAttribute('tabindex', '0');
+		await expect(confirmationBody).toHaveCSS('overscroll-behavior', 'contain');
+		assert.ok(await confirmationBody.evaluate(element => element.scrollHeight > element.clientHeight), 'Long confirmation copy has its own scroll region');
+		await confirmationBody.evaluate(element => { element.scrollTop = 0; });
+		await confirmationBody.focus();
+		const documentScroll = await page.evaluate(() => window.scrollY);
+		await page.keyboard.press('End');
+		await expect.poll(() => confirmationBody.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+		expect(await page.evaluate(() => window.scrollY)).toBe(documentScroll);
+		expect(await Promise.all(fixedContent.map(control => control.boundingBox()))).toEqual(beforeScroll);
+		await fits(page);
+	}
+	await confirmationCopy.evaluate((element, text) => { element.textContent = text; }, confirmationText);
+	await expect(cancellationDialog).toHaveAccessibleDescription(m.cancelConfirm);
+	await page.setViewportSize(beforeConfirmationViewport);
+	await cancellationDialog.getByRole('button', { name: m.cancelSelected, exact: true }).click();
 	await expect(page.getByText(m.cancellationRecorded, { exact: true })).toBeVisible();
 	expect(await value(`SELECT cancelled_quantity||'|'||outstanding_quantity FROM app.purchase_line_progress WHERE order_id=${literal(orderId)} AND product_id=${literal(seedProductId(0))}`)).toBe('2|3');
 	const history = page.locator('section[aria-labelledby="cancellation-history-title"]');
@@ -255,7 +323,7 @@ try {
 
 	await page.goto(`${origin}/en/admin/orders/${orderId}`);
 	await page.getByRole('button', { name: m.editMetadata, exact: true }).first().click();
-	const longSupplier = 'Disposable parts supplier with a deliberately long workshop purchasing name';
+	const longSupplier = `Disposable supplier ${'W'.repeat(120)}`;
 	const longReference = 'WEB-ORDER-1-' + 'R'.repeat(170);
 	const longNote = 'Long order note for phone and desktop wrapping. '.repeat(18).trim();
 	await page.getByLabel(fieldLabel(m.supplierName)).fill(longSupplier);
@@ -326,11 +394,30 @@ try {
 		await expect(page.getByText(messages.placedAt, { exact: true }).first()).toBeVisible();
 		await fits(page); await headingClear(page, longSupplier);
 		await page.screenshot({ path: `${artifacts}/detail-${locale}-${width}.png`, fullPage: true });
+		await page.getByRole('button', { name: messages.openReceipt, exact: true }).click();
+		const receipt = page.getByRole('dialog', { name: new RegExp(messages.receiveHeading) });
+		const receiptBody = receipt.getByRole('region', { name: messages.receiveHeading, exact: true });
+		await expect(receiptBody.getByText(longSupplier, { exact: true })).toBeVisible();
+		const closeReceipt = receipt.getByRole('button', { name: messages.closeReceipt, exact: true });
+		for (const viewport of [{ width, height: 900 }, ...(width === 360 ? [{ width: 320, height: 256 }, { width: 667, height: 375 }] : [])]) {
+			await page.setViewportSize(viewport);
+			await expect(receipt.getByRole('heading')).toBeInViewport({ ratio: 1 });
+			await expect(closeReceipt).toBeInViewport({ ratio: 1 });
+			await expect(closeReceipt).toHaveCSS('width', '44px');
+			const complete = receiptBody.getByText(messages.noOutstanding, { exact: true });
+			await complete.scrollIntoViewIfNeeded();
+			await expect(complete).toBeInViewport({ ratio: 1 });
+			assert.ok(await receiptBody.evaluate(element => element.scrollWidth <= element.clientWidth), 'Long supplier text wraps inside the receipt body');
+			await fits(page);
+		}
+		await page.setViewportSize({ width, height: 900 });
+		await closeReceipt.click();
 	}
 	await page.setViewportSize({ width: 360, height: 900 });
 	await page.goto(`${origin}/en/admin/orders`);
 	await page.getByRole('button', { name: m.newOrder, exact: true }).click();
-	await page.getByLabel(fieldLabel(m.supplier)).fill('New product order');
+	const activeSupplier = `${longSupplier} (open)`;
+	await page.getByLabel(fieldLabel(m.supplier)).fill(activeSupplier);
 	await page.getByLabel(fieldLabel(m.reference)).fill('PRODUCT-NEW-1');
 	const [productTab] = await Promise.all([
 		context.waitForEvent('page'),
@@ -348,10 +435,11 @@ try {
 	const newProductCode = await value(`SELECT code FROM app.products WHERE id=${literal(newProductId)}`);
 	await expect(productTab).toHaveURL(`${origin}/en/admin/products/${newProductId}`);
 	await expect(productTab.getByRole('heading', { name: newProductCode, exact: true })).toBeVisible();
+	await expect(productTab.getByLabel(fieldLabel(en.adminProducts.nameEn))).toHaveValue('New item from order');
 	await productTab.close();
 	await page.bringToFront();
 	await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-	await expect(page.getByLabel(fieldLabel(m.supplier))).toHaveValue('New product order');
+	await expect(page.getByLabel(fieldLabel(m.supplier))).toHaveValue(activeSupplier);
 	await expect(page.getByLabel(fieldLabel(m.reference))).toHaveValue('PRODUCT-NEW-1');
 	await page.getByRole('combobox', { name: m.product, exact: true }).click();
 	await page.getByRole('combobox', { name: m.searchProduct, exact: true }).fill(newProductCode);
@@ -361,6 +449,21 @@ try {
 	await page.getByRole('button', { name: m.recordOrder, exact: true }).click();
 	await expect(page).toHaveURL(/\/en\/admin\/orders\/[0-9a-f-]{36}$/);
 	expect(await value(`SELECT count(*) FROM app.purchase_order_lines WHERE order_id=${literal(page.url().split('/').at(-1)!)} AND product_id=${literal(newProductId)}`)).toBe('1');
+	await page.getByRole('button', { name: m.openReceipt, exact: true }).click();
+	const activeReceipt = page.getByRole('dialog', { name: m.receiveHeading, exact: true });
+	const activeBody = activeReceipt.getByRole('region', { name: m.receiveHeading, exact: true });
+	await expect(activeBody.getByText(activeSupplier, { exact: true })).toBeVisible();
+	for (const viewport of [{ width: 320, height: 256 }, { width: 667, height: 375 }]) {
+		await page.setViewportSize(viewport);
+		for (const control of [activeReceipt.getByRole('heading'), activeReceipt.getByRole('button', { name: m.closeReceipt, exact: true }), activeReceipt.getByRole('button', { name: m.confirmReceived, exact: true })]) {
+			await expect(control).toBeInViewport({ ratio: 1 });
+		}
+		const line = activeBody.getByRole('checkbox').first();
+		await line.scrollIntoViewIfNeeded();
+		await expect(line).toBeInViewport({ ratio: 1 });
+		await fits(page);
+	}
+	await activeReceipt.getByRole('button', { name: m.closeReceipt, exact: true }).click();
 	console.log('PASS: New product opens the existing editor; the order draft survives and can use the created product');
 	await page.setViewportSize({ width: 1280, height: 900 });
 	await page.emulateMedia({ colorScheme: 'dark' });
@@ -389,7 +492,7 @@ try {
 	await expect(page.getByRole('dialog', { name: m.newOrder, exact: true }).getByText(m.unavailable, { exact: true })).toHaveCount(0);
 	await page.getByRole('button', { name: m.closeEntry, exact: true }).click();
 	await expect(page.getByRole('link', { name: longSupplier, exact: true })).toBeVisible();
-	console.log('PASS: unplanned receipt adds exact stock; long order list/detail fit both locales at 360/1280px with clear sticky headings');
+	console.log('PASS: unplanned receipt adds exact stock; long order text fits both locales and receipt controls remain reachable down to 320x256px');
 	console.log('PASS: failed background list refresh preserves rows and blocks writes until contextual retry');
 
 	// Needs-attention sheet: pick parts, prefill New order with purchase links, then skip what is already on order.

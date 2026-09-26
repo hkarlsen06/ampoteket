@@ -14,6 +14,10 @@ Shift+Space applies the new state to the range from the previous anchor in readi
 order (highest row first, left to right), within one cabinet for drawers. Keep a short
 Shift hint, since it is invisible.
 
+Cabinets retain enough width for their checkbox and coordinate. Dense walls pan
+inside a named, keyboard-accessible region without widening the page. Focus and
+returning from a cabinet reveal its controls within that region.
+
 - **Select all** includes every live drawer and products without a drawer.
 - Each saved product in a selected drawer gets exactly one label, including inactive
   products and zero or negative stock. Empty drawers and archived storage add nothing.

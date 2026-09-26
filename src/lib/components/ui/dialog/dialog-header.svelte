@@ -16,7 +16,7 @@
 <div
 	bind:this={ref}
 	data-slot="dialog-header"
-	class={cn("gap-2 flex flex-col", layout === "bar" && "relative flex-row items-center justify-between gap-3 px-4 py-3 md:px-6", density === "compact" && "py-2 pr-3", className)}
+	class={cn("min-w-0 gap-2 flex flex-col", layout === "bar" && "relative flex-row items-center justify-between gap-3 px-4 py-3 md:px-6 [&>button]:shrink-0", density === "compact" && "py-2 pr-3", className)}
 	{...restProps}
 >
 	{@render children?.()}

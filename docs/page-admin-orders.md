@@ -13,6 +13,10 @@ and RPCs in [datamodell.md](datamodell.md).
 - Unit cost is per sale unit; freight and other costs go on the order header.
 - The product picker includes inactive products, since past purchases must stay
   recordable. A line without a product links to the New product editor in a new tab.
+  Its search stays visible while the result list scrolls within the available
+  popover height, including short landscape viewports. If the keyboard covers the
+  trigger, the picker anchors at the visual viewport edge. On extremely short
+  screens, dismissing the native keyboard exposes the full result list.
 - `?new=<product ids>` prefills lines with saved purchase links; quantity and cost stay
   blank.
 - Quantities follow the stock step; quantities and costs stay strings.
@@ -28,6 +32,8 @@ An **unplanned receipt** (including donations) needs products, positive quantiti
 a source note. A **planned receipt** belongs to one order: checking a line takes its
 current outstanding quantity (never the original), and never more. A scan only
 highlights the matching line; it never selects a quantity or changes stock.
+The full supplier name wraps in the scrolling receipt body; the short title, Close
+and confirmation action remain outside it, including in short landscape viewports.
 
 The database derives progress as ordered minus received minus net cancellations,
 floored at zero. Cancellation needs a reason, is confirmed in an `AlertDialog` and

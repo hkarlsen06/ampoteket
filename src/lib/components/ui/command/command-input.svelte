@@ -12,7 +12,7 @@
 	}: CommandPrimitive.InputProps = $props();
 </script>
 
-<div data-slot="command-input-wrapper" class="p-1 pb-0">
+<div data-slot="command-input-wrapper" class="shrink-0 p-1 pb-0">
 	<InputGroup.Root class="*:data-[slot=input-group-addon]:pl-2!">
 		<CommandPrimitive.Input
 			{value}

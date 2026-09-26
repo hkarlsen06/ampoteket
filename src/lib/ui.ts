@@ -22,7 +22,7 @@ export const pageContainer = tv({
 // The block holding a page's h1 and, when present, its lede, meta line and
 // page-level actions (in that order). Owns the one gap between heading and content.
 export const pageHeader = 'mb-6 grid justify-items-start gap-3';
-export const pageHeading = 'text-3xl font-bold leading-tight tracking-tight md:text-4xl';
+export const pageHeading = 'min-w-0 max-w-full text-3xl font-bold leading-tight tracking-tight md:text-4xl';
 export const sectionHeading = 'text-xl font-semibold leading-snug tracking-tight md:text-2xl';
 // Section introduction (design-system §3): only when it adds context the heading lacks.
 export const lede = 'max-w-[var(--measure-lede)] text-[1.0625rem] text-muted-foreground md:text-lg';

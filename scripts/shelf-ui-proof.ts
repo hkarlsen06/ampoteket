@@ -156,6 +156,17 @@ try {
   expect(await sql(`SELECT col_span FROM app.bins WHERE id='${first}'`)).toBe('2');
   await expect(editor.getByRole('button', { name: m.discardChanges, exact: true })).toBeHidden();
   const source = page.locator(`[data-item-id="${swapFirst}"]`), target = page.locator(`[data-item-id="${swapSecond}"]`);
+  const beforeTouchViewport = page.viewportSize()!;
+  await page.setViewportSize({ width: 360, height: 640 });
+  await expect(source).toHaveCSS('touch-action', 'auto');
+  await source.click();
+  const touchHandle = page.locator('.drawer-move-handle');
+  await expect(touchHandle).toHaveCSS('touch-action', 'none');
+  await startMove(page, touchHandle, 12, 12);
+  await expect(page.locator('[data-drawer-drag-preview]')).toBeVisible();
+  await page.keyboard.press('Escape'); await page.mouse.up();
+  await expect(page.locator('[data-drawer-drag-preview]')).toHaveCount(0);
+  await page.setViewportSize(beforeTouchViewport);
   const swaps: unknown[] = [];
   page.on('request', request => { if (request.url().includes('/rpc/amp_swap_bins') && request.method() === 'POST') swaps.push(request.postDataJSON()); });
   await dragSwap(page, source, target); await page.keyboard.press('Escape'); await page.mouse.up(); await expect(page.locator('[data-drawer-drag-preview]')).toHaveCount(0);

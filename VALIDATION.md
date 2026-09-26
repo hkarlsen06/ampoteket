@@ -29,6 +29,7 @@ results are from the earlier security validation on the same date.
 | `./scripts/test-web.sh --shelf` | PASS |
 | `./scripts/test-web.sh --orders` | PASS: field errors and first-invalid focus, receipt freshness with selection retained, access recovery inside a pending sheet, identical uncertain-write retry and exact stock changes |
 | Collaborative browser geometry | PASS: homepage in both locales/themes at 320/360/768/1280 px; specification and admin scanner dialogs at 360×320 retain reachable title, close and actions |
+| Responsiveness | PASS: short dialogs and product pickers, long text, dense shelf targets and enlarged hero text; iOS Simulator rotation, keyboard and native shelf panning |
 
 The dynamic `ShelfCabinetFace` viewBox was manually reviewed: its drawer shapes
 are fill-only, with no clipped strokes. The static checker does not validate
@@ -37,6 +38,13 @@ dynamic geometry. Short-viewport checks do not prove physical phone keyboard beh
 CI runs the database chain and the `boundary`, `shop`, `checkout`, `admin`,
 `scanner`, `labels` and `statistics` browser modes. These results are local runs,
 not CI claims.
+
+Responsive browser regressions include 320×256, 667×375 and 844×390 viewports,
+both locales, reduced motion, a 100-character category and a 120-character supplier
+token. The confirmation checks preserve the full accessible warning description.
+Native Safari checks used iOS 27 Simulator at 440×956 and 956×440; they do not
+establish physical-device coverage. Android emulation was unavailable because its
+SDK was missing. The phone launch checks below remain open.
 
 ## Migrations and schema surface
 
