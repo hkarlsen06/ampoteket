@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { memory } from './test-storage';
 import { ApiError } from './api';
 import { clearOrderCommand, orderCommandPath, orderRejection, readOrderCommand, readOrderDetail, readOutstandingByProduct, runOrderCommand, saveOrderCommand, type OrderCommand } from './admin-orders';
 
@@ -11,10 +12,6 @@ const requestId = '66666666-6666-4666-8666-666666666666';
 const session = { config: { url: 'https://fixture.invalid', publishableKey: 'sb_publishable_fixture' }, token: 'staff-token', userId };
 const command: OrderCommand = { kind: 'create', userId, requestId, supplierName: 'Supplier', placedAt: '2026-09-20T10:00:00Z', additionalCostNok: '0.01', supplierReference: null, note: null,
 	items: [{ productId, quantity: '999999999999', unitCostNok: '0.000001', purchaseUrl: null, supplierSku: 'SKU-1' }] };
-function memory() {
-	const values = new Map<string, string>();
-	return { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); }, removeItem: (key: string) => { values.delete(key); } };
-}
 
 test('order command freezes actor and exact payload across uncertain retries', async () => {
 	const storage = memory();

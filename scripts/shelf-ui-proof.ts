@@ -2,9 +2,9 @@
 import { firefox, expect, type BrowserContext, type Locator, type Page } from '@playwright/test';
 import { strict as assert } from 'node:assert';
 import { randomUUID } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { fieldLabel, proofEnvironment } from './web-proof/harness';
+import { fieldLabel, captureFailure, proofEnvironment } from './web-proof/harness';
 import { en } from '../src/lib/i18n/en';
 import { nb } from '../src/lib/i18n/nb';
 
@@ -285,9 +285,6 @@ try {
   await expect(page.getByText(m.archivedFrom(`${m.cabinet('A3')} · ${m.bin('B1')}`), { exact: true })).toBeVisible();
   console.log('PASS: cabinet and two empty drawers archive through one confirmed RPC; former locations remain visible');
 } catch (error) {
-  for (const [index, page] of (context?.pages() ?? []).entries()) {
-    await page.screenshot({ path: `${artifacts}/failure-${index}.png`, fullPage: true }).catch(() => {});
-    if (!page.url().includes('/login')) await writeFile(`${artifacts}/failure-${index}.txt`, await page.locator('body').ariaSnapshot().catch(() => 'Unavailable'));
-  }
+  for (const [index, page] of (context?.pages() ?? []).entries()) await captureFailure(page, artifacts, String(index), 'body');
   throw error;
 } finally { await close(); }

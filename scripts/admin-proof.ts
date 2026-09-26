@@ -2,8 +2,8 @@
 import { firefox, expect, type BrowserContext, type Page, type Locator } from '@playwright/test';
 import { strict as assert } from 'node:assert';
 import { resolve } from 'node:path';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { fieldLabel, proofEnvironment } from './web-proof/harness';
+import { mkdir } from 'node:fs/promises';
+import { fieldLabel, signIn, fits, captureFailure, proofEnvironment } from './web-proof/harness';
 import { generateSeedSql } from './seed-test-data';
 import { en } from '../src/lib/i18n/en';
 import { nb } from '../src/lib/i18n/nb';
@@ -26,12 +26,6 @@ await mkdir(artifacts, { recursive: true });
 
 const literal = (value: string) => `'${value.replaceAll("'", "''")}'`;
 const diagnostics: string[] = [];
-async function signIn(page: Page, email = staffEmail) {
-  await page.goto(`${origin}/en/admin/login`);
-  await page.getByLabel(fieldLabel('Email address')).fill(email);
-  await page.getByLabel(fieldLabel('Password')).fill(password);
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-}
 // Specification fields are labelled by their translated name, with the unit in an
 // sr-only span. Svelte trims the space before it, so match the accessible name
 // (which spaces the positioned span) rather than the label's raw text.
@@ -42,9 +36,6 @@ function specField(scope: Locator, code: string, messages: typeof en = en) {
   const definition = standardSpecifications.find(field => field.code === code)!;
   const label = messages.specificationLabels[definition.code];
   return specInput(scope, definition.canonical_unit ? `${label} (${definition.canonical_unit})` : label, definition.value_type === 'boolean');
-}
-async function fits(page: Page) {
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 }
 async function chooseDrawer(scope: Locator, binId: string) {
   const cabinetId = await sql(`SELECT cabinet_id FROM app.bins WHERE id=${literal(binId)}`);
@@ -85,10 +76,10 @@ try {
   context = await firefox.launchPersistentContext(`${directory}/profile`, { headless: true, ignoreHTTPSErrors: false });
   context.on('page', (tab) => tab.on('pageerror', (error) => diagnostics.push(error.message)));
   const page = await context.newPage();
-  await signIn(page, nonstaffEmail);
+  await signIn(page, origin, nonstaffEmail, password);
   await expect(page.getByText(en.admin.noAccess, { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
-  await signIn(page);
+  await signIn(page, origin, staffEmail, password);
   await expect(page.getByRole('heading', { name: en.admin.overview, exact: true })).toBeVisible();
   expect(await sql('SELECT count(*) FROM app.cabinets WHERE NOT is_archived')).toBe('12');
   expect(await sql('SELECT count(*) FROM app.bins WHERE NOT is_archived')).toBe('492');
@@ -951,9 +942,6 @@ try {
   expect(diagnostics).toEqual([]);
   console.log('PASS: real admin Auth and operational pages');
 } catch (error) {
-  for (const [index, page] of (context?.pages() ?? []).entries()) {
-    await page.screenshot({ path: `${artifacts}/failure-${index}.png`, fullPage: true }).catch(() => {});
-    if (!page.url().includes('/login')) await writeFile(`${artifacts}/failure-${index}.txt`, await page.locator('main').ariaSnapshot().catch(() => 'Unavailable'));
-  }
+  for (const [index, page] of (context?.pages() ?? []).entries()) await captureFailure(page, artifacts, String(index));
   throw error;
 } finally { await close(); }

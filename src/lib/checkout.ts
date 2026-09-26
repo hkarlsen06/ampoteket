@@ -1,6 +1,6 @@
 import { ApiError, requestApiJson } from './api';
 import {
-	ACTIVE_ATTEMPT_KEY, CART_KEY, CART_LOCK, CHECKOUT_STORE, CartError, openCheckoutDatabase,
+	ACTIVE_ATTEMPT_KEY, CART_KEY, CHECKOUT_STORE, CartError, notifyCartChanged, openCheckoutDatabase,
 	parseActiveAttempt, parseCart, readActiveAttempt, withCartLock, type ActiveAttempt, type CartLine
 } from './cart';
 import { parseCheckoutSnapshot, parsePrepareRequest, parsePrepareResponse, parseSessionResponse, type CheckoutSnapshot } from './checkout-contract';
@@ -21,12 +21,6 @@ export function checkoutErrorCode(error: unknown): CheckoutErrorCode {
 		}
 	}
 	return 'unavailable';
-}
-function notify() {
-	try {
-		const channel = new BroadcastChannel(CART_LOCK);
-		channel.postMessage('changed'); channel.close();
-	} catch { /* Focus/storage refresh remains available; this is not durable state. */ }
 }
 const attemptKey = (requestId: string) => `attempt:${requestId}`;
 const checkoutKey = (checkoutId: string) => `checkout:${checkoutId}`;
@@ -68,7 +62,7 @@ async function changeAttempt(attempt: ActiveAttempt, change: (current: ActiveAtt
 				finish(next);
 			} catch (error) { fail(error); }
 		};
-	})).then((result) => { notify(); return result; });
+	})).then((result) => { notifyCartChanged(); return result; });
 }
 export async function findCheckoutAttempt(checkoutId?: string): Promise<ActiveAttempt | null> {
 	if (!checkoutId) return readActiveAttempt();
@@ -125,7 +119,7 @@ export async function startCheckout(contact: string): Promise<ActiveAttempt> {
 			};
 		});
 	});
-	notify(); return result;
+	notifyCartChanged(); return result;
 }
 
 export async function prepareCheckout(attempt: ActiveAttempt): Promise<ActiveAttempt> {

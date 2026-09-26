@@ -2,8 +2,8 @@
 import { firefox, expect, type BrowserContext, type Page, type Locator } from '@playwright/test';
 import { strict as assert } from 'node:assert';
 import { resolve } from 'node:path';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { fieldLabel, proofEnvironment } from './web-proof/harness';
+import { mkdir } from 'node:fs/promises';
+import { fieldLabel, captureFailure, proofEnvironment } from './web-proof/harness';
 import { generateSeedSql, seedProductId, seedProductCode, seedBinId } from './seed-test-data';
 import { en } from '../src/lib/i18n/en';
 import { nb } from '../src/lib/i18n/nb';
@@ -23,10 +23,6 @@ let context: BrowserContext | undefined;
 const { ready, close } = await startWorker(() => context);
 const artifacts = resolve('test-results/shop');
 await mkdir(artifacts, { recursive: true });
-async function captureFailure(page: Page, name: string) {
-	await page.screenshot({ path: `${artifacts}/failure-${name}.png`, fullPage: true }).catch(() => {});
-	await writeFile(`${artifacts}/failure-${name}.txt`, await page.locator('main').ariaSnapshot().catch(() => 'Unavailable'));
-}
 async function documentBox(locator: Locator) {
 	return locator.evaluate(element => {
 		const box = element.getBoundingClientRect();
@@ -542,7 +538,7 @@ try {
 			await expect(homePage.getByRole('dialog', { name: messages.scanner.title, exact: true })).toBeVisible();
 			await expect(homePage.locator('.scanner-dialog form.manual')).toBeVisible();
 			await fits(homePage);
-		} catch (error) { await captureFailure(homePage, `home-${locale ? 'en' : 'nb'}-${colour}-${width}`); throw error; }
+		} catch (error) { await captureFailure(homePage, artifacts, `home-${locale ? 'en' : 'nb'}-${colour}-${width}`); throw error; }
 		finally { await homeContext.close(); }
 	}
 	console.log('PASS: homepage shelf sheet in both locales/themes at 360/1280px; selection scrolling, full-width product links, empty/unavailable/retry states, keyboard access and retained selection; refresh and closed pending reads preserve scroll');
@@ -580,7 +576,7 @@ try {
 				for (const key of ['x', 'y', 'width', 'height'] as const) expect(after[key]).toBeCloseTo(before[key], 2);
 			}
 			await fits(delayedPage);
-		} catch (error) { await captureFailure(delayedPage, `delayed-${width}`); throw error; }
+		} catch (error) { await captureFailure(delayedPage, artifacts, `delayed-${width}`); throw error; }
 		finally { release(); await delayed.close(); }
 	}
 	console.log('PASS: automatic shelf-map loading preserves quantity and Add geometry while real topology is delayed at phone and desktop widths');
@@ -739,7 +735,7 @@ try {
 		await expect(current).toHaveAttribute('aria-label', 'A8');
 		releaseOld(); await oldSettled;
 		await expect(current).toHaveAttribute('aria-label', 'A8');
-	} catch (error) { await captureFailure(navigationPage, 'navigation'); throw error; }
+	} catch (error) { await captureFailure(navigationPage, artifacts, 'navigation'); throw error; }
 	finally { releaseOld(); await navigating.close(); }
 	console.log('PASS: failed topology retries independently of purchase controls; interrupted product navigation retains the new product location');
 
@@ -997,7 +993,7 @@ try {
 	console.log(`PASS: catalog/product/cart acceptance; screenshots: ${artifacts}`);
 } catch (error) {
 	for (const [index, page] of (context?.browser()?.contexts().flatMap(context => context.pages()) ?? []).entries()) {
-		await captureFailure(page, String(index));
+		await captureFailure(page, artifacts, String(index));
 	}
 	const raw = await Bun.file(`${directory}/worker-error.log`).text() + await Bun.file(`${directory}/worker.log`).text();
 	const redacted = safe(raw);

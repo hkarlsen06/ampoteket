@@ -1,9 +1,9 @@
 /** Actual pages and gateway, disposable PostgreSQL/Auth, trusted HTTPS and real browser storage. */
-import { firefox, expect, type BrowserContext, type Page } from '@playwright/test';
+import { firefox, expect, type BrowserContext } from '@playwright/test';
 import { strict as assert } from 'node:assert';
 import { resolve } from 'node:path';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { fieldLabel, proofEnvironment } from './web-proof/harness';
+import { mkdir } from 'node:fs/promises';
+import { fieldLabel, signIn, fits, captureFailure, proofEnvironment } from './web-proof/harness';
 import { generateSeedSql, seedProductId, seedProductCode, seedBinId } from './seed-test-data';
 import { en } from '../src/lib/i18n/en';
 import { nb } from '../src/lib/i18n/nb';
@@ -34,15 +34,6 @@ async function verifyBootAssets() {
 }
 
 const diagnostics: string[] = [];
-async function signIn(page: Page, email = staffEmail) {
-  await page.goto(`${origin}/en/admin/login`);
-  await page.getByLabel(fieldLabel('Email address')).fill(email);
-  await page.getByLabel(fieldLabel('Password')).fill(password);
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-}
-async function fits(page: Page) {
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
-}
 async function snapshot() {
   const tables = (await sql("SELECT tablename FROM pg_tables WHERE schemaname='app' ORDER BY tablename")).split('\n');
   return await sql(tables.map(name => `SELECT '${name}:' || md5(coalesce(string_agg(value::text, E'\\n' ORDER BY value::text), '')) FROM (SELECT to_jsonb(t) AS value FROM app.${name} t) rows;`).join('\n'));
@@ -141,12 +132,12 @@ try {
   });
   const page = await context.newPage();
   page.setDefaultTimeout(30000);
-  await signIn(page, nonstaffEmail);
+  await signIn(page, origin, nonstaffEmail, password);
   await expect(page.getByText(en.admin.noAccess, { exact: false })).toBeVisible();
   await page.goto(`${origin}/en/admin/products/labels`);
   await expect(page.getByRole('button', { name: 'Create labels', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
-  await signIn(page);
+  await signIn(page, origin, staffEmail, password);
   await expect(page.getByRole('heading', { name: en.admin.overview, exact: true })).toBeVisible();
 
   const m = en.adminLabels;
@@ -378,9 +369,6 @@ try {
 
 
 } catch (error) {
-  for (const [index, page] of (context?.pages() ?? []).entries()) {
-    await page.screenshot({ path: `${artifacts}/failure-${index}.png`, fullPage: true }).catch(() => {});
-    if (!page.url().includes('/login')) await writeFile(`${artifacts}/failure-${index}.txt`, await page.locator('main').ariaSnapshot().catch(() => 'Unavailable'));
-  }
+  for (const [index, page] of (context?.pages() ?? []).entries()) await captureFailure(page, artifacts, String(index));
   throw error;
 } finally { await close(); }

@@ -3,7 +3,7 @@ import { firefox, expect, type BrowserContext, type Page, type Route } from '@pl
 import { strict as assert } from 'node:assert';
 import { resolve } from 'node:path';
 import { mkdir } from 'node:fs/promises';
-import { proofEnvironment } from './web-proof/harness';
+import { post, proofEnvironment } from './web-proof/harness';
 import type { ActiveAttempt } from '../src/lib/cart';
 import type { CheckoutSnapshot } from '../src/lib/checkout-contract';
 
@@ -90,12 +90,6 @@ async function complete(page: Page, attempt: ActiveAttempt) {
 	const snapshot = await call<CheckoutSnapshot>(page, 'confirmCheckout', [attempt]);
 	await call(page, 'finishRegistration', [attempt, snapshot]);
 	return snapshot;
-}
-async function post(page: Page, path: string, body: unknown) {
-	return page.evaluate(async ({ path, body }) => {
-		const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-		return { status: response.status, cache: response.headers.get('cache-control'), body: await response.json() };
-	}, { path, body });
 }
 async function commitThenDrop(route: Route) {
 	// Playwright's API transport does not use Firefox's disposable CA store.

@@ -8,13 +8,20 @@ manufacturer artwork or third-party meshes are embedded in the delivered assets.
 """
 
 import subprocess
+import sys
 import bpy
 import bmesh
 import _cycles
 import numpy as np
+from functools import partial
 from math import cos, sin, pi, radians
 from mathutils import Matrix, Vector
 from pathlib import Path
+
+# Blender does not put the script directory on sys.path.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import blender_helpers as helpers
+from blender_helpers import aim, area, box, cylinder, into_model, soften, tube
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "assets/models/bambu-p2s.blend"
@@ -24,26 +31,8 @@ GLB.parent.mkdir(parents=True, exist_ok=True)
 SERVED_GLB = ROOT / "static/models/bambu-p2s.glb"
 WEBP = ROOT / "static/models/bambu-p2s.webp"
 WEBP.parent.mkdir(parents=True, exist_ok=True)
-bpy.ops.object.select_all(action="SELECT")
-bpy.ops.object.delete(use_global=False)
-for coll in list(bpy.data.collections):
-    bpy.data.collections.remove(coll)
-model = bpy.data.collections.new("P2S — original unbranded geometry")
-bpy.context.scene.collection.children.link(model)
-
-
-def material(name, color, metallic=0, roughness=.5, transmission=0, emission=0):
-    mat = bpy.data.materials.new(name)
-    mat.diffuse_color = (*color, 1)
-    mat.use_nodes = True
-    bsdf = mat.node_tree.nodes.get("Principled BSDF")
-    for key, value in {"Base Color": (*color, 1), "Metallic": metallic,
-                       "Roughness": roughness, "Transmission Weight": transmission,
-                       "IOR": 1.46, "Emission Color": (*color, 1),
-                       "Emission Strength": emission}.items():
-        bsdf.inputs[key].default_value = value
-    mat.use_backface_culling = True
-    return mat
+model = helpers.new_model("P2S — original unbranded geometry")
+material = partial(helpers.material, ior=1.46, backface_culling=True)
 
 
 shell = material("Warm graphite moulded enclosure", (.215, .219, .216), .14, .43)
@@ -56,8 +45,8 @@ lead_steel = material("Satin steel lead screws", (.42, .45, .46), .78, .34)
 carbon = material("Graphite X rods", (.057, .063, .063), .6, .24)
 head = material("Toolhead grey moulding", (.14, .15, .15), .14, .43)
 pei = material("Fine textured PEI", (.20, .185, .15), .36, .77)
-glass = material("Smoked tempered door glass", (.36, .39, .38), 0, .055, .96)
-lid_glass = material("Smoked tempered lid glass", (.40, .43, .42), 0, .065, .96)
+glass = material("Smoked tempered door glass", (.36, .39, .38), 0, .055, transmission=.96)
+lid_glass = material("Smoked tempered lid glass", (.40, .43, .42), 0, .065, transmission=.96)
 lcd = material("LCD black glass", (.003, .005, .006), 0, .3)
 lcd.node_tree.nodes.get("Principled BSDF").inputs["Specular IOR Level"].default_value = .08
 # RGB straight to the output exports as KHR_materials_unlit: display pixels
@@ -109,36 +98,6 @@ for mat, strength in [(shell, .07), (trim, .06), (pei, .55)]:
     links.new(normal.outputs["Normal"], nodes.get("Principled BSDF").inputs["Normal"])
 
 
-def into_model(obj, name, mat):
-    obj.name = name
-    for coll in list(obj.users_collection):
-        coll.objects.unlink(obj)
-    model.objects.link(obj)
-    obj.data.materials.append(mat)
-    return obj
-
-
-def soften(obj, width, segments=4):
-    mod = obj.modifiers.new("Manufactured edge radius", "BEVEL")
-    mod.width, mod.segments = width, segments
-    # Freeze triangulation before computing normals and baking/exporting UVs.
-    obj.modifiers.new("Stable render triangles", "TRIANGULATE")
-    obj.modifiers.new("Face weighted normals", "WEIGHTED_NORMAL")
-    for poly in obj.data.polygons:
-        poly.use_smooth = True
-    return obj
-
-
-def box(name, location, dimensions, mat, bevel=0):
-    bpy.ops.mesh.primitive_cube_add(size=1, location=location)
-    obj = into_model(bpy.context.object, name, mat)
-    obj.dimensions = dimensions
-    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-    if bevel:
-        soften(obj, bevel)
-    return obj
-
-
 def prism(name, outline, depth, location, mat, axis="Y", bevel=0):
     # Extruded outlines allow large face radii on thin panels (a cube bevel alone
     # clamps to half the panel thickness and loses the real rounded silhouette).
@@ -181,31 +140,6 @@ def rounded(name, location, width, height, depth, radius, mat, axis="Y"):
             a = radians(start + step*90/12)
             outline.append((u + radius*cos(a), v + radius*sin(a)))
     return prism(name, outline, depth, location, mat, axis, min(depth/4, .0005))
-
-
-def cylinder(name, location, radius, depth, mat, rotation=(0, 0, 0), vertices=48):
-    bpy.ops.mesh.primitive_cylinder_add(vertices=vertices, radius=radius, depth=depth,
-                                      location=location, rotation=rotation)
-    return soften(into_model(bpy.context.object, name, mat), min(.0005, depth/5), 3)
-
-
-def tube(name, points, radius, mat, smooth=True):
-    data = bpy.data.curves.new(name, "CURVE")
-    data.dimensions, data.bevel_depth, data.bevel_resolution = "3D", radius, 3
-    spline = data.splines.new("BEZIER" if smooth else "POLY")
-    if smooth:
-        spline.bezier_points.add(len(points)-1)
-        for p, co in zip(spline.bezier_points, points):
-            p.co = co
-            p.handle_left_type = p.handle_right_type = "AUTO"
-    else:
-        spline.points.add(len(points)-1)
-        for p, co in zip(spline.points, points):
-            p.co = (*co, 1)
-    obj = bpy.data.objects.new(name, data)
-    model.objects.link(obj)
-    data.materials.append(mat)
-    return obj
 
 
 def screw(name, x, y, z, radius=.003):
@@ -552,19 +486,6 @@ pivot = Vector((-.080, -.220, .468))
 tilt = Matrix.Translation(pivot) @ Matrix.Rotation(radians(-20), 4, "X") @ Matrix.Translation(-pivot)
 for obj in set(model.objects) - screen_start:
     obj.matrix_world = tilt @ obj.matrix_world
-
-
-def aim(obj, target):
-    obj.rotation_euler = (Vector(target) - obj.location).to_track_quat("-Z", "Y").to_euler()
-
-
-def area(name, location, power, size, target):
-    data = bpy.data.lights.new(name, "AREA")
-    data.energy, data.shape, data.size = power, "DISK", size
-    obj = bpy.data.objects.new(name, data)
-    bpy.context.scene.collection.objects.link(obj)
-    obj.location = location
-    aim(obj, target)
 
 
 camera_data = bpy.data.cameras.new("Marketing camera")

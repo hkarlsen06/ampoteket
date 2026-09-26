@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { memory } from './test-storage';
 import { clearStockCommand, needsRecount, readStockCommand, readStockDetail, readStockProducts, runStockCommand, saveStockCommand, stockQuantity, type StockCommand } from './admin-stock';
 
 const productId = '11111111-1111-4111-8111-111111111111';
@@ -55,8 +56,7 @@ test('correction with recount uses one atomic RPC and exact decimal strings', as
 	expect(body).toMatchObject({ p_corrects_movement_id: '9007199254740993', p_expected_revision: '9007199254740994', p_quantity_delta: '-3', p_counted_quantity: '7' });
 	expect(stockQuantity('-0,5', '0.25', true, 'nb')).toBe('-0.5');
 	expect(() => stockQuantity('0.3', '0.25', false, 'en')).toThrow();
-	const values = new Map<string, string>();
-	const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); }, removeItem: (key: string) => { values.delete(key); } };
+	const storage = memory();
 	saveStockCommand(storage, command);
 	expect(readStockCommand(storage)).toEqual(command);
 	expect(() => saveStockCommand(storage, { ...command, requestId: event3 })).toThrow('Unresolved stock command');

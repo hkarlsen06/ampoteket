@@ -1,4 +1,4 @@
-import type { BrowserContext } from '@playwright/test';
+import { expect, type BrowserContext, type Page } from '@playwright/test';
 import { strict as assert } from 'node:assert';
 import { writeFile } from 'node:fs/promises';
 
@@ -8,6 +8,31 @@ import { writeFile } from 'node:fs/promises';
  */
 export function fieldLabel(text: string): RegExp {
 	return new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\*?$`);
+}
+
+export async function signIn(page: Page, origin: string, email: string, password: string) {
+	await page.goto(`${origin}/en/admin/login`);
+	await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeEnabled();
+	await page.getByLabel(fieldLabel('Email address')).fill(email);
+	await page.getByLabel(fieldLabel('Password')).fill(password);
+	await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+}
+
+export async function fits(page: Page) {
+	expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+}
+
+export async function post(page: Page, path: string, body: unknown = {}) {
+	return page.evaluate(async ({ path, body }) => {
+		const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+		return { status: response.status, cache: response.headers.get('Cache-Control'), body: await response.json() };
+	}, { path, body });
+}
+
+/** Login pages are skipped for the accessibility tree because it includes filled field values. */
+export async function captureFailure(page: Page, artifacts: string, name: string, root = 'main') {
+	await page.screenshot({ path: `${artifacts}/failure-${name}.png`, fullPage: true }).catch(() => {});
+	if (!page.url().includes('/login')) await writeFile(`${artifacts}/failure-${name}.txt`, await page.locator(root).ariaSnapshot().catch(() => 'Unavailable'));
 }
 
 /** Services and credentials belong to the disposable project created by test-web.sh. */

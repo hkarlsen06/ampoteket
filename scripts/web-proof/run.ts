@@ -2,7 +2,7 @@ import { firefox, type BrowserContext } from '@playwright/test';
 import { strict as assert } from 'node:assert';
 import { resolve } from 'node:path';
 import { writeFile } from 'node:fs/promises';
-import { proofEnvironment } from './harness';
+import { post, proofEnvironment } from './harness';
 
 const { directory, origin, api, publicKey, serviceKey, password, safe, sql, createUser, startWorker } = await proofEnvironment();
 const staffId = await createUser('staff@example.test');
@@ -74,11 +74,7 @@ try {
 	assert.equal(verified, '999999999998.999998');
 	console.log('PASS: capped browser/Worker catalog reads, complete traversal, direct lookup and exact browser → database price round trip');
 
-	const post = (path: string, body: unknown = {}) => page.evaluate(async ({ path, body }) => {
-		const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-		return { status: response.status, cache: response.headers.get('Cache-Control'), body: await response.json() };
-	}, { path, body });
-	const initialized = await post('/proof/session');
+	const initialized = await post(page, '/proof/session');
 	assert.equal(initialized.status, 200);
 	assert.equal(initialized.cache, 'no-store');
 	const fingerprint = initialized.body.fingerprint;
@@ -88,24 +84,24 @@ try {
 	assert.ok(root.secure && root.httpOnly && root.sameSite === 'Lax' && root.path === '/');
 	assert.equal(await page.evaluate(() => document.cookie.includes('__Host-amp_checkout')), false);
 	assert.equal(JSON.stringify(initialized).includes(root.value), false);
-	assert.equal((await post('/proof/session')).body.fingerprint, fingerprint);
+	assert.equal((await post(page, '/proof/session')).body.fingerprint, fingerprint);
 	const requestId = crypto.randomUUID();
-	assert.equal((await post('/proof/binding', { requestId, fingerprint })).status, 200);
-	assert.equal((await post('/proof/binding', { requestId, fingerprint: '0'.repeat(64) })).status, 409);
+	assert.equal((await post(page, '/proof/binding', { requestId, fingerprint })).status, 200);
+	assert.equal((await post(page, '/proof/binding', { requestId, fingerprint: '0'.repeat(64) })).status, 409);
 	await page.reload();
 	await page.waitForFunction(() => 'proof' in window);
-	assert.equal((await post('/proof/binding', { requestId, fingerprint })).status, 200);
+	assert.equal((await post(page, '/proof/binding', { requestId, fingerprint })).status, 200);
 
 	await sql("UPDATE app.staff_members SET is_active=false WHERE auth_user_id=:'staff_id';", ['-v', `staff_id=${staffId}`]);
 	assert.equal(await call('membership'), null);
 	assert.deepEqual(await call('staffProducts'), []);
 	assert.deepEqual(await call('updatePrice', ['73000000-0000-4000-8000-000000000001', '2', '1']), []);
 	assert.equal(await call('logout'), true);
-	assert.equal((await post('/proof/binding', { requestId, fingerprint })).status, 200);
+	assert.equal((await post(page, '/proof/binding', { requestId, fingerprint })).status, 200);
 	assert.ok((await context.cookies()).find((cookie) => cookie.name === root.name)?.value === root.value,
 		'Auth logout preserves the checkout root');
 	await context.clearCookies();
-	assert.equal((await post('/proof/binding', { requestId, fingerprint })).status, 409);
+	assert.equal((await post(page, '/proof/binding', { requestId, fingerprint })).status, 409);
 	assert.equal((await context.cookies()).length, 0);
 	console.log('PASS: immediate membership revocation; Secure/HttpOnly cookie survives Auth logout; missing/changed credentials fail closed');
 	console.log('PASS: local Auth/HTTPS boundary proof (test fixture, not operational checkout acceptance)');

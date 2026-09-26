@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { memory } from './test-storage';
 import { ApiError } from './api';
 import { clearCountCommand, countBatchAccess, countCommandPath, countDifference, countRejection, countStorageKey, readCountBatches, readCountDetail, readCountCommand, readCountHistory, readCountInventory, runCountCommand, saveCountCommand, validCountQuantity, type CountBatch, type CountCommand } from './admin-counts';
 
@@ -9,10 +10,6 @@ const eventId = '44444444-4444-4444-8444-444444444444';
 const requestId = '55555555-5555-4555-8555-555555555555';
 const session = { config: { url: 'https://fixture.invalid', publishableKey: 'sb_publishable_fixture' }, token: 'real-staff-token', userId };
 const command: CountCommand = { kind: 'count', userId, requestId, productId, batchId: null, revision: '9007199254740993', expected: '1999999999998.999999', quantity: '1999999999998.999999', note: 'Bin paused and checked' };
-function memory() {
-	const values = new Map<string, string>();
-	return { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); }, removeItem: (key: string) => { values.delete(key); } };
-}
 
 test('physical counts preserve accumulated stock precision, allow explicit zero and reject wrong steps', () => {
 	expect(validCountQuantity('1999999999998.999999', '0.000001')).toBe('1999999999998.999999');

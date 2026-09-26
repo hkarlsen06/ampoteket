@@ -1,7 +1,7 @@
 // Run only through test-api.sh: loopback HTTP and synthetic JWTs.
 import assert from 'node:assert/strict';
 import { createHmac, randomUUID } from 'node:crypto';
-import { parseApiJson, requestApiJson } from '../src/lib/api';
+import { isRecord, parseApiJson, requestApiJson } from '../src/lib/api';
 
 const origin = process.env.AMP_API_TEST_ORIGIN;
 const secret = process.env.AMP_API_TEST_JWT_SECRET;
@@ -39,8 +39,8 @@ async function read(path: string, token?: string, method = 'GET', body?: unknown
 	return requestApiJson(`http://localhost/${path}`, options(token, method, body), fetcher);
 }
 function record(value: unknown): Record<string, unknown> {
-	assert(value !== null && typeof value === 'object' && !Array.isArray(value));
-	return value as Record<string, unknown>;
+	assert(isRecord(value));
+	return value;
 }
 function rows(value: unknown): Record<string, unknown>[] {
 	assert(Array.isArray(value));

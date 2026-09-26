@@ -1,4 +1,4 @@
-import { requestApiJson } from './api';
+import { isRecord, requestApiJson } from './api';
 import type { CatalogConfig, CatalogProduct, CatalogRequestOptions } from './catalog';
 
 export type ShelfCabinet = {
@@ -16,8 +16,8 @@ export class ShelfResponseError extends Error {
 }
 function invalid(): never { throw new ShelfResponseError(); }
 function object(value: unknown): Record<string, unknown> {
-	if (!value || typeof value !== 'object' || Array.isArray(value)) invalid();
-	return value as Record<string, unknown>;
+	if (!isRecord(value)) invalid();
+	return value;
 }
 function text(value: unknown): string { if (typeof value !== 'string') invalid(); return value; }
 function identity(value: unknown): string {

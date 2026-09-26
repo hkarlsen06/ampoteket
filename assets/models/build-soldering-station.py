@@ -5,6 +5,7 @@
 Metres, Z up, front = -Y. Reference photographs are never embedded. See README.md.
 """
 import subprocess
+import sys
 import bpy
 import bmesh
 import _cycles
@@ -13,6 +14,12 @@ from math import cos, sin, pi, radians
 from mathutils import Vector
 from pathlib import Path
 
+# Blender does not put the script directory on sys.path.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from functools import partial
+import blender_helpers as helpers
+from blender_helpers import aim, area, box, into_model, material, new_model, soften, tube
+
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "assets/models/soldering-station.blend"
 # The raw export is compressed into static/models/ by scripts/compress-model.sh.
@@ -20,28 +27,12 @@ GLB = ROOT / "assets/models/build/soldering-station.glb"
 GLB.parent.mkdir(parents=True, exist_ok=True)
 SERVED_GLB = ROOT / "static/models/soldering-station.glb"
 WEBP = ROOT / "static/models/soldering-station.webp"
-bpy.ops.object.select_all(action="SELECT")
-bpy.ops.object.delete(use_global=False)
-for collection in list(bpy.data.collections):
-    bpy.data.collections.remove(collection)
-model = bpy.data.collections.new("Soldering station — original geometry")
-bpy.context.scene.collection.children.link(model)
+model = new_model("Soldering station — original geometry")
+cylinder = partial(helpers.cylinder, cap=.0004)
 scene = bpy.context.scene
 scene.unit_settings.system = "METRIC"
 scene.render.fps = 30
 scene.frame_start, scene.frame_end = 1, 121
-
-
-def material(name, color, metallic=0, roughness=.45, emission=0):
-    mat = bpy.data.materials.new(name)
-    mat.diffuse_color = (*color, 1)
-    mat.use_nodes = True
-    bsdf = mat.node_tree.nodes.get("Principled BSDF")
-    for key, value in {"Base Color": (*color, 1), "Metallic": metallic,
-                       "Roughness": roughness, "Emission Color": (*color, 1),
-                       "Emission Strength": emission}.items():
-        bsdf.inputs[key].default_value = value
-    return mat
 
 
 case = material("Black moulded enclosure", (.014, .017, .019), .03, .43)
@@ -87,66 +78,13 @@ for mat, strength, grain in [(case, .13, .055), (rubber, .18, .08), (sponge_mat,
     links.new(normal.outputs["Normal"], nodes.get("Principled BSDF").inputs["Normal"])
 
 
-def add(obj, name, mat):
-    obj.name = name
-    for collection in list(obj.users_collection):
-        collection.objects.unlink(obj)
-    model.objects.link(obj)
-    if mat:
-        obj.data.materials.append(mat)
-    return obj
-
-
-def bevel(obj, amount, segments=4):
-    mod = obj.modifiers.new("Manufactured edge radius", "BEVEL")
-    mod.width, mod.segments = amount, segments
-    obj.modifiers.new("Stable triangles", "TRIANGULATE")
-    obj.modifiers.new("Weighted normals", "WEIGHTED_NORMAL")
-    for poly in obj.data.polygons:
-        poly.use_smooth = True
-    return obj
-
-
-def box(name, location, dimensions, mat, radius=0):
-    bpy.ops.mesh.primitive_cube_add(size=1, location=location)
-    obj = add(bpy.context.object, name, mat)
-    obj.dimensions = dimensions
-    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-    return bevel(obj, radius) if radius else obj
-
-
-def cylinder(name, location, radius, depth, mat, rotation=(0, 0, 0), vertices=48):
-    bpy.ops.mesh.primitive_cylinder_add(vertices=vertices, radius=radius, depth=depth,
-                                      location=location, rotation=rotation)
-    return bevel(add(bpy.context.object, name, mat), min(.0004, depth/5), 3)
-
-
 def torus(name, location, major, minor, mat, rotation=(0, 0, 0)):
     bpy.ops.mesh.primitive_torus_add(major_radius=major, minor_radius=minor,
                                     major_segments=64, minor_segments=12,
                                     location=location, rotation=rotation)
-    obj = add(bpy.context.object, name, mat)
+    obj = into_model(bpy.context.object, name, mat)
     for poly in obj.data.polygons:
         poly.use_smooth = True
-    return obj
-
-
-def tube(name, points, radius, mat, smooth=True):
-    data = bpy.data.curves.new(name, "CURVE")
-    data.dimensions, data.bevel_depth, data.bevel_resolution = "3D", radius, 3
-    spline = data.splines.new("BEZIER" if smooth else "POLY")
-    if smooth:
-        spline.bezier_points.add(len(points)-1)
-        for point, co in zip(spline.bezier_points, points):
-            point.co = co
-            point.handle_left_type = point.handle_right_type = "AUTO"
-    else:
-        spline.points.add(len(points)-1)
-        for point, co in zip(spline.points, points):
-            point.co = (*co, 1)
-    obj = bpy.data.objects.new(name, data)
-    model.objects.link(obj)
-    data.materials.append(mat)
     return obj
 
 
@@ -319,7 +257,7 @@ def prism(name, outline, width, x, mat, radius=0):
     for loop in mesh.loops:
         co=mesh.vertices[loop.vertex_index].co
         uv.data[loop.index].uv=(co.y/.146,co.z/.091)
-    return bevel(obj,radius) if radius else obj
+    return soften(obj,radius) if radius else obj
 
 
 # Tenma/AT938D-family control unit: 120 mm wide × 146 mm deep × 91 mm high.
@@ -433,7 +371,7 @@ box("Porous cleaning sponge",(hx,hy-.030,.025),(.061,.057,.007),sponge_mat,.002)
 for i in range(190):
     x,y=hx+rng.uniform(-.028,.028),hy-.030+rng.uniform(-.025,.025)
     bpy.ops.mesh.primitive_uv_sphere_add(segments=8,ring_count=4,radius=1,location=(x,y,.02825+rng.uniform(-.00025,.00025)))
-    obj=add(bpy.context.object,"Cellulose pore",sponge_pore)
+    obj=into_model(bpy.context.object,"Cellulose pore",sponge_pore)
     obj.scale=(rng.uniform(.0003,.0011),rng.uniform(.0003,.0009),.00016)
 prism("Raised stand support",[(hy+.002,.02),(hy+.061,.02),(hy+.054,.067),
                               (hy+.022,.071),(hy+.003,.041)],.064,hx,case,.005)
@@ -472,19 +410,6 @@ for i in range(40):
     part=tube("Black collet longitudinal rib",[(.007*cos(a),.007*sin(a),.086),
                                              (.007*cos(a),.007*sin(a),.095)],.00022,edge,False)
     part.parent=iron_pointer
-
-
-def aim(obj, target):
-    obj.rotation_euler=(Vector(target)-obj.location).to_track_quat("-Z","Y").to_euler()
-
-
-def area(name, location, power, size, target):
-    data=bpy.data.lights.new(name,"AREA")
-    data.energy,data.shape,data.size=power,"DISK",size
-    obj=bpy.data.objects.new(name,data)
-    scene.collection.objects.link(obj)
-    obj.location=location
-    aim(obj,target)
 
 
 # Rigid tip-pivot motion: straight withdrawal first, travel second, contact last.

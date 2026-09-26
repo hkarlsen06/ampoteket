@@ -1,9 +1,9 @@
 /** Staff statistics over real disposable Auth/PostgREST, production pages and trusted HTTPS. */
-import { firefox, expect, type BrowserContext, type Page } from '@playwright/test';
+import { firefox, expect, type BrowserContext } from '@playwright/test';
 import { strict as assert } from 'node:assert';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { fieldLabel, proofEnvironment } from './web-proof/harness';
+import { fieldLabel, signIn, captureFailure, proofEnvironment } from './web-proof/harness';
 import { generateSeedSql, seedProductId, seedProductCode } from './seed-test-data';
 import { en } from '../src/lib/i18n/en';
 import { nb } from '../src/lib/i18n/nb';
@@ -25,12 +25,6 @@ const longNameNb = 'Motstand for statistikk i nettlesertest med et svært langt 
 const longBatch = 'Stock count with a deliberately long descriptive title for a narrow phone screen';
 await sql(`UPDATE app.products SET name_en='${longName}', name_nb='${longNameNb}', sale_unit_price_nok=999999999998.999999 WHERE id='${productId}';
   UPDATE app.products SET name_en='${longName} out of stock', name_nb='${longNameNb} uten beholdning' WHERE id='${outOfStockId}';`);
-async function signIn(page: Page, email = staffEmail) {
-  await page.goto(`${origin}/en/admin/login`);
-  await page.getByLabel(fieldLabel('Email address')).fill(email);
-  await page.getByLabel(fieldLabel('Password')).fill(password);
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-}
 async function authToken(email: string) {
   const response = await fetch(`${api.origin}/auth/v1/token?grant_type=password`, {
     method: 'POST', headers: { apikey: publicKey, 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password })
@@ -65,13 +59,13 @@ try {
   context = await firefox.launchPersistentContext(`${directory}/profile`, { headless: true, ignoreHTTPSErrors: false });
   context.on('page', tab => tab.on('pageerror', error => errors.push(error.message)));
   const page = await context.newPage();
-  await signIn(page, nonstaffEmail);
+  await signIn(page, origin, nonstaffEmail, password);
   await expect(page.getByText(en.admin.noAccess, { exact: true })).toBeVisible();
   await page.goto(`${origin}/en/admin/statistics`);
   await expect(page.getByText(en.admin.noAccess, { exact: true })).toBeVisible();
   await expect(page.getByRole('img', { name: en.adminStatistics.chartTitle })).toHaveCount(0);
   await page.getByRole('button', { name: en.admin.signOut, exact: true }).click();
-  await signIn(page);
+  await signIn(page, origin, staffEmail, password);
   await expect(page.getByRole('heading', { name: en.admin.overview, exact: true })).toBeVisible();
   await page.goto(`${origin}/en/admin/statistics`);
   await expect(page.getByText(en.adminStatistics.emptySales, { exact: true })).toBeVisible();
@@ -225,9 +219,6 @@ try {
   expect(errors).toEqual([]);
   console.log('PASS: public product privacy and immediate revoked-staff API denial');
 } catch (error) {
-  for (const [index, page] of (context?.pages() ?? []).entries()) {
-    await page.screenshot({ path: `${artifacts}/failure-${index}.png`, fullPage: true }).catch(() => {});
-    if (!page.url().includes('/login')) await writeFile(`${artifacts}/failure-${index}.txt`, await page.locator('main').ariaSnapshot().catch(() => 'Unavailable'));
-  }
+  for (const [index, page] of (context?.pages() ?? []).entries()) await captureFailure(page, artifacts, String(index));
   throw error;
 } finally { await close(); }

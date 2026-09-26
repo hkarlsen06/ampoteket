@@ -1,11 +1,19 @@
 import { getContext, setContext } from 'svelte';
 import { writable, type Readable } from 'svelte/store';
+import { isRecord } from './api';
 import type { CatalogProduct } from './catalog';
 import { addDecimals, validQuantity } from './decimal';
 import type { Locale } from './i18n';
 
 export const CART_KEY = 'ampoteket:cart';
 export const CART_LOCK = 'ampoteket:cart-and-checkout:v1';
+/** Tells other tabs to reload the cart; focus/storage refresh covers any failure here. */
+export function notifyCartChanged() {
+	try {
+		const channel = new BroadcastChannel(CART_LOCK);
+		try { channel.postMessage('changed'); } finally { channel.close(); }
+	} catch { /* Not durable state. */ }
+}
 export const CHECKOUT_DATABASE = 'ampoteket:checkout';
 export const CHECKOUT_STORE = 'attempts';
 export const ACTIVE_ATTEMPT_KEY = 'active';
@@ -69,8 +77,8 @@ export function parseCart(raw: string | null): CartLine[] {
 
 export function parseActiveAttempt(value: unknown): ActiveAttempt | null {
 	if (value === undefined || value === null) return null;
-	if (!value || typeof value !== 'object' || Array.isArray(value)) throw new CartError('storage');
-	const item = value as Record<string, unknown>;
+	if (!isRecord(value)) throw new CartError('storage');
+	const item = value;
 	if (typeof item.requestId !== 'string' || !requestUuid.test(item.requestId)
 		|| typeof item.fingerprint !== 'string' || !/^[0-9a-f]{64}$/.test(item.fingerprint)
 		|| item.version !== 1 || typeof item.createdAt !== 'string' || !Number.isFinite(Date.parse(item.createdAt))
@@ -165,11 +173,7 @@ function browserEnvironment(): CartEnvironment {
 				window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', visibility);
 			};
 		},
-		notify() {
-			if (typeof BroadcastChannel !== 'function') return;
-			const channel = new BroadcastChannel(CART_LOCK);
-			try { channel.postMessage('changed'); } finally { channel.close(); }
-		}
+		notify: notifyCartChanged
 	};
 }
 

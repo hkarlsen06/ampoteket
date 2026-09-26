@@ -1,4 +1,4 @@
-import { ApiError, requestApiJson, type Fetcher } from './api';
+import { ApiError, isRecord, requestApiJson, type Fetcher } from './api';
 import type { Locale } from './i18n';
 import { formatMeasurementText } from './format';
 import { catalogSearchLabels, CatalogQueryError, type CatalogFacets, type CatalogQuery } from './catalog-search';
@@ -82,8 +82,8 @@ function invalid(): never {
 }
 
 function record(value: unknown): Record<string, unknown> {
-	if (value === null || typeof value !== 'object' || Array.isArray(value)) invalid();
-	return value as Record<string, unknown>;
+	if (!isRecord(value)) invalid();
+	return value;
 }
 
 function string(value: unknown): string {

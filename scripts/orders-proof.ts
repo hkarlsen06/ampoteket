@@ -4,7 +4,7 @@ import { strict as assert } from 'node:assert';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { prepareZXingModule, writeBarcode } from 'zxing-wasm/writer';
-import { fieldLabel, proofEnvironment } from './web-proof/harness';
+import { fieldLabel, signIn, fits, proofEnvironment } from './web-proof/harness';
 import { generateSeedSql, seedProductCode, seedProductId } from './seed-test-data';
 import { en } from '../src/lib/i18n/en';
 import { nb } from '../src/lib/i18n/nb';
@@ -25,15 +25,6 @@ const m = en.adminOrders;
 const literal = (value: string) => `'${value.replaceAll("'", "''")}'`;
 const diagnostics: string[] = [];
 
-async function signIn(page: Page, email = staffEmail) {
-	await page.goto(`${origin}/en/admin/login`);
-	await page.getByLabel(fieldLabel('Email address')).fill(email);
-	await page.getByLabel(fieldLabel('Password')).fill(password);
-	await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-}
-async function fits(page: Page) {
-	expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
-}
 async function headingClear(page: Page, heading: string) {
 	await page.evaluate(() => { (document.activeElement as HTMLElement | null)?.blur(); window.scrollTo(0, 0); });
 	await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
@@ -61,12 +52,12 @@ try {
 	context.on('page', (tab) => tab.on('pageerror', (error) => diagnostics.push(error.message)));
 	const page = await context.newPage();
 	page.setDefaultTimeout(30000);
-	await signIn(page, nonstaffEmail);
+	await signIn(page, origin, nonstaffEmail, password);
 	await expect(page.getByText(en.admin.noAccess, { exact: false })).toBeVisible();
 	await page.goto(`${origin}/en/admin/orders`);
 	await expect(page.getByRole('button', { name: m.newOrder, exact: true })).toHaveCount(0);
 	await page.getByRole('button', { name: en.admin.signOut, exact: true }).click();
-	await signIn(page);
+	await signIn(page, origin, staffEmail, password);
 	await expect(page.getByRole('heading', { name: en.admin.overview, exact: true })).toBeVisible();
 	await page.goto(`${origin}/en/admin/orders`);
 	await expect(page.getByRole('heading', { name: m.heading, exact: true })).toBeVisible();

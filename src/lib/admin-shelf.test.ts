@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { memory } from './test-storage';
 import { ApiError, parseApiJson } from './api';
 import { parseAdminBin, parseAdminCabinet, readAdminShelf, shelfColumn, shelfInteger, saveShelfCommand, readShelfCommand,
 	clearShelfCommand, executeShelfCommand, parseShelfCommand, shelfFailure, type AdminCabinet, type AdminBin, type ShelfCommand } from './admin-shelf';
@@ -9,10 +10,6 @@ const cabinet: AdminCabinet = { id: id(1), code: 'INTERNAL-1', label: null, oute
 const bin: AdminBin = { id: id(3), code: 'INTERNAL-BIN', label: null, cabinet_id: cabinet.id, inner_row: 1, inner_col: 1, row_span: 1, col_span: 2, is_archived: false };
 const actor = { userId: session.userId, requestId: id(10) };
 const wire = (value: unknown) => parseApiJson(JSON.stringify(value));
-function memory() {
-	const values = new Map<string, string>();
-	return { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); }, removeItem: (key: string) => { values.delete(key); } };
-}
 test('storage response parsing keeps archive nulls and accepts only bounded structural integers', () => {
 	expect(parseAdminCabinet(wire(cabinet))).toEqual(cabinet);
 	expect(parseAdminBin(wire(bin))).toEqual(bin);

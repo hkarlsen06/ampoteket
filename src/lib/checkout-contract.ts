@@ -1,3 +1,4 @@
+import { isRecord } from './api';
 import { compareDecimals, validQuantity } from './decimal';
 
 export const checkoutUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -25,8 +26,8 @@ export type CheckoutSnapshot = {
 
 function invalid(): never { throw new Error('INVALID_CHECKOUT_DATA'); }
 function record(value: unknown): Record<string, unknown> {
-	if (!value || typeof value !== 'object' || Array.isArray(value)) return invalid();
-	return value as Record<string, unknown>;
+	if (!isRecord(value)) return invalid();
+	return value;
 }
 function text(value: unknown, pattern: RegExp): string {
 	if (typeof value !== 'string' || !pattern.test(value)) return invalid();

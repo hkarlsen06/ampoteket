@@ -1,5 +1,5 @@
 import { expect, type BrowserContext, type Page } from '@playwright/test';
-import { fieldLabel } from './web-proof/harness';
+import { fieldLabel, signIn as signInAs } from './web-proof/harness';
 import { mkdir } from 'node:fs/promises';
 import { en } from '../src/lib/i18n/en';
 import { nb } from '../src/lib/i18n/nb';
@@ -23,13 +23,7 @@ export async function exerciseAdminHelp(options: ProofOptions) {
 	const literal = (value: string) => `'${value.replaceAll("'", "''")}'`;
 	const membershipFilter = `auth_user_id=(SELECT id FROM auth.users WHERE email=${literal(staffEmail)})`;
 	const open = (path: string) => page.goto(`${origin}/en${path}`);
-	async function signIn(email: string, currentPassword = password) {
-		await open('/admin/login');
-		await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeEnabled();
-		await page.getByLabel(fieldLabel('Email address')).fill(email);
-		await page.getByLabel(fieldLabel('Password')).fill(currentPassword);
-		await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-	}
+	const signIn = (email: string, currentPassword = password) => signInAs(page, origin, email, currentPassword);
 	async function helpVisible(name: string, visible: boolean) {
 		await visitor.goto(`${origin}/en/help`);
 		const entry = visitor.getByRole('heading', { name, exact: true });

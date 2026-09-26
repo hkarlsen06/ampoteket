@@ -2,9 +2,12 @@ import { parse } from 'lossless-json';
 
 export type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 export const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+export function isRecord(value: unknown): value is Record<string, unknown> {
+	return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
 export function object(value: unknown): Record<string, unknown> {
-	if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid API object');
-	return value as Record<string, unknown>;
+	if (!isRecord(value)) throw new Error('Invalid API object');
+	return value;
 }
 export function text(value: unknown, max: number): string {
 	if (typeof value !== 'string' || !value.trim() || [...value].length > max) throw new Error('Invalid API text');
