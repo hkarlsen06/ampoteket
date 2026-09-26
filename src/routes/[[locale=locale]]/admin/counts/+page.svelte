@@ -9,7 +9,7 @@
 	import { Button, ButtonLabel } from '$lib/components/ui/button';
 	import StateBadge from '$lib/StateBadge.svelte';
 	import * as Field from '$lib/components/ui/field';
-	import { onMount } from 'svelte';
+	import { untrack, onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { getI18n } from '$lib/i18n';
 	import { getAdminContext } from '$lib/admin-context.svelte';
@@ -31,20 +31,30 @@
 		return () => { mounted = false; generation++; window.removeEventListener('storage', syncPending); window.removeEventListener(countStorageEvent, syncPending); };
 	});
 	async function load() {
-		loading = true; failed = false; const version = ++generation; const session = admin.credentials();
-		try { const result = await readCountBatches(session); if (mounted && version === generation && admin.session?.user.id === session.userId) { batches = result.batches; owners = result.owners; loaded = true; } }
+		if (admin.status !== 'ready') return;
+		loading = true; failed = false; const version = ++generation;
+		try {
+			const session = admin.credentials(); const result = await readCountBatches(session); if (mounted && version === generation && admin.session?.user.id === session.userId) { batches = result.batches; owners = result.owners; loaded = true; } }
 		catch (error) { if (mounted && version === generation) failed = true; await admin.permissionFailure(error); }
 		finally { if (mounted && version === generation) loading = false; }
 	}
 	// The app owns freshness (design-system.md §4.2): re-read on return to the
 	// tab instead of offering a manual refresh button.
-	function revalidate() { if (admin.status === 'ready' && document.visibilityState === 'visible' && !loading) void load(); }
+	let revalidateQueued = $state(false);
+	function revalidate() { revalidateQueued = document.visibilityState === 'visible'; }
+	$effect(() => {
+		if (revalidateQueued && admin.status === 'ready' && !(loading || busy)) {
+			revalidateQueued = false;
+			untrack(() => { void load(); });
+		}
+	});
 	async function start(event: SubmitEvent) {
-		event.preventDefault(); if (busy || !storageReady || wrongIdentity || (command && command.kind !== 'start') || !title.trim()) return;
-		busy = true; outcome = 'idle'; const session = admin.credentials();
-		const candidate: CountCommand = command ?? { kind: 'start', userId: session.userId, requestId: crypto.randomUUID(), title: title.trim() };
+		event.preventDefault(); if (admin.status !== 'ready' || busy || !storageReady || wrongIdentity || (command && command.kind !== 'start') || !title.trim()) return;
+		busy = true; outcome = 'idle';
 		let frozen: CountCommand | null = null;
 		try {
+			const session = admin.credentials();
+			const candidate: CountCommand = command ?? { kind: 'start', userId: session.userId, requestId: crypto.randomUUID(), title: title.trim() };
 			frozen = await updateCountStorage((storage) => saveCountCommand(storage, candidate)); command = frozen;
 			const result = await runCountCommand(session, frozen);
 			await updateCountStorage((storage) => clearCountCommand(storage, frozen!));
@@ -55,7 +65,7 @@
 </script>
 
 <svelte:head><title>{m.title}</title></svelte:head>
-<svelte:window onfocus={revalidate} />
+<svelte:window onfocus={revalidate} ononline={revalidate} />
 <svelte:document onvisibilitychange={revalidate} />
 <header class={pageHeader}><h1 class={pageHeading}>{m.heading}</h1></header>
 <section class="space-y-4" aria-labelledby="start-count-title">
@@ -85,7 +95,7 @@
 		<span class="sr-only" role="status">{m.loading}</span>
 		<div class="min-h-64 space-y-6" aria-busy="true" aria-hidden="true">{#each [1, 2, 3] as row (row)}<div class="space-y-3 py-3"><Skeleton class="h-6 w-2/3" /><Skeleton class="h-5 w-1/2" /></div>{/each}</div>
 	{/if}
-	{#if !failed}
+	{#if loaded}
 		<Item.Group class="batch-list">
 			{#each batches as batch, index (batch.id)}
 				{#if index > 0}<Item.Separator />{/if}

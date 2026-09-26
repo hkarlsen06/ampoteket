@@ -9,7 +9,8 @@
 	import ArrowUpRightIcon from 'phosphor-svelte/lib/ArrowUpRightIcon';
 	import { codeText, pageContainer, pageHeader, pageHeading, sectionHeading } from '$lib/ui';
 	import { specificationLabel, getI18n } from '$lib/i18n';
-	import { productName } from '$lib/catalog';
+	import { onDestroy, untrack } from 'svelte';
+	import { lookupCatalogProduct, productName } from '$lib/catalog';
 	import { formatMeasurement } from '$lib/format';
 	import { compareDecimals } from '$lib/decimal';
 	import ProductIdentity from '$lib/ProductIdentity.svelte';
@@ -22,11 +23,43 @@
 	let { data }: { data: PageData } = $props();
 	const i18n = getI18n();
 	const m = $derived(i18n.m.product);
-	const product = $derived(data.product);
+	let product = $state.raw(untrack(() => data.product));
+	let unavailable = $state(untrack(() => data.unavailable));
+	let refreshing = $state(false);
+	let refreshQueued = false;
+	let controller: AbortController | undefined;
+	$effect(() => {
+		product = data.product; unavailable = data.unavailable;
+		controller?.abort(); controller = undefined; refreshing = false; refreshQueued = false;
+	});
+	onDestroy(() => { controller?.abort(); controller = undefined; refreshQueued = false; });
+	async function refreshProduct() {
+		if (document.visibilityState !== 'visible' || !data.catalogConfig) return;
+		if (refreshing) { refreshQueued = true; return; }
+		const own = controller = new AbortController();
+		const deadline = setTimeout(() => own.abort(), 15000);
+		refreshing = true;
+		try {
+			const latest = await lookupCatalogProduct(data.catalogConfig, product?.code ?? data.code, { signal: own.signal });
+			if (controller !== own) return;
+			if (latest) product = latest;
+			unavailable = !latest;
+		} catch { if (controller === own) unavailable = true; }
+		finally {
+			clearTimeout(deadline);
+			if (controller === own) {
+				refreshing = false;
+				if (refreshQueued) { refreshQueued = false; void refreshProduct(); }
+			}
+		}
+	}
 	const name = $derived(product ? productName(product, i18n.locale) : null);
 	const balanceState = $derived(product ? compareDecimals(product.quantity, '0') : null);
 
 </script>
+
+<svelte:window onfocus={refreshProduct} ononline={refreshProduct} />
+<svelte:document onvisibilitychange={refreshProduct} />
 
 <!-- Closed by default below 48rem; the two-column layout, and pages without
 JavaScript, always show the content with a plain heading. -->
@@ -59,7 +92,11 @@ JavaScript, always show the content with a plain heading. -->
 				</div>
 				<ProductPrice {product} prominent />
 				{#if balanceState !== null && balanceState <= 0}<p class="mt-3 text-sm text-muted-foreground">{m.stockNote}</p>{/if}
-				{#key product.product_id}<ProductPurchase {product} />{/key}
+				{#key product.product_id}<ProductPurchase {product} unavailable={unavailable || refreshing} />{/key}
+				{#if unavailable}
+					<Alert.Message appearance="inline" variant="destructive" role="status">{m.unavailable}</Alert.Message>
+					<Button variant="outline" class="mt-3" disabled={refreshing} onclick={refreshProduct}>{m.retry}</Button>
+				{/if}
 				<noscript><p class="text-sm text-muted-foreground">{m.noJavascript}</p></noscript>
 			</div>
 			{#if product.description}
@@ -67,15 +104,14 @@ JavaScript, always show the content with a plain heading. -->
 				{@render disclosure('description-title', m.description, description)}
 			{/if}
 			<div class="product-location min-w-0 md:col-start-2 md:row-span-3 md:row-start-1">
-				{#snippet map()}{#key product?.product_id}<ShelfMap labelledby="map-title" initialTopology={data.shelfTopology} config={data.catalogConfig} {product} />{/key}{/snippet}
-				{@render disclosure('map-title', i18n.m.shelfMap.title, map)}
+				{#key product.product_id}<ShelfMap collapsible labelledby="map-title" initialTopology={data.shelfTopology} config={data.catalogConfig} {product} />{/key}
 			</div>
 			<div class="details grid min-w-0 gap-6 md:col-start-1">
 				{#if Object.keys(product.attributes).length}
 					{#snippet specifications()}
 						<Table.Root class="table-fixed">
 							<Table.Body>
-								{#each Object.entries(product.attributes) as [code, attribute] (code)}
+								{#each Object.entries(product?.attributes ?? {}) as [code, attribute] (code)}
 									<Table.Row>
 										<Table.Head scope="row" class="w-1/2 whitespace-normal font-normal text-muted-foreground wrap-break-word hyphens-auto">{specificationLabel(code, attribute, i18n.locale)}</Table.Head>
 										<Table.Cell class={attribute.value_type === 'number' ? 'font-mono whitespace-normal wrap-anywhere' : 'whitespace-normal wrap-anywhere'}>{attribute.value_type === 'boolean' ? (attribute.value ? i18n.m.shop.yes : i18n.m.shop.no) : attribute.value_type === 'number' ? formatMeasurement(attribute.value, attribute.unit, i18n.locale) : attribute.value}</Table.Cell>

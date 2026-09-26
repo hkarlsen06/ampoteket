@@ -35,7 +35,7 @@
 {:else}
 	<form class={[formLayout, "max-w-md"]} onsubmit={signIn}>
 		<Field.Field width="grow"><Field.Label for={`${fieldId}-1`}>{m.email}</Field.Label><Input id={`${fieldId}-1`} type="email" autocomplete="username" required bind:value={email} disabled={busy} /></Field.Field>
-		<Field.Field width="grow"><Field.Label for={`${fieldId}-2`}>{m.password}</Field.Label><Input id={`${fieldId}-2`} type="password" autocomplete="current-password" required bind:value={password} disabled={busy} /></Field.Field>
+		<Field.Field width="grow"><Field.Label for={`${fieldId}-2`}>{m.password}</Field.Label><Input id={`${fieldId}-2`} type="password" autocomplete="current-password" enterkeyhint="go" required bind:value={password} disabled={busy} /></Field.Field>
 		<div class={formActions}><Button type="submit" variant="default" disabled={busy || !admin.auth}><ButtonLabel pending={busy} pendingLabel={m.working} label={m.signIn} /></Button><Button variant="link" href={i18n.href(`/admin/password?next=${encodeURIComponent(next)}`)}>{m.forgotPassword}</Button></div>
 	</form>
 	<div class={formStatus} aria-live="polite">{#if failed}<Alert.Message appearance="inline" variant="destructive" role="status">{m.signInFailed}</Alert.Message>{:else if admin.status === 'unavailable'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unavailable}</Alert.Message>{/if}</div>

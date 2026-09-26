@@ -1,7 +1,8 @@
 <script lang="ts">
+	import { onMount, untrack } from 'svelte';
 	import { getI18n } from '$lib/i18n';
 	import { getAdminContext } from '$lib/admin-context.svelte';
-	import { readAuditPage, type AuditEntry } from '$lib/admin-audit';
+	import { readAuditPage, readAuditUpdates, type AuditEntry } from '$lib/admin-audit';
 	import { allStaffRows } from '$lib/admin-api';
 	import { identifier, text } from '$lib/api';
 	import { formatCountedAt } from '$lib/format';
@@ -20,26 +21,43 @@
 	let actorNames = $state<Record<string, string>>({});
 	let loading = $state(false); let failed = $state(false); let complete = $state(false); let loaded = $state(false);
 	let cursor: string | null = null;
+	let alive = true; let failedRefresh = false;
+	onMount(() => () => { alive = false; });
 	const tableName = (table: string) => (m.tables as Record<string, string>)[table] ?? table;
 
 	$effect(() => { if (admin.status === 'ready' && !loaded && !loading && !failed) void loadMore(); });
-	async function loadMore() {
-		if (loading || complete || admin.status !== 'ready') return;
-		const session = admin.credentials(); loading = true; failed = false;
+	async function loadMore(refresh = false) {
+		if (loading || (!refresh && complete) || admin.status !== 'ready') return;
+		loading = true; failed = false; failedRefresh = refresh;
 		try {
-			const page = await readAuditPage(session, cursor);
+			const session = admin.credentials();
+			const newest = refresh ? entries[0]?.id : undefined;
+			const page = newest ? { entries: await readAuditUpdates(session, newest), more: !complete } : await readAuditPage(session, refresh ? null : cursor);
 			const actorIds = [...new Set(page.entries.map(entry => entry.actorId).filter((id): id is string => id !== null))];
 			const actors = actorIds.length ? await allStaffRows(session, 'amp_staff_members', 'id,display_name', 'id', { id: `in.(${actorIds.join(',')})` }) : [];
-			if (admin.session?.user.id !== session.userId) return;
+			if (!alive || admin.session?.user.id !== session.userId) return;
 			actorNames = { ...actorNames, ...Object.fromEntries(actors.map(actor => [identifier(actor.id), text(actor.display_name, 200)])) };
-			entries = [...entries, ...page.entries];
-			if (page.entries.length) cursor = page.entries.at(-1)!.id;
-			complete = !page.more; loaded = true;
+			entries = newest ? [...page.entries, ...entries] : [...entries, ...page.entries];
+			if (!newest) {
+				if (page.entries.length) cursor = page.entries.at(-1)!.id;
+				complete = !page.more;
+			}
+			loaded = true;
 		} catch (error) { failed = true; await admin.permissionFailure(error); }
 		finally { loading = false; }
 	}
+	let revalidateQueued = $state(false);
+	function revalidate() { revalidateQueued = document.visibilityState === 'visible'; }
+	$effect(() => {
+		if (revalidateQueued && admin.status === 'ready' && !loading) {
+			revalidateQueued = false;
+			untrack(() => { void loadMore(true); });
+		}
+	});
 </script>
 
+<svelte:window onfocus={revalidate} ononline={revalidate} />
+<svelte:document onvisibilitychange={revalidate} />
 <svelte:head><title>{m.title}</title></svelte:head>
 <header class={pageHeader}>
 	<h1 class={pageHeading}>{m.heading}</h1>
@@ -83,9 +101,9 @@
 	</Item.Group>
 {/if}
 <div class={formStatus} aria-live="polite">{#if failed}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unavailable}</Alert.Message>{/if}</div>
-{#if failed}<Button type="button" variant="outline" onclick={loadMore} disabled={loading}><ButtonLabel pending={loading} pendingLabel={m.loading} label={m.retry} /></Button>
+{#if failed}<Button type="button" variant="outline" onclick={() => loadMore(failedRefresh)} disabled={loading}><ButtonLabel pending={loading} pendingLabel={m.loading} label={m.retry} /></Button>
 {:else if !complete}
-	<Button type="button" variant="outline" class="mt-5" onclick={loadMore} disabled={loading}>
+	<Button type="button" variant="outline" class="mt-5" onclick={() => loadMore()} disabled={loading}>
 		<ButtonLabel pending={loading} pendingLabel={m.loading} label={m.more} />
 	</Button>
 {/if}

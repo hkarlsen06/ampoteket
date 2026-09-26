@@ -553,6 +553,29 @@ try {
 		await page.screenshot({ path: `${artifacts}/${locale ? 'en' : 'nb'}-${colour}-360x640-confirmation.png` });
 		await page.keyboard.press('Escape'); await camera(page, 'closed');
 	}
+	// Maximum supported names may need the explicit overflow fallback. Its
+	// region scrolls by keyboard while confirmation controls stay in the footer.
+	const previousName = await sql(`SELECT name_en FROM app.products WHERE id='${seedProductId(0)}'`);
+	try {
+		await sql(`UPDATE app.products SET name_en=repeat('W',200) WHERE id='${seedProductId(0)}'`);
+		await page.goto(`${origin}/en/cart`); await open(page);
+		await scannerDialog(page).getByLabel(fieldLabel('Part code')).fill(seedProductCode(0));
+		await action(page, 'Find part').click(); await product(page);
+		const body = scannerDialog(page).getByRole('region', { name: en.scanner.contents, exact: true });
+		await expect.poll(() => body.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+		await body.focus(); await body.press('End');
+		await expect.poll(() => body.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+		for (const label of ['Add to cart', 'Scan']) {
+			const control = action(page, label);
+			assert.equal(await control.evaluate(element => element.closest('.dialog-body')), null);
+			const box = await control.boundingBox();
+			assert.ok(box && box.y >= 0 && box.y + box.height <= 640, 'Scanner confirmation stays visible below its scrolling content');
+		}
+		await fits(page); await action(page, 'Close scanner').click(); await camera(page, 'closed');
+	} finally {
+		await sql(`UPDATE app.products SET name_en='${previousName.replaceAll("'", "''")}' WHERE id='${seedProductId(0)}'`);
+	}
+	console.log('PASS: scanner long-name overflow is named and keyboard-scrollable, with Add/Scan outside it');
 	await page.setViewportSize({ width: 1280, height: 900 });
 	// Complete the actual paid flow on disposable stock. This deliberately does
 	// not open Vipps or claim payment/app-switching acceptance.

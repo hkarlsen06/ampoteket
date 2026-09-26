@@ -83,6 +83,13 @@ try {
 	const addBox = await addLine.boundingBox(), footerBox = await orderSheet.locator('[data-slot="dialog-footer"]').boundingBox();
 	assert.ok(addBox && footerBox && footerBox.y >= addBox.y + addBox.height + 8, 'Save stays below the Add line control');
 	await page.screenshot({ path: `${artifacts}/create-en-360.png` });
+	const firstOrderQuantity = page.getByLabel(fieldLabel(`${m.quantity} (pcs)`)).first();
+	await firstOrderQuantity.fill('0.5');
+	await page.getByRole('button', { name: m.recordOrder, exact: true }).click();
+	await expect(firstOrderQuantity).toHaveAttribute('aria-invalid', 'true');
+	await expect(firstOrderQuantity).toBeFocused();
+	await expect(orderSheet.getByText(m.invalidQuantity('1'), { exact: true })).toBeVisible();
+	await firstOrderQuantity.fill('10');
 	const beforeOrderStock = await value(`SELECT quantity FROM app.inventory WHERE product_id=${literal(seedProductId(0))}`);
 	await page.getByRole('button', { name: m.recordOrder, exact: true }).click();
 	await expect(page).toHaveURL(/\/en\/admin\/orders\/[0-9a-f-]{36}$/);
@@ -130,7 +137,28 @@ try {
 	expect(await value(`SELECT quantity FROM app.inventory WHERE product_id=${literal(seedProductId(0))}`)).toBe(beforeOrderStock);
 	expect(await value(`SELECT count(*) FROM app.inventory_events WHERE kind='receipt' AND purchase_order_id=${literal(orderId)}`)).toBe('0');
 	await receive.getByRole('button', { name: m.differentQuantity, exact: true }).first().click();
-	await receive.getByLabel(fieldLabel(`${m.receivedQuantity} (pcs)`)).fill('4');
+	const receivedQuantity = receive.getByLabel(fieldLabel(`${m.receivedQuantity} (pcs)`));
+	await receivedQuantity.fill('0');
+	await receive.getByRole('button', { name: m.confirmReceived, exact: true }).click();
+	await expect(receivedQuantity).toHaveAttribute('aria-invalid', 'true');
+	await expect(receivedQuantity).toBeFocused();
+	await expect(receive.getByText(m.invalidQuantity('1'), { exact: true })).toBeVisible();
+	await receivedQuantity.fill('11');
+	await receive.getByRole('button', { name: m.confirmReceived, exact: true }).click();
+	await expect(receivedQuantity).toHaveAttribute('aria-invalid', 'true');
+	await expect(receivedQuantity).toBeFocused();
+	await expect(receive.getByText(m.exceedsOutstanding('10', unitLabel('pcs', 'en', '10')), { exact: true })).toBeVisible();
+	await receivedQuantity.fill('4');
+	await sql(`UPDATE app.purchase_orders SET supplier_name='Supplier updated in another tab' WHERE id=${literal(orderId)}`);
+	await page.evaluate(() => window.dispatchEvent(new Event('online')));
+	await expect(receive.getByRole('heading', { name: `${m.receiveHeading} · Supplier updated in another tab`, exact: true })).toBeVisible();
+	await expect(receivedQuantity).toHaveValue('4');
+	await expect(receivedQuantity).toBeFocused();
+	await sql(`UPDATE app.purchase_orders SET supplier_name='Disposable parts supplier' WHERE id=${literal(orderId)}`);
+	await page.evaluate(() => window.dispatchEvent(new Event('online')));
+	await expect(receive.getByRole('heading', { name: `${m.receiveHeading} · Disposable parts supplier`, exact: true })).toBeVisible();
+	await expect(receivedQuantity).toHaveValue('4');
+	console.log('PASS: planned receipt refreshes on reconnect while retaining selected quantity and focus');
 	const receiptRpc = `${api.origin}/rest/v1/rpc/amp_record_receipt`;
 	let releaseReceipt!: () => void;
 	let requestSeen!: () => void;
@@ -247,8 +275,35 @@ try {
 	await chooseProduct(page, 29);
 	await page.getByLabel(fieldLabel(`${m.quantity} (m)`)).fill('0.5');
 	const beforeUnplanned = await value(`SELECT quantity FROM app.inventory WHERE product_id=${literal(seedProductId(29))}`);
+	const unplannedCommands: unknown[] = [];
+	await page.route(receiptRpc, async route => {
+		if (route.request().method() !== 'POST') { await route.continue(); return; }
+		unplannedCommands.push(route.request().postDataJSON());
+		if (unplannedCommands.length === 1) { const response = await route.fetch(); expect(response.ok()).toBe(true); await route.abort('failed'); }
+		else await route.continue();
+	});
 	await page.getByRole('button', { name: m.recordReceipt, exact: true }).click();
+	const unplannedSheet = page.getByRole('dialog', { name: m.unplannedReceipt, exact: true });
+	await expect(unplannedSheet.getByText(m.unknown, { exact: true })).toBeVisible();
+	const pendingBeforeAccessFailure = await page.evaluate(() => localStorage.getItem('ampoteket:admin-order-command:v1'));
+	const membershipRead = `${api.origin}/rest/v1/amp_staff_members*`;
+	await page.route(membershipRead, route => route.abort('failed'));
+	await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+	await expect(unplannedSheet.getByText(en.admin.unavailable, { exact: true })).toBeVisible();
+	await expect(unplannedSheet.getByRole('button', { name: m.retrySame, exact: true })).toBeDisabled();
+	await expect(unplannedSheet.getByRole('button', { name: m.closeEntry, exact: true })).toBeEnabled();
+	await page.unroute(membershipRead);
+	await unplannedSheet.getByRole('button', { name: en.admin.retry, exact: true }).click();
+	await expect(unplannedSheet.getByText(en.admin.unavailable, { exact: true })).toHaveCount(0);
+	expect(await page.evaluate(() => localStorage.getItem('ampoteket:admin-order-command:v1'))).toBe(pendingBeforeAccessFailure);
+	await unplannedSheet.getByRole('button', { name: m.closeEntry, exact: true }).click();
+	await expect(unplannedSheet).toHaveCount(0);
+	await page.getByRole('button', { name: m.resumePending, exact: true }).click();
+	await unplannedSheet.getByRole('button', { name: m.retrySame, exact: true }).click();
 	await expect(page.getByText(m.receiptRecorded, { exact: true })).toBeVisible();
+	await page.unroute(receiptRpc);
+	expect(unplannedCommands).toHaveLength(2);
+	expect(unplannedCommands[1]).toEqual(unplannedCommands[0]);
 	expect(await value(`SELECT quantity-${beforeUnplanned}=0.5 FROM app.inventory WHERE product_id=${literal(seedProductId(29))}`)).toBe('t');
 	expect(await value("SELECT count(*) FROM app.inventory_events WHERE kind='receipt' AND purchase_order_id IS NULL AND note='Donation from the workshop'")).toBe('1');
 	await expect(page.getByRole('heading', { name: m.unplannedHistory, exact: true })).toBeVisible();
@@ -287,9 +342,12 @@ try {
 	await productTab.getByLabel(fieldLabel(en.adminProducts.nameNb)).fill('Ny vare fra bestilling');
 	await productTab.getByLabel(fieldLabel(en.adminProducts.nameEn)).fill('New item from order');
 	await productTab.getByRole('button', { name: en.adminProducts.save, exact: true }).click();
-	await expect(productTab.getByText(en.adminProducts.saved, { exact: true })).toBeVisible();
+	// Creation replaces /new with the persisted editor, so verify its durable result after navigation.
+	await expect(productTab).toHaveURL(/\/en\/admin\/products\/[0-9a-f-]{36}$/);
 	const newProductId = await value("SELECT id FROM app.products WHERE name_en='New item from order'");
 	const newProductCode = await value(`SELECT code FROM app.products WHERE id=${literal(newProductId)}`);
+	await expect(productTab).toHaveURL(`${origin}/en/admin/products/${newProductId}`);
+	await expect(productTab.getByRole('heading', { name: newProductCode, exact: true })).toBeVisible();
 	await productTab.close();
 	await page.bringToFront();
 	await page.evaluate(() => window.dispatchEvent(new Event('focus')));
@@ -369,7 +427,7 @@ try {
 	await page.emulateMedia({ colorScheme: 'dark' });
 	await page.screenshot({ path: `${artifacts}/attention-order-on-order-en-dark-360.png` });
 	await page.emulateMedia({ colorScheme: 'light' });
-	for (const [, unit] of rows) await expect(pickSheet.getByText(s.onOrder(`5 ${unitLabel(unit, 'en')}`), { exact: true }).first()).toBeVisible();
+	for (const [, unit] of rows) await expect(pickSheet.getByText(s.onOrder(`5 ${unitLabel(unit, 'en', '5')}`), { exact: true }).first()).toBeVisible();
 	console.log('PASS: needs-attention sheet lists every attention part, prefills New order with purchase links, and leaves parts already on order unchecked');
 	assert.deepEqual(diagnostics, []);
 } finally {

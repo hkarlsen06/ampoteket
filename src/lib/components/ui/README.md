@@ -18,6 +18,10 @@ This file lists what differs from upstream, so updates do not undo it.
 - Initialize `bind:ref` targets with `$state<HTMLButtonElement | null>(null)` (or the
   right element type), not `undefined`.
 - Decimal inputs stay `type="text"` with `inputmode="decimal"` and string values.
+- `Input` defaults to no autocomplete or capitalization and a next-key hint.
+  Native input types keep their keyboard; override these defaults for names,
+  search, credentials and final fields. `Textarea` uses sentence capitalization
+  and a newline key. `InputGroup.Input` inherits `Input` defaults.
 - Import Phosphor icons individually (`phosphor-svelte/lib/CheckIcon`) and render
   them through `$lib/Icon.svelte`.
 
@@ -58,9 +62,13 @@ Keep these when comparing with or updating from upstream:
   button; supply a localized close, or both `showCloseButton` and `closeLabel`.
   `Dialog.Title` is `text-xl`; `Content`/`Footer` take `variant="sheet"`;
   `Dialog.Header` has `layout="bar"` and `density="compact"` (the scanner at 360×640).
+  Centered content is limited to the viewport minus 2rem. Put long content in a
+  named, focusable `sheetBody` scroll region, with title and actions outside it.
 - **`AlertDialog`:** no close icon, `preventScroll={false}`, initial focus on the
   enabled `Cancel`. `Cancel` closes; `Action` leaves closing to the caller after
   success.
+  Long descriptions form a contained scroll region with a caller-supplied
+  accessible name; title and actions remain visible.
 - **`Sidebar`:** below 48rem the upstream mobile branch uses our shared `Dialog` as a
   left sheet with localized title/close. `Sidebar.Content` is the named navigation
   scroll region (`overflow-y-auto overscroll-contain`).

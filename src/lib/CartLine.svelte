@@ -18,11 +18,11 @@
 	import QuantityStepper from '$lib/QuantityStepper.svelte';
 	import { codeText, nameWrap } from '$lib/ui';
 
-	let { line, fact, locked, onremoved, onready, onretry }: { line: CartLine; fact?: CartProductFact; locked: boolean; onremoved: () => void; onready?: (ready: boolean) => void; onretry?: () => void } = $props();
+	let { line, fact, locked, onremoved, onready, onretry }: { line: CartLine; fact?: CartProductFact; locked: boolean; onremoved: (returnFocus: boolean) => void; onready?: (ready: boolean) => void; onretry?: () => void } = $props();
 	const i18n = getI18n();
 	const m = $derived(i18n.m.cart);
 	const cart = getCartContext();
-	const product = $derived(fact?.kind === 'ready' ? fact.product : null);
+	const product = $derived(fact && 'product' in fact ? fact.product ?? null : null);
 	const name = $derived(product ? productName(product, i18n.locale)
 		: formatMeasurementText((i18n.locale === 'nb' ? line.name_nb ?? line.name_en : line.name_en ?? line.name_nb) ?? line.code ?? m.unknown, i18n.locale));
 	const total = $derived.by(() => {
@@ -37,11 +37,16 @@
 	let removing = $state(false);
 	let result = $state(false);
 	let error = $state<CartErrorCode | null>(null);
+	const displayError = $derived.by(() => {
+		if (error || dirty || fact?.kind !== 'ready') return error;
+		try { validQuantity(line.quantity, fact.product.sale_step); return null; }
+		catch { return 'quantity'; }
+	});
 	let stepper: QuantityStepper | undefined = $state();
 	let revision = 0;
 	let saving: Promise<boolean> | null = null;
 	$effect(() => {
-		let ready = !!product && !dirty && !pending && !removing && !error;
+		let ready = fact?.kind === 'ready' && !dirty && !pending && !removing && !displayError;
 		if (product) { try { validQuantity(line.quantity, product.sale_step); } catch { ready = false; } }
 		untrack(() => onready?.(ready));
 	});
@@ -55,7 +60,7 @@
 		}
 	});
 	function save(reportInvalid = false): Promise<boolean> {
-		if (!product || locked || removing) return Promise.resolve(false);
+		if (!product || fact?.kind !== 'ready' || locked || removing) return Promise.resolve(false);
 		if (reportInvalid) {
 			try { validQuantity(draft, product.sale_step, i18n.locale); }
 			catch { error = 'quantity'; return Promise.resolve(false); }
@@ -69,7 +74,7 @@
 		try {
 			// Coalesce edits made while waiting for the shared cart lock. Each write
 			// still compares against the last quantity we successfully persisted.
-			while (dirty && !locked && !removing) {
+			while (dirty && fact?.kind === 'ready' && !locked && !removing) {
 				let quantity: string;
 				try { quantity = validQuantity(draft, saleStep, i18n.locale); }
 				catch { break; }
@@ -90,7 +95,7 @@
 		void save();
 	}
 	function step(direction: 1 | -1) {
-		if (!product || locked || removing) return;
+		if (!product || fact?.kind !== 'ready' || locked || removing) return;
 		error = null; result = false;
 		try {
 			const current = validQuantity(draft, product.sale_step, i18n.locale);
@@ -100,13 +105,14 @@
 	}
 	async function remove() {
 		if (locked || removing) return;
+		const returnFocus = document.activeElement?.matches(':focus-visible') ?? false;
 		removing = true; result = false; error = null;
 		try {
 			// Finish an in-flight write before removing; never replay a queued edit
 			// after removal or bypass a conflict detected by that write.
 			if (saving && !await saving) return;
 			if (locked) return;
-			await cart.remove(line.product_id, baseline); onremoved();
+			await cart.remove(line.product_id, baseline); onremoved(returnFocus);
 		}
 		catch (failure) {
 			error = failure instanceof CartError ? failure.code : 'storage';
@@ -143,7 +149,7 @@
 							bind:value={draft}
 							id={`quantity-${line.product_id}`}
 							disabled={locked || removing || !product}
-							invalid={error === 'quantity'}
+							invalid={displayError === 'quantity'}
 							describedby={`step-${line.product_id} result-${line.product_id}`}
 							decreaseLabel={m.decrease(name)}
 							increaseLabel={m.increase(name)}
@@ -160,15 +166,15 @@
 		</div>
 		<Item.Footer class="mt-2 min-h-6 flex-wrap items-baseline gap-x-4 gap-y-1">
 			<p class="sr-only" id={`step-${line.product_id}`}>{#if product}{m.step(formatDecimal(product.sale_step, i18n.locale), unitLabel(product.unit_symbol, i18n.locale, product.sale_step))}{/if}</p>
-			<div class={['min-w-0 text-sm', !error && (!fact || !!product) && 'sr-only']} id={`result-${line.product_id}`} role={error ? 'alert' : 'status'}>
-				{#if error}<Field.Error role={undefined}>{m.errors[error]}{#if error === 'quantity' && product} {m.step(formatDecimal(product.sale_step, i18n.locale), unitLabel(product.unit_symbol, i18n.locale, product.sale_step))}{/if}</Field.Error>
+			<div class={['min-w-0 text-sm', !displayError && (!fact || fact.kind === 'ready') && 'sr-only']} id={`result-${line.product_id}`} role={displayError ? 'alert' : 'status'}>
+				{#if displayError}<Field.Error role={undefined}>{m.errors[displayError]}{#if displayError === 'quantity' && product} {m.step(formatDecimal(product.sale_step, i18n.locale), unitLabel(product.unit_symbol, i18n.locale, product.sale_step))}{/if}</Field.Error>
 				{:else if fact?.kind === 'unavailable'}<Alert.Message role={undefined} appearance="inline" variant="destructive">{m.factsUnavailable}</Alert.Message>
 				{:else if fact?.kind === 'missing'}<Field.Description>{m.missing}</Field.Description>
 				{:else if !product}{m.factsLoading}
 				{:else if pending}{m.saving}
 				{:else if result}{m.saved}{/if}
 			</div>
-			{#if !error && fact?.kind === 'unavailable' && onretry}
+			{#if !displayError && fact?.kind === 'unavailable' && onretry}
 				<div class="basis-full"><Button variant="outline" type="button" onclick={onretry}>{m.retry}</Button></div>
 			{/if}
 			{#if total !== null}

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import AdminAccessGate from '$lib/AdminAccessGate.svelte';
+	import { productName } from '$lib/catalog';
 	import { Separator } from '$lib/components/ui/separator';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import Icon from '$lib/Icon.svelte';
@@ -34,6 +36,7 @@
 
 	const i18n = getI18n(), admin = getAdminContext();
 	const m = $derived(i18n.m.adminShelf);
+	let loadFailed = $state(false);
 	let shelf = $state<AdminShelf | null>(null), busy = $state(false), storageReady = $state(false), needsRefresh = $state(false);
 	let pending = $state<ShelfCommand | null>(null);
 	let reviewCommand = $state<ShelfCommand | null>(null);
@@ -65,7 +68,7 @@
 	let editorTrigger: HTMLElement | null = null;
 	let newCabinetButton = $state<HTMLButtonElement | null>(null);
 	const wrongIdentity = $derived(Boolean(pending && pending.userId !== admin.session?.user.id));
-	const locked = $derived(busy || Boolean(pending) || Boolean(reviewCommand) || !storageReady || needsRefresh || !shelf);
+	const locked = $derived(admin.status !== 'ready' || busy || Boolean(pending) || Boolean(reviewCommand) || !storageReady || needsRefresh || loadFailed || !shelf);
 	const currentReview = $derived.by(() => {
 		const command = reviewCommand;
 		if (!command) return undefined;
@@ -149,9 +152,9 @@
 		try {
 			const session = admin.credentials(), result = await readAdminShelf(session);
 			if (!alive || session.userId !== admin.session?.user.id) return;
-			shelf = result; needsRefresh = false;
+			shelf = result; loadFailed = false; needsRefresh = false;
 			if (!pending && !reconciling) outcome = 'idle';
-		} catch (error) { if (alive) { shelf = null; if (!pending) outcome = 'failed'; } await admin.permissionFailure(error); }
+		} catch (error) { if (alive) { loadFailed = true; if (!pending) outcome = 'failed'; } await admin.permissionFailure(error); }
 		finally {
 			if (alive) {
 				busy = false;
@@ -264,7 +267,7 @@
 		});
 	}
 	async function run(command?: ShelfCommand) {
-		if (busy || !storageReady || wrongIdentity) return;
+		if (admin.status !== 'ready' || busy || !storageReady || wrongIdentity || loadFailed) return;
 		const restoreFocus = document.activeElement?.matches(':focus-visible') ?? false;
 		let closed = false, savedInline = false;
 		busy = true; outcome = 'idle';
@@ -292,8 +295,8 @@
 			if (inlineEditor) savedInline = true;
 			else { closeEditor(false); closed = true; }
 			// This is display refresh after acknowledgement, never a new write.
-			try { const refreshed = await readAdminShelf(session); if (alive && session.userId === admin.session?.user.id) shelf = refreshed; }
-			catch (error) { shelf = null; needsRefresh = true; await admin.permissionFailure(error); }
+			try { const refreshed = await readAdminShelf(session); if (alive && session.userId === admin.session?.user.id) { shelf = refreshed; loadFailed = false; } }
+			catch (error) { loadFailed = true; needsRefresh = true; await admin.permissionFailure(error); }
 		} catch (error) {
 			if (!alive) return;
 			const failure = shelfFailure(error);
@@ -311,7 +314,7 @@
 		} finally {
 			if (alive) {
 				busy = false;
-				if (savedInline && shelf) {
+				if (savedInline && shelf && !loadFailed) {
 					const current = shelf.cabinets.find((item) => item.id === before?.id && !item.is_archived);
 					if (current) syncCabinet(current); else closeEditor(false);
 				}
@@ -421,11 +424,12 @@
 	{:else}
 		<Dialog.Header layout="bar">
 			<Dialog.Title>{editorMode === 'swap' ? m.swapHeading : before ? position(before) : m.newCabinet}</Dialog.Title>
-			<Dialog.Close disabled={busy || Boolean(pending)}>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm"><Icon icon={XIcon} class="size-5" /><span class="sr-only">{m.cancel}</span></Button>{/snippet}</Dialog.Close>
+			<Dialog.Close disabled={busy}>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm"><Icon icon={XIcon} class="size-5" /><span class="sr-only">{m.cancel}</span></Button>{/snippet}</Dialog.Close>
 		</Dialog.Header>
 	{/if}
 	<!-- svelte-ignore a11y_no_noninteractive_tabindex (Named dialog editor region supports native keyboard scrolling.) -->
 	<div class={inline ? 'min-w-0' : ['shelf-editor-body', sheetBody]} role={inline ? undefined : 'region'} aria-label={inline ? undefined : editorMode === 'swap' ? m.swapHeading : m.layoutHeading} tabindex={inline ? undefined : 0}>
+		<AdminAccessGate active={!inline}>
 		{#if !inline}<Dialog.Description class="sr-only">{m.moveHint}</Dialog.Description>{/if}
 
 		{#if reviewCommand}
@@ -470,7 +474,7 @@
 		{/if}
 		{#if pending && !wrongIdentity}
 			<h3>{m.pendingHeading}</h3><p>{summary(pending)}</p>
-			<Button type="button" variant="outline" disabled={busy || !storageReady} onclick={() => run()}><ButtonLabel pending={busy} pendingLabel={m.saving} label={m.retry} /></Button>
+			<Button type="button" variant="outline" disabled={admin.status !== 'ready' || busy || !storageReady} onclick={() => run()}><ButtonLabel pending={busy} pendingLabel={m.saving} label={m.retry} /></Button>
 		{/if}
 		{#if before && !before.is_archived && editorMode === 'swap'}
 			<p>{m.swapHint}</p>
@@ -488,6 +492,7 @@
 				{#if draftChanged}<Button type="button" variant="outline" disabled={locked} onclick={() => edit('cabinet', shelf!.cabinets.find((item) => item.id === before!.id)!)}>{m.discardChanges}</Button>{/if}
 			</div>
 		{/if}
+		</AdminAccessGate>
 	</div>
 	{#if !inline}
 		<Dialog.Footer variant="sheet" class="items-center">
@@ -500,7 +505,7 @@
 
 <svelte:head><title>{m.title}</title></svelte:head>
 <Toaster position="bottom-center" closeButton containerAriaLabel={m.notifications} closeButtonAriaLabel={m.dismissNotification} />
-<svelte:window onfocus={revalidate} onkeydown={(event) => { if (event.key === 'Escape' && swapSource && !confirmation) { swapSource = null; event.preventDefault(); } }} />
+<svelte:window onfocus={revalidate} ononline={revalidate} onkeydown={(event) => { if (event.key === 'Escape' && swapSource && !confirmation) { swapSource = null; event.preventDefault(); } }} />
 <svelte:document onvisibilitychange={revalidate} />
 <div class={pageHeader}>
 	<h1 class={pageHeading}>{m.heading}</h1>
@@ -517,9 +522,10 @@
 
 {#if pending && !wrongIdentity && !editor}
 	<section class={shelfSection} aria-labelledby="pending-title"><Separator /><h2 class={sectionHeading} id="pending-title">{m.pendingHeading}</h2>
-		<p>{summary(pending)}</p><Button type="button" variant="default" disabled={busy || !storageReady} onclick={() => run()}><ButtonLabel pending={busy} pendingLabel={m.saving} label={m.retry} /></Button>
+		<p>{summary(pending)}</p><Button type="button" variant="default" disabled={admin.status !== 'ready' || busy || !storageReady} onclick={() => run()}><ButtonLabel pending={busy} pendingLabel={m.saving} label={m.retry} /></Button>
 	</section>
 {/if}
+{#if shelf && loadFailed}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unavailable}</Alert.Message><Button type="button" variant="outline" disabled={busy} onclick={load}>{m.retryLoad}</Button>{/if}
 {#if !shelf}
 	{#if busy}<span class="sr-only" role="status">{m.loading}</span>{/if}
 	<section class={shelfSection} aria-busy={busy}>
@@ -554,7 +560,7 @@
 						{#if index > 0}<Item.Separator />{/if}
 						<Item.Root variant="row" role="listitem">
 							<Item.Content>
-							<Item.Title class={itemTitle}><a href={i18n.href(`/admin/products/${product.id}`)}>{i18n.locale === 'nb' ? product.name_nb : product.name_en}</a></Item.Title>
+							<Item.Title class={itemTitle}><a href={i18n.href(`/admin/products/${product.id}`)}>{productName(product, i18n.locale)}</a></Item.Title>
 							<Item.Description class="flex flex-wrap items-center gap-x-3 gap-y-1"><span class={codeText}>{product.code}</span>{#if !product.is_active}<StateBadge tone="neutral">{m.inactive}</StateBadge>{/if}</Item.Description>
 							</Item.Content>
 						</Item.Root>
@@ -592,10 +598,10 @@
 	{/if}
 {/if}
 
-<Dialog.Root open={editor !== null && !inlineEditor} onOpenChange={(open) => { if (!open && !busy && !pending) closeEditor(); }}>
+<Dialog.Root open={editor !== null && !inlineEditor} onOpenChange={(open) => { if (!open && !busy) closeEditor(); }}>
 	<Dialog.Content variant="sheet" preventScroll={false}
-		onInteractOutside={(event) => { if (busy || pending) event.preventDefault(); }}
-		onEscapeKeydown={(event) => { if (busy || pending || document.querySelector('[data-resizing="true"]')) event.preventDefault(); }}
+		onInteractOutside={(event) => { if (busy) event.preventDefault(); }}
+		onEscapeKeydown={(event) => { if (busy || document.querySelector('[data-resizing="true"]')) event.preventDefault(); }}
 		onCloseAutoFocus={(event) => {
 			event.preventDefault();
 			void tick().then(() => {
@@ -611,9 +617,8 @@
 	<AlertDialog.Content preventScroll={false} onCloseAutoFocus={(event) => { event.preventDefault(); confirmationTrigger?.focus({ preventScroll: true }); }}>
 		<AlertDialog.Header>
 			<AlertDialog.Title>{confirmation?.kind === 'swap-bins' || confirmation?.kind === 'swap-cabinets' ? m.swapHeading : confirmation?.kind === 'bin' && !confirmation.after.is_archived ? m.moveDrawer : confirmation?.kind === 'archive-cabinet' ? m.archiveCabinetWithDrawers : confirmation?.kind === 'cabinet' ? m.archiveCabinet : m.archiveBin}</AlertDialog.Title>
-			<AlertDialog.Description>{confirmation ? summary(confirmation) : ''}</AlertDialog.Description>
+			<AlertDialog.Description aria-label={confirmation?.kind === 'swap-bins' || confirmation?.kind === 'swap-cabinets' ? m.swapHeading : confirmation?.kind === 'bin' && !confirmation.after.is_archived ? m.moveDrawer : confirmation?.kind === 'archive-cabinet' ? m.archiveCabinetWithDrawers : confirmation?.kind === 'cabinet' ? m.archiveCabinet : m.archiveBin}>{confirmation ? summary(confirmation) : ''}<span class="mt-2 block">{confirmation?.kind === 'swap-bins' || confirmation?.kind === 'swap-cabinets' ? m.swapHint : confirmation?.kind === 'bin' && !confirmation.after.is_archived ? m.moveHint : m.archiveHint}</span></AlertDialog.Description>
 		</AlertDialog.Header>
-		<p>{confirmation?.kind === 'swap-bins' || confirmation?.kind === 'swap-cabinets' ? m.swapHint : confirmation?.kind === 'bin' && !confirmation.after.is_archived ? m.moveHint : m.archiveHint}</p>
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel>{m.cancelAction}</AlertDialog.Cancel>
 			<AlertDialog.Action disabled={locked} onclick={() => { const command = confirmation; confirmation = null; if (command) void run(command); }}>{m.confirmAction}</AlertDialog.Action>
@@ -622,14 +627,17 @@
 </AlertDialog.Root>
 
 <Dialog.Root bind:open={renameOpen}>
-	<Dialog.Content preventScroll={false} aria-describedby={undefined} class="gap-0 p-0">
+	<Dialog.Content preventScroll={false} aria-describedby={undefined} class="grid-rows-[auto_minmax(0,1fr)_auto] gap-0 p-0">
 		<Dialog.Header layout="bar">
-			<Dialog.Title>{m.renameDrawer}</Dialog.Title>
+			<Dialog.Title id={`${fieldId}-rename-title`}>{m.renameDrawer}</Dialog.Title>
 			<Dialog.Close>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm"><Icon icon={XIcon} class="size-5" /><span class="sr-only">{m.cancel}</span></Button>{/snippet}</Dialog.Close>
 		</Dialog.Header>
-		<form class={[formLayout, 'px-4 py-5 md:px-6']} onsubmit={(event) => { event.preventDefault(); drawerDetails({ label: drawerLabel.trim() || null }); renameOpen = false; }}>
-			<Field.Field><Field.Label for={`${fieldId}-drawer-label`}>{m.label}</Field.Label><Input id={`${fieldId}-drawer-label`} bind:value={drawerLabel} disabled={locked} /></Field.Field>
-			<Button type="submit" disabled={locked}>{m.applyDrawerDetails}</Button>
-		</form>
+		<!-- svelte-ignore a11y_no_noninteractive_tabindex (Named dialog body supports native keyboard scrolling.) -->
+		<div class={sheetBody} role="region" aria-labelledby={`${fieldId}-rename-title`} tabindex="0">
+			<AdminAccessGate><form id={`${fieldId}-rename-form`} class={formLayout} onsubmit={(event) => { event.preventDefault(); if (locked) return; drawerDetails({ label: drawerLabel.trim() || null }); renameOpen = false; }}>
+				<Field.Field><Field.Label for={`${fieldId}-drawer-label`}>{m.label}</Field.Label><Input id={`${fieldId}-drawer-label`} bind:value={drawerLabel} disabled={locked} /></Field.Field>
+			</form></AdminAccessGate>
+		</div>
+		<Dialog.Footer variant="sheet"><Button form={`${fieldId}-rename-form`} type="submit" disabled={locked}>{m.applyDrawerDetails}</Button></Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>

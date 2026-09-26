@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { untrack, onMount } from 'svelte';
 	import { getI18n } from '$lib/i18n';
 	import { getAdminContext } from '$lib/admin-context.svelte';
 	import { readAdminStatistics, type AdminStatistics } from '$lib/admin-statistics';
@@ -25,8 +25,9 @@
 	onMount(() => { mounted = true; void load(); return () => { mounted = false; generation++; }; });
 	async function load() {
 		if (admin.status !== 'ready') return;
-		loading = true; const version = ++generation; const session = admin.credentials();
+		loading = true; const version = ++generation;
 		try {
+			const session = admin.credentials();
 			const result = await readAdminStatistics(session, productId);
 			// The statistics RPC names the parts needing attention; the catalog-style cards need their full product rows.
 			const ids = result.overview?.attention.map(part => part.product_id) ?? [];
@@ -38,7 +39,14 @@
 		} catch (error) { if (mounted && version === generation) failed = true; await admin.permissionFailure(error); }
 		finally { if (mounted && version === generation) loading = false; }
 	}
-	function revalidate() { if (document.visibilityState === 'visible' && !loading) void load(); }
+	let revalidateQueued = $state(false);
+	function revalidate() { revalidateQueued = document.visibilityState === 'visible'; }
+	$effect(() => {
+		if (revalidateQueued && admin.status === 'ready' && !(loading)) {
+			revalidateQueued = false;
+			untrack(() => { void load(); });
+		}
+	});
 	const metrics = $derived([
 		{ label: m.saleCount, value: data ? formatDecimal(data.summary.sale_count, i18n.locale) : null },
 		{ label: m.value, value: data ? formatMoney(data.summary.total_nok, i18n.locale) : null },
@@ -49,7 +57,7 @@
 	]);
 </script>
 
-<svelte:window onfocus={revalidate} />
+<svelte:window onfocus={revalidate} ononline={revalidate} />
 <svelte:document onvisibilitychange={revalidate} />
 <section class="space-y-4" aria-labelledby="statistics-period-title">
 <h2 id="statistics-period-title" class={sectionHeading}>{m.period}</h2>
@@ -70,16 +78,15 @@
 	{:else if loading && !data}<span role="status" class="sr-only">{m.loading}</span>
 	{:else if !overview}<p class="text-sm text-muted-foreground">{m.basis}</p>{/if}
 </div>
-{#if data && !failed}
+{#if data}
 	{#if overview && data.overview}
-		<!-- Open stocktakes are ongoing work, so they lead when any exist. Both sections render from the same load, so the order is settled before the skeleton leaves. -->
-		{#if data.overview.open_counts.length}{@render countsSection(data.overview)}{@render attentionSection(data.overview)}
-		{:else}{@render attentionSection(data.overview)}{@render countsSection(data.overview)}{/if}
+		{@render countsSection(data.overview)}
+		{@render attentionSection(data.overview)}
 		{#snippet attentionSection(overviewData: Overview)}
 			<section class={section()} aria-labelledby="stock-attention-title">
 				<h2 id="stock-attention-title" class={sectionHeading}>{m.attention}</h2>
 				<div class={formActions}>
-					{#if overviewData.attention.length}<AttentionOrderSheet />{/if}
+					{#if overviewData.attention.length}<AttentionOrderSheet disabled={loading || failed} />{/if}
 					<Button variant="outline" href={i18n.href('/admin/products')}>{m.allProducts}</Button>
 				</div>
 				{#if !overviewData.attention.length}<Empty.Root><Empty.Description>{m.noAttention}</Empty.Description></Empty.Root>
@@ -89,7 +96,7 @@
 				{#if attention}
 					<ul class="grid list-none grid-cols-1 gap-4 p-0 md:grid-cols-2 lg:grid-cols-3" aria-labelledby="stock-attention-title">
 						{#each attention.products as product (product.id)}
-							<AdminProductCard {product} references={attention.references} quantity={overviewData.attention.find(part => part.product_id === product.id)?.quantity ?? null} headingLevel={3} />
+							<AdminProductCard {product} references={attention.references} quantity={failed ? null : overviewData.attention.find(part => part.product_id === product.id)?.quantity ?? null} headingLevel={3} />
 						{/each}
 					</ul>
 				{/if}

@@ -5,6 +5,7 @@
 export const nb = {
 	scanner: {
 		title: 'Skann eller finn en del', action: 'Skann', open: 'Skann QR-kode', close: 'Lukk skanneren',
+		contents: 'Skanning og produktdetaljer',
 		entry: 'Delekode', find: 'Finn del', preview: 'Kamerabilde for skanning av etiketter',
 		paused: 'Skanningen er satt på pause.',
 		moveAway: 'Flytt etiketten ut av rammen før du skanner den igjen.', again: 'Skann samme etikett igjen',
@@ -186,6 +187,7 @@ export const nb = {
 		saleAndStock: 'Salg og lager', attributes: 'Spesifikasjoner', attributesHint: 'Prefikser går fint: skriv for eksempel 27p, 4,7k eller 4k7.', chooseAttribute: 'Velg spesifikasjon', yes: 'Ja', no: 'Nei', noAttributes: 'Ingen spesifikasjoner er lagret.', newDefinition: 'Ny spesifikasjon', categoryName: 'Kategorinavn', definitionCode: 'Kode', definitionLabel: 'Navn', valueType: 'Type', numberType: 'Tall', textType: 'Tekst', booleanType: 'Ja/nei', canonicalUnit: 'Grunnenhet (valgfri)', saveReference: 'Legg til', referenceSaved: 'Lagret.', referenceInvalid: 'Kontroller navnet og typen og prøv igjen.', cancel: 'Lukk', location: (cabinet: string, drawer: string) => `Kabinett ${cabinet} · skuff ${drawer}`
 	},
 	adminOrders: {
+		invalidQuantity: (step: string) => `Skriv et tall større enn 0, i trinn på ${step}.`, exceedsOutstanding: (quantity: string, unit: string) => `Skriv høyst ${quantity} ${unit}.`, invalidCost: (scale: number) => `Skriv 0 eller mer, med høyst ${scale} desimaler.`,
 		title: 'Bestillinger og mottak | Admin | Ampoteket', heading: 'Bestillinger og mottak', detailTitle: 'Bestilling | Admin | Ampoteket', detailHeading: 'Bestilling',
 		newOrder: 'Ny bestilling', unplannedReceipt: 'Registrer mottak uten bestilling', closeEntry: 'Lukk skjema', newProductFromOrder: 'Opprett nytt produkt (ny fane)', orders: 'Bestillinger', orderLines: 'Bestillingslinjer', lineNumber: (number: number) => `Linje ${number}`,
 		loading: 'Henter bestillinger …', unavailable: 'Utilgjengelig akkurat nå.', retry: 'Prøv igjen', empty: 'Ingen bestillinger ennå.', missing: 'Bestillingen finnes ikke.',
@@ -210,6 +212,8 @@ export const nb = {
 		historyCorrection: 'Korrigering', unplannedHistory: 'Mottak uten bestilling'
 	},
 	adminStock: {
+		reasonRequired: 'Skriv en begrunnelse.',
+		invalidQuantity: (step: string, signed: boolean) => signed ? `Skriv en endring ulik 0, i trinn på ${step}.` : `Skriv et tall større enn 0, i trinn på ${step}.`,
 		title: 'Svinn & korrigeringer | Admin | Ampoteket', heading: 'Svinn & korrigeringer',
 		stock: 'Registrert beholdning', history: 'Lagerhistorikk',
 		withdraw: 'Uttak', adjust: 'Justering', correct: 'Korriger tidligere bevegelse', actionHeading: 'Registrer lagerendring', kind: 'Type', movement: 'Bevegelse som korrigeres', chooseMovement: 'Velg bevegelse',
@@ -549,6 +553,7 @@ export const nb = {
 			parts: 'Se delekatalogen',
 			place: 'Pilestredet 35 · Oslo',
 			clock: 'Klokka i Oslo',
+			clockTime: (time: string) => `Klokka i Oslo: ${time}`,
 			open: 'Åpent',
 			closed: 'Stengt',
 			hours: 'OsloMets åpningstider',

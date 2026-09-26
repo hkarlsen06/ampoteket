@@ -85,6 +85,7 @@
   --night-border: #2a2a2d;
   /* The lit accent on the night surface: the sign's red, in both schemes. */
   --night-accent: #ff3c33;
+  --night-ring: #8fbbff;
   /* The shelf graphic: a quiet Raaco-blue tint for the cabinet steel, its
      hairlines, and the drawer fronts. */
   --steel: #0c1424;
@@ -190,8 +191,15 @@
   --muted-foreground: var(--night-muted);
   --border: var(--night-border);
   --primary: var(--night-accent);
+  --ring: var(--night-ring);
+  --focus-contrast: var(--night);
   color: var(--foreground);
   color-scheme: dark;
+}
+
+@utility focus-night {
+  --ring: var(--night-ring);
+  --focus-contrast: var(--night);
 }
 
 /* Landing-page photo motion (docs/page-home.md §2.2, §2.4). Everything below

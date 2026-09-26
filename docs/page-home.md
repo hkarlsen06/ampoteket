@@ -44,9 +44,11 @@ eyebrows or section numbers.
 The header holds the wordmark, Discord's official symbol (`DiscordLogo.svelte`, foreground
 colour only, per Discord's brand rules, left of the catalog icon) linking the permanent invite
 (`DISCORD_INVITE` in `src/lib/i18n/index.ts`), the cart icon (badge from
-`localStorage["ampoteket:cart"]`), the scanner trigger and a menu button. The catalog
-link, Admin link and language picker live in the menu panel at every width, so nothing
-moves when it opens. Without JavaScript the button is hidden and the panel is the
+`localStorage["ampoteket:cart"]`) and a menu button. Above 40rem, catalog and Admin
+are header icon links; the menu holds scanning and the language picker. At phone
+widths, catalog and Admin move into the menu and scanning follows the placement below.
+The same DOM adapts through CSS, and opening the menu does not move the header.
+Without JavaScript the button is hidden and the panel is the
 header's second row (`html.no-js`, set in `src/app.html`). The Admin link appears only
 after active staff membership is confirmed; the footer login link is always there. On
 phones (≤ 40rem) the scanner is a Scan button in the hero, then a floating button once
@@ -71,8 +73,9 @@ dock fades, so the floating trigger takes over when a mark 27svh below the secti
 passes the header. Without support or with reduced motion, the same DOM stacks as two
 still figures.
 
-The frame is decorative (`aria-hidden`) except the clock link. The Oslo clock is green
-while OsloMet's Pilestredet buildings are open and red when closed, per
+The frame is decorative (`aria-hidden`) except the clock link. The Oslo clock has a
+visible Open/Closed label at every width and includes its time in its accessible label.
+It is green while OsloMet's Pilestredet buildings are open and red when closed, per
 [student.oslomet.no/apningstider](https://student.oslomet.no/apningstider) (Mon–Fri
 06–22, weekends 08–22; holidays not modelled). These are building hours, not
 Ampoteket's staffed hours. Each photograph's credit runs along its right edge.
@@ -102,7 +105,7 @@ models must stay browser-rendered 3D meshes, never image sequences or video. Tou
 never tilts them. Sources and limits: [`assets/models/README.md`](../assets/models/README.md).
 
 - **Printer** (Bambu Lab P2S, logo-free). Scrolling through the viewport turns it about
-  90° counterclockwise from above (camera azimuth +45° → −45°), clamped; never a full
+  55° counterclockwise from above (camera azimuth +30° → −25°), clamped; never a full
   spin. Hover turns its front toward the pointer (≤ 30° horizontal, 15° vertical).
   Rebuild: `blender -b --python assets/models/build-p2s.py`.
 - **Soldering station.** Document scroll scrubs the paused `Soldering` clip from iron
@@ -194,4 +197,3 @@ Still open:
 - Lighthouse (mobile and desktop).
 - Link preview in a real sharing debugger (checked only in source).
 - External phone cameras opening the scheme-less label QR address.
-- Opening hours: the footer says they are on the door until we have them in writing.

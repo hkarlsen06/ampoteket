@@ -9,7 +9,7 @@
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import * as Popover from '$lib/components/ui/popover';
 	import * as RadioGroup from '$lib/components/ui/radio-group';
-	import { onMount } from 'svelte';
+	import { untrack, onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { getI18n } from '$lib/i18n';
 	import Icon from '$lib/Icon.svelte';
@@ -23,7 +23,7 @@
 	import ProductReferencesEditor from '$lib/ProductReferences.svelte';
 	const fieldId = $props.id();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.adminProducts);
-	let products = $state<AdminProduct[] | null>(null); let references = $state<ProductReferences | null>(null); let stock = $state<Map<string, ProductStock> | null>(null); let busy = $state(false); let failed = $state(false); let query = $state(''); let activity = $state('all'); let sort = $state<keyof typeof sorters>('attention'); let sortOpen = $state(false); let pending = $state<ProductCommand | null>(null); let alive = true;
+	let products = $state<AdminProduct[] | null>(null); let references = $state<ProductReferences | null>(null); let stock = $state<Map<string, ProductStock> | null>(null); let stockFailed = $state(false); let busy = $state(false); let failed = $state(false); let query = $state(''); let activity = $state('all'); let sort = $state<keyof typeof sorters>('attention'); let sortOpen = $state(false); let pending = $state<ProductCommand | null>(null); let alive = true;
 	// Products load in code order and sorting is stable, so code breaks every tie.
 	const quantity = (p: AdminProduct) => stock?.get(p.id)?.quantity;
 	const sorters = {
@@ -41,17 +41,34 @@
 	});
 	function openProduct(id: string) { void goto(i18n.href(`/admin/products/${id}`)); }
 	async function load() {
-		if (busy) return; busy = true; failed = false; const session = admin.credentials();
+		if (admin.status !== 'ready') return;
+		if (busy) return; busy = true;
 		// A failed stock read shows as unavailable per card instead of hiding the product list.
-		try { const [items, refs, inventory] = await Promise.all([readAdminProducts(session), readProductReferences(session), readInventory(session).catch(() => null)]); if (alive && session.userId === admin.session?.user.id) { products = items.sort((a, b) => a.code.localeCompare(b.code)); references = refs; stock = inventory && new Map(inventory.map(s => [s.product_id, s])); } }
+		try { const session = admin.credentials(); const [items, refs, inventory] = await Promise.all([readAdminProducts(session), readProductReferences(session), readInventory(session).catch(error => { void admin.permissionFailure(error); return null; })]); if (alive && session.userId === admin.session?.user.id) { products = items.sort((a, b) => a.code.localeCompare(b.code)); references = refs; if (inventory) stock = new Map(inventory.map(s => [s.product_id, s])); stockFailed = inventory === null; failed = false; } }
 		catch (error) { if (alive) failed = true; await admin.permissionFailure(error); } finally { if (alive) busy = false; }
+	}
+	async function retryInventory() {
+		if (busy || admin.status !== 'ready') return;
+		busy = true;
+		try {
+			const session = admin.credentials(); const inventory = await readInventory(session);
+			if (alive && session.userId === admin.session?.user.id) { stock = new Map(inventory.map(item => [item.product_id, item])); stockFailed = false; }
+		} catch (error) { stockFailed = true; await admin.permissionFailure(error); }
+		finally { if (alive) busy = false; }
 	}
 	// The app owns freshness (design-system.md §4.2): re-read when the tab
 	// becomes relevant again instead of offering a manual refresh button.
-	function revalidate() { if (admin.status === 'ready' && document.visibilityState === 'visible') void load(); }
+	let revalidateQueued = $state(false);
+	function revalidate() { revalidateQueued = document.visibilityState === 'visible'; }
+	$effect(() => {
+		if (revalidateQueued && admin.status === 'ready' && !(busy)) {
+			revalidateQueued = false;
+			untrack(() => { void load(); });
+		}
+	});
 </script>
 <svelte:head><title>{m.title}</title></svelte:head>
-<svelte:window onfocus={revalidate} />
+<svelte:window onfocus={revalidate} ononline={revalidate} />
 <svelte:document onvisibilitychange={revalidate} />
 <div class={pageHeader}>
 	<h1 class={pageHeading}>{m.heading}</h1>
@@ -67,7 +84,7 @@
 	</div>
 {/if}
 <Field.Group layout="row" class="filters mb-6">
-	<Field.Field width="grow"><Field.Label for={`${fieldId}-1`}>{m.search}</Field.Label><Input id={`${fieldId}-1`} type="search" bind:value={query} /></Field.Field>
+	<Field.Field width="grow"><Field.Label for={`${fieldId}-1`}>{m.search}</Field.Label><Input id={`${fieldId}-1`} type="search" enterkeyhint="search" bind:value={query} /></Field.Field>
 	<Field.Set class="w-auto gap-2">
 		<Field.Legend id="products-state-label" variant="label">{m.stateFilter}</Field.Legend>
 		<ToggleGroup.Root type="single" variant="outline" value={activity} onValueChange={(value) => { if (value) activity = value; }} aria-labelledby="products-state-label">
@@ -91,20 +108,20 @@
 		</Popover.Content>
 	</Popover.Root>
 </Field.Group>
-<div class={formStatus} aria-live="polite">{#if failed}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unavailable}</Alert.Message>{/if}</div>
-{#if failed}<Button type="button" variant="outline" disabled={busy} onclick={load}>{m.retry}</Button>{/if}
+<div class={formStatus} aria-live="polite">{#if failed}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unavailable}</Alert.Message>{:else if stockFailed}<Alert.Message appearance="inline" variant="destructive" role="status">{m.inventoryUnavailable}</Alert.Message>{/if}</div>
+{#if failed || stockFailed}<Button type="button" variant="outline" disabled={busy} onclick={failed ? load : retryInventory}>{m.retry}</Button>{/if}
 {#if products === null && busy}
 	<span class="sr-only" role="status">{m.loading}</span>
 	<div class="grid min-h-80 grid-cols-1 content-start gap-4 md:grid-cols-2 lg:grid-cols-3" aria-busy={busy}>
 		{#each [1, 2, 3] as row (row)}<Skeleton class="h-40 rounded-xl" aria-hidden="true" />{/each}
 	</div>
 {/if}
-{#if products !== null && !failed}
+{#if products !== null}
 	{#if !filtered.length}
 		<Empty.Root><Empty.Description>{m.empty}</Empty.Description></Empty.Root>
 	{:else}
 		<ul class="products m-0 grid min-h-40 list-none grid-cols-1 gap-4 p-0 md:grid-cols-2 lg:grid-cols-3" aria-label={m.heading}>
-			{#each filtered as product (product.id)}<AdminProductCard {product} {references} quantity={quantity(product) ?? null} />{/each}
+			{#each filtered as product (product.id)}<AdminProductCard {product} {references} quantity={failed || stockFailed ? null : quantity(product) ?? null} />{/each}
 		</ul>
 	{/if}
 {/if}

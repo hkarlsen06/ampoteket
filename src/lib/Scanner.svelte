@@ -19,12 +19,15 @@
 	import ProductPrice from '$lib/ProductPrice.svelte';
 	import ProductAvailability from '$lib/ProductAvailability.svelte';
 	import ProductPurchase from '$lib/ProductPurchase.svelte';
+	import CartNotice from '$lib/CartNotice.svelte';
+	import { getCartContext } from '$lib/cart';
 
 	// One layout-owned buyer scanner: review quantities before adding on shopping pages.
 	// Its own trigger floats on phones; above 40rem the header menu calls show().
 	let { config }: { config: CatalogConfig | null } = $props();
 	const id = $props.id();
 	const i18n = getI18n();
+	const cart = getCartContext();
 	const m = $derived(i18n.m.scanner);
 	let mounted = $state(false);
 	let open = $state(false);
@@ -120,7 +123,7 @@
 		if (!mounted || workflow === 'adding' || !entryCode) return;
 		frozen = false; void resolve(entryCode, productCodeFromQr(entry.trim()) === null);
 	}
-	function resume(returnFocus = document.activeElement?.matches('.scanner-result :focus-visible') ?? false) {
+	function resume(returnFocus = document.activeElement?.matches('.scanner-dialog :focus-visible') ?? false) {
 		if (workflow === 'adding') return;
 		abortLookup(); workflow = 'idle'; product = null; frozen = false;
 		session?.resume();
@@ -140,7 +143,7 @@
 			{/snippet}
 		</Dialog.Trigger>
 		<Dialog.Content
-			class="scanner-dialog max-h-[calc(100dvh-2rem)] w-[26rem] max-w-[calc(100%-2rem)] grid-rows-[auto_minmax(0,1fr)] gap-0 p-0 text-base break-words"
+			class="scanner-dialog max-h-[calc(100dvh-2rem)] w-[26rem] max-w-[calc(100%-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 p-0 text-base break-words"
 			preventScroll={false}
 			showCloseButton={false}
 			aria-describedby={undefined}
@@ -152,7 +155,8 @@
 				<Button variant="ghost" bind:ref={closeControl} class="shrink-0" size="icon" type="button" disabled={workflow === 'adding'} onclick={close} aria-label={m.close}><Icon icon={XIcon} class="size-5" aria-hidden="true" /></Button>
 			</Dialog.Header>
 			<!-- Keep the compact viewfinder within the 360×640 confirmation budget. -->
-			<div class="dialog-body grid auto-rows-max gap-2 overflow-y-auto overscroll-contain px-4 pt-3 pb-4">
+			<!-- svelte-ignore a11y_no_noninteractive_tabindex (named keyboard-scrollable fallback) -->
+			<div class="dialog-body grid auto-rows-max gap-2 overflow-y-auto overscroll-contain px-4 pt-3 pb-4" role="region" tabindex="0" aria-label={m.contents}>
 				<!-- A found product takes the top row, its frozen frame shrunk to the right. -->
 				<div class="flex items-center gap-3">
 					{#if product}
@@ -183,10 +187,7 @@
 				<div class="scanner-result grid gap-2">
 					<Field.Description class={['m-0 text-base leading-[1.55] text-foreground empty:hidden', (workflow === 'product' || workflow === 'adding') && 'sr-only']} role="status">{#if workflow === 'invalid'}{m.invalid}{:else if workflow === 'missing'}{m.missing}{:else if workflow === 'unavailable'}{m.unavailable}{:else if workflow === 'product'}<span class="sr-only">{m.found(name)}</span>{/if}</Field.Description>
 					{#if product}
-						<ProductPurchase {product} compact
-							onpending={(pending) => { if (open && product) workflow = pending ? 'adding' : 'product'; }}
-							onadded={(returnFocus) => { if (open && product) { resume(returnFocus); added = true; } }}
-							onscan={() => resume()} />
+						<CartNotice state={$cart} />
 					{:else if reviewing && workflow !== 'resolving'}
 						<div class={formActions}>
 							{#if workflow === 'unavailable' && code}<Button variant="outline" type="button" onclick={() => resolve(code, allowCompactCode)}>{m.retryLookup}</Button>{/if}
@@ -204,6 +205,14 @@
 					{/if}
 				</div>
 			</div>
+			{#if product}
+				<Dialog.Footer variant="sheet" class="block px-4 py-3">
+					<ProductPurchase {product} compact showCartNotice={false}
+						onpending={(pending) => { if (open && product) workflow = pending ? 'adding' : 'product'; }}
+						onadded={(returnFocus) => { if (open && product) { resume(returnFocus); added = true; } }}
+						onscan={() => resume()} />
+				</Dialog.Footer>
+			{/if}
 		</Dialog.Content>
 	</Dialog.Root>
 </div>

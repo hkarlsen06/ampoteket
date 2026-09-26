@@ -150,6 +150,12 @@ try {
   console.log('PASS: registered snapshots, exact rounded values, distinct purchases, mixed units, 30-day window and focus-preserving revalidation');
 
   await page.route(endpoint, route => route.abort('failed'));
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await expect(page.getByText(en.adminStatistics.unavailable, { exact: true })).toBeVisible();
+  await expect(chart).toBeVisible();
+  await expect(daily).toHaveAttribute('aria-expanded', 'true');
+  await expect(daily).toBeFocused();
+  await expect(page.locator('time[datetime]')).toHaveCount(30);
   await page.goto(`${origin}/en/admin/statistics`);
   await expect(page.getByText(en.adminStatistics.unavailable, { exact: true })).toBeVisible();
   await expect(page.getByText(en.adminStatistics.emptySales, { exact: true })).toHaveCount(0);

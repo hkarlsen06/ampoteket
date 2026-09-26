@@ -1,4 +1,6 @@
 <script lang="ts">
+	import AdminAccessGate from '$lib/AdminAccessGate.svelte';
+	import { productName } from '$lib/catalog';
 	import { Separator } from '$lib/components/ui/separator';
 	import { codeText, formGrid, formLayout, formStatus, lede, nameWrap, pageHeader, pageHeading, section, sectionHeading, sheetBody } from '$lib/ui';
 	import { controlStyles } from '$lib/components/ui/control';
@@ -25,7 +27,7 @@
 	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
 	import ArrowUpRightIcon from 'phosphor-svelte/lib/ArrowUpRightIcon';
 
-	import { onMount, tick } from 'svelte';
+	import { untrack, onMount, tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { getI18n, categoryLabel, messagesFor } from '$lib/i18n';
 	import { getAdminContext } from '$lib/admin-context.svelte';
@@ -124,18 +126,28 @@
 		void load(); return () => { alive = false; };
 	});
 	async function refreshStock() {
-		if (!product) return;
-		const generation = ++stockGeneration; stockLoading = true; const session = admin.credentials();
-		try { const next = await readProductStock(session, product.id); if (alive && generation === stockGeneration && admin.session?.user.id === session.userId) stock = next; }
+		if (!product || admin.status !== 'ready') return;
+		const generation = ++stockGeneration; stockLoading = true;
+		try {
+			const session = admin.credentials(); const next = await readProductStock(session, product.id); if (alive && generation === stockGeneration && admin.session?.user.id === session.userId) stock = next; }
 		catch (error) { if (alive && generation === stockGeneration) stock = null; await admin.permissionFailure(error); }
 		finally { if (alive && generation === stockGeneration) stockLoading = false; }
 	}
 	// The app owns freshness (design-system.md §4.2): the recorded balance
 	// re-reads on return to the tab; the draft fields are never touched.
-	function revalidateStock() { if (admin.status === 'ready' && document.visibilityState === 'visible' && !busy) void refreshStock(); }
+	let revalidateQueued = $state(false);
+	function revalidateStock() { revalidateQueued = document.visibilityState === 'visible'; }
+	$effect(() => {
+		if (revalidateQueued && admin.status === 'ready' && !(stockLoading || busy)) {
+			revalidateQueued = false;
+			untrack(() => { void refreshStock(); });
+		}
+	});
 	async function load() {
-		loading = true; loadFailed = false; const session = admin.credentials();
+		if (admin.status !== 'ready') return;
+		loading = true; loadFailed = false;
 		try {
+			const session = admin.credentials();
 			if (id !== 'new' && !uuidPattern.test(id)) { product = null; return; }
 			const [refs, item] = await Promise.all([readProductReferences(session), id === 'new' ? Promise.resolve(null) : readProduct(session, id)]);
 			if (!alive || session.userId !== admin.session?.user.id) return;
@@ -158,9 +170,10 @@
 		// Enter can submit without a change event; tidy the names as leaving them would.
 		if (!pending) nameFields.forEach(({ field }) => tidyName(field));
 		if (attributesEditor && (product || !pending) && !attributesEditor.prepare()) return;
-		const session = admin.credentials(); busy = true; outcome = 'idle'; invalidField = null;
+		busy = true; outcome = 'idle'; invalidField = null;
 		const existing = Boolean(product);
 		try {
+			const session = admin.credentials();
 			if (!pending) {
 				let payload: ProductWrite;
 				try {
@@ -279,12 +292,12 @@
 	}
 </script>
 <svelte:head><title>{productCode ? `${productCode} | ${m.title}` : m.title}</title></svelte:head>
-<svelte:window onfocus={revalidateStock} />
+<svelte:window onfocus={revalidateStock} ononline={revalidateStock} />
 <svelte:document onvisibilitychange={revalidateStock} />
 <div class={[pageHeader, 'product-editor-heading grid-cols-[minmax(0,1fr)_auto] items-center']}>
 	<div class="row-span-2 grid min-w-0 justify-items-start gap-1">
 		<h1 class={pageHeading}>{productCode ?? (id === 'new' ? m.newProduct : m.editProduct)}</h1>
-		{#if product}<p class={[lede, nameWrap]}>{i18n.locale === 'nb' ? product.name_nb : product.name_en}</p>{/if}
+		{#if product}<p class={[lede, nameWrap]}>{productName(product, i18n.locale)}</p>{/if}
 		{#if product?.is_active}<Button variant="link" size="sm" href={i18n.href(`/p/${product.code}`)}>{m.publicProduct}<Icon icon={ArrowUpRightIcon} data-icon="inline-end" /></Button>{/if}
 	</div>
 	<div class="w-16 justify-self-center lg:w-20"><CategoryGraphic category={productCategory} /></div>
@@ -399,24 +412,26 @@
 											<Dialog.Close>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm"><Icon icon={XIcon} class="size-5" /><span class="sr-only">{m.closeDrawer}</span></Button>{/snippet}</Dialog.Close>
 										</Dialog.Header>
 										<!-- svelte-ignore a11y_no_noninteractive_tabindex (Named sheet body supports native keyboard scrolling.) -->
-										<div class={['placement-sheet-body', sheetBody]} role="region" aria-labelledby="placement-sheet-title" tabindex="0" inert={admin.status !== 'ready'}>
+										<div class={['placement-sheet-body', sheetBody]} role="region" aria-labelledby="placement-sheet-title" tabindex="0">
+											<AdminAccessGate>
 											<Field.Set id="product-placement" class="gap-3" aria-invalid={invalidField === 'bin_id'} aria-describedby={invalidField === 'bin_id' ? 'product-placement-error' : undefined}>
 												<Field.Legend id="placement-title" class="sr-only">{m.placement}</Field.Legend>
 												<p class="flex flex-wrap items-center gap-x-4 gap-y-1" aria-live="polite"><strong>{binLabel(draft.bin_id)}</strong>{#if draft.bin_id}<Button variant="ghost" disabled={blocked} onclick={() => draft.bin_id = null}>{m.clearPlacement}</Button>{/if}</p>
 												<ShelfPlacementPicker topology={references.shelf} selected={draft.bin_id} disabled={blocked} onselect={selectPlacement} />
 												<p class="text-sm"><a href={i18n.href('/admin/shelf')}>{m.manageShelf}</a></p>
 											</Field.Set>
+											</AdminAccessGate>
 										</div>
 										{#if draft.bin_id}
 											<Dialog.Footer variant="sheet">
-												<Dialog.Close>{#snippet child({ props })}<Button {...props}>{m.useDrawer}</Button>{/snippet}</Dialog.Close>
+												<Dialog.Close>{#snippet child({ props })}<Button {...props} disabled={admin.status !== 'ready'}>{m.useDrawer}</Button>{/snippet}</Dialog.Close>
 											</Dialog.Footer>
 										{/if}
 										<AlertDialog.Root bind:open={moveOpen}>
 											<AlertDialog.Content preventScroll={false} onCloseAutoFocus={(event) => { event.preventDefault(); placementTrigger?.focus({ preventScroll: true }); }}>
 												<AlertDialog.Header>
 													<AlertDialog.Title>{m.moveTitle}</AlertDialog.Title>
-													<AlertDialog.Description>{proposedPlacement ? m.moveDescription(binLabel(proposedPlacement.from), binLabel(proposedPlacement.to)) : ''}</AlertDialog.Description>
+													<AlertDialog.Description aria-label={m.moveTitle}>{proposedPlacement ? m.moveDescription(binLabel(proposedPlacement.from), binLabel(proposedPlacement.to)) : ''}</AlertDialog.Description>
 												</AlertDialog.Header>
 												<AlertDialog.Footer>
 													<AlertDialog.Cancel>{m.cancelMove}</AlertDialog.Cancel>
@@ -453,8 +468,8 @@
 						<DisclosureTrigger>{m.descriptionAndLinks}</DisclosureTrigger>
 						<Collapsible.Content class={formGrid}>
 							<Field.Field class="col-span-full"><Field.Label for="product-description">{m.description}</Field.Label><Textarea id="product-description" rows={3} bind:value={draft.description} disabled={blocked} /></Field.Field>
-							<Field.Field class="col-span-full"><Field.Label for="product-datasheet">{m.datasheet}</Field.Label><Input id="product-datasheet" aria-invalid={invalidField === 'datasheet_url'} aria-describedby={invalidField === 'datasheet_url' ? 'product-datasheet-error' : undefined} type="url" bind:value={draft.datasheet_url} disabled={blocked} />{#if invalidField === 'datasheet_url'}<Field.Error id="product-datasheet-error">{errorMessage('datasheet_url')}</Field.Error>{/if}</Field.Field>
-							<Field.Field class="col-span-full"><Field.Label for="product-purchase">{m.purchaseUrl}</Field.Label><Input id="product-purchase" aria-invalid={invalidField === 'purchase_url'} aria-describedby={invalidField === 'purchase_url' ? 'product-purchase-error' : undefined} type="url" bind:value={draft.purchase_url} disabled={blocked} />{#if invalidField === 'purchase_url'}<Field.Error id="product-purchase-error">{errorMessage('purchase_url')}</Field.Error>{/if}</Field.Field>
+							<Field.Field class="col-span-full"><Field.Label for="product-datasheet">{m.datasheet}</Field.Label><Input id="product-datasheet" aria-invalid={invalidField === 'datasheet_url'} aria-describedby={invalidField === 'datasheet_url' ? 'product-datasheet-error' : undefined} type="url" autocapitalize="none" enterkeyhint="go" bind:value={draft.datasheet_url} disabled={blocked} />{#if invalidField === 'datasheet_url'}<Field.Error id="product-datasheet-error">{errorMessage('datasheet_url')}</Field.Error>{/if}</Field.Field>
+							<Field.Field class="col-span-full"><Field.Label for="product-purchase">{m.purchaseUrl}</Field.Label><Input id="product-purchase" aria-invalid={invalidField === 'purchase_url'} aria-describedby={invalidField === 'purchase_url' ? 'product-purchase-error' : undefined} type="url" autocapitalize="none" enterkeyhint="go" bind:value={draft.purchase_url} disabled={blocked} />{#if invalidField === 'purchase_url'}<Field.Error id="product-purchase-error">{errorMessage('purchase_url')}</Field.Error>{/if}</Field.Field>
 						</Collapsible.Content>
 					</Collapsible.Root>
 					<Field.Field orientation="horizontal" class="min-h-12"><Switch id="product-active" bind:checked={draft.is_active} disabled={blocked} aria-describedby="product-active-hint" /><Field.Content><Field.Label for="product-active">{m.activeLabel}</Field.Label><Field.Description id="product-active-hint">{m.activeHint}</Field.Description></Field.Content></Field.Field>
@@ -472,7 +487,7 @@
 		</Tabs.Content>
 		{#if product}
 			<Tabs.Content value="statistics">
-				<h2 class={sectionHeading}>{i18n.locale === 'nb' ? product.name_nb : product.name_en}</h2>
+				<h2 class={sectionHeading}>{productName(product, i18n.locale)}</h2>
 				<p class={[codeText, 'mb-4 text-muted-foreground']}>{product.code}</p>
 				<AdminStatistics productId={product.id} unit={unitLabel(product.unit_code, i18n.locale)} />
 			</Tabs.Content>

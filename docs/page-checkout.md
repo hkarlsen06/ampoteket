@@ -32,6 +32,12 @@ Success means items are registered, never that payment was verified.
 attempt state first: registered checkouts are read-only, and an attempted confirmation
 never shows another payment action.
 
+Reconcile the original saved checkout on tab return, reconnect and local attempt
+changes. Keep its lines and references mounted while reading, and gate payment until
+the read succeeds. Before opening Vipps, check the same checkout again; a registration
+by another tab or a volunteer applies the existing completion and cleanup path.
+Revalidation never creates a replacement checkout or implies verified payment.
+
 ## States
 
 | State | Actions and presentation |

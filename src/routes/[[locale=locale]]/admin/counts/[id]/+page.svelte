@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { productName } from '$lib/catalog';
 	import { Separator } from '$lib/components/ui/separator';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { codeText, formLayout, formStatus, itemTitle, lede, nameWrap, pageHeader, pageHeading, section, sectionHeading } from '$lib/ui';
@@ -79,10 +80,11 @@
 		});
 	});
 	async function load(id = page.params.id!) {
+		if (admin.status !== 'ready') return;
 		const version = ++generation; loading = true; failed = false;
 		if (!uuidPattern.test(id)) { batch = null; loading = false; return; }
-		const session = admin.credentials();
 		try {
+			const session = admin.credentials();
 			const [detail, shelf] = await Promise.all([readCountDetail(session, id, admin.membership!.id, {
 				productId: pendingCount && command?.kind === 'count' ? command.productId : undefined
 			}), readShelfTopology(session.config)]);
@@ -94,7 +96,14 @@
 	}
 	// The app owns freshness (design-system.md §4.2): re-read on return to the
 	// tab instead of offering a manual refresh button.
-	function revalidate() { if (admin.status === 'ready' && document.visibilityState === 'visible' && !loading && !busy) void load(); }
+	let revalidateQueued = $state(false);
+	function revalidate() { revalidateQueued = document.visibilityState === 'visible'; }
+	$effect(() => {
+		if (revalidateQueued && admin.status === 'ready' && !(loading || busy)) {
+			revalidateQueued = false;
+			untrack(() => { void load(); });
+		}
+	});
 	// Finishing is final: confirm first. A pending command was already confirmed, so its retry goes straight through.
 	function requestFinish(event: SubmitEvent) {
 		event.preventDefault();
@@ -102,15 +111,16 @@
 	}
 	async function finish() {
 		finishOpen = false;
-		if (busy || loading || failed || !batch || batch.id !== page.params.id || !storageReady || wrongIdentity || (command && (!pendingHere || command.kind === 'count'))) return;
+		if (admin.status !== 'ready' || busy || loading || failed || !batch || batch.id !== page.params.id || !storageReady || wrongIdentity || (command && (!pendingHere || command.kind === 'count'))) return;
 		if (!command && access !== 'owner' && access !== 'abandoned') return;
 		if (!command && access === 'abandoned' && !reason.trim()) return;
-		busy = true; outcome = 'idle'; const session = admin.credentials();
-		const candidate: CountCommand = command ?? (access === 'owner'
-			? { kind: 'finish', userId: session.userId, requestId: crypto.randomUUID(), batchId: batch.id }
-			: { kind: 'close', userId: session.userId, requestId: crypto.randomUUID(), batchId: batch.id, reason: reason.trim() });
+		busy = true; outcome = 'idle';
 		let frozen: CountCommand | null = null;
 		try {
+			const session = admin.credentials();
+			const candidate: CountCommand = command ?? (access === 'owner'
+			? { kind: 'finish', userId: session.userId, requestId: crypto.randomUUID(), batchId: batch.id }
+			: { kind: 'close', userId: session.userId, requestId: crypto.randomUUID(), batchId: batch.id, reason: reason.trim() });
 			frozen = await updateCountStorage((storage) => saveCountCommand(storage, candidate)); command = frozen;
 			await runCountCommand(session, frozen); await updateCountStorage((storage) => clearCountCommand(storage, frozen!));
 			if (mounted && admin.session?.user.id === session.userId) { command = null; outcome = 'saved'; await load(); }
@@ -125,7 +135,7 @@
 </script>
 
 <svelte:head><title>{m.detailTitle}</title></svelte:head>
-<svelte:window onfocus={revalidate} />
+<svelte:window onfocus={revalidate} ononline={revalidate} />
 <svelte:document onvisibilitychange={revalidate} />
 <header class={pageHeader}>
 	<h1 class={pageHeading}>{batch && batch.id === page.params.id ? batch.title : m.detailHeading}</h1>
@@ -185,29 +195,30 @@
 				<AlertDialog.Content preventScroll={false} onCloseAutoFocus={(event) => { event.preventDefault(); finishTrigger?.focus({ preventScroll: true }); }}>
 					<AlertDialog.Header>
 						<AlertDialog.Title>{closing ? m.closeAbandoned : m.finish}</AlertDialog.Title>
-						<AlertDialog.Description>{m.finishConfirmed}</AlertDialog.Description>
+						<AlertDialog.Description aria-label={closing ? m.closeAbandoned : m.finish}>{m.finishConfirmed}</AlertDialog.Description>
 					</AlertDialog.Header>
 					<AlertDialog.Footer>
 						<AlertDialog.Cancel>{i18n.m.admin.cancel}</AlertDialog.Cancel>
-						<AlertDialog.Action disabled={busy} onclick={() => { void finish(); }}>{closing ? m.closeAbandoned : m.finish}</AlertDialog.Action>
+						<AlertDialog.Action disabled={admin.status !== 'ready' || loading || failed || busy} onclick={() => { void finish(); }}>{closing ? m.closeAbandoned : m.finish}</AlertDialog.Action>
 					</AlertDialog.Footer>
 				</AlertDialog.Content>
 			</AlertDialog.Root>
 		</section>
 	{/if}
+	{#if observations.length}
 	<section class={section({ spacing: 'divided', class: "history-section" })} aria-labelledby="count-history-title">
 		<Separator />
 		<h2 class={sectionHeading} id="count-history-title">{m.history}</h2>
-		{#if !observations.length}<Empty.Root><Empty.Description>{m.noObservations}</Empty.Description></Empty.Root>{/if}
 		<Item.Group class="observations">{#each observations as observation, index (observation.eventId)}
 			{#if index > 0}<Item.Separator />{/if}
 			{@const product = productById.get(observation.productId)!}
 			{@const difference = countDifference(observation.counted, observation.expected)}
-			<Item.Root variant="row" role="listitem"><Item.Content class="min-w-0"><Item.Title><h3 class={[itemTitle, nameWrap]}><a class="text-foreground no-underline hover:underline" href={i18n.href(`/admin/products/${product.id}`)}><span class={codeText}>{product.code}</span>: {i18n.locale === 'nb' ? product.name_nb : product.name_en}</a></h3>{#if !product.is_active}<StateBadge>{i18n.m.adminProducts.inactive}</StateBadge>{/if}</Item.Title>
+			<Item.Root variant="row" role="listitem"><Item.Content class="min-w-0"><Item.Title><h3 class={[itemTitle, nameWrap]}><a class="text-foreground no-underline hover:underline" href={i18n.href(`/admin/products/${product.id}`)}><span class={codeText}>{product.code}</span>: {productName(product, i18n.locale)}</a></h3>{#if !product.is_active}<StateBadge>{i18n.m.adminProducts.inactive}</StateBadge>{/if}</Item.Title>
 				<Item.Description>{formatCountedAt(observation.recordedAt, i18n.locale)} · {ownerById.get(observation.actorId)!.name}</Item.Description>
 				<dl class="mt-2 grid grid-cols-2 gap-x-5 gap-y-2 md:grid-cols-3 [&_dd]:m-0 [&_dd]:font-mono [&_dt]:text-sm [&_dt]:text-muted-foreground"><div><dt>{m.expected}</dt><dd>{formatDecimal(observation.expected, i18n.locale)} {unitLabel(product.unit_code, i18n.locale, observation.expected)}</dd></div><div><dt>{m.observed}</dt><dd>{formatDecimal(observation.counted, i18n.locale)} {unitLabel(product.unit_code, i18n.locale, observation.counted)}</dd></div><div><dt>{m.difference}</dt><dd class:text-destructive={compareDecimals(difference, '0') !== 0}>{formatDecimal(difference, i18n.locale)} {unitLabel(product.unit_code, i18n.locale, difference)}</dd></div></dl>
 				{#if observation.note}<p class="text-sm">{observation.note}</p>{/if}
 			</Item.Content></Item.Root>
 		{/each}</Item.Group>
 	</section>
+	{/if}
 {/if}

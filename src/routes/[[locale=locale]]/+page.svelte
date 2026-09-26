@@ -79,7 +79,7 @@
 	type DiscordStatus = 'online' | 'idle' | 'dnd';
 	type DiscordMembers = { online: number; members: { name: string; status: DiscordStatus; avatar: string | null }[] };
 	// Discord's own shapes carry the status; the colour only repeats it.
-	const discordStatusColor: Record<DiscordStatus, string> = { online: 'text-success', idle: 'text-warning', dnd: 'text-destructive' };
+	const discordStatusColor: Record<DiscordStatus, string> = { online: 'text-success', idle: 'text-foreground', dnd: 'text-destructive' };
 	let discord = $state<DiscordMembers | null>();
 	let discordCard = $state<HTMLElement | null>(null);
 	let discordStatus = $state<HTMLElement>();
@@ -301,7 +301,7 @@
 <!-- Photo credit along the right edge of a photograph, like film-edge markings. -->
 {#snippet credit()}
 	<!-- svelte-ignore a11y_figcaption_parent (Rendered only as the last child of a photo figure.) -->
-	<figcaption class="absolute top-1/2 right-1 z-10 -translate-y-1/2 rotate-180 text-xs whitespace-nowrap text-night-muted [text-shadow:0_0_.5rem_var(--night)] [writing-mode:vertical-rl] md:right-3 flex items-center gap-[0.5em]"><Icon icon={CameraIcon} size="1.25em" class="shrink-0 rotate-90" /><span><span class="sr-only">{m.photos.credit}</span> {m.photos.photographer}</span></figcaption>
+	<figcaption class="absolute top-1/2 right-1 z-10 -translate-y-1/2 rotate-180 text-sm whitespace-nowrap text-night-muted [text-shadow:0_0_.5rem_var(--night)] [writing-mode:vertical-rl] md:right-3 flex items-center gap-[0.5em]"><Icon icon={CameraIcon} size="1.25em" class="shrink-0 rotate-90" /><span><span class="sr-only">{m.photos.credit}</span> {m.photos.photographer}</span></figcaption>
 {/snippet}
 
 <svelte:head>
@@ -317,7 +317,7 @@
      storefront grows toward its window and dissolves into the room inside,
      where the quote appears. Elsewhere the same DOM stacks as two still
      figures: storefront with the copy, then the room with the quote. -->
-<section class="relative isolate bg-night scroll-motion:walk-scene scroll-motion:h-[250svh]" aria-labelledby="hero-title">
+<section class="focus-night relative isolate bg-night scroll-motion:walk-scene scroll-motion:h-[250svh]" aria-labelledby="hero-title">
 	<!-- In the scene the scanner dock fades instead of scrolling away; the floating
 	     trigger takes over when this mark, placed where the fade ends, passes the header. -->
 	<div bind:this={walkMark} class="pointer-events-none absolute top-[calc(27svh+var(--header-h))] hidden size-px scroll-motion:block" aria-hidden="true"></div>
@@ -368,9 +368,9 @@
 		     lede already says where the workshop is); the clock links to the OsloMet
 		     hours it is coloured by. -->
 		<div class="absolute inset-x-0 top-0 z-30">
-			<div class={pageContainer({ class: 'flex items-center justify-between gap-4 pt-4 text-sm text-night-muted md:pt-8' })}>
+			<div class={pageContainer({ class: 'flex flex-wrap items-center justify-between gap-x-4 gap-y-1 pt-4 text-sm text-night-muted md:pt-8' })}>
 				<span class="inline-flex min-w-0 items-center gap-2.5" aria-hidden="true"><span class="size-1.5 rounded-full bg-night-accent shadow-[0_0_0.5rem_var(--night-accent)]"></span>{m.hero.place}</span>
-				<a href={m.hero.hoursSource} target="_blank" rel="external noopener" class="inline-flex shrink-0 items-center gap-2.5 rounded-sm text-night-muted no-underline hover:text-night-foreground">{#if open !== undefined}<span class="max-md:sr-only">{open ? m.hero.open : m.hero.closed}</span>{/if}<Led value={clock} label={m.hero.clock} red={!open} size="small" class="border-night-border text-sm whitespace-nowrap" /><span class="sr-only">{m.hero.hours} {m.about.newTab}</span></a>
+				<a href={m.hero.hoursSource} target="_blank" rel="external noopener" class="inline-flex min-h-11 shrink-0 items-center gap-2.5 rounded-sm text-night-muted no-underline hover:text-night-foreground"><span class="grid">{#each [m.hero.open, m.hero.closed] as status (status)}<span class="invisible col-start-1 row-start-1" aria-hidden="true">{status}</span>{/each}<span class="col-start-1 row-start-1">{open === undefined ? '' : open ? m.hero.open : m.hero.closed}</span></span><Led value={clock} label={m.hero.clockTime(clock)} red={!open} size="small" class="border-night-border text-sm whitespace-nowrap" /><span class="sr-only">{m.hero.hours} {m.about.newTab}</span></a>
 			</div>
 		</div>
 	</div>
@@ -405,7 +405,7 @@
 									{#each fact.chips as chip (chip)}
 										<li>
 											{#if ASSOCIATION_SITES[chip]}
-												<Badge variant="outline" href={ASSOCIATION_SITES[chip]} target="_blank" rel="external noopener" class="h-auto px-2 py-1 font-normal text-foreground no-underline hover:bg-muted">{chip}<span class="sr-only"> {m.about.newTab}</span></Badge>
+											<Badge variant="outline" href={ASSOCIATION_SITES[chip]} target="_blank" rel="external noopener" class="min-h-11 h-auto px-2 py-1 font-normal text-foreground no-underline hover:bg-muted">{chip}<span class="sr-only"> {m.about.newTab}</span></Badge>
 											{:else}
 												<Badge variant="outline" class="h-auto px-2 py-1 font-normal">{chip}</Badge>
 											{/if}
@@ -537,6 +537,8 @@
 									class="font-mono uppercase"
 									name="code"
 									type="text"
+									inputmode="text"
+									enterkeyhint="go"
 									bind:value={code}
 									autocomplete="off"
 									autocapitalize="characters"
@@ -621,10 +623,10 @@
 				{#if discord}
 					<ul class="m-0 flex w-full list-none flex-wrap gap-2 p-0" aria-label={m.who.discord.online(discord.online)}>
 						{#each discord.members as member, index (index)}
-							<li class="inline-flex max-w-full min-w-0 items-center gap-2 rounded-full bg-muted py-1 pr-3 pl-1 text-sm">
+							<li class="inline-flex max-w-full min-w-0 items-center gap-2 rounded-sm bg-muted py-1 pr-3 pl-1 text-sm">
 								<span class="relative shrink-0">
 									{#if member.avatar}<img class="size-6 rounded-full" src={member.avatar} alt="" width="24" height="24" loading="lazy" decoding="async" />{:else}<DiscordLogo class="size-6 p-1" />{/if}
-									<svg class={['absolute -right-1 -bottom-1 size-3.5 rounded-full bg-muted p-0.5', discordStatusColor[member.status]]} viewBox="0 0 10 10" aria-hidden="true" focusable="false">
+									<svg class={['absolute -right-1 -bottom-1 size-3.5 rounded-full bg-muted p-0.5', discordStatusColor[member.status]]} viewBox="0 0 10 10" stroke="none" aria-hidden="true" focusable="false">
 										<circle cx="5" cy="5" r="5" fill="currentColor" />
 										{#if member.status === 'idle'}<circle cx="2.5" cy="2.5" r="3.5" class="fill-muted" />{:else if member.status === 'dnd'}<rect x="2" y="4" width="6" height="2" rx="1" class="fill-muted" />{/if}
 									</svg>

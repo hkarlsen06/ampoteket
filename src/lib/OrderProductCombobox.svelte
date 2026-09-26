@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { productName } from '$lib/catalog';
 	import { tick } from 'svelte';
 	import { getI18n } from '$lib/i18n';
 	import type { OrderProduct } from '$lib/admin-orders';
@@ -12,8 +13,8 @@
 	import { codeText, nameWrap } from '$lib/ui';
 	import CaretUpDownIcon from 'phosphor-svelte/lib/CaretUpDownIcon';
 
-	let { id, products, value = $bindable(''), disabled = false, newProductHref, onselect }: {
-		id: string; products: Omit<OrderProduct, 'purchase_url'>[]; value: string; disabled?: boolean; newProductHref?: string; onselect?: (productId: string) => void;
+	let { id, products, value = $bindable(''), disabled = false, newProductHref, onselect, error }: {
+		id: string; products: Omit<OrderProduct, 'purchase_url'>[]; value: string; disabled?: boolean; newProductHref?: string; error?: string; onselect?: (productId: string) => void;
 	} = $props();
 	const i18n = getI18n();
 	const m = $derived(i18n.m.adminOrders);
@@ -35,8 +36,8 @@
 		<Popover.Trigger bind:ref={trigger}>
 			{#snippet child({ props })}
 				<!-- Sits among form inputs, so it wears the shared control surface rather than a button's. -->
-				<button {...props} {id} type="button" role="combobox" aria-expanded={open} {disabled} class={[controlStyles, 'flex min-h-12 items-center justify-between gap-2 py-2 pr-2.5 pl-3 text-left']}>
-					<span class={['min-w-0', nameWrap, !selected && 'text-muted-foreground']}>{#if selected}<span class={codeText}>{selected.code}</span>: {i18n.locale === 'nb' ? selected.name_nb : selected.name_en}{:else}{m.selectProduct}{/if}</span>
+				<button {...props} {id} type="button" role="combobox" aria-expanded={open} aria-invalid={Boolean(error)} aria-describedby={error ? `${id}-error` : undefined} {disabled} class={[controlStyles, 'flex min-h-12 items-center justify-between gap-2 py-2 pr-2.5 pl-3 text-left']}>
+					<span class={['min-w-0', nameWrap, !selected && 'text-muted-foreground']}>{#if selected}<span class={codeText}>{selected.code}</span>: {productName(selected, i18n.locale)}{:else}{m.selectProduct}{/if}</span>
 					<Icon icon={CaretUpDownIcon} class="size-4 shrink-0 text-muted-foreground" />
 				</button>
 			{/snippet}
@@ -49,7 +50,7 @@
 					<Command.Group>
 						{#each products as product (product.id)}
 							<Command.Item value={product.id} keywords={[product.code, product.name_nb, product.name_en]} data-checked={product.id === value} onSelect={() => choose(product.id)}>
-								<span class={['min-w-0', nameWrap]}><span class={codeText}>{product.code}</span>: {i18n.locale === 'nb' ? product.name_nb : product.name_en}</span>
+								<span class={['min-w-0', nameWrap]}><span class={codeText}>{product.code}</span>: {productName(product, i18n.locale)}</span>
 								{#if !product.is_active}<StateBadge class="shrink-0">{i18n.m.adminProducts.inactive}</StateBadge>{/if}
 							</Command.Item>
 						{/each}
@@ -58,5 +59,6 @@
 			</Command.Root>
 		</Popover.Content>
 	</Popover.Root>
+	{#if error}<Field.Error id={`${id}-error`}>{error}</Field.Error>{/if}
 	{#if newProductHref && !selected}<Button href={newProductHref} target="_blank" rel="noopener noreferrer" variant="link" class="w-fit" {disabled}>{m.newProductFromOrder}</Button>{/if}
 </Field.Field>

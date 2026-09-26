@@ -17,7 +17,8 @@ description; shelf map opened on the product's drawer, with its address in the h
 specifications and datasheet link. Unknown values stay absent. Zero and negative
 balances explain that physically found parts can still be added.
 
-Below 48rem, description and map are `Collapsible`s that start closed. From 48rem and
+Below 48rem, description and map are `Collapsible`s that start closed; the map's
+compact placement address remains visible beside its heading. From 48rem and
 without JavaScript both are open. The content is force-mounted and CSS switches the
 presentation. From 48rem the map forms the right column. Actions stay in document flow:
 no fixed purchase bar or nested panel.
@@ -35,6 +36,9 @@ no fixed purchase bar or nested panel.
   failed refresh, keep the old data readable, marked unavailable, and disable Add.
 - The page renders server-side and reads without JavaScript; cart controls say they
   need JavaScript and storage. The only refresh controls are contextual retries.
+- Re-read product facts on tab return and reconnect, keeping quantity drafts and
+  focus. A failed read keeps the previous product visible with an unavailable state
+  and contextual retry; Add waits for a successful read.
 - Escape saved text. Link a datasheet only if it is an absolute HTTP(S) URL without
   credentials.
 - Canonical, alternate and social URLs are the localized path without query

@@ -188,7 +188,7 @@
 					<Tooltip.Trigger>
 						{#snippet child({ props })}
 							<Button {...props} href={i18n.href(item.href)} variant={isCurrent(item.href) ? 'secondary' : 'ghost'} size="icon-sm"
-								class="shrink-0 aria-[current=page]:border-border phone:hidden"
+								class="shrink-0 aria-[current=page]:border-current phone:hidden"
 								aria-label={item.label}
 								aria-current={isCurrent(item.href) ? 'page' : undefined}><Icon icon={item.icon} class="size-5" aria-hidden="true" /></Button>
 						{/snippet}
@@ -200,7 +200,7 @@
 				<Tooltip.Trigger>
 					{#snippet child({ props })}
 						<Button {...props} href={i18n.href('/cart')} variant={isCurrent('/cart') ? 'secondary' : 'ghost'} size="icon-sm"
-							class="header-cart shrink-0 aria-[current=page]:border-border"
+							class="header-cart shrink-0 aria-[current=page]:border-current"
 							aria-current={isCurrent('/cart') ? 'page' : undefined}>
 							<span class="relative inline-flex" aria-hidden="true">
 								<Icon icon={ShoppingCartIcon} class="size-5" />
@@ -236,7 +236,7 @@
 							<Button
 								href={i18n.href(item.href)}
 								variant={isCurrent(item.href) ? 'secondary' : 'ghost'}
-								class="w-full justify-start px-3 aria-[current=page]:border-border"
+								class="w-full justify-start px-3 aria-[current=page]:border-current"
 								aria-current={isCurrent(item.href) ? 'page' : undefined}
 							><Icon icon={item.icon} class="size-5" />{item.label}</Button>
 						</li>

@@ -1,7 +1,9 @@
 <script lang="ts">
+	import AdminAccessGate from '$lib/AdminAccessGate.svelte';
+	import { productName } from '$lib/catalog';
 	import { goto, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
-	import { onMount, tick } from 'svelte';
+	import { untrack, onMount, tick } from 'svelte';
 	import { getI18n } from '$lib/i18n';
 	import { getAdminContext } from '$lib/admin-context.svelte';
 	import { normalizeDecimal, validQuantity } from '$lib/decimal';
@@ -34,6 +36,7 @@
 	let loaded = $state(false); let loading = $state(true); let failed = $state(false); let busy = $state(false); let storageReady = $state(false);
 	let mode = $state<'closed' | 'create' | 'receipt'>('closed'); let command = $state<OrderCommand | null>(null);
 	let outcome = $state<'idle' | 'invalid' | 'date' | 'ambiguous' | 'conflict' | 'unknown' | 'recorded'>('idle');
+	let invalidInput = $state(''); let invalidMessage = $state('');
 	let supplier = $state(''); let reference = $state(''); let placedLocal = $state(''); let offset = $state(''); let additionalCost = $state('0'); let note = $state('');
 	let sourceNote = $state(''); let lines = $state<DraftLine[]>([]); let mounted = false; let generation = 0;
 	let newOrderTrigger = $state<HTMLButtonElement | null>(null);
@@ -78,22 +81,30 @@
 		return value;
 	}
 	function openable(input: string): boolean { try { return purchaseUrl(input) !== null; } catch { return false; } }
+	function checked<T>(suffix: string, message: string, parse: () => T): T {
+		try { return parse(); }
+		catch (error) { invalidInput = `${fieldId}-${suffix}`; invalidMessage = message; throw error; }
+	}
 	function draftCommand(): OrderCommand {
 		if (!lines.length || lines.length > 200) throw new Error('invalid');
 		const session = admin.credentials();
+		let placedAt = ''; let additionalCostNok = '';
+		if (mode === 'create') {
+			checked('supplier', m.invalid, () => { if (!supplier.trim() || [...supplier.trim()].length > 200) throw new Error('invalid'); });
+			placedAt = checked('placed', offsets.length === 2 && !offset ? m.ambiguousDate : m.invalidDate, placedInstant);
+			additionalCostNok = checked('extra', m.invalidCost(2), () => cost(additionalCost, 2));
+		} else checked('source', m.invalid, () => { if (!sourceNote.trim()) throw new Error('invalid'); });
 		const items = lines.map((line) => {
-			const selected = product(line.productId);
-			const quantity = validQuantity(line.quantity, selected.stock_step, i18n.locale);
-			return { productId: selected.id, quantity, unitCostNok: mode === 'create' ? cost(line.unitCost, 6) : '0',
-				purchaseUrl: mode === 'create' ? purchaseUrl(line.purchaseUrl) : null, supplierSku: line.supplierSku.trim() || null, orderLineId: null };
+			const selected = checked(`product-${line.key}`, m.selectProduct, () => product(line.productId));
+			const quantity = checked(`qty-${line.key}`, m.invalidQuantity(formatDecimal(selected.stock_step, i18n.locale)), () => validQuantity(line.quantity, selected.stock_step, i18n.locale));
+			return { productId: selected.id, quantity, unitCostNok: mode === 'create' ? checked(`cost-${line.key}`, m.invalidCost(6), () => cost(line.unitCost, 6)) : '0',
+				purchaseUrl: mode === 'create' ? checked(`url-${line.key}`, i18n.m.adminProducts.invalidLink, () => purchaseUrl(line.purchaseUrl)) : null, supplierSku: line.supplierSku.trim() || null, orderLineId: null };
 		});
 		if (mode === 'create') {
-			if (!supplier.trim() || [...supplier.trim()].length > 200) throw new Error('invalid');
-			return { kind: 'create', userId: session.userId, requestId: crypto.randomUUID(), supplierName: supplier.trim(), placedAt: placedInstant(),
-				additionalCostNok: cost(additionalCost, 2), supplierReference: reference.trim() || null, note: note.trim() || null,
+			return { kind: 'create', userId: session.userId, requestId: crypto.randomUUID(), supplierName: supplier.trim(), placedAt,
+				additionalCostNok, supplierReference: reference.trim() || null, note: note.trim() || null,
 				items: items.map(({ productId, quantity, unitCostNok, purchaseUrl, supplierSku }) => ({ productId, quantity, unitCostNok, purchaseUrl, supplierSku })) };
 		}
-		if (!sourceNote.trim()) throw new Error('invalid');
 		return { kind: 'receipt', userId: session.userId, requestId: crypto.randomUUID(), orderId: null, note: sourceNote.trim(), occurredAt: null,
 			items: items.map(({ productId, quantity, orderLineId }) => ({ productId, quantity, orderLineId })) };
 	}
@@ -125,8 +136,10 @@
 		return () => { mounted = false; generation++; window.removeEventListener('storage', syncPending); window.removeEventListener(orderStorageEvent, syncPending); };
 	});
 	async function load() {
-		const version = ++generation; loading = true; failed = false; const session = admin.credentials();
+		if (admin.status !== 'ready') return;
+		const version = ++generation; loading = true; failed = false;
 		try {
+			const session = admin.credentials();
 			const [orderRows, productRows, receiptRows] = await Promise.all([readOrders(session), readOrderProducts(session), readUnplannedReceipts(session)]);
 			if (mounted && version === generation && session.userId === admin.session?.user.id) {
 				orders = orderRows; products = productRows; unplanned = receiptRows; loaded = true;
@@ -139,13 +152,20 @@
 		} catch (error) { if (mounted && version === generation) failed = true; await admin.permissionFailure(error); }
 		finally { if (mounted && version === generation) loading = false; }
 	}
-	function revalidate() { if (admin.status === 'ready' && document.visibilityState === 'visible' && !loading) void load(); }
+	let revalidateQueued = $state(false);
+	function revalidate() { revalidateQueued = document.visibilityState === 'visible'; }
+	$effect(() => {
+		if (revalidateQueued && admin.status === 'ready' && !(loading || busy)) {
+			revalidateQueued = false;
+			untrack(() => { void load(); });
+		}
+	});
 	function show(next: 'create' | 'receipt') {
 		if (command) return; returnMode = next; mode = next; outcome = 'idle';
 		if (!lines.length) lines = [blankLine()];
 	}
 	function closeForm() {
-		if (busy || (command && !wrongIdentity)) return;
+		if (busy) return;
 		if (mode !== 'closed') returnMode = mode;
 		mode = 'closed';
 		if (page.url.searchParams.has('new')) replaceState(i18n.href('/admin/orders'), {});
@@ -155,13 +175,14 @@
 	}
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
-		if (busy || !storageReady || wrongIdentity || otherCommand || mode === 'closed' || !loaded || failed || (command && command.kind !== mode)) return;
+		if (admin.status !== 'ready' || busy || loading || !storageReady || wrongIdentity || otherCommand || mode === 'closed' || !loaded || failed || (command && command.kind !== mode)) return;
 		if (mode === 'create' && !command && !placedEdited) { placedLocal = osloLocal(new Date()); offset = ''; }
-		let candidate: OrderCommand;
+		let candidate: OrderCommand; invalidInput = ''; invalidMessage = '';
 		try { candidate = command ?? draftCommand(); }
-		catch (error) { outcome = error instanceof Error && error.message === 'date' ? 'date' : error instanceof Error && error.message === 'ambiguous' ? 'ambiguous' : 'invalid'; return; }
-		busy = true; outcome = 'idle'; const session = admin.credentials(); let saved: OrderCommand | null = null;
+		catch (error) { outcome = error instanceof Error && error.message === 'date' ? 'date' : error instanceof Error && error.message === 'ambiguous' ? 'ambiguous' : 'invalid'; void tick().then(() => document.getElementById(invalidInput)?.focus()); return; }
+		busy = true; outcome = 'idle'; let saved: OrderCommand | null = null;
 		try {
+			const session = admin.credentials();
 			saved = await updateOrderStorage((storage) => saveOrderCommand(storage, candidate)); command = saved;
 			const result = await runOrderCommand(session, saved);
 			await updateOrderStorage((storage) => clearOrderCommand(storage, saved!));
@@ -180,8 +201,11 @@
 	}
 </script>
 
+{#snippet fieldError(id: string)}
+	{#if invalidInput === id}<Field.Error id={`${id}-error`}>{invalidMessage}</Field.Error>{/if}
+{/snippet}
 <svelte:head><title>{m.title}</title></svelte:head>
-<svelte:window onfocus={revalidate} />
+<svelte:window onfocus={revalidate} ononline={revalidate} />
 <svelte:document onvisibilitychange={revalidate} />
 <header class={pageHeader}>
 	<h1 class={pageHeading}>{m.heading}</h1>
@@ -204,36 +228,38 @@
 	{#if failed && mode !== 'closed'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unavailable}</Alert.Message>{/if}
 </div>
 {#if pendingNotice === 'planned'}<Button type="button" variant="link" onclick={resumePlanned}>{m.resumePending}</Button>
-{:else if pendingNotice === 'other' && command}<Button variant="link" href={i18n.href(orderCommandPath(command))}>{m.resumePending}</Button>{/if}
+{:else if pendingNotice === 'other' && command}<Button variant="link" href={i18n.href(orderCommandPath(command))}>{m.resumePending}</Button>
+{:else if mode === 'closed' && command && !wrongIdentity}<Button type="button" variant="link" onclick={() => { if (command?.kind === 'create' || (command?.kind === 'receipt' && !command.orderId)) mode = command.kind; }}>{m.resumePending}</Button>{/if}
 {#if failed && mode !== 'closed'}<Button type="button" variant="outline" disabled={loading} onclick={load}>{m.retry}</Button>{/if}
 {/snippet}
 {#if mode === 'closed'}{@render entryStatus()}{/if}
 <Dialog.Root open={mode !== 'closed'} onOpenChange={(open) => { if (!open) closeForm(); }}>
 	<Dialog.Content variant="sheet" preventScroll={false} aria-describedby={undefined}
-		onInteractOutside={(event) => { if (busy || (command && !wrongIdentity)) event.preventDefault(); }}
-		onEscapeKeydown={(event) => { if (busy || (command && !wrongIdentity)) event.preventDefault(); }}
+		onInteractOutside={(event) => { if (busy) event.preventDefault(); }}
+		onEscapeKeydown={(event) => { if (busy) event.preventDefault(); }}
 		onCloseAutoFocus={(event) => { event.preventDefault(); void tick().then(() => (returnMode === 'create' ? newOrderTrigger : receiptTrigger)?.focus({ preventScroll: true })); }}>
 		<Dialog.Header layout="bar">
 			<Dialog.Title id="order-entry-title">{mode === 'create' ? m.newOrder : m.unplannedReceipt}</Dialog.Title>
-			<Dialog.Close>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" disabled={busy || Boolean(command && !wrongIdentity)}><Icon icon={XIcon} /><span class="sr-only">{m.closeEntry}</span></Button>{/snippet}</Dialog.Close>
+			<Dialog.Close>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" disabled={busy}><Icon icon={XIcon} /><span class="sr-only">{m.closeEntry}</span></Button>{/snippet}</Dialog.Close>
 		</Dialog.Header>
 		<!-- svelte-ignore a11y_no_noninteractive_tabindex (Named sheet body supports native keyboard scrolling.) -->
 		<div class={['order-entry-body', sheetBody]} role="region" aria-labelledby="order-entry-title" tabindex="0">
+			<AdminAccessGate>
 			{#if mode !== 'closed'}{@render entryStatus()}{/if}
 			<form id={`${fieldId}-order-form`} class={formLayout} onsubmit={submit}>
 			{#if mode === 'create'}
 				<Field.Group layout="row">
-					<Field.Field width="grow"><Field.Label for={`${fieldId}-supplier`}>{m.supplier}</Field.Label><Input id={`${fieldId}-supplier`} required maxlength={200} bind:value={supplier} disabled={frozen || busy} /></Field.Field>
+					<Field.Field width="grow"><Field.Label for={`${fieldId}-supplier`}>{m.supplier}</Field.Label><Input id={`${fieldId}-supplier`} autocapitalize="words" aria-invalid={invalidInput === `${fieldId}-supplier`} aria-describedby={invalidInput === `${fieldId}-supplier` ? `${fieldId}-supplier`.concat('-error') : undefined} required maxlength={200} bind:value={supplier} disabled={frozen || busy} />{@render fieldError(`${fieldId}-supplier`)}</Field.Field>
 					<Field.Field width="medium"><Field.Label for={`${fieldId}-reference`}>{m.reference}</Field.Label><Input id={`${fieldId}-reference`} maxlength={2000} bind:value={reference} disabled={frozen || busy} /></Field.Field>
 				</Field.Group>
 				<Field.Group layout="row">
-					<Field.Field width="medium"><Field.Label for={`${fieldId}-placed`}>{m.placedAt}</Field.Label><Input id={`${fieldId}-placed`} type="datetime-local" required bind:value={placedLocal} oninput={() => { offset = ''; placedEdited = true; }} disabled={frozen || busy} /></Field.Field>
+					<Field.Field width="medium"><Field.Label for={`${fieldId}-placed`}>{m.placedAt}</Field.Label><Input id={`${fieldId}-placed`} aria-invalid={invalidInput === `${fieldId}-placed`} aria-describedby={invalidInput === `${fieldId}-placed` ? `${fieldId}-placed`.concat('-error') : undefined} type="datetime-local" required bind:value={placedLocal} oninput={() => { offset = ''; placedEdited = true; }} disabled={frozen || busy} />{@render fieldError(`${fieldId}-placed`)}</Field.Field>
 						{#if offsets.length === 2}<Field.Field width="medium"><Field.Label for={`${fieldId}-offset`}>{m.offset}</Field.Label><NativeSelect.Root id={`${fieldId}-offset`} required bind:value={offset} onchange={() => { placedEdited = true; }} disabled={frozen || busy}><NativeSelect.Option value="">{m.chooseOffset}</NativeSelect.Option><NativeSelect.Option value="+02:00">{m.beforeClockChange}</NativeSelect.Option><NativeSelect.Option value="+01:00">{m.afterClockChange}</NativeSelect.Option></NativeSelect.Root></Field.Field>{/if}
-					<Field.Field width="medium"><Field.Label for={`${fieldId}-extra`}>{m.additionalCost} <span class="sr-only">(NOK)</span></Field.Label><InputGroup.Root><InputGroup.Input id={`${fieldId}-extra`} type="text" inputmode="decimal" required bind:value={additionalCost} disabled={frozen || busy} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>NOK</InputGroup.Text></InputGroup.Addon></InputGroup.Root></Field.Field>
+					<Field.Field width="medium"><Field.Label for={`${fieldId}-extra`}>{m.additionalCost} <span class="sr-only">(NOK)</span></Field.Label><InputGroup.Root><InputGroup.Input id={`${fieldId}-extra`} aria-invalid={invalidInput === `${fieldId}-extra`} aria-describedby={invalidInput === `${fieldId}-extra` ? `${fieldId}-extra`.concat('-error') : undefined} type="text" inputmode="decimal" required bind:value={additionalCost} disabled={frozen || busy} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>NOK</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{@render fieldError(`${fieldId}-extra`)}</Field.Field>
 				</Field.Group>
 				<Field.Field><Field.Label for={`${fieldId}-note`}>{m.note}</Field.Label><Textarea id={`${fieldId}-note`} rows={2} maxlength={2000} bind:value={note} disabled={frozen || busy} /></Field.Field>
 			{:else}
-				<Field.Field><Field.Label for={`${fieldId}-source`}>{m.sourceNote}</Field.Label><Textarea id={`${fieldId}-source`} rows={2} required maxlength={2000} bind:value={sourceNote} disabled={frozen || busy} /></Field.Field>
+				<Field.Field><Field.Label for={`${fieldId}-source`}>{m.sourceNote}</Field.Label><Textarea id={`${fieldId}-source`} aria-invalid={invalidInput === `${fieldId}-source`} aria-describedby={invalidInput === `${fieldId}-source` ? `${fieldId}-source`.concat('-error') : undefined} rows={2} required maxlength={2000} bind:value={sourceNote} disabled={frozen || busy} />{@render fieldError(`${fieldId}-source`)}</Field.Field>
 			{/if}
 			<div class="space-y-6">
 				{#each lines as line, index (line.key)}
@@ -242,20 +268,21 @@
 						<legend id={`${fieldId}-line-${line.key}`} class="font-semibold">{m.lineNumber(index + 1)}</legend>
 						<Separator />
 						<Field.Group layout="row">
-							<OrderProductCombobox id={`${fieldId}-product-${line.key}`} {products} bind:value={line.productId} newProductHref={mode === 'create' ? i18n.href('/admin/products/new') : undefined} disabled={frozen || busy || loading} />
-							<Field.Field width="short"><Field.Label for={`${fieldId}-qty-${line.key}`}>{m.quantity}{#if unit}<span class="sr-only">{` (${unit})`}</span>{/if}</Field.Label><InputGroup.Root><InputGroup.Input id={`${fieldId}-qty-${line.key}`} type="text" inputmode="decimal" required bind:value={line.quantity} disabled={frozen || busy} />{#if unit}<InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unit}</InputGroup.Text></InputGroup.Addon>{/if}</InputGroup.Root></Field.Field>
-							{#if mode === 'create'}<Field.Field width="medium"><Field.Label for={`${fieldId}-cost-${line.key}`}>{m.unitCost} <span class="sr-only">(NOK)</span></Field.Label><InputGroup.Root><InputGroup.Input id={`${fieldId}-cost-${line.key}`} type="text" inputmode="decimal" required bind:value={line.unitCost} disabled={frozen || busy} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>NOK</InputGroup.Text></InputGroup.Addon></InputGroup.Root></Field.Field>{/if}
+							<OrderProductCombobox id={`${fieldId}-product-${line.key}`} error={invalidInput === `${fieldId}-product-${line.key}` ? invalidMessage : undefined} {products} bind:value={line.productId} newProductHref={mode === 'create' ? i18n.href('/admin/products/new') : undefined} disabled={frozen || busy || loading} />
+							<Field.Field width="short"><Field.Label for={`${fieldId}-qty-${line.key}`}>{m.quantity}{#if unit}<span class="sr-only">{` (${unit})`}</span>{/if}</Field.Label><InputGroup.Root><InputGroup.Input id={`${fieldId}-qty-${line.key}`} aria-invalid={invalidInput === `${fieldId}-qty-${line.key}`} aria-describedby={invalidInput === `${fieldId}-qty-${line.key}` ? `${fieldId}-qty-${line.key}`.concat('-error') : undefined} type="text" inputmode="decimal" required bind:value={line.quantity} disabled={frozen || busy} />{#if unit}<InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unit}</InputGroup.Text></InputGroup.Addon>{/if}</InputGroup.Root>{@render fieldError(`${fieldId}-qty-${line.key}`)}</Field.Field>
+							{#if mode === 'create'}<Field.Field width="medium"><Field.Label for={`${fieldId}-cost-${line.key}`}>{m.unitCost} <span class="sr-only">(NOK)</span></Field.Label><InputGroup.Root><InputGroup.Input id={`${fieldId}-cost-${line.key}`} aria-invalid={invalidInput === `${fieldId}-cost-${line.key}`} aria-describedby={invalidInput === `${fieldId}-cost-${line.key}` ? `${fieldId}-cost-${line.key}`.concat('-error') : undefined} type="text" inputmode="decimal" required bind:value={line.unitCost} disabled={frozen || busy} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>NOK</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{@render fieldError(`${fieldId}-cost-${line.key}`)}</Field.Field>{/if}
 						</Field.Group>
-						{#if mode === 'create'}<Field.Group layout="row"><Field.Field width="grow"><Field.Label for={`${fieldId}-url-${line.key}`}>{m.purchaseUrl}</Field.Label><Input id={`${fieldId}-url-${line.key}`} type="url" maxlength={2000} bind:value={line.purchaseUrl} disabled={frozen || busy} />{#if openable(line.purchaseUrl)}<a class="w-fit text-sm" href={line.purchaseUrl.trim()} target="_blank" rel="noopener noreferrer" aria-describedby={`${fieldId}-line-${line.key}`}>{m.openPurchaseUrl}</a>{/if}</Field.Field><Field.Field width="medium"><Field.Label for={`${fieldId}-sku-${line.key}`}>{m.supplierSku}</Field.Label><Input id={`${fieldId}-sku-${line.key}`} maxlength={2000} bind:value={line.supplierSku} disabled={frozen || busy} /></Field.Field></Field.Group>{/if}
+						{#if mode === 'create'}<Field.Group layout="row"><Field.Field width="grow"><Field.Label for={`${fieldId}-url-${line.key}`}>{m.purchaseUrl}</Field.Label><Input id={`${fieldId}-url-${line.key}`} aria-invalid={invalidInput === `${fieldId}-url-${line.key}`} aria-describedby={invalidInput === `${fieldId}-url-${line.key}` ? `${fieldId}-url-${line.key}`.concat('-error') : undefined} type="url" autocapitalize="none" enterkeyhint="go" maxlength={2000} bind:value={line.purchaseUrl} disabled={frozen || busy} />{#if openable(line.purchaseUrl)}<a class="w-fit text-sm" href={line.purchaseUrl.trim()} target="_blank" rel="noopener noreferrer" aria-describedby={`${fieldId}-line-${line.key}`}>{m.openPurchaseUrl}</a>{/if}{@render fieldError(`${fieldId}-url-${line.key}`)}</Field.Field><Field.Field width="medium"><Field.Label for={`${fieldId}-sku-${line.key}`}>{m.supplierSku}</Field.Label><Input id={`${fieldId}-sku-${line.key}`} maxlength={2000} bind:value={line.supplierSku} disabled={frozen || busy} /></Field.Field></Field.Group>{/if}
 						{#if lines.length > 1 && !frozen}<Button type="button" variant="ghost" onclick={() => lines = lines.filter((item) => item.key !== line.key)} disabled={busy}>{m.removeLine}</Button>{/if}
 					</fieldset>
 				{/each}
 			</div>
 				<div><Button type="button" variant="outline" onclick={() => lines = [...lines, blankLine()]} disabled={frozen || busy || lines.length >= 200}>{m.addLine}</Button></div>
 			</form>
+			</AdminAccessGate>
 		</div>
 		<Dialog.Footer variant="sheet">
-			<Button type="submit" form={`${fieldId}-order-form`} disabled={!storageReady || !loaded || failed || busy || wrongIdentity || otherCommand}><ButtonLabel pending={busy} pendingLabel={m.working} label={frozen ? m.retrySame : mode === 'create' ? m.recordOrder : m.recordReceipt} reserveLabels={[m.retrySame, m.recordOrder, m.recordReceipt]} /></Button>
+			<Button type="submit" form={`${fieldId}-order-form`} disabled={admin.status !== 'ready' || !storageReady || !loaded || loading || failed || busy || wrongIdentity || otherCommand}><ButtonLabel pending={busy} pendingLabel={m.working} label={frozen ? m.retrySame : mode === 'create' ? m.recordOrder : m.recordReceipt} reserveLabels={[m.retrySame, m.recordOrder, m.recordReceipt]} /></Button>
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>
@@ -276,6 +303,6 @@
 <section class={section({ spacing: 'divided' })} aria-labelledby="unplanned-heading">
 	<Separator />
 	<h2 class={sectionHeading} id="unplanned-heading">{m.unplannedHistory}</h2>
-	<Item.Group>{#each unplanned as receipt, index (receipt.id)}{#if index > 0}<Item.Separator />{/if}<Item.Root variant="row" role="listitem"><Item.Content class="min-w-0"><Item.Title class={itemTitle}>{receipt.note ?? m.unplannedHistory}</Item.Title><Item.Description>{formatCountedAt(receipt.occurredAt, i18n.locale)}</Item.Description><ul class="space-y-1 text-sm">{#each receipt.movements as movement (movement.id)}{@const product = products.find((item) => item.id === movement.productId)}<li class={nameWrap}>{#if product}<span class={codeText}>{product.code}</span> {i18n.locale === 'nb' ? product.name_nb : product.name_en}{:else}{movement.productId}{/if} · <span class="font-mono">{formatDecimal(movement.quantityDelta, i18n.locale)} {unitLabel(product?.unit_code, i18n.locale, movement.quantityDelta)}</span></li>{/each}</ul></Item.Content></Item.Root>{/each}</Item.Group>
+	<Item.Group>{#each unplanned as receipt, index (receipt.id)}{#if index > 0}<Item.Separator />{/if}<Item.Root variant="row" role="listitem"><Item.Content class="min-w-0"><Item.Title class={itemTitle}>{receipt.note ?? m.unplannedHistory}</Item.Title><Item.Description>{formatCountedAt(receipt.occurredAt, i18n.locale)}</Item.Description><ul class="space-y-1 text-sm">{#each receipt.movements as movement (movement.id)}{@const product = products.find((item) => item.id === movement.productId)}<li class={nameWrap}>{#if product}<span class={codeText}>{product.code}</span> {productName(product, i18n.locale)}{:else}{movement.productId}{/if} · <span class="font-mono">{formatDecimal(movement.quantityDelta, i18n.locale)} {unitLabel(product?.unit_code, i18n.locale, movement.quantityDelta)}</span></li>{/each}</ul></Item.Content></Item.Root>{/each}</Item.Group>
 </section>
 {/if}

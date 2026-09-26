@@ -45,3 +45,16 @@ export async function readAuditPage(session: StaffSession, after: string | null 
 		if (entries.length === pageSize + 1) return { entries: entries.slice(0, pageSize), more: true };
 	}
 }
+
+/** Read all entries added since the visible head without replacing older loaded pages. */
+export async function readAuditUpdates(session: StaffSession, newestId: string, fetcher: Fetcher = fetch): Promise<AuditEntry[]> {
+	const newest = BigInt(auditId(newestId));
+	const updates: AuditEntry[] = [];
+	let cursor: string | null = null;
+	for (;;) {
+		const page = await readAuditPage(session, cursor, fetcher);
+		updates.push(...page.entries.filter(entry => BigInt(entry.id) > newest));
+		if (!page.more || page.entries.some(entry => BigInt(entry.id) <= newest)) return updates;
+		cursor = page.entries.at(-1)!.id;
+	}
+}

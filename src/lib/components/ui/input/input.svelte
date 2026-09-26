@@ -14,6 +14,10 @@
 		ref = $bindable(null),
 		value = $bindable(),
 		type,
+		inputmode,
+		autocapitalize = "none",
+		autocomplete = "off",
+		enterkeyhint = "next",
 		files = $bindable(),
 		class: className,
 		"data-slot": dataSlot = "input",
@@ -38,6 +42,10 @@
 		data-slot={dataSlot}
 		class={classes}
 		{type}
+		inputmode={inputmode ?? (!type || type === "text" ? "text" : undefined)}
+		{autocapitalize}
+		{autocomplete}
+		{enterkeyhint}
 		bind:value
 		{...restProps}
 	/>

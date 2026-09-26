@@ -326,7 +326,7 @@ try {
 			await expect(shelfBody).toHaveAccessibleName(/\S/);
 			if (exerciseRecovery) {
 				await homePage.evaluate(() => window.dispatchEvent(new Event('online')));
-				await expect(homeMap.getByText(messages.shelfMap.previousRead, { exact: true })).toBeVisible();
+				await expect(homeMap.getByText(messages.shelfMap.unavailable, { exact: true })).toBeVisible();
 				await expect(homeMap.getByText(messages.shelfMap.noProducts, { exact: true })).toHaveCount(0);
 				await expect(homePage.getByRole('button', { name: messages.home.find.codeSubmit, exact: true, includeHidden: true })).toBeEnabled();
 				await homeContext.unroute(topologyUrl);
@@ -594,8 +594,8 @@ try {
 	// The product page opens zoomed into the product's cabinet; the wall is one tap out.
 	await expect(publicMap.getByRole('group', { name: mapMessages.cabinet('A1'), exact: true })).toBeVisible();
 	await expect(wall).toHaveCount(0);
-	await expect(publicMap.locator('.coordinate-list, button[aria-expanded]')).toHaveCount(0);
-	await expect(publicMap.locator('button:not([data-item-id])')).toHaveCount(1);
+	await expect(publicMap.locator('.coordinate-list, .levels button[aria-expanded]')).toHaveCount(0);
+	await expect(publicMap.locator('button:not([data-item-id]):not([aria-expanded])')).toHaveCount(1);
 	await expect(publicMap.locator('.stage button[data-item-id][tabindex="0"]')).toHaveCount(1);
 	await expect(publicMap.locator('.stage [data-item-id][aria-current="true"]')).toHaveAttribute('aria-label', 'A1');
 	await expect(publicMap.getByRole('heading', { name: mapMessages.contents('A1') })).toBeVisible();
@@ -673,7 +673,7 @@ try {
 	await interactive.unroute(topologyUrl);
 	await publicMap.getByRole('button', { name: mapMessages.retry, exact: true }).click();
 	await expect(publicMap.getByText(mapMessages.previousRead, { exact: true })).toHaveCount(0);
-	await expect(publicMap.locator('button:not([data-item-id])')).toHaveCount(1);
+	await expect(publicMap.locator('button:not([data-item-id]):not([aria-expanded])')).toHaveCount(1);
 	// A real placement change must reach the map/address without losing the
 	// separately selected drawer or requiring a product reload.
 	const selectedCabinet = `(SELECT cabinet_id FROM app.bins WHERE id='${seedBinId(0)}')`;
@@ -798,10 +798,15 @@ try {
 			}
 			if (route.startsWith('/p/')) {
 				const messages = locale ? en : nb;
+				if (width < 768) {
+					await expect(page.locator('#map-title button')).toHaveAttribute('aria-expanded', 'false');
+					await expect(page.locator('.shelf-map > .loc')).toBeVisible();
+					await expect(page.locator('.shelf-map > .loc')).toContainText(messages.shop.drawer);
+				}
 				await openShelfMap(page);
 				const shelf = page.locator('.shelf-map');
 				await expect(shelf.getByRole('group', { name: messages.shelfMap.cabinet('A1'), exact: true })).toBeVisible();
-				await expect(shelf.locator('.coordinate-list, button[aria-expanded]')).toHaveCount(0);
+				await expect(shelf.locator('.coordinate-list, .levels button[aria-expanded]')).toHaveCount(0);
 				const hitboxes = await shelf.locator('.cell-hit').evaluateAll(elements => elements.map(element => {
 					const box = element.getBoundingClientRect(); return { width: box.width, height: box.height };
 				}));
@@ -839,10 +844,13 @@ try {
 
 	await page.goto(`${origin}/en/cart`);
 	await expect(page.locator('.cart-line').last().getByRole('button', { name: /^Remove / })).toBeEnabled();
-	await page.locator('.cart-line').last().getByRole('button', { name: /^Remove / }).click();
+	await page.locator('.cart-line').last().getByRole('button', { name: /^Remove / }).press('Enter');
 	await expect(page.locator('.cart-line')).toHaveCount(1);
+	await expect(page.locator('.cart-line .remove')).toBeFocused();
 	await expect(page.locator('.header-cart [data-slot=badge]')).toHaveText('1');
 	assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('ampoteket:cart') ?? '[]')[0]?.quantity), '11');
+	await page.locator('.cart-line .remove').press('Enter');
+	await expect(page.locator('#cart-browse')).toBeFocused();
 	console.log('PASS: automatic quantity save and line removal update persisted basket and header');
 	await page.evaluate(() => localStorage.setItem('ampoteket:cart', '{broken'));
 	await page.reload();
@@ -988,6 +996,79 @@ try {
 	await expect(silentPage.locator('.header-cart [data-slot=badge]')).toHaveText('1');
 	assert.equal(await silentPage.evaluate(() => JSON.parse(localStorage.getItem('ampoteket:cart') ?? '[]')[0]?.quantity), '1');
 	await silent.close();
+	// Real price/sale-step changes revalidate on return without replacing drafts.
+	const freshContext = await context.browser()!.newContext();
+	const freshPage = await freshContext.newPage();
+	const changedId = seedProductId(0), changedCode = seedProductCode(0);
+	const previous = JSON.parse(await sql(`SELECT json_build_object('step',sale_step::text,'price',sale_unit_price_nok::text) FROM app.products WHERE id='${changedId}'`)) as { step: string; price: string };
+	try {
+		await freshPage.goto(`${origin}/en/p/${changedCode}`);
+		const input = freshPage.getByLabel(fieldLabel(en.product.quantity));
+		const add = freshPage.getByRole('button', { name: en.product.add, exact: true });
+		await expect(add).toBeEnabled();
+		await input.fill('3');
+		await sql(`UPDATE app.products SET sale_step=2,sale_unit_price_nok=13.37 WHERE id='${changedId}'`);
+		let releaseProduct!: () => void, productRefreshes = 0;
+		const productGate = new Promise<void>(resolve => { releaseProduct = resolve; });
+		await freshPage.route(drawerCatalogUrl, async route => {
+			if (route.request().postDataJSON().p_code === changedCode && ++productRefreshes === 1) await productGate;
+			await route.continue();
+		});
+		await freshPage.evaluate(() => window.dispatchEvent(new Event('focus')));
+		await expect.poll(() => productRefreshes).toBe(1);
+		await freshPage.evaluate(() => window.dispatchEvent(new Event('online')));
+		releaseProduct();
+		await expect.poll(() => productRefreshes).toBe(2);
+		await expect(freshPage.locator('.product-summary')).toContainText('13.37 NOK');
+		await expect(add).toBeEnabled();
+		await expect(input).toHaveValue('3'); await expect(input).toBeFocused();
+		await freshPage.unroute(drawerCatalogUrl);
+		await freshPage.route(drawerCatalogUrl, async route => {
+			if (route.request().postDataJSON().p_code === changedCode) await route.abort('failed');
+			else await route.continue();
+		});
+		await freshPage.evaluate(() => window.dispatchEvent(new Event('online')));
+		await expect(freshPage.locator('.product-summary').getByText(en.product.unavailable, { exact: true })).toBeVisible();
+		await expect(add).toBeDisabled(); await expect(input).toHaveValue('3');
+		await expect(freshPage.locator('.product-summary')).toContainText('13.37 NOK');
+		await freshPage.unroute(drawerCatalogUrl);
+		await freshPage.locator('.product-summary').getByRole('button', { name: en.product.retry, exact: true }).click();
+		await expect(add).toBeEnabled();
+		await freshPage.evaluate(({ product_id, code }) => localStorage.setItem('ampoteket:cart', JSON.stringify([{ product_id, code, quantity: '1' }])), { product_id: changedId, code: changedCode });
+		await freshPage.goto(`${origin}/en/cart`);
+		const quantityInput = freshPage.locator('input[inputmode=decimal]').first();
+		await expect(quantityInput).toHaveAttribute('aria-invalid', 'true');
+		await expect(freshPage.locator('.cart-line')).toContainText(en.cart.step('2', 'pieces'));
+		await expect(freshPage.getByRole('button', { name: en.checkout.proceed, exact: true })).toBeDisabled();
+		await quantityInput.fill('');
+		await sql(`UPDATE app.products SET sale_step=1,sale_unit_price_nok=22 WHERE id='${changedId}'`);
+		let releaseCart!: () => void, cartRefreshes = 0;
+		const cartGate = new Promise<void>(resolve => { releaseCart = resolve; });
+		await freshPage.route(drawerCatalogUrl, async route => {
+			if (++cartRefreshes === 1) await cartGate;
+			await route.continue();
+		});
+		await freshPage.evaluate(() => window.dispatchEvent(new Event('focus')));
+		await expect.poll(() => cartRefreshes).toBe(1);
+		await freshPage.evaluate(() => window.dispatchEvent(new Event('online')));
+		releaseCart();
+		await expect.poll(() => cartRefreshes).toBe(2);
+		await expect(freshPage.locator('.cart-line')).toContainText('22.00 NOK');
+		await expect(quantityInput).toHaveValue(''); await expect(quantityInput).toBeFocused();
+		await freshPage.unroute(drawerCatalogUrl);
+		await quantityInput.fill('2');
+		await expect(freshPage.getByRole('button', { name: en.checkout.proceed, exact: true })).toBeEnabled();
+		await freshPage.route(drawerCatalogUrl, route => route.abort('failed'));
+		await freshPage.evaluate(() => window.dispatchEvent(new Event('online')));
+		await expect(freshPage.getByText(en.cart.factsUnavailable, { exact: true })).toBeVisible();
+		await expect(freshPage.locator('.cart-line h2')).toContainText('220');
+		await expect(quantityInput).toHaveValue('2'); await expect(quantityInput).toBeFocused();
+		await expect(freshPage.getByRole('button', { name: en.checkout.proceed, exact: true })).toBeDisabled();
+	} finally {
+		await sql(`UPDATE app.products SET sale_step='${previous.step}',sale_unit_price_nok='${previous.price}' WHERE id='${changedId}'`);
+		await freshContext.close();
+	}
+	console.log('PASS: product/cart refresh retains focused drafts and old facts on failure; changed sale steps get visible line errors; removal preserves keyboard focus; mobile placement stays visible');
 	assert.deepEqual(errors, []);
 	console.log('PASS: no-JavaScript SSR paging/lookup, unavailable reads, denied storage, optional notifications and keyboard submission');
 	console.log(`PASS: catalog/product/cart acceptance; screenshots: ${artifacts}`);

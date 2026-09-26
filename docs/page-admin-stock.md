@@ -16,8 +16,8 @@ one-DOM rule; resizing never replaces the mounted editor or its unsaved input.
 `/admin` shows registered purchases and sales value for 30 days, active products
 needing attention and open count batches. Needing attention means zero or negative
 recorded stock, or below the product's own minimum; never invent a global threshold.
-Open stocktakes come first when any exist; the skeleton stays until both sections load,
-so the order never jumps. The preview shows eight products (sold out, negative before
+Open stocktakes always precede products needing attention, including when none are
+open; background refresh never swaps the sections. The preview shows eight products (sold out, negative before
 zero, then lowest share of the minimum) and the five oldest open stocktakes.
 «Start en bestilling» opens a sheet of every product needing attention with quantities
 already on order; rows start checked unless already on order, and the button opens
@@ -194,6 +194,8 @@ full history. A failed read is unavailable, never an empty ledger.
 
 - A withdrawal records a positive quantity and reason; the database posts it negative.
   An adjustment records a signed non-zero quantity and reason.
+- Invalid quantities identify the field and its permitted step, retain the draft,
+  and focus the first invalid field. Recounts accept zero; changes do not.
 - A correction picks an earlier movement from history, shows linked corrections and any
   affected order line, and carries the history revision. A changed revision needs a
   fresh review.
@@ -204,7 +206,9 @@ full history. A failed read is unavailable, never an empty ledger.
 ## Shared request rules
 
 - **Freshness** follows design-system §4.2: re-read on page open, tab return and after
-  acknowledged writes, and once more if a return happened mid-request.
+  acknowledged writes, and once more if a return happened mid-request. Failed reads
+  keep the previous content mounted, mark it unavailable and offer contextual retry.
+  Actions requiring fresh values wait for a successful read.
 - **Conflicts.** After a stale or occupied rejection the map re-reads itself and the
   admin confirms again. Specification conflicts show the current value and need an
   explicit choice; neither replaces the draft.
@@ -213,7 +217,9 @@ full history. A failed read is unavailable, never an empty ledger.
   permits only retry of the same command; a confirmed rejection permits editing. Staff
   requests time out after 15 seconds; an abort is not proof of rollback.
 - **Access.** A failed membership read makes the editor inert but keeps its state until
-  access is rechecked; revocation, sign-out or another identity clears it.
+  access is rechecked; revocation, sign-out or another identity clears it. Portaled
+  editors enforce the same boundary and offer access retry within the active dialog,
+  so a pending command never hides its own recovery controls.
 
 Browser checks: `./scripts/test-web.sh --admin`, `--shelf` and `--statistics`. Executed
 results and open physical checks are in [VALIDATION.md](../VALIDATION.md).

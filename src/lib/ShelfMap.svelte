@@ -6,6 +6,8 @@
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
 	import * as Alert from '$lib/components/ui/alert';
 	import * as Empty from '$lib/components/ui/empty';
+	import * as Collapsible from '$lib/components/ui/collapsible';
+	import DisclosureTrigger from '$lib/DisclosureTrigger.svelte';
 	import { codeText, itemTitle, nameWrap, sectionHeading } from '$lib/ui';
 	import { onMount, onDestroy, untrack } from 'svelte';
 	import { getI18n } from '$lib/i18n';
@@ -17,8 +19,9 @@
 	import ShelfZoom from '$lib/ShelfZoom.svelte';
 	// One stage shows the wall or, zoomed in, one cabinet's drawers; contents grow
 	// below it. `stacked` expands the diagrams instead of bounding them.
-	let { config, product, title, labelledby, onreveal, headingLevel = 2, initialTopology = null, stacked = false }: {
+	let { config, product, title, labelledby, onreveal, headingLevel = 2, initialTopology = null, stacked = false, collapsible = false }: {
 		config: CatalogConfig | null; product?: CatalogProduct; title?: string; labelledby?: string; headingLevel?: 2 | 3; initialTopology?: ShelfTopology | null; stacked?: boolean;
+		collapsible?: boolean;
 		onreveal?: (section: HTMLElement) => void;
 	} = $props();
 	const i18n = getI18n();
@@ -139,12 +142,18 @@
 <svelte:window onfocus={refreshWhenVisible} ononline={refreshWhenVisible} />
 <svelte:document onvisibilitychange={refreshWhenVisible} />
 
-<section class="shelf-map min-w-0 wrap-break-word" aria-labelledby={labelledby ?? `${uid}-title`}>
-	{#if !labelledby}<svelte:element this={`h${headingLevel}`} class={[sectionHeading, "mb-2"]} id={`${uid}-title`}>{title ?? m.title}</svelte:element>{/if}
+<Collapsible.Root class="shelf-map min-w-0 wrap-break-word" role="region" aria-labelledby={labelledby ?? `${uid}-title`}>
+	{#if !labelledby || collapsible}<svelte:element this={`h${headingLevel}`} class={[sectionHeading, "mb-2"]} id={labelledby ?? `${uid}-title`}>
+		{#if collapsible}
+			<DisclosureTrigger class="text-[length:inherit] font-[inherit] md:hidden no-js:hidden">{title ?? m.title}</DisclosureTrigger>
+			<span class="hidden md:inline no-js:inline">{title ?? m.title}</span>
+		{:else}{title ?? m.title}{/if}
+	</svelte:element>{/if}
 	{#if product?.bin_code === null}<LocationChips plain note={product.location_note ?? i18n.m.shop.askStaff} />
 	{:else if product}<LocationChips plain outerRow={location?.cabinet.outer_row ?? product.outer_row} outerCol={location?.cabinet.outer_col ?? product.outer_col}
 		innerRow={location?.bin.inner_row ?? product.inner_row} innerCol={location?.bin.inner_col ?? product.inner_col}
 		rowSpan={location?.bin.row_span ?? product.row_span} colSpan={location?.bin.col_span ?? product.col_span} />{/if}
+	<Collapsible.Content forceMount class={collapsible ? 'hidden data-[state=open]:block md:block no-js:block' : 'block'}>
 	<noscript><p class="text-sm text-muted-foreground">{m.noJavascript}</p></noscript>
 	<div class="map-status text-sm" role="status">
 		{#if mapState === 'error'}<Alert.Message appearance="inline" role={undefined} variant="destructive" class="my-3">{topology ? m.previousRead : m.unavailable}</Alert.Message>
@@ -212,4 +221,5 @@
 			</section>
 		{/if}
 	</div>
-</section>
+	</Collapsible.Content>
+</Collapsible.Root>

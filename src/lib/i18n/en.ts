@@ -6,6 +6,7 @@ import type { Messages } from './nb';
 export const en: Messages = {
 	scanner: {
 		title: 'Scan or find a part', action: 'Scan', open: 'Scan QR code', close: 'Close scanner',
+		contents: 'Scanning and product details',
 		entry: 'Part code', find: 'Find part', preview: 'Camera preview for scanning labels',
 		paused: 'Scanning paused.',
 		moveAway: 'Move the label out of the frame before scanning it again.', again: 'Scan same label again',
@@ -187,6 +188,7 @@ export const en: Messages = {
 		saleAndStock: 'Sales and stock', attributes: 'Specifications', attributesHint: 'Prefixes work: type 27p, 4.7k or 4k7, for example.', chooseAttribute: 'Choose specification', yes: 'Yes', no: 'No', noAttributes: 'No specifications are saved.', newDefinition: 'New specification', categoryName: 'Category name', definitionCode: 'Code', definitionLabel: 'Name', valueType: 'Type', numberType: 'Number', textType: 'Text', booleanType: 'Yes/no', canonicalUnit: 'Base unit (optional)', saveReference: 'Add', referenceSaved: 'Saved.', referenceInvalid: 'Check the name and type, then try again.', cancel: 'Close', location: (cabinet: string, drawer: string) => `Cabinet ${cabinet} · drawer ${drawer}`
 	},
 	adminOrders: {
+		invalidQuantity: (step: string) => `Enter more than 0, in steps of ${step}.`, exceedsOutstanding: (quantity: string, unit: string) => `Enter no more than ${quantity} ${unit}.`, invalidCost: (scale: number) => `Enter 0 or more, with at most ${scale} decimal places.`,
 		title: 'Orders and receipts | Admin | Ampoteket', heading: 'Orders and receipts', detailTitle: 'Order | Admin | Ampoteket', detailHeading: 'Order',
 		newOrder: 'New order', unplannedReceipt: 'Record receipt without an order', closeEntry: 'Close form', newProductFromOrder: 'Create new product (new tab)', orders: 'Orders', orderLines: 'Order lines', lineNumber: (number: number) => `Line ${number}`,
 		loading: 'Loading orders …', unavailable: 'Unavailable right now.', retry: 'Try again', empty: 'No orders yet.', missing: 'This order does not exist.',
@@ -211,6 +213,8 @@ export const en: Messages = {
 		historyCorrection: 'Correction', unplannedHistory: 'Receipts without an order'
 	},
 	adminStock: {
+		reasonRequired: 'Enter a reason.',
+		invalidQuantity: (step: string, signed: boolean) => signed ? `Enter a non-zero change, in steps of ${step}.` : `Enter more than 0, in steps of ${step}.`,
 		title: 'Shrinkage & corrections | Admin | Ampoteket', heading: 'Shrinkage & corrections',
 		stock: 'Recorded stock', history: 'Stock history',
 		withdraw: 'Withdrawal', adjust: 'Adjustment', correct: 'Correct an earlier movement', actionHeading: 'Record a stock change', kind: 'Type', movement: 'Movement to correct', chooseMovement: 'Choose movement',
@@ -543,6 +547,7 @@ export const en: Messages = {
 			parts: 'Browse parts catalog',
 			place: 'Pilestredet 35 · Oslo',
 			clock: 'Time in Oslo',
+			clockTime: (time: string) => `Time in Oslo: ${time}`,
 			open: 'Open',
 			closed: 'Closed',
 			hours: 'OsloMet opening hours',
@@ -580,7 +585,7 @@ export const en: Messages = {
 			gearTitle: 'Equipment',
 			gear: [
 				'Soldering stations, power supplies and oscilloscopes',
-				'2 stk Bambu Lab P2S 3D printer and prototyping equipment',
+				'Two Bambu Lab P2S 3D printers and prototyping equipment',
 				'Workstations, a shared work bench and PCs',
 				'Parts you can buy on the spot'
 			],

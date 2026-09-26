@@ -1,4 +1,5 @@
 <script lang="ts">
+	import AdminAccessGate from '$lib/AdminAccessGate.svelte';
 	import { goto } from '$app/navigation';
 	import { onMount, tick } from 'svelte';
 	import { getI18n } from '$lib/i18n';
@@ -24,6 +25,7 @@
 	// Picks every active part that is sold out or below its minimum (not just the overview's
 	// most urgent few) and opens the New order form with those products as lines.
 	type Row = { product: AdminProduct; quantity: string; unit: string; outstanding: string | null };
+	let { disabled = false }: { disabled?: boolean } = $props();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.adminStatistics); const id = $props.id();
 	let open = $state(false); let rows = $state<Row[] | null>(null); let selected = $state(new Set<string>());
 	let loading = $state(false); let failed = $state(false); let trigger = $state<HTMLButtonElement | null>(null); let generation = 0;
@@ -31,8 +33,10 @@
 	onMount(() => () => { generation++; });
 
 	async function load() {
-		const version = ++generation; loading = true; failed = false; const session = admin.credentials();
+		if (admin.status !== 'ready') return;
+		const version = ++generation; loading = true; failed = false;
 		try {
+			const session = admin.credentials();
 			const [products, inventory, outstanding] = await Promise.all([readAdminProducts(session), readInventory(session), readOutstandingByProduct(session)]);
 			if (version !== generation || session.userId !== admin.session?.user.id) return;
 			const stock = new Map(inventory.map(item => [item.product_id, item.quantity]));
@@ -44,7 +48,7 @@
 		} catch (error) { if (version === generation) failed = true; await admin.permissionFailure(error); }
 		finally { if (version === generation) loading = false; }
 	}
-	function show() { open = true; rows = null; void load(); }
+	function show() { if (disabled || admin.status !== 'ready') return; open = true; rows = null; void load(); }
 	function choose(productId: string, checked: boolean) {
 		selected = checked ? new Set([...selected, productId]) : new Set([...selected].filter((id) => id !== productId));
 	}
@@ -54,7 +58,7 @@
 	}
 </script>
 
-<Button bind:ref={trigger} type="button" aria-haspopup="dialog" onclick={show}>{m.openOrder}</Button>
+<Button bind:ref={trigger} {disabled} type="button" aria-haspopup="dialog" onclick={show}>{m.openOrder}</Button>
 <Dialog.Root bind:open>
 	<Dialog.Content variant="sheet" preventScroll={false} aria-describedby={undefined}
 		onCloseAutoFocus={(event) => { event.preventDefault(); void tick().then(() => trigger?.focus({ preventScroll: true })); }}>
@@ -64,6 +68,7 @@
 		</Dialog.Header>
 		<!-- svelte-ignore a11y_no_noninteractive_tabindex (Named sheet body supports native keyboard scrolling.) -->
 		<div class={sheetBody} role="region" aria-labelledby={`${id}-title`} tabindex="0">
+			<AdminAccessGate>
 			{#if failed}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unavailable}</Alert.Message><Button type="button" variant="outline" onclick={load} disabled={loading}>{m.retry}</Button>
 			{:else if !rows}<span class="sr-only" role="status">{m.loading}</span><div class="space-y-4" aria-hidden="true"><Skeleton class="h-14 w-full" /><Skeleton class="h-14 w-full" /><Skeleton class="h-14 w-full" /></div>
 			{:else if !rows.length}<Empty.Root><Empty.Description>{m.noAttention}</Empty.Description></Empty.Root>
@@ -87,10 +92,11 @@
 					</Field.Field>
 				{/each}
 			{/if}
+			</AdminAccessGate>
 		</div>
 		{#if rows?.length}
 			<Dialog.Footer variant="sheet">
-				<Button type="button" disabled={!selected.size} onclick={start}>{m.startOrder(selected.size)}</Button>
+				<Button type="button" disabled={admin.status !== 'ready' || loading || failed || !selected.size} onclick={start}>{m.startOrder(selected.size)}</Button>
 			</Dialog.Footer>
 		{/if}
 	</Dialog.Content>

@@ -34,6 +34,7 @@ Usage: python3 scripts/check-clipped-ink.py  (wired as `bun run check:ink`)
 """
 
 import itertools
+import math
 import pathlib
 import re
 import sys
@@ -82,6 +83,9 @@ def resolve(expr, loops, notes, where):
         except Exception:  # noqa: BLE001
             notes.append(f"{where}: cannot evaluate {{{expr}}}")
             return None
+    if not vals:
+        notes.append(f"{where}: cannot verify {{{expr}}} in an empty or non-numeric loop; manual review required")
+        return None
     return min(vals), max(vals)
 
 
@@ -102,10 +106,18 @@ def check_file(path):
         )
         vb = VIEWBOX_RE.search(svg.group(1))
         if not vb:
-            notes.append(f"{path}:{line_of(svg.start())}: svg without viewBox skipped")
+            notes.append(f"{path}:{line_of(svg.start())}: SVG viewBox is not a quoted literal; manual ink review required")
             continue
-        nums = [float(n) for n in re.sub(r"[,\s]+", " ", vb.group(1)).strip().split(" ")]
-        min_x, min_y, vb_w, vb_h = nums[0], nums[1], nums[2], nums[3]
+        if "{" in vb.group(1) or "}" in vb.group(1):
+            notes.append(f"{path}:{line_of(svg.start())}: dynamic viewBox {vb.group(1)!r}; manual ink review required")
+            continue
+        try:
+            min_x, min_y, vb_w, vb_h = map(float, re.split(r"[,\s]+", vb.group(1).strip()))
+            if not all(math.isfinite(n) for n in (min_x, min_y, vb_w, vb_h)) or vb_w <= 0 or vb_h <= 0:
+                raise ValueError
+        except ValueError:
+            violations.append(f"{path}:{line_of(svg.start())}: invalid viewBox {vb.group(1)!r}")
+            continue
         max_x, max_y = min_x + vb_w, min_y + vb_h
         body = svg.group(2)
         base = svg.start() + svg.group(0).index(body)
@@ -153,6 +165,7 @@ def check_file(path):
                         none = True
                     elif am.get("stroke"):
                         stroke = am["stroke"]
+                        none = False
                     g_stack.append((dx, dy, stroke, none))
                 elif name == "g" and closing:
                     if len(g_stack) > 1:
@@ -167,11 +180,12 @@ def check_file(path):
                         none = True
                     elif attrs.get("stroke"):
                         stroke = attrs["stroke"]
+                        none = False
                     loops = dict(loop_stack)
                     fill_only = (
                         attrs.get("fill", "") not in ("", "none") and not stroke
                     )
-                    if name == "text" or fill_only:
+                    if name == "text" or none or fill_only:
                         continue
                     if name == "path":
                         d = attrs.get("d", "")
@@ -297,7 +311,7 @@ def main():
             "(strokes are centred on the shape, halos/filters spread further)."
         )
         return 1
-    print(f"OK: no clipped SVG ink in {len(files)} Svelte file(s).")
+    print(f"OK: no static SVG ink violations in {len(files)} Svelte file(s).")
     return 0
 
 

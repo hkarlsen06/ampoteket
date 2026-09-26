@@ -27,6 +27,8 @@
 	let attempt = $state<ActiveAttempt | null>(null);
 	let snapshot = $state<CheckoutSnapshot | null>(null);
 	let busy = $state<'loading' | 'preparing' | 'confirming' | null>('loading');
+	let refreshing = $state(false);
+	let reconcileQueued = false;
 	let error = $state<CheckoutErrorCode | null>(null);
 	let asideOpen = $state(false);
 	let asideDone = $state(false);
@@ -42,15 +44,32 @@
 	const reference = $derived(checkoutId ?? attempt?.checkoutId);
 	const savedAttempt = $derived(attempt ?? (!checkoutId || $cart.activeAttempt?.checkoutId === checkoutId ? $cart.activeAttempt : null));
 	const lineCount = $derived(snapshot?.items.length ?? savedAttempt?.cartLines?.length ?? 1);
+	const sharedAttempt = $derived(`${$cart.activeAttempt?.requestId ?? ''}:${$cart.activeAttempt?.state ?? ''}`);
 
 	$effect(() => {
 		const id = checkoutId;
-		untrack(() => { attempt = null; snapshot = null; asideDone = false; void load(id); });
+		untrack(() => { attempt = null; snapshot = null; asideDone = false; refreshing = false; reconcileQueued = false; void load(id); });
 		return () => { generation += 1; };
 	});
-	async function load(id = checkoutId) {
+	$effect(() => {
+		const shared = sharedAttempt;
+		untrack(() => {
+			if (snapshot && !registered && attempt && shared !== `${attempt.requestId}:prepared`) void reconcile();
+		});
+	});
+	async function reconcile() {
+		if (document.visibilityState !== 'visible') return;
+		if (busy || refreshing) { reconcileQueued = true; return; }
+		if (!attempt?.checkoutId) return;
+		await load(checkoutId, true);
+	}
+	function reconcilePending() {
+		if (reconcileQueued && !busy && !refreshing) { reconcileQueued = false; void reconcile(); }
+	}
+	async function load(id = checkoutId, background = false) {
 		const run = ++generation;
-		busy = 'loading'; error = null; asideOpen = false;
+		if (background) refreshing = true;
+		else { busy = 'loading'; error = null; asideOpen = false; }
 		try {
 			let saved = await findCheckoutAttempt(id);
 			if (run !== generation) return;
@@ -69,7 +88,7 @@
 			}
 			const result = await readCheckout(saved);
 			if (run !== generation) return;
-			snapshot = result;
+			snapshot = result; error = null;
 			if (result.status === 'confirmed') {
 				const completed = await finishRegistration(saved, result);
 				if (run !== generation) return;
@@ -84,11 +103,11 @@
 			if (run === generation) error = checkoutErrorCode(failure);
 		} finally {
 			await cart.refresh();
-			if (run === generation) busy = null;
+			if (run === generation) { busy = null; refreshing = false; reconcilePending(); }
 		}
 	}
 	async function register() {
-		if (!attempt || (!canAct && !canRetryConfirm)) return;
+		if (!attempt || refreshing || (!canAct && !canRetryConfirm)) return;
 		const saved = attempt;
 		const run = ++generation;
 		busy = 'confirming'; error = null; asideOpen = false;
@@ -107,33 +126,45 @@
 			} catch { /* Keep the original reference available when storage is denied. */ }
 		} finally {
 			await cart.refresh();
-			if (run === generation) busy = null;
+			if (run === generation) { busy = null; reconcilePending(); }
 		}
 	}
 	async function openVipps(event: MouseEvent) {
 		event.preventDefault();
-		if (!attempt || !canPay || !snapshot?.payment_required) return;
+		if (!attempt || refreshing || !canPay || !snapshot?.payment_required) return;
 		try {
-			if (await canOpenPayment(attempt)) window.location.assign('https://qr.vipps.no/vp/swDrxGWcp');
+			// Remote staff recovery cannot update this browser's local pointer.
+			// Read the original checkout before opening payment, outside the cart lock.
+			const saved = attempt;
+			const checking = load(checkoutId, true);
+			const run = generation;
+			await checking;
+			if (run !== generation || attempt?.requestId !== saved.requestId || refreshing || !canPay || !snapshot?.payment_required) return;
+			const allowed = await canOpenPayment(saved);
+			if (run !== generation || refreshing) return;
+			if (allowed && canPay) window.location.assign('https://qr.vipps.no/vp/swDrxGWcp');
 			else { error = 'conflict'; await cart.refresh(); }
 		} catch (failure) { error = checkoutErrorCode(failure); }
 	}
 	async function setAside() {
-		if (!attempt || !canPay) return;
+		if (!attempt || refreshing || !canPay) return;
 		busy = 'loading'; error = null;
 		try { await setAsideCheckout(attempt); asideDone = true; asideOpen = false; }
 		catch (failure) { error = checkoutErrorCode(failure); }
-		finally { await cart.refresh(); busy = null; }
+		finally { await cart.refresh(); busy = null; reconcilePending(); }
 	}
 	async function resume() {
 		if (!attempt || busy) return;
 		busy = 'loading'; error = null;
 		try { attempt = await resumeCheckout(attempt); asideDone = false; await load(); }
 		catch (failure) { error = checkoutErrorCode(failure); }
-		finally { await cart.refresh(); busy = null; }
+		finally { await cart.refresh(); busy = null; reconcilePending(); }
 	}
 	const money = (value: string) => formatMoney(value, i18n.locale);
 </script>
+
+<svelte:window onfocus={reconcile} ononline={reconcile} />
+<svelte:document onvisibilitychange={reconcile} />
 
 <svelte:head>
 	<title>{m.title}</title>
@@ -220,14 +251,14 @@
 				<h2 class={sectionHeading} id="payment-heading">{m.paymentHeading}</h2>
 				<p>{m.recipient}: <strong class="font-mono">47322</strong></p>
 				<p>{m.paymentInstructions}</p>
-				<Button variant="default" href="https://qr.vipps.no/vp/swDrxGWcp" rel="noreferrer" onclick={openVipps}>{m.openVipps}</Button>
+				<Button variant="default" href="https://qr.vipps.no/vp/swDrxGWcp" rel="noreferrer" disabled={refreshing} onclick={openVipps}>{m.openVipps}</Button>
 				<img src="/payments/vipps-47322.svg" width="246" height="246" alt={m.qrAlt} />
-				<Button variant="outline" type="button" onclick={register}>{m.paid}</Button>
+				<Button variant="outline" type="button" disabled={refreshing} onclick={register}>{m.paid}</Button>
 			</section>
 		{:else if canPay && snapshot && !snapshot.payment_required}
-			<Button variant="default" type="button" onclick={register}>{m.free}</Button>
+			<Button variant="default" type="button" disabled={refreshing} onclick={register}>{m.free}</Button>
 		{:else if canRetryConfirm}
-			<Button variant="default" type="button" onclick={register}>{m.retryConfirm}</Button>
+			<Button variant="default" type="button" disabled={refreshing} onclick={register}>{m.retryConfirm}</Button>
 		{:else if busy === 'confirming'}
 			<Button variant="default" type="button" disabled>{m.pending}</Button>
 		{:else if snapshot && !active && !$cart.activeAttempt && !busy && !error && attempt?.state === 'prepared'}
@@ -248,11 +279,11 @@
 	{#if canPay}
 		<Collapsible.Root bind:open={asideOpen} class={section()}>
 			<Collapsible.Trigger>
-				{#snippet child({ props })}<Button variant="outline" {...props}>{m.setAside}</Button>{/snippet}
+				{#snippet child({ props })}<Button variant="outline" {...props} disabled={refreshing}>{m.setAside}</Button>{/snippet}
 			</Collapsible.Trigger>
 			<Collapsible.Content class="grid gap-4">
 				<p>{m.setAsideQuestion}</p>
-				<div class={formActions}><Button variant="outline" type="button" onclick={setAside}>{m.setAsideConfirm}</Button><Button variant="ghost" type="button" onclick={() => { asideOpen = false; }}>{i18n.m.cart.cancel}</Button></div>
+				<div class={formActions}><Button variant="outline" type="button" disabled={refreshing} onclick={setAside}>{m.setAsideConfirm}</Button><Button variant="ghost" type="button" onclick={() => { asideOpen = false; }}>{i18n.m.cart.cancel}</Button></div>
 			</Collapsible.Content>
 		</Collapsible.Root>
 	{/if}

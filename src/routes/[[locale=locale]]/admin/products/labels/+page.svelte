@@ -47,7 +47,14 @@
 		downloadUrl = ''; prepared = null; previewLines = {};
 	}
 	onMount(() => { void load(); return () => { alive = false; controller?.abort(); clearPreview(); }; });
-	function refresh() { if (admin.status === 'ready' && document.visibilityState === 'visible' && !loading && !generating) void load(); }
+	let revalidateQueued = $state(false);
+	function refresh() { revalidateQueued = document.visibilityState === 'visible'; }
+	$effect(() => {
+		if (revalidateQueued && admin.status === 'ready' && !(loading || generating)) {
+			revalidateQueued = false;
+			untrack(() => { void load(); });
+		}
+	});
 
 	async function read(signal: AbortSignal): Promise<LabelData> {
 		const session = admin.credentials(), cleanups: (() => void)[] = [], requests: AbortController[] = [];

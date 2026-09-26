@@ -75,7 +75,8 @@
 	}
 </script>
 
-<div bind:this={element} class={["min-w-0", className]}>
+<!-- Finish the zoom before focused descendants measure their visible scroll region. -->
+<div bind:this={element} class={["min-w-0", className]} onfocuscapture={() => settle?.()}>
 	<div class="mb-2 flex min-h-11 items-center justify-between gap-3">
 		<svelte:element this={headingLevel ? `h${headingLevel}` : 'p'} class={itemTitle} id={`${uid}-title`} tabindex="-1">{title}</svelte:element>
 		{#if open}<Button variant="outline" size="sm" type="button" {disabled} onclick={() => open && zoom(open, null)}><Icon icon={MagnifyingGlassMinusIcon} class="size-4" />{i18n.m.shelfMap.showWall}</Button>{/if}

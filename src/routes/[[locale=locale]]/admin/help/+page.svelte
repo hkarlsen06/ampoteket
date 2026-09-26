@@ -9,7 +9,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Switch } from '$lib/components/ui/switch';
 	import * as Field from '$lib/components/ui/field';
-	import { onMount } from 'svelte';
+	import { untrack, onMount } from 'svelte';
 	import { ApiError } from '$lib/api';
 	import { getI18n } from '$lib/i18n';
 	import { getAdminContext } from '$lib/admin-context.svelte';
@@ -18,7 +18,7 @@
 	import { parseEditableHelpContact, parseHelpContact, type EditableHelpContact } from '$lib/help';
 	const fieldId = $props.id();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.admin);
-	let contacts = $state<EditableHelpContact[] | null>(null); let busy = $state(false);
+	let failed = $state(false); let contacts = $state<EditableHelpContact[] | null>(null); let busy = $state(false);
 	let selected = $state<EditableHelpContact | null>(null); let editing = $state(false);
 	let current = $state<EditableHelpContact | null>(null); let reviewFailed = $state(false);
 	let reviewId = $state<string | null>(null);
@@ -46,15 +46,24 @@
 		void load();
 	});
 	async function load() {
-		if (busy) return; busy = true; outcome = 'idle'; const session = admin.credentials();
-		try { const rows = await readAdminHelp(session); if (session.userId === admin.session?.user.id) contacts = rows; }
-		catch (error) { contacts = null; await admin.permissionFailure(error); } finally { busy = false; }
+		if (admin.status !== 'ready') return;
+		if (busy || admin.status !== 'ready') return; busy = true; outcome = 'idle';
+		try {
+			const session = admin.credentials(); const rows = await readAdminHelp(session); if (session.userId === admin.session?.user.id) { contacts = rows; failed = false; } }
+		catch (error) { failed = true; await admin.permissionFailure(error); } finally { busy = false; }
 	}
 	// The app owns freshness (design-system.md §4.2): re-read the list on
 	// return to the tab; an open editor keeps its draft and statuses untouched.
-	function revalidate() { if (admin.status === 'ready' && document.visibilityState === 'visible' && !busy && !pending && !editing) void load(); }
+	let revalidateQueued = $state(false);
+	function revalidate() { revalidateQueued = document.visibilityState === 'visible'; }
+	$effect(() => {
+		if (revalidateQueued && admin.status === 'ready' && !(busy || editing || Boolean(pending))) {
+			revalidateQueued = false;
+			untrack(() => { void load(); });
+		}
+	});
 	function edit(row: EditableHelpContact | null) {
-		if (busy || pending) return; selected = row; editing = true; editTarget = row?.id ?? 'new'; outcome = 'idle';
+		if (failed || busy || pending) return; selected = row; editing = true; editTarget = row?.id ?? 'new'; outcome = 'idle';
 		current = null; reviewFailed = false;
 		fields(row ?? { id: '', display_name: '', email: null, phone: null, contact_url: null, display_order: 0, is_published: false });
 	}
@@ -79,9 +88,10 @@
 			&& row.contact_url === payload.contact_url && row.display_order === payload.display_order && row.is_published === payload.is_published;
 	}
 	async function save(event: SubmitEvent) {
-		event.preventDefault(); if (busy || admin.status !== 'ready' || !storageReady || wrongIdentity || outcome === 'stale') return;
-		const session = admin.credentials(); busy = true; outcome = 'idle';
+		event.preventDefault(); if (failed || busy || admin.status !== 'ready' || !storageReady || wrongIdentity || outcome === 'stale') return;
+		busy = true; outcome = 'idle';
 		try {
+			const session = admin.credentials();
 			if (!pending) {
 				let payload: ContactWrite;
 				try {
@@ -117,7 +127,8 @@
 			}
 			if (admin.session?.user.id !== session.userId) return;
 			sessionStorage.removeItem(key); pending = null; selected = acknowledged; fields(acknowledged); outcome = 'saved';
-			contacts = await readAdminHelp(session);
+			try { contacts = await readAdminHelp(session); failed = false; }
+			catch (error) { failed = true; await admin.permissionFailure(error); }
 		} catch (error) {
 			if (error instanceof ApiError && [400, 409, 422].includes(error.status)) {
 				sessionStorage.removeItem(key); pending = null; outcome = 'invalid';
@@ -127,12 +138,12 @@
 	}
 </script>
 <svelte:head><title>{m.directoryTitle}</title></svelte:head>
-<svelte:window onfocus={revalidate} />
+<svelte:window onfocus={revalidate} ononline={revalidate} />
 <svelte:document onvisibilitychange={revalidate} />
 <header class={pageHeader}>
 	<h1 class={pageHeading}>{m.directoryHeading}</h1>
 	<p class={lede}>{m.directoryConsent}</p>
-	<div class={formActions}><Button type="button" disabled={busy || Boolean(pending)} onclick={() => edit(null)}>{m.newContact}</Button><Button variant="link" href={i18n.href('/help')}>{m.viewPublic}</Button></div>
+	<div class={formActions}><Button type="button" disabled={failed || busy || Boolean(pending)} onclick={() => edit(null)}>{m.newContact}</Button><Button variant="link" href={i18n.href('/help')}>{m.viewPublic}</Button></div>
 </header>
 <div class={formStatus} aria-live="polite">
 	{#if wrongIdentity}<Alert.Message appearance="inline" variant="destructive" role="status">{m.commandIdentity}</Alert.Message>{:else if !storageReady}<Alert.Message appearance="inline" variant="destructive" role="status">{m.storageUnavailable}</Alert.Message>{/if}
@@ -157,17 +168,17 @@
 		{/if}
 		<form class={formLayout} aria-label={selected || pending?.revision ? m.editHeading : m.newContact} onsubmit={save}>
 			<Field.Group layout="row">
-				<Field.Field width="grow"><Field.Label for={`${fieldId}-1`}>{m.contactName}</Field.Label><Input id={`${fieldId}-1`} required maxlength={120} bind:value={name} disabled={busy || Boolean(pending)} /></Field.Field>
+				<Field.Field width="grow"><Field.Label for={`${fieldId}-1`}>{m.contactName}</Field.Label><Input id={`${fieldId}-1`} autocapitalize="words" required maxlength={120} bind:value={name} disabled={busy || Boolean(pending)} /></Field.Field>
 				<Field.Field width="short"><Field.Label for={`${fieldId}-2`}>{m.displayOrder}</Field.Label><Input id={`${fieldId}-2`} type="text" inputmode="numeric" pattern="[0-9]+" required bind:value={order} disabled={busy || Boolean(pending)} /></Field.Field>
 			</Field.Group>
 			<Field.Group layout="row">
 				<Field.Field width="grow"><Field.Label for={`${fieldId}-3`}>{m.contactEmail}</Field.Label><Input id={`${fieldId}-3`} type="email" maxlength={254} bind:value={email} disabled={busy || Boolean(pending)} /></Field.Field>
 				<Field.Field width="medium"><Field.Label for={`${fieldId}-4`}>{m.contactPhone}</Field.Label><Input id={`${fieldId}-4`} type="tel" maxlength={40} bind:value={phone} disabled={busy || Boolean(pending)} /></Field.Field>
 			</Field.Group>
-			<Field.Field width="grow"><Field.Label for={`${fieldId}-5`}>{m.contactUrl}</Field.Label><Input id={`${fieldId}-5`} type="url" maxlength={500} bind:value={url} disabled={busy || Boolean(pending)} /></Field.Field>
+			<Field.Field width="grow"><Field.Label for={`${fieldId}-5`}>{m.contactUrl}</Field.Label><Input id={`${fieldId}-5`} type="url" autocapitalize="none" enterkeyhint="go" maxlength={500} bind:value={url} disabled={busy || Boolean(pending)} /></Field.Field>
 			<Field.Field orientation="horizontal"><Switch id="switch-published" name="switch-published" bind:checked={published} disabled={busy || Boolean(pending)} aria-describedby="published-hint" /><Field.Content><Field.Label for="switch-published" class="cursor-pointer">{m.publishContact}</Field.Label><Field.Description id="published-hint">{m.atLeastOneContact}</Field.Description></Field.Content></Field.Field>
 			<div class={formActions}>
-				<Button type="submit" disabled={busy || !storageReady || outcome === 'stale'}><ButtonLabel pending={busy} pendingLabel={m.working} label={pending ? m.retrySave : m.saveContact} reserveLabels={[m.retrySave, m.saveContact]} /></Button>
+				<Button type="submit" disabled={failed || busy || !storageReady || outcome === 'stale'}><ButtonLabel pending={busy} pendingLabel={m.working} label={pending ? m.retrySave : m.saveContact} reserveLabels={[m.retrySave, m.saveContact]} /></Button>
 				<Button type="button" variant="ghost" disabled={busy || Boolean(pending)} onclick={() => { editing = false; }}>{m.cancel}</Button>
 			</div>
 		</form>
@@ -176,6 +187,7 @@
 		</div>
 	</div>
 {/snippet}
+{#if failed && contacts !== null}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unavailable}</Alert.Message><Button type="button" variant="outline" disabled={busy} onclick={load}>{m.retry}</Button>{/if}
 {#if contacts === null}
 	{#if busy}<span class="sr-only" role="status">{m.loading}</span>{/if}
 	<div class="min-h-80 space-y-4" aria-busy={busy}>
@@ -192,7 +204,7 @@
 					<Item.Title class={itemTitle}>{contact.display_name}</Item.Title>
 					<Item.Description class="flex flex-wrap items-center gap-x-3 gap-y-1"><StateBadge tone={contact.is_published ? 'success' : 'neutral'}>{contact.is_published ? m.published : m.unpublished}</StateBadge><span>{m.displayOrder}: {contact.display_order}</span></Item.Description>
 				</Item.Content>
-				<Item.Actions><Button type="button" variant="outline" size="sm" disabled={busy || Boolean(pending)} onclick={() => edit(contact)}>{m.editContact(contact.display_name)}</Button></Item.Actions>
+				<Item.Actions><Button type="button" variant="outline" size="sm" disabled={busy || failed || Boolean(pending)} onclick={() => edit(contact)}>{m.editContact(contact.display_name)}</Button></Item.Actions>
 				{#if rowEditor === contact.id}<div class="min-w-0 basis-full pt-2">{@render editor()}</div>{/if}
 			</Item.Root>
 		{/each}

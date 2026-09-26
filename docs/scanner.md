@@ -108,8 +108,10 @@ Placement:
   slides under the header). None on checkout, help or admin pages, and no page-level
   triggers. Without JavaScript the trigger is hidden. Only deliberate activation
   opens it; `?scan=1` does nothing. Placement details: [design system](design-system.md#4-layout).
-- The dialog is a shared `Dialog` with `preventScroll={false}`. It fits a 360×640
-  phone without interior scrolling. Close, Escape or backdrop release the camera like
+- The dialog is a shared `Dialog` with `preventScroll={false}`. Its body is a named,
+  keyboard-accessible scroll region with contained overscroll for long content and
+  short viewports. The title, close control and Add/Scan actions stay outside that body.
+  Close, Escape or backdrop release the camera like
   navigation; only an Add in flight blocks closing. Focus returns to the trigger.
   The product name links to its localized details page.
 - `AdminProductScanner` (admin product list and stock corrections page) uses the same

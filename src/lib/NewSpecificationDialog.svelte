@@ -8,7 +8,8 @@
 	import * as Alert from '$lib/components/ui/alert';
 	import { Input } from '$lib/components/ui/input';
 	import { Button, ButtonLabel } from '$lib/components/ui/button';
-	import { formLayout, formStatus } from '$lib/ui';
+	import { formLayout, formStatus, sheetBody } from '$lib/ui';
+	import AdminAccessGate from '$lib/AdminAccessGate.svelte';
 	import { getI18n } from '$lib/i18n';
 	import { getAdminContext } from '$lib/admin-context.svelte';
 	import { definitiveProductFailure, detailCommandKey, executeDetailCommand, parseDefinition, parseDetailCommand, StaleProductError, type AttributeDefinition, type DetailCommand } from '$lib/admin-products';
@@ -83,13 +84,15 @@
 	<Dialog.Trigger>
 		{#snippet child({ props })}<Button {...props} type="button" variant="outline" class={className} {disabled}>{pending ? m.referenceRecovery : m.newDefinition}</Button>{/snippet}
 	</Dialog.Trigger>
-	<Dialog.Content preventScroll={false} aria-describedby={undefined} class="gap-0 p-0">
+	<Dialog.Content preventScroll={false} aria-describedby={undefined} class="grid-rows-[auto_minmax(0,1fr)_auto] gap-0 p-0">
 		<Dialog.Header layout="bar">
-			<Dialog.Title>{m.newDefinition}</Dialog.Title>
+			<Dialog.Title id={`${uid}-title`}>{m.newDefinition}</Dialog.Title>
 			<Dialog.Close>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm"><Icon icon={XIcon} class="size-5" /><span class="sr-only">{m.cancel}</span></Button>{/snippet}</Dialog.Close>
 		</Dialog.Header>
-		<div class="px-4 py-5 md:px-6">
-		<form class={formLayout} onsubmit={save}>
+		<!-- svelte-ignore a11y_no_noninteractive_tabindex (Named scroll region supports native keyboard scrolling.) -->
+		<div class={sheetBody} role="region" aria-labelledby={`${uid}-title`} tabindex="0">
+		<AdminAccessGate>
+		<form id={`${uid}-form`} class={formLayout} onsubmit={save}>
 			<Field.Field><Field.Label for={`${uid}-label`}>{m.definitionLabel}</Field.Label><Input id={`${uid}-label`} bind:value={label} required maxlength={100} disabled={busy || Boolean(pending) || wrongIdentity} /></Field.Field>
 			<Field.Set class="gap-2">
 				<Field.Legend id={`${uid}-type`} variant="label">{m.valueType}</Field.Legend>
@@ -100,13 +103,16 @@
 				</ToggleGroup.Root>
 			</Field.Set>
 			{#if type === 'number'}<Field.Field><Field.Label for={`${uid}-unit`}>{m.canonicalUnit}</Field.Label><Input id={`${uid}-unit`} bind:value={unit} maxlength={100} disabled={busy || Boolean(pending) || wrongIdentity} /></Field.Field>{/if}
-			<Button type="submit" disabled={disabled || busy || !storageReady || wrongIdentity}><ButtonLabel pending={busy} pendingLabel={m.working} label={pending ? m.retrySave : m.saveReference} reserveLabels={[m.retrySave, m.saveReference]} /></Button>
 		</form>
 		<div class={formStatus} aria-live="polite">
 			{#if wrongIdentity}<Alert.Message appearance="inline" variant="destructive" role="status">{m.wrongIdentity}</Alert.Message>
 			{:else if !storageReady || outcome === 'storage'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.storage}</Alert.Message>
 			{:else if !busy && (outcome !== 'idle' || pending)}<Alert.Message appearance="inline" variant="destructive" role="status">{outcome === 'invalid' ? m.referenceInvalid : m.unknown}</Alert.Message>{/if}
 		</div>
+		</AdminAccessGate>
 		</div>
+		<Dialog.Footer variant="sheet">
+			<Button type="submit" form={`${uid}-form`} disabled={disabled || busy || !storageReady || wrongIdentity || admin.status !== 'ready'}><ButtonLabel pending={busy} pendingLabel={m.working} label={pending ? m.retrySave : m.saveReference} reserveLabels={[m.retrySave, m.saveReference]} /></Button>
+		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>

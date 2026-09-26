@@ -141,8 +141,9 @@ room. Page specs (`docs/page-*.md`) describe the phone layout first.
   docked in the hero). Above 40rem it is the first header-menu row; never show two.
   Checkout, help and admin have none. No other floating buttons or bottom bars.
 - **The virtual keyboard is part of the layout.** Inputs are ≥ 1rem so iOS never
-  zooms. Every input declares `inputmode`, `autocapitalize`, `autocomplete` and
-  `enterkeyhint` (codes: mono, `autocapitalize="characters"`; quantities:
+  zooms. Shared controls supply keyboard, capitalization, autocomplete and return-key
+  defaults; native input types retain their keyboards. Override these for the field's
+  purpose (codes: mono, `autocapitalize="characters"`; quantities:
   `inputmode="decimal"`). The focused field and its actions stay visible above the
   keyboard.
 
@@ -165,8 +166,9 @@ or suppresses it.
     the document stays still);
   - the homepage shelf sheet's `shelf-picker-body` and the admin placement sheet's
     `shelf-editor-body`;
-  - dialog bodies `count-body`, `placement-sheet-body`, `order-entry-body` and the
-    planned receipt review;
+  - dialog bodies `count-body`, `placement-sheet-body`, `order-entry-body`, the
+    planned receipt review and new specification form;
+  - long confirmation descriptions in `AlertDialog`;
   - the catalog filter picker, and the scanner's last-resort overflow fallback;
   - the admin `Sidebar.Content` menu and the product combobox result list.
 - **The header never hides.** `position: sticky; top: 0`, constant height
@@ -243,8 +245,9 @@ Import from `$lib/components/ui/<component>`; use Tailwind for layout. No local
 admin and reading widths; `padding: 'page'`), `pageHeader`, `pageHeading`,
 `sectionHeading`, `lede`, `itemTitle`, `codeText`, `nameWrap`, `cardLink`,
 `formLayout`, `formGrid`, `formActions`, `formStatus`, `sheetBody` and `section`.
-They are classes, not wrappers: keep semantic HTML at the call site. Keep
-`formStatus`'s `{#if}` blocks adjacent with no whitespace so `:empty` still matches.
+They are classes, not wrappers: keep semantic HTML at the call site.
+`formStatus` collapses when it has no child elements, using `:has(*)` so whitespace
+between conditional blocks does not leave an empty gap.
 Extend a recipe when a presentation repeats; keep local geometry with its owner.
 
 Prefer shared variants to repeated class overrides:
@@ -320,7 +323,9 @@ finished first is an inline `Alert.Message` followed by a `link` resume button.
 grows below its trigger, including inline confirmations and row edits (no native
 `<details>` or ad-hoc toggles). `Dialog` uses `preventScroll={false}` and a localized
 title and close control; it has no default close button. Keep Escape, outside
-interaction, return focus and in-flight guards. Destructive or irreversible actions
+interaction, return focus and in-flight guards. Centered dialogs stay inside the
+viewport; long content scrolls in a named body while the title and actions stay visible.
+Destructive or irreversible actions
 (archiving, cancelling an order, finishing a count, clearing contacts) confirm with
 `AlertDialog`. An acknowledged shelf swap shows a localized `Sonner` toast;
 cancelled or uncertain requests do not.

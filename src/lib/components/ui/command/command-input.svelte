@@ -23,7 +23,7 @@
 			{...restProps}
 		>
 			{#snippet child({ props })}
-				<InputGroup.Input {...props} bind:value bind:ref />
+				<InputGroup.Input inputmode="search" enterkeyhint="search" {...props} bind:value bind:ref />
 			{/snippet}
 		</CommandPrimitive.Input>
 		<InputGroup.Addon>

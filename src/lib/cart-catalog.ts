@@ -3,7 +3,8 @@ import type { CartLine } from './cart';
 
 export type CartProductFact =
 	| { kind: 'ready'; product: CatalogProduct }
-	| { kind: 'missing' | 'unavailable' };
+	| { kind: 'missing' }
+	| { kind: 'unavailable'; product?: CatalogProduct };
 
 /** Hints are lookup aids only: a code must resolve to the saved identity.
  * Old lines without codes use a complete traversal, never a first-page guess. */

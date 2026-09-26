@@ -14,11 +14,13 @@ and a low or negative balance never blocks recording items actually taken.
 
 - Quantities are exact strings in sale steps. Valid edits save automatically. Keep the
   typed text; an invalid or empty draft stays visible without changing the saved
-  quantity. Errors name the sale step.
+  quantity. Errors name the sale step, including when fresh product facts invalidate
+  a previously saved quantity.
 - Writes per line are serialized and coalesced under the cart lock, each with an
   expected-quantity check; a conflict shows the saved quantity for review.
 - Remove waits for an in-flight save; queued edits never restore a removed line. Empty
-  input is never dropped silently.
+  input is never dropped silently. Keyboard removal moves focus to a remaining line
+  or the empty-cart browse action without scrolling the document.
 - Re-adding a product merges into its line; never send duplicate product IDs.
 - The total is indicative; the database's prepared total is what is payable.
 - The contact field (phone or email) is optional, unverified, and neither an account
@@ -30,7 +32,9 @@ The server renders only the shell. The browser reads `ampoteket:cart` and the at
 metadata before enabling changes.
 
 - Saved name/code hints are display-only; resolve them by direct lookup and verify the
-  product ID. Refresh product facts on entering the cart.
+  product ID. Refresh product facts on entering the cart, tab return and reconnect,
+  preserving quantity drafts, contact input and focus. Keep loaded lines mounted
+  while checking; unavailable facts block proceeding and offer contextual retry.
 - Validate saved data: string quantities, one line per product, at most 200 lines.
   Invalid data is a visible recovery state, never an empty cart.
 - A failed read stays unavailable. A product no longer returned must be reviewed or

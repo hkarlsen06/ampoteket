@@ -6,7 +6,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Button, ButtonLabel } from '$lib/components/ui/button';
 	import { formActions, formStatus, pageContainer, pageHeader, pageHeading, section } from '$lib/ui';
-	import { onMount, untrack } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { getI18n } from '$lib/i18n';
 	import { CartError, getCartContext, readActiveAttempt, type CartErrorCode } from '$lib/cart';
@@ -25,6 +25,7 @@
 	let facts = $state<Record<string, CartProductFact>>({});
 	let revision = $state(0);
 	let factsPending = $state(true);
+	let factsRefreshQueued = false;
 	let resetOpen = $state(false);
 	let pending = $state(false);
 	let resetDone = $state(false);
@@ -54,8 +55,11 @@
 
 	onMount(() => {
 		let checking = false;
+		let checkQueued = false;
+		let alive = true;
 		async function reconcile() {
-			if (checking) return;
+			if (!alive) return;
+			if (checking) { checkQueued = true; return; }
 			checking = true;
 			try {
 				await cart.refresh();
@@ -65,13 +69,22 @@
 					if (snapshot.status === 'confirmed') await finishRegistration(active, snapshot);
 				}
 			} catch { /* Keep the cart locked and its references available for recovery. */ }
-			finally { await cart.refresh(); checking = false; }
+			finally {
+				await cart.refresh(); checking = false;
+				if (checkQueued) { checkQueued = false; void reconcile(); }
+			}
 		}
-		const onVisible = () => { if (document.visibilityState === 'visible') void reconcile(); };
-		window.addEventListener('focus', reconcile);
+		const onVisible = () => {
+			if (document.visibilityState !== 'visible') return;
+			void reconcile();
+			if (factsPending) factsRefreshQueued = true;
+			else revision += 1;
+		};
+		window.addEventListener('focus', onVisible);
+		window.addEventListener('online', onVisible);
 		document.addEventListener('visibilitychange', onVisible);
 		void reconcile();
-		return () => { window.removeEventListener('focus', reconcile); document.removeEventListener('visibilitychange', onVisible); };
+		return () => { alive = false; window.removeEventListener('focus', onVisible); window.removeEventListener('online', onVisible); document.removeEventListener('visibilitychange', onVisible); };
 	});
 	$effect(() => {
 		// Quantity-only changes do not repeat product reads or disturb quantity drafts.
@@ -82,10 +95,24 @@
 		facts = untrack(() => Object.fromEntries(lines.filter((line: { product_id: string }) => facts[line.product_id]).map((line: { product_id: string }) => [line.product_id, facts[line.product_id]])));
 		factsPending = true;
 		void readCartProducts(data.catalogConfig, lines, controller.signal).then((next) => {
-			if (!controller.signal.aborted) { facts = next; factsPending = false; }
+			if (!controller.signal.aborted) {
+				for (const [id, fact] of Object.entries(next)) {
+					const previous = facts[id];
+					if (fact.kind === 'unavailable' && previous && 'product' in previous) fact.product = previous.product;
+				}
+				facts = next; factsPending = false;
+				if (factsRefreshQueued) { factsRefreshQueued = false; revision += 1; }
+			}
 		});
 		return () => controller.abort();
 	});
+	async function removedLine(index: number, returnFocus: boolean) {
+		removed = true;
+		if (!returnFocus) return;
+		await tick();
+		const controls = document.querySelectorAll<HTMLButtonElement>('.cart-lines .remove:not(:disabled)');
+		(controls[index] ?? controls[controls.length - 1] ?? document.getElementById('cart-browse'))?.focus({ preventScroll: true });
+	}
 	async function reset() {
 		if (pending) return;
 		pending = true; error = null;
@@ -118,7 +145,7 @@
 	<header class={pageHeader}>
 		<h1 class={pageHeading}>{m.heading}</h1>
 		<p class="min-h-5 text-sm text-muted-foreground">{#if $cart.status === 'ready'}{m.lines($cart.lines.length)}{/if}</p>
-		<div class={formActions}><Button variant="outline" href={i18n.href('/p')}>{m.browse}</Button></div>
+		<div class={formActions}><Button id="cart-browse" variant="outline" href={i18n.href('/p')}>{m.browse}</Button></div>
 	</header>
 	<CartNotice state={$cart} />
 	<noscript><p class="text-sm text-muted-foreground">{m.noJavascript}</p></noscript>
@@ -138,8 +165,8 @@
 		<Empty.Root><Empty.Description>{m.empty}</Empty.Description></Empty.Root>
 	{:else if $cart.lines.length}
 		<ul class="cart-lines m-0 grid list-none gap-4 p-0">
-			{#each $cart.lines as line (line.product_id)}
-				<CartLine {line} fact={facts[line.product_id]} {locked} onremoved={() => { removed = true; }} onready={(ready) => { readyLines[line.product_id] = ready; }} onretry={() => { revision += 1; }} />
+			{#each $cart.lines as line, index (line.product_id)}
+				<CartLine {line} fact={facts[line.product_id]} {locked} onremoved={(returnFocus) => removedLine(index, returnFocus)} onready={(ready) => { readyLines[line.product_id] = ready; }} onretry={() => { revision += 1; }} />
 			{/each}
 		</ul>
 		<div class={section({ class: 'px-5' })}>

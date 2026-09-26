@@ -1,5 +1,7 @@
 <script lang="ts">
-	import { onMount, tick } from 'svelte';
+	import AdminAccessGate from '$lib/AdminAccessGate.svelte';
+	import { productName } from '$lib/catalog';
+	import { onMount, tick, untrack } from 'svelte';
 	import { getI18n } from '$lib/i18n';
 	import { getAdminContext } from '$lib/admin-context.svelte';
 	import { compareDecimals, validQuantity } from '$lib/decimal';
@@ -40,6 +42,7 @@
 	let storageReady = $state(false);
 	let command = $state<OrderCommand | null>(null);
 	let quantities = $state<Record<string, string>>({});
+	let invalidLine = $state(''); let invalidMessage = $state('');
 	let manual = $state<Set<string>>(new Set());
 	let outcome = $state<'idle' | 'invalid' | 'unknown' | 'conflict'>('idle');
 	let scanOpen = $state(false);
@@ -55,10 +58,10 @@
 	const pendingHere = $derived(command?.kind === 'receipt' && command.orderId === orderId);
 	const products = $derived(new Map(detail?.products.map((product) => [product.id, product]) ?? []));
 	const openLines = $derived(detail?.lines.filter((line) => compareDecimals(line.outstandingQuantity, '0') > 0) ?? []);
-	const reviewLines = $derived(detail?.lines.filter((line) => compareDecimals(line.outstandingQuantity, '0') > 0 || (pendingHere && quantities[line.id])) ?? []);
+	const reviewLines = $derived(detail?.lines.filter((line) => compareDecimals(line.outstandingQuantity, '0') > 0 || Boolean(quantities[line.id]?.trim())) ?? []);
 	const matchingLines = $derived(openLines.filter((line) => products.get(line.productId)?.code === scanCode));
 	const wrongIdentity = $derived(Boolean(command && command.userId !== admin.session?.user.id));
-	const selectedCount = $derived(openLines.filter((line) => quantities[line.id]?.trim() && quantities[line.id].trim() !== '0').length);
+	const selectedCount = $derived(reviewLines.filter((line) => quantities[line.id]?.trim()).length);
 
 	function full(line: OrderLine) { return !manual.has(line.id) && quantities[line.id] === line.outstandingQuantity; }
 	function chooseFull(line: OrderLine, checked: boolean) {
@@ -102,43 +105,62 @@
 		};
 	});
 	async function load() {
+		if (admin.status !== 'ready') return;
 		const version = ++generation;
 		loading = true; failed = false;
-		const session = admin.credentials();
 		try {
+			const session = admin.credentials();
 			const result = await readOrderDetail(session, orderId);
 			if (mounted && version === generation && admin.session?.user.id === session.userId) {
 				detail = result;
-				if (command?.kind === 'receipt' && command.orderId === orderId) manual = new Set(command.items.filter((item) => result.lines.find((line) => line.id === item.orderLineId)?.outstandingQuantity !== item.quantity).map((item) => item.orderLineId!));
+				// Keep a selected amount visible when another receipt changes what remains.
+				manual = new Set([...manual, ...result.lines.filter(line => quantities[line.id]?.trim() && quantities[line.id] !== line.outstandingQuantity).map(line => line.id)]);
 			}
 		} catch (error) { if (mounted && version === generation) failed = true; await admin.permissionFailure(error); }
 		finally { if (mounted && version === generation) loading = false; }
 	}
+	let revalidateQueued = $state(false);
+	function revalidate() { revalidateQueued = document.visibilityState === 'visible'; }
+	$effect(() => {
+		if (revalidateQueued && admin.status === 'ready' && !loading && !busy) {
+			revalidateQueued = false;
+			untrack(() => { void load(); });
+		}
+	});
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
-		if (!detail?.order || busy || loading || failed || !storageReady || wrongIdentity || (command && !pendingHere)) return;
-		let candidate: OrderCommand;
+		if (admin.status !== 'ready' || !detail?.order || busy || loading || failed || !storageReady || wrongIdentity || (command && !pendingHere)) return;
+		let candidate: OrderCommand; invalidLine = ''; invalidMessage = '';
 		try {
 			if (command) candidate = command;
 			else {
-				const items = openLines.flatMap((line) => {
+				const items = reviewLines.flatMap((line) => {
 					const raw = quantities[line.id]?.trim();
 					if (!raw) return [];
 					const product = products.get(line.productId);
 					if (!product) throw new Error('Missing product');
-					const quantity = validQuantity(raw, product.stock_step, i18n.locale);
-					if (compareDecimals(quantity, line.outstandingQuantity) > 0) throw new Error('Too much');
+					let quantity: string;
+					try { quantity = validQuantity(raw, product.stock_step, i18n.locale); }
+					catch (error) { invalidLine = line.id; invalidMessage = m.invalidQuantity(formatDecimal(product.stock_step, i18n.locale)); throw error; }
+					if (compareDecimals(quantity, line.outstandingQuantity) > 0) {
+						invalidLine = line.id; invalidMessage = m.exceedsOutstanding(formatDecimal(line.outstandingQuantity, i18n.locale), unitLabel(product.unit_code, i18n.locale, line.outstandingQuantity));
+						throw new Error('Too much');
+					}
 					return [{ productId: line.productId, orderLineId: line.id, quantity }];
 				});
 				if (!items.length) throw new Error('No selection');
 				candidate = { kind: 'receipt', userId: admin.credentials().userId, requestId: crypto.randomUUID(), orderId, items, note: null, occurredAt: null };
 			}
-		} catch { outcome = 'invalid'; return; }
+		} catch {
+			outcome = 'invalid';
+			if (invalidLine) { manual = new Set([...manual, invalidLine]); void tick().then(() => document.getElementById(`${id}-qty-${invalidLine}`)?.focus()); }
+			return;
+		}
 		busy = true; outcome = 'idle';
-		const session = admin.credentials();
 		let saved: OrderCommand | null = null;
 		let recorded = false;
 		try {
+			const session = admin.credentials();
 			saved = await updateOrderStorage((storage) => saveOrderCommand(storage, candidate));
 			command = saved;
 			await runOrderCommand(session, saved);
@@ -154,7 +176,7 @@
 			} else if (mounted) outcome = saved ? 'unknown' : 'invalid';
 			await admin.permissionFailure(error);
 		} finally { if (mounted) { busy = false; syncPending(); } }
-		if (recorded && mounted && admin.session?.user.id === session.userId) {
+		if (recorded && mounted && admin.session?.user.id === candidate.userId) {
 			command = null;
 			onclose();
 			try { await onrecorded(); } catch (error) { await admin.permissionFailure(error); }
@@ -191,6 +213,8 @@
 	}
 </script>
 
+<svelte:window onfocus={revalidate} ononline={revalidate} />
+<svelte:document onvisibilitychange={revalidate} />
 <Dialog.Root open={true} onOpenChange={(open) => { if (!open && !busy) onclose(); }}>
 	<Dialog.Content variant="sheet" preventScroll={false} aria-describedby={undefined}
 		onInteractOutside={(event) => { if (busy) event.preventDefault(); }}
@@ -202,6 +226,7 @@
 		</Dialog.Header>
 		<!-- svelte-ignore a11y_no_noninteractive_tabindex (Named sheet body supports native keyboard scrolling.) -->
 		<div class={sheetBody} role="region" aria-labelledby={`${id}-title`} tabindex="0">
+			<AdminAccessGate>
 			{#if !storageReady}<Alert.Message appearance="inline" variant="destructive" role="status">{m.storageUnavailable}</Alert.Message>{/if}
 			{#if wrongIdentity}<Alert.Message appearance="inline" variant="destructive" role="status">{m.wrongIdentity}</Alert.Message>
 			{:else if command && !pendingHere}<Alert.Message appearance="inline" role="status">{m.pendingElsewhere}</Alert.Message><Button variant="link" href={i18n.href(orderCommandPath(command))}>{m.resumePending}</Button>{/if}
@@ -236,21 +261,22 @@
 								<div class="flex flex-wrap items-center justify-between gap-2">
 									<Field.Field orientation="horizontal" class="min-w-0 flex-1 gap-3">
 										<Checkbox id={`${id}-full-${line.id}`} checked={full(line)} onCheckedChange={(checked) => chooseFull(line, checked === true)} disabled={busy || Boolean(command)} />
-										<div class="min-w-0"><Field.Label for={`${id}-full-${line.id}`} class={['cursor-pointer', nameWrap]}>{#if product}<span class={codeText}>{product.code}</span>: {i18n.locale === 'nb' ? product.name_nb : product.name_en}{:else}{line.productId}{/if}</Field.Label><Field.Description>{m.lineNumber(line.lineNumber)} · {m.outstanding} <span class="font-mono">{formatDecimal(line.outstandingQuantity, i18n.locale)} {unitLabel(product?.unit_code, i18n.locale, line.outstandingQuantity)}</span></Field.Description></div>
+										<div class="min-w-0"><Field.Label for={`${id}-full-${line.id}`} class={['cursor-pointer', nameWrap]}>{#if product}<span class={codeText}>{product.code}</span>: {productName(product, i18n.locale)}{:else}{line.productId}{/if}</Field.Label><Field.Description>{m.lineNumber(line.lineNumber)} · {m.outstanding} <span class="font-mono">{formatDecimal(line.outstandingQuantity, i18n.locale)} {unitLabel(product?.unit_code, i18n.locale, line.outstandingQuantity)}</span></Field.Description></div>
 									</Field.Field>
 									{#if !manual.has(line.id)}<Button type="button" variant="ghost" size="sm" onclick={() => override(line)} disabled={busy || Boolean(command)}>{m.differentQuantity}</Button>{/if}
 								</div>
-								{#if manual.has(line.id)}<Field.Field width="short"><Field.Label for={`${id}-qty-${line.id}`}>{m.receivedQuantity}{#if product}<span class="sr-only">{` (${unitLabel(product.unit_code, i18n.locale)})`}</span>{/if}</Field.Label><InputGroup.Root><InputGroup.Input id={`${id}-qty-${line.id}`} type="text" inputmode="decimal" autocomplete="off" bind:value={quantities[line.id]} disabled={busy || Boolean(command)} />{#if product}<InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(product.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon>{/if}</InputGroup.Root></Field.Field>{/if}
+								{#if manual.has(line.id)}<Field.Field width="short"><Field.Label for={`${id}-qty-${line.id}`}>{m.receivedQuantity}{#if product}<span class="sr-only">{` (${unitLabel(product.unit_code, i18n.locale)})`}</span>{/if}</Field.Label><InputGroup.Root><InputGroup.Input id={`${id}-qty-${line.id}`} aria-invalid={invalidLine === line.id} aria-describedby={invalidLine === line.id ? `${id}-qty-${line.id}-error` : undefined} type="text" inputmode="decimal" autocomplete="off" bind:value={quantities[line.id]} disabled={busy || Boolean(command)} />{#if product}<InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(product.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon>{/if}</InputGroup.Root>{#if invalidLine === line.id}<Field.Error id={`${id}-qty-${line.id}-error`}>{invalidMessage}</Field.Error>{/if}</Field.Field>{/if}
 							</div>
 						{/each}
 					</form>
 				{:else}<Empty.Root><Empty.Description>{m.noOutstanding}</Empty.Description></Empty.Root>{/if}
 			{:else if !loading && !failed}<Empty.Root><Empty.Description>{m.missing}</Empty.Description></Empty.Root>
 			{/if}
+			</AdminAccessGate>
 		</div>
 		{#if reviewLines.length}
 			<Dialog.Footer variant="sheet">
-				<Button type="submit" form={`${id}-form`} disabled={busy || loading || failed || !storageReady || wrongIdentity || Boolean(command && !pendingHere) || (!pendingHere && selectedCount === 0)}><ButtonLabel pending={busy} pendingLabel={m.working} label={pendingHere ? m.retrySame : m.confirmReceived} reserveLabels={[m.retrySame, m.confirmReceived]} /></Button>
+				<Button type="submit" form={`${id}-form`} disabled={admin.status !== 'ready' || busy || loading || failed || !storageReady || wrongIdentity || Boolean(command && !pendingHere) || (!pendingHere && selectedCount === 0)}><ButtonLabel pending={busy} pendingLabel={m.working} label={pendingHere ? m.retrySame : m.confirmReceived} reserveLabels={[m.retrySame, m.confirmReceived]} /></Button>
 			</Dialog.Footer>
 		{/if}
 	</Dialog.Content>

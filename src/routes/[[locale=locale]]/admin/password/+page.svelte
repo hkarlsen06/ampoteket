@@ -58,12 +58,12 @@
 {:else if verified}
 	<form class={[formLayout, "max-w-md"]} onsubmit={save}>
 		<Field.Field width="grow"><Field.Label for={`${fieldId}-1`}>{m.newPassword}</Field.Label><Input id={`${fieldId}-1`} type="password" autocomplete="new-password" minlength={8} required bind:value={password} disabled={busy} /></Field.Field>
-		<Field.Field width="grow"><Field.Label for={`${fieldId}-2`}>{m.repeatPassword}</Field.Label><Input id={`${fieldId}-2`} type="password" autocomplete="new-password" minlength={8} required bind:value={repeat} disabled={busy} /></Field.Field>
+		<Field.Field width="grow"><Field.Label for={`${fieldId}-2`}>{m.repeatPassword}</Field.Label><Input id={`${fieldId}-2`} type="password" autocomplete="new-password" enterkeyhint="go" minlength={8} required bind:value={repeat} disabled={busy} /></Field.Field>
 		<Button type="submit" variant="default" disabled={busy}><ButtonLabel pending={busy} pendingLabel={m.working} label={m.savePassword} /></Button>
 	</form>
 {:else}
 	<form class={[formLayout, "max-w-md"]} onsubmit={send}>
-		<Field.Field width="grow"><Field.Label for={`${fieldId}-3`}>{m.email}</Field.Label><Input id={`${fieldId}-3`} type="email" autocomplete="username" required bind:value={email} disabled={busy} /></Field.Field>
+		<Field.Field width="grow"><Field.Label for={`${fieldId}-3`}>{m.email}</Field.Label><Input id={`${fieldId}-3`} type="email" autocomplete="username" enterkeyhint="send" required bind:value={email} disabled={busy} /></Field.Field>
 		<Button type="submit" variant="default" disabled={busy || !admin.auth || !admin.callbackOrigin}><ButtonLabel pending={busy} pendingLabel={m.working} label={m.sendReset} /></Button>
 	</form>
 {/if}

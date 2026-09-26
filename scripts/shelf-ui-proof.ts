@@ -20,6 +20,8 @@ const artifacts = resolve('test-results/shelf');
 await mkdir(artifacts, { recursive: true });
 const errors: string[] = [];
 const m = en.adminShelf;
+// One CSS pixel plus floating-point noise from browser bounding-box coordinates.
+const pixelTolerance = 1 + 1e-5;
 async function center(locator: Locator) {
   await locator.scrollIntoViewIfNeeded();
   const box = await locator.boundingBox(); assert.ok(box);
@@ -43,8 +45,8 @@ async function dragSwap(page: Page, source: Locator, target: Locator) {
   await expect(source.locator('.drawer')).toHaveCSS('visibility', 'hidden');
   await expect(source).toHaveClass(/border-dashed/);
   const floating = await lifted.boundingBox(); assert.ok(floating);
-  expect(Math.abs(floating.x - (original.x + destination.x - start.x))).toBeLessThanOrEqual(1);
-  expect(Math.abs(floating.y - (original.y + destination.y - start.y))).toBeLessThanOrEqual(1);
+  expect(Math.abs(floating.x - (original.x + destination.x - start.x))).toBeLessThanOrEqual(pixelTolerance);
+  expect(Math.abs(floating.y - (original.y + destination.y - start.y))).toBeLessThanOrEqual(pixelTolerance);
   expect(floating.width).toBeCloseTo(original.width, 0); expect(floating.height).toBeCloseTo(original.height, 0);
   expect(await lifted.evaluate(element => getComputedStyle(element).pointerEvents)).toBe('none');
   await expect(target.locator('.drawer')).toHaveClass(/outline-dashed/);
@@ -52,7 +54,7 @@ async function dragSwap(page: Page, source: Locator, target: Locator) {
   const viewport = await source.locator('xpath=ancestor::*[contains(@class, "shelf-viewport")]').boundingBox(); assert.ok(viewport);
   const outside = { x: viewport.x - 12, y: destination.y };
   await page.mouse.move(outside.x, outside.y, { steps: 3 });
-  expect(Math.abs((await lifted.boundingBox())!.x - (original.x + outside.x - start.x))).toBeLessThanOrEqual(1);
+  expect(Math.abs((await lifted.boundingBox())!.x - (original.x + outside.x - start.x))).toBeLessThanOrEqual(pixelTolerance);
   expect(await lifted.evaluate(element => {
     const box = element.getBoundingClientRect();
     return document.elementsFromPoint(box.left + box.width / 2, box.top + box.height / 2).every(hit => !element.contains(hit));
@@ -98,8 +100,8 @@ try {
   await expect(editor.getByLabel(fieldLabel(m.row))).toBeHidden();
   const frameLocator = editor.locator('.cabinet-frame');
   const initialFrame = await frameLocator.boundingBox(), rowGrip = await rows.boundingBox(), colGrip = await cols.boundingBox(); assert.ok(initialFrame && rowGrip && colGrip);
-  expect(Math.abs(rowGrip.y + rowGrip.height / 2 - initialFrame.y)).toBeLessThanOrEqual(1);
-  expect(Math.abs(colGrip.x + colGrip.width / 2 - initialFrame.x - initialFrame.width)).toBeLessThanOrEqual(1);
+  expect(Math.abs(rowGrip.y + rowGrip.height / 2 - initialFrame.y)).toBeLessThanOrEqual(pixelTolerance);
+  expect(Math.abs(colGrip.x + colGrip.width / 2 - initialFrame.x - initialFrame.width)).toBeLessThanOrEqual(pixelTolerance);
   expect(initialFrame.height).toBeCloseTo(384, 0);
   await rows.focus(); await page.keyboard.press('ArrowUp'); await expect(rows).toHaveAttribute('aria-valuenow', '13');
   await page.keyboard.press('ArrowDown'); await expect(rows).toHaveAttribute('aria-valuenow', '12');
@@ -107,7 +109,7 @@ try {
   await expect(rows).not.toHaveAttribute('aria-valuenow', '12');
   const activeRows = await rows.boundingBox(), activeFrame = await frameLocator.boundingBox(); assert.ok(activeRows && activeFrame);
   expect(activeFrame.height).toBeCloseTo(initialFrame.height, 0);
-  expect(Math.abs(activeRows.y + activeRows.height / 2 - activeFrame.y)).toBeLessThanOrEqual(1);
+  expect(Math.abs(activeRows.y + activeRows.height / 2 - activeFrame.y)).toBeLessThanOrEqual(pixelTolerance);
   await rows.dispatchEvent('pointercancel', { pointerId: 1, pointerType: 'mouse' }); await page.mouse.up(); await expect(page.locator('[data-drawer-drag-preview]')).toHaveCount(0);
   await expect(rows).toHaveAttribute('aria-valuenow', '12');
   await startMove(page, rows, 0, -40); await page.keyboard.press('Escape'); await page.mouse.up(); await expect(page.locator('[data-drawer-drag-preview]')).toHaveCount(0);
@@ -118,7 +120,7 @@ try {
   await expect(cols).toHaveAttribute('aria-valuenow', '5');
   const liveFrame = await frameLocator.boundingBox(), liveCell = await editor.locator(`[data-item-id="${first}"]`).boundingBox(); assert.ok(liveFrame && liveCell);
   const activeCols = await cols.boundingBox(); assert.ok(activeCols);
-  expect(Math.abs(activeCols.x + activeCols.width / 2 - liveFrame.x - liveFrame.width)).toBeLessThanOrEqual(1);
+  expect(Math.abs(activeCols.x + activeCols.width / 2 - liveFrame.x - liveFrame.width)).toBeLessThanOrEqual(pixelTolerance);
   expect(activeCols.y + activeCols.height / 2).toBeCloseTo(liveFrame.y + liveFrame.height / 2, 0);
   expect(liveFrame.width - frame.width).toBeCloseTo(64, 0); expect(liveFrame.height).toBeCloseTo(frame.height, 0);
   expect(Math.abs(liveCell.width - cellBefore.width)).toBeLessThan(1);

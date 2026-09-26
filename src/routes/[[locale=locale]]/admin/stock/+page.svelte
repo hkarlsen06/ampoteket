@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { untrack, onMount, tick } from 'svelte';
 	import { page } from '$app/state';
 	import { getI18n } from '$lib/i18n';
 	import { getAdminContext } from '$lib/admin-context.svelte';
@@ -32,6 +32,7 @@
 	let kind = $state<'withdraw' | 'adjust' | 'correct'>('withdraw'), movementId = $state(''), quantity = $state(''), counted = $state(''), reason = $state('');
 	let command = $state<StockCommand | null>(null), storageReady = $state(false), busy = $state(false), reviewNeeded = $state(false), paused = $state(false);
 	let outcome = $state<'idle' | 'invalid' | 'unknown' | 'stale' | 'recount' | 'saved'>('idle');
+	let invalidField = $state(''), invalidMessage = $state('');
 	let mounted = false, generation = 0;
 	const product = $derived(products.find(item => item.id === selected));
 	const original = $derived(detail?.movements.find(item => item.id === movementId));
@@ -57,6 +58,7 @@
 		return () => { mounted = false; generation++; window.removeEventListener('storage', syncPending); window.removeEventListener(stockStorageEvent, syncPending); };
 	});
 	async function load() {
+		if (admin.status !== 'ready') return;
 		const version = ++generation, session = admin.credentials(); loading = true; failed = false;
 		try {
 			const result = await readStockProducts(session);
@@ -73,26 +75,50 @@
 		finally { if (mounted && version === generation) loading = false; }
 	}
 	async function choose(productId: string) {
-		if (command || busy) return;
+		if (command || busy || admin.status !== 'ready') return;
 		selected = productId; detail = null; movementId = ''; paused = false; outcome = 'idle'; reviewNeeded = false;
+		invalidField = ''; invalidMessage = '';
 		if (!productId) return;
 		const version = ++generation, session = admin.credentials(); loading = true; failed = false;
 		try { const result = await readStockDetail(session, productId); if (mounted && version === generation && session.userId === admin.session?.user.id) detail = result; }
 		catch (error) { if (mounted && version === generation) failed = true; await admin.permissionFailure(error); }
 		finally { if (mounted && version === generation) loading = false; }
 	}
-	function revalidate() { if (admin.status === 'ready' && document.visibilityState === 'visible' && !loading && !busy) void load(); }
+	let revalidateQueued = $state(false);
+	function revalidate() { revalidateQueued = document.visibilityState === 'visible'; }
+	$effect(() => {
+		if (revalidateQueued && admin.status === 'ready' && !(loading || busy)) {
+			revalidateQueued = false;
+			untrack(() => { void load(); });
+		}
+	});
+	async function rejectField(field: string, message: string) {
+		invalidField = field; invalidMessage = message;
+		await tick();
+		document.getElementById(`${fieldId}-${field}`)?.focus();
+	}
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
-		if (busy || !storageReady || wrongIdentity || otherProduct || !product || !detail || failed || reviewNeeded || (!command && kind === 'correct' && recount && !paused)) return;
+		if (busy || loading || admin.status !== 'ready' || !storageReady || wrongIdentity || otherProduct || !product || !detail || failed || reviewNeeded || (!command && kind === 'correct' && recount && !paused)) return;
+		invalidField = ''; invalidMessage = '';
+		let nextQuantity = quantity, nextCounted: string | null = null;
+		if (!command) {
+			try { nextQuantity = stockQuantity(quantity, product.stock_step, kind !== 'withdraw', i18n.locale); }
+			catch { await rejectField('quantity', m.invalidQuantity(formatDecimal(product.stock_step, i18n.locale), kind !== 'withdraw')); return; }
+			if (kind === 'correct' && recount) {
+				try { nextCounted = validCountQuantity(counted, product.stock_step, i18n.locale); }
+				catch { await rejectField('counted', i18n.m.adminCounts.invalidQuantity(formatDecimal(product.stock_step, i18n.locale))); return; }
+			}
+			if (!reason.trim()) { await rejectField('reason', m.reasonRequired); return; }
+		}
 		busy = true; outcome = 'idle'; let frozen: StockCommand | null = null;
 		try {
 			const session = admin.credentials();
 			const candidate: StockCommand = command ?? {
 				userId: session.userId, requestId: crypto.randomUUID(), kind, productId: product.id,
-				quantity: stockQuantity(quantity, product.stock_step, kind !== 'withdraw', i18n.locale), reason: reason.trim(),
+				quantity: nextQuantity, reason: reason.trim(),
 				movementId: kind === 'correct' ? original?.id ?? null : null, revision: kind === 'correct' ? detail.stock.revision : null,
-				counted: kind === 'correct' && recount ? validCountQuantity(counted, product.stock_step, i18n.locale) : null
+				counted: nextCounted
 			};
 			if (kind === 'correct' && !original || !candidate.reason || [...candidate.reason].length > 2000) throw new Error('Invalid stock form');
 			frozen = await updateStockStorage(storage => saveStockCommand(storage, candidate)); command = frozen;
@@ -112,8 +138,12 @@
 	}
 </script>
 
+{#snippet fieldError(field: string)}
+	{#if invalidField === field}<Field.Error id={`${fieldId}-${field}-error`}>{invalidMessage}</Field.Error>{/if}
+{/snippet}
+
 <svelte:head><title>{m.title}</title></svelte:head>
-<svelte:window onfocus={revalidate} />
+<svelte:window onfocus={revalidate} ononline={revalidate} />
 <svelte:document onvisibilitychange={revalidate} />
 <div class={pageHeader}><h1 class={pageHeading}>{m.heading}</h1></div>
 <div class="space-y-4">
@@ -138,13 +168,13 @@
 		<p class="text-muted-foreground">{m.stock}</p>
 		<p class="flex flex-wrap items-center gap-x-3 gap-y-1">
 			<span class={['font-mono text-xl font-semibold', compareDecimals(detail.stock.quantity, '0') <= 0 && 'text-destructive']}>{formatDecimal(detail.stock.quantity, i18n.locale)} {unitLabel(product.unit_code, i18n.locale, detail.stock.quantity)}</span>
-			<StockBadge quantity={detail.stock.quantity} unit={unitLabel(product.unit_code, i18n.locale)} showQuantity={false} />
+			<StockBadge quantity={failed ? null : detail.stock.quantity} unit={unitLabel(product.unit_code, i18n.locale)} showQuantity={false} />
 		</p>
 	</div>
 	<section class={section({ spacing: 'divided' })} aria-labelledby="stock-action-title">
 		<Separator />
 		<h2 id="stock-action-title" class={sectionHeading}>{m.actionHeading}</h2>
-		<form class={formLayout} onsubmit={submit}>
+		<form class={formLayout} onsubmit={submit} oninput={() => { invalidField = ''; }}>
 			<Field.Set class="gap-2">
 				<Field.Legend id={`${fieldId}-kind`} variant="label">{m.kind}</Field.Legend>
 				<ToggleGroup.Root type="single" variant="outline" value={kind} disabled={Boolean(command) || busy} aria-labelledby={`${fieldId}-kind`}
@@ -164,12 +194,12 @@
 				{#if recount}<Alert.Message appearance="inline" variant="default" role="status">{m.recount}</Alert.Message>{/if}
 			{/if}
 			<Field.Group layout="row">
-				<Field.Field width="medium"><Field.Label for={`${fieldId}-quantity`}>{kind === 'withdraw' ? m.quantity : m.delta} <span class="sr-only">({unitLabel(product.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id={`${fieldId}-quantity`} type="text" required inputmode="decimal" autocomplete="off" bind:value={quantity} disabled={Boolean(command) || busy} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(product.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root></Field.Field>
-				{#if kind === 'correct' && recount}<Field.Field width="medium"><Field.Label for={`${fieldId}-counted`}>{m.counted} <span class="sr-only">({unitLabel(product.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id={`${fieldId}-counted`} type="text" required inputmode="decimal" autocomplete="off" bind:value={counted} disabled={Boolean(command) || busy} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(product.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root></Field.Field>{/if}
+				<Field.Field width="medium"><Field.Label for={`${fieldId}-quantity`}>{kind === 'withdraw' ? m.quantity : m.delta} <span class="sr-only">({unitLabel(product.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id={`${fieldId}-quantity`} aria-invalid={invalidField === 'quantity'} aria-describedby={invalidField === 'quantity' ? `${fieldId}-quantity-error` : undefined} type="text" required inputmode="decimal" autocomplete="off" bind:value={quantity} disabled={Boolean(command) || busy} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(product.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{@render fieldError('quantity')}</Field.Field>
+				{#if kind === 'correct' && recount}<Field.Field width="medium"><Field.Label for={`${fieldId}-counted`}>{m.counted} <span class="sr-only">({unitLabel(product.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id={`${fieldId}-counted`} aria-invalid={invalidField === 'counted'} aria-describedby={invalidField === 'counted' ? `${fieldId}-counted-error` : undefined} type="text" required inputmode="decimal" autocomplete="off" bind:value={counted} disabled={Boolean(command) || busy} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(product.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{@render fieldError('counted')}</Field.Field>{/if}
 			</Field.Group>
 			{#if kind === 'correct' && recount}<Field.Field orientation="horizontal"><Checkbox id={`${fieldId}-paused`} required bind:checked={paused} disabled={Boolean(command) || busy} /><Field.Label for={`${fieldId}-paused`} class="cursor-pointer">{m.pauseConfirmed}</Field.Label></Field.Field>{/if}
-			<Field.Field width="grow"><Field.Label for={`${fieldId}-reason`}>{m.reason}</Field.Label><Textarea id={`${fieldId}-reason`} required maxlength={2000} bind:value={reason} disabled={Boolean(command) || busy} /><Field.Description>{m.noteHint}</Field.Description></Field.Field>
-			<div class={formActions}><Button type="submit" disabled={busy || !storageReady || failed || reviewNeeded || wrongIdentity || otherProduct || (!command && kind === 'correct' && (!original || (recount && !paused)))}><ButtonLabel pending={busy} pendingLabel={m.working} label={command ? m.retrySame : m.save} reserveLabels={[m.retrySame, m.save]} /></Button>
+			<Field.Field width="grow"><Field.Label for={`${fieldId}-reason`}>{m.reason}</Field.Label><Textarea id={`${fieldId}-reason`} aria-invalid={invalidField === 'reason'} aria-describedby={`${fieldId}-reason-hint${invalidField === 'reason' ? ` ${fieldId}-reason-error` : ''}`} required maxlength={2000} bind:value={reason} disabled={Boolean(command) || busy} /><Field.Description id={`${fieldId}-reason-hint`}>{m.noteHint}</Field.Description>{@render fieldError('reason')}</Field.Field>
+			<div class={formActions}><Button type="submit" disabled={busy || loading || admin.status !== 'ready' || !storageReady || failed || reviewNeeded || wrongIdentity || otherProduct || (!command && kind === 'correct' && (!original || (recount && !paused)))}><ButtonLabel pending={busy} pendingLabel={m.working} label={command ? m.retrySame : m.save} reserveLabels={[m.retrySame, m.save]} /></Button>
 				{#if reviewNeeded}<Button type="button" variant="outline" disabled={loading || failed} onclick={() => { reviewNeeded = false; paused = false; outcome = 'idle'; }}>{m.reviewed}</Button>{/if}
 			</div>
 		</form>

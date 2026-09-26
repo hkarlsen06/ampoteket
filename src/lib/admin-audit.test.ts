@@ -1,8 +1,21 @@
 import { expect, test } from 'bun:test';
-import { readAuditPage } from './admin-audit';
+import { readAuditPage, readAuditUpdates } from './admin-audit';
 
 const session = { config: { url: 'https://fixture.invalid', publishableKey: 'sb_publishable_fixture' }, token: 'staff-jwt', userId: '11111111-1111-4111-8111-111111111111' };
 const entry = (id: string) => ({ id, table_name: 'products', row_key: { id: session.userId }, action: 'UPDATE', before_data: { sale_unit_price_nok: '9007199254740993.123456' }, after_data: { sale_unit_price_nok: '9007199254740994.123456' }, actor_id: session.userId, database_role: 'authenticated', recorded_at: '2026-09-23T10:00:00Z' });
+
+test('audit refresh reads every new entry across capped pages without repeating the visible head', async () => {
+	const newest = 9007199254740994n;
+	const fetcher = async (input: RequestInfo | URL) => {
+		const url = new URL(String(input));
+		const cursor = BigInt(url.searchParams.get('id')?.slice(3) ?? String(newest + 46n));
+		const count = Math.min(Number(url.searchParams.get('limit')), 7);
+		return new Response(JSON.stringify(Array.from({ length: count }, (_, index) => entry(String(cursor - BigInt(index + 1))))));
+	};
+	const updates = await readAuditUpdates(session, String(newest), fetcher);
+	expect(updates.map(row => row.id)).toEqual(Array.from({ length: 45 }, (_, index) => String(newest + 45n - BigInt(index))));
+	expect(await readAuditUpdates(session, String(newest + 45n), fetcher)).toEqual([]);
+});
 
 test('audit paging retains exact nested values and fills capped responses without skipping an ID', async () => {
 	const calls: string[] = [];

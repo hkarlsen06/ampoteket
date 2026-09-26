@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { onMount, untrack } from 'svelte';
+	import { productName as displayProductName } from '$lib/catalog';
+	import { onMount, tick, untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { getI18n } from '$lib/i18n';
 	import { getAdminContext } from '$lib/admin-context.svelte';
@@ -33,6 +34,7 @@
 	let loading = $state(true);
 	let failed = $state(false);
 	let busy = $state(false);
+	let invalidInput = $state(''); let invalidMessage = $state('');
 	let sendingCommand = false;
 	let storageReady = $state(false);
 	let command = $state<OrderCommand | null>(null);
@@ -71,7 +73,7 @@
 
 	function productName(productId: string): string {
 		const product = products.get(productId);
-		return product ? `${product.code}: ${i18n.locale === 'nb' ? product.name_nb : product.name_en}` : productId;
+		return product ? `${product.code}: ${displayProductName(product, i18n.locale)}` : productId;
 	}
 	function syncPending() {
 		if (sendingCommand) return;
@@ -133,12 +135,13 @@
 		});
 	});
 	async function load(id = page.params.id!) {
+		if (admin.status !== 'ready') return;
 		const version = ++generation;
 		loading = true;
 		failed = false;
 		if (!uuidPattern.test(id)) { detail = null; loading = false; return; }
-		const session = admin.credentials();
 		try {
+			const session = admin.credentials();
 			const result = await readOrderDetail(session, id);
 			if (mounted && version === generation && admin.session?.user.id === session.userId) detail = result;
 		} catch (error) {
@@ -146,17 +149,27 @@
 			await admin.permissionFailure(error);
 		} finally { if (mounted && version === generation) loading = false; }
 	}
-	function revalidate() {
-		if (admin.status === 'ready' && document.visibilityState === 'visible' && !loading && !busy) void load();
+	let revalidateQueued = $state(false);
+	function revalidate() { revalidateQueued = document.visibilityState === 'visible'; }
+	$effect(() => {
+		if (revalidateQueued && admin.status === 'ready' && !(loading || busy)) {
+			revalidateQueued = false;
+			untrack(() => { void load(); });
+		}
+	});
+	function checked<T>(suffix: string, message: string, parse: () => T): T {
+		try { return parse(); }
+		catch (error) { invalidInput = `${fieldId}-${suffix}`; invalidMessage = message; throw error; }
 	}
+	function focusInvalid() { void tick().then(() => document.getElementById(invalidInput)?.focus()); }
 	function selectedQuantities(values: Record<string, string>): { line: OrderLine; quantity: string }[] {
 		return lines.flatMap((line) => {
 			const raw = values[line.id]?.trim();
 			if (!raw) return [];
 			const product = products.get(line.productId);
 			if (!product) throw new Error('Missing order product');
-			const quantity = validQuantity(raw, product.stock_step, i18n.locale);
-			if (compareDecimals(quantity, line.outstandingQuantity) > 0) throw new Error('Quantity exceeds outstanding');
+			const quantity = checked(`cancel-${line.id}`, m.invalidQuantity(formatDecimal(product.stock_step, i18n.locale)), () => validQuantity(raw, product.stock_step, i18n.locale));
+			checked(`cancel-${line.id}`, m.exceedsOutstanding(formatDecimal(line.outstandingQuantity, i18n.locale), unitLabel(product.unit_code, i18n.locale, line.outstandingQuantity)), () => { if (compareDecimals(quantity, line.outstandingQuantity) > 0) throw new Error('Quantity exceeds outstanding'); });
 			return [{ line, quantity }];
 		});
 	}
@@ -183,20 +196,25 @@
 	}
 	async function saveHeader(event: SubmitEvent) {
 		event.preventDefault();
-		if (!order || !headerBasis || busy || command || !editingHeader) return;
-		const basis = headerBasis;
+		if (admin.status !== 'ready' || loading || failed || !order || !headerBasis || busy || command || !editingHeader) return;
+		const basis = headerBasis; invalidInput = ''; invalidMessage = '';
 		let target: { supplier_name: string; supplier_reference: string | null; placed_at: string; additional_cost_nok: string; note: string | null };
 		try {
 			const supplier = headerDraft.supplierName.trim();
-			if (!supplier || [...supplier].length > 200 || [...headerDraft.supplierReference].length > 2000 || [...headerDraft.note].length > 2000) throw new Error();
-			const placedAt = headerDraft.placedAt === osloLocal(new Date(basis.placedAt)) ? basis.placedAt : osloInstant(headerDraft.placedAt, headerDraft.offset);
-			if (Date.parse(placedAt) > Date.parse(basis.recordedAt) + 86_400_000) throw new Error();
+			checked('supplier', m.invalidMetadata, () => { if (!supplier || [...supplier].length > 200) throw new Error(); });
+			checked('reference', m.invalidMetadata, () => { if ([...headerDraft.supplierReference].length > 2000) throw new Error(); });
+			const placedAt = checked('placed', placedOffsets.length === 2 && !headerDraft.offset ? m.ambiguousDate : m.invalidDate, () => {
+				const value = headerDraft.placedAt === osloLocal(new Date(basis.placedAt)) ? basis.placedAt : osloInstant(headerDraft.placedAt, headerDraft.offset);
+				if (Date.parse(value) > Date.parse(basis.recordedAt) + 86_400_000) throw new Error(); return value;
+			});
+			const additionalCost = checked('additional', m.invalidCost(2), () => boundedAmount(headerDraft.additionalCostNok, 2));
+			checked('header-note', m.invalidMetadata, () => { if ([...headerDraft.note].length > 2000) throw new Error(); });
 			target = { supplier_name: supplier, supplier_reference: headerDraft.supplierReference.trim() || null, placed_at: placedAt,
-				additional_cost_nok: boundedAmount(headerDraft.additionalCostNok, 2), note: headerDraft.note.trim() || null };
-		} catch { metadataOutcome = 'invalid'; return; }
+				additional_cost_nok: additionalCost, note: headerDraft.note.trim() || null };
+		} catch { metadataOutcome = 'invalid'; focusInvalid(); return; }
 		busy = true; metadataOutcome = 'idle';
-		const session = admin.credentials();
 		try {
+			const session = admin.credentials();
 			const rows = await staffRequest(session, 'amp_purchase_orders', {
 				select: 'id', id: staffEquals(basis.id), supplier_name: staffEquals(basis.supplierName),
 				supplier_reference: staffEquals(basis.supplierReference), placed_at: staffEquals(basis.placedAt),
@@ -212,20 +230,21 @@
 	async function saveLine(event: SubmitEvent) {
 		event.preventDefault();
 		const line = lineBasis;
-		if (!line || !order || busy || command) return;
+		if (admin.status !== 'ready' || loading || failed || !line || !order || busy || command) return;
+		invalidInput = ''; invalidMessage = '';
 		let target: { unit_cost_nok: string; purchase_url: string | null; supplier_sku: string | null };
 		try {
-			const purchaseUrl = lineDraft.purchaseUrl.trim();
-			if (purchaseUrl) {
-				const url = new URL(purchaseUrl);
-				if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || /[\s\\]/.test(purchaseUrl)) throw new Error();
-			}
-			if ([...lineDraft.supplierSku].length > 2000) throw new Error();
-			target = { unit_cost_nok: boundedAmount(lineDraft.unitCostNok, 6), purchase_url: purchaseUrl || null, supplier_sku: lineDraft.supplierSku.trim() || null };
-		} catch { metadataOutcome = 'invalid'; return; }
+			const unitCost = checked(`cost-${line.id}`, m.invalidCost(6), () => boundedAmount(lineDraft.unitCostNok, 6));
+			checked(`sku-${line.id}`, m.invalidMetadata, () => { if ([...lineDraft.supplierSku].length > 2000) throw new Error(); });
+			const purchaseUrl = checked(`url-${line.id}`, i18n.m.adminProducts.invalidLink, () => {
+				const value = lineDraft.purchaseUrl.trim(); if (!value) return value; const url = new URL(value);
+				if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || /[\s\\]/.test(value)) throw new Error(); return value;
+			});
+			target = { unit_cost_nok: unitCost, purchase_url: purchaseUrl || null, supplier_sku: lineDraft.supplierSku.trim() || null };
+		} catch { metadataOutcome = 'invalid'; focusInvalid(); return; }
 		busy = true; metadataOutcome = 'idle';
-		const session = admin.credentials();
 		try {
+			const session = admin.credentials();
 			const rows = await staffRequest(session, 'amp_purchase_order_lines', {
 				select: 'id', id: staffEquals(line.id), order_id: staffEquals(order.id), unit_cost_nok: staffEquals(line.unitCostNok),
 				purchase_url: staffEquals(line.purchaseUrl), supplier_sku: staffEquals(line.supplierSku)
@@ -239,26 +258,27 @@
 	}
 	async function submit(kind: 'cancel' | 'reverse', event?: SubmitEvent) {
 		event?.preventDefault();
-		if (!order || busy || loading || failed || !storageReady || wrongIdentity || (command && (!pendingHere || command.kind !== kind))) return;
-		let candidate: OrderCommand;
+		if (admin.status !== 'ready' || !order || busy || loading || failed || !storageReady || wrongIdentity || (command && (!pendingHere || command.kind !== kind))) return;
+		let candidate: OrderCommand; invalidInput = ''; invalidMessage = '';
 		try {
 			const session = admin.credentials();
 			if (command) candidate = command;
 			else if (kind === 'cancel') {
 				const items = selectedQuantities(cancellationQuantities).map(({ line, quantity }) => ({ orderLineId: line.id, quantity }));
-				if (!items.length || !cancellationReason.trim()) throw new Error('Invalid cancellation');
+				checked(items.length ? 'cancel-reason' : `cancel-${lines.find(line => compareDecimals(line.outstandingQuantity, '0') > 0)?.id}`, m.invalid, () => { if (!items.length || !cancellationReason.trim()) throw new Error('Invalid cancellation'); });
 				candidate = { kind, userId: session.userId, requestId: crypto.randomUUID(), orderId: order.id, items, reason: cancellationReason.trim() };
 			} else {
-				if (!reversingId || !reversalReason.trim()) throw new Error('Invalid reversal');
+				if (!reversingId) throw new Error('Missing cancellation');
+				checked(`reverse-${reversingId}`, m.invalid, () => { if (!reversalReason.trim()) throw new Error('Invalid reversal'); });
 				candidate = { kind, userId: session.userId, requestId: crypto.randomUUID(), orderId: order.id, cancellationId: reversingId, reason: reversalReason.trim() };
 			}
-		} catch { outcome = 'invalid'; return; }
+		} catch { outcome = 'invalid'; focusInvalid(); return; }
 		busy = true;
 		sendingCommand = true;
 		outcome = 'idle';
-		const session = admin.credentials();
 		let frozen: OrderCommand | null = null;
 		try {
+			const session = admin.credentials();
 			frozen = await updateOrderStorage((storage) => saveOrderCommand(storage, candidate));
 			command = frozen;
 			await runOrderCommand(session, frozen);
@@ -289,15 +309,17 @@
 	function requestCancel(event: SubmitEvent) {
 		event.preventDefault();
 		if (command) { void submit('cancel'); return; }
-		try { if (!selectedQuantities(cancellationQuantities).length || !cancellationReason.trim()) throw new Error('Invalid cancellation'); }
-		catch { outcome = 'invalid'; return; }
+		invalidInput = ''; invalidMessage = '';
+		try { const selected = selectedQuantities(cancellationQuantities); checked(selected.length ? 'cancel-reason' : `cancel-${lines.find(line => compareDecimals(line.outstandingQuantity, '0') > 0)?.id}`, m.invalid, () => { if (!selected.length || !cancellationReason.trim()) throw new Error('Invalid cancellation'); }); }
+		catch { outcome = 'invalid'; focusInvalid(); return; }
 		outcome = 'idle'; cancelConfirmOpen = true;
 	}
 	const reversedIds = $derived(new Set(detail?.cancellations.filter((entry) => entry.reversesId).map((entry) => entry.reversesId) ?? []));
 </script>
 
+{#snippet fieldError(id: string)}{#if invalidInput === id}<Field.Error id={`${id}-error`}>{invalidMessage}</Field.Error>{/if}{/snippet}
 <svelte:head><title>{m.detailTitle}</title></svelte:head>
-<svelte:window onfocus={revalidate} />
+<svelte:window onfocus={revalidate} ononline={revalidate} />
 <svelte:document onvisibilitychange={revalidate} />
 <header class={pageHeader}><h1 class={[pageHeading, nameWrap]}>{order?.supplierName ?? m.detailHeading}</h1></header>
 <div class={formStatus} aria-live="polite">
@@ -317,21 +339,21 @@
 		<div><dt>{m.additionalCost}</dt><dd class="font-mono">{formatMoney(order.additionalCostNok, i18n.locale)}</dd></div>
 		{#if order.note}<div><dt>{m.note}</dt><dd>{order.note}</dd></div>{/if}
 	</dl>
-	<Collapsible.Root class="mt-4" open={editingHeader} disabled={busy || Boolean(command)} onOpenChange={(open) => { if (open) openHeader(order); else editingHeader = false; }}>
+	<Collapsible.Root class="mt-4" open={editingHeader} disabled={loading || failed || busy || Boolean(command)} onOpenChange={(open) => { if (open) openHeader(order); else editingHeader = false; }}>
 		<DisclosureTrigger>{m.editMetadata}</DisclosureTrigger>
 		<Collapsible.Content>
 			<form class={[formLayout, 'mt-3']} onsubmit={saveHeader}>
 				<Field.Group layout="row">
-					<Field.Field width="grow"><Field.Label for={`${fieldId}-supplier`}>{m.supplierName}</Field.Label><Input id={`${fieldId}-supplier`} required maxlength={200} bind:value={headerDraft.supplierName} disabled={busy} /></Field.Field>
-					<Field.Field width="medium"><Field.Label for={`${fieldId}-reference`}>{m.reference}</Field.Label><Input id={`${fieldId}-reference`} maxlength={2000} bind:value={headerDraft.supplierReference} disabled={busy} /></Field.Field>
+					<Field.Field width="grow"><Field.Label for={`${fieldId}-supplier`}>{m.supplierName}</Field.Label><Input id={`${fieldId}-supplier`} autocapitalize="words" aria-invalid={invalidInput === `${fieldId}-supplier`} aria-describedby={invalidInput === `${fieldId}-supplier` ? `${fieldId}-supplier`.concat('-error') : undefined} required maxlength={200} bind:value={headerDraft.supplierName} disabled={busy} />{@render fieldError(`${fieldId}-supplier`)}</Field.Field>
+					<Field.Field width="medium"><Field.Label for={`${fieldId}-reference`}>{m.reference}</Field.Label><Input id={`${fieldId}-reference`} aria-invalid={invalidInput === `${fieldId}-reference`} aria-describedby={invalidInput === `${fieldId}-reference` ? `${fieldId}-reference`.concat('-error') : undefined} maxlength={2000} bind:value={headerDraft.supplierReference} disabled={busy} />{@render fieldError(`${fieldId}-reference`)}</Field.Field>
 				</Field.Group>
 				<Field.Group layout="row">
-					<Field.Field width="medium"><Field.Label for={`${fieldId}-placed`}>{m.placedAt}</Field.Label><Input id={`${fieldId}-placed`} type="datetime-local" required bind:value={headerDraft.placedAt} oninput={() => { headerDraft.offset = ''; }} disabled={busy} /></Field.Field>
+					<Field.Field width="medium"><Field.Label for={`${fieldId}-placed`}>{m.placedAt}</Field.Label><Input id={`${fieldId}-placed`} aria-invalid={invalidInput === `${fieldId}-placed`} aria-describedby={invalidInput === `${fieldId}-placed` ? `${fieldId}-placed`.concat('-error') : undefined} type="datetime-local" required bind:value={headerDraft.placedAt} oninput={() => { headerDraft.offset = ''; }} disabled={busy} />{@render fieldError(`${fieldId}-placed`)}</Field.Field>
 					{#if placedOffsets.length === 2}<Field.Field width="medium"><Field.Label for={`${fieldId}-offset`}>{m.offset}</Field.Label><NativeSelect.Root id={`${fieldId}-offset`} required bind:value={headerDraft.offset} disabled={busy}><NativeSelect.Option value="">{m.chooseOffset}</NativeSelect.Option><NativeSelect.Option value="+02:00">{m.beforeClockChange}</NativeSelect.Option><NativeSelect.Option value="+01:00">{m.afterClockChange}</NativeSelect.Option></NativeSelect.Root></Field.Field>{/if}
-					<Field.Field width="medium"><Field.Label for={`${fieldId}-additional`}>{m.additionalCost} <span class="sr-only">(NOK)</span></Field.Label><InputGroup.Root><InputGroup.Input id={`${fieldId}-additional`} type="text" inputmode="decimal" required bind:value={headerDraft.additionalCostNok} disabled={busy} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>NOK</InputGroup.Text></InputGroup.Addon></InputGroup.Root></Field.Field>
+					<Field.Field width="medium"><Field.Label for={`${fieldId}-additional`}>{m.additionalCost} <span class="sr-only">(NOK)</span></Field.Label><InputGroup.Root><InputGroup.Input id={`${fieldId}-additional`} aria-invalid={invalidInput === `${fieldId}-additional`} aria-describedby={invalidInput === `${fieldId}-additional` ? `${fieldId}-additional`.concat('-error') : undefined} type="text" inputmode="decimal" required bind:value={headerDraft.additionalCostNok} disabled={busy} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>NOK</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{@render fieldError(`${fieldId}-additional`)}</Field.Field>
 				</Field.Group>
-				<Field.Field><Field.Label for={`${fieldId}-header-note`}>{m.note}</Field.Label><Textarea id={`${fieldId}-header-note`} rows={2} maxlength={2000} bind:value={headerDraft.note} disabled={busy} /></Field.Field>
-				<Button type="submit" disabled={busy || Boolean(command)}><ButtonLabel pending={busy} pendingLabel={m.working} label={m.saveOrderMetadata} /></Button>
+				<Field.Field><Field.Label for={`${fieldId}-header-note`}>{m.note}</Field.Label><Textarea id={`${fieldId}-header-note`} aria-invalid={invalidInput === `${fieldId}-header-note`} aria-describedby={invalidInput === `${fieldId}-header-note` ? `${fieldId}-header-note`.concat('-error') : undefined} rows={2} maxlength={2000} bind:value={headerDraft.note} disabled={busy} />{@render fieldError(`${fieldId}-header-note`)}</Field.Field>
+				<Button type="submit" disabled={loading || failed || busy || Boolean(command)}><ButtonLabel pending={busy} pendingLabel={m.working} label={m.saveOrderMetadata} /></Button>
 			</form>
 		</Collapsible.Content>
 	</Collapsible.Root>
@@ -355,16 +377,16 @@
 							<div><dt>{m.outstanding}</dt><dd>{formatDecimal(line.outstandingQuantity, i18n.locale)} {unitLabel(unit, i18n.locale, line.outstandingQuantity)}</dd></div>
 						</dl>
 						{#if line.purchaseUrl}<Button variant="link" class="w-fit" href={line.purchaseUrl} target="_blank" rel="noopener noreferrer">{m.openPurchaseUrl}</Button>{/if}
-						<Collapsible.Root open={editingLineId === line.id} disabled={busy || Boolean(command)} onOpenChange={(open) => { if (open) openLine(line); else editingLineId = null; }}>
+						<Collapsible.Root open={editingLineId === line.id} disabled={loading || failed || busy || Boolean(command)} onOpenChange={(open) => { if (open) openLine(line); else editingLineId = null; }}>
 							<DisclosureTrigger>{m.editMetadata}</DisclosureTrigger>
 							<Collapsible.Content>
 								<form class={[formLayout, 'mt-3']} onsubmit={saveLine}>
 									<Field.Group layout="row">
-										<Field.Field width="medium"><Field.Label for={`${fieldId}-cost-${line.id}`}>{m.unitCost} <span class="sr-only">(NOK)</span></Field.Label><InputGroup.Root><InputGroup.Input id={`${fieldId}-cost-${line.id}`} type="text" inputmode="decimal" required bind:value={lineDraft.unitCostNok} disabled={busy} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>NOK</InputGroup.Text></InputGroup.Addon></InputGroup.Root></Field.Field>
-										<Field.Field width="medium"><Field.Label for={`${fieldId}-sku-${line.id}`}>{m.supplierSku}</Field.Label><Input id={`${fieldId}-sku-${line.id}`} maxlength={2000} bind:value={lineDraft.supplierSku} disabled={busy} /></Field.Field>
+										<Field.Field width="medium"><Field.Label for={`${fieldId}-cost-${line.id}`}>{m.unitCost} <span class="sr-only">(NOK)</span></Field.Label><InputGroup.Root><InputGroup.Input id={`${fieldId}-cost-${line.id}`} aria-invalid={invalidInput === `${fieldId}-cost-${line.id}`} aria-describedby={invalidInput === `${fieldId}-cost-${line.id}` ? `${fieldId}-cost-${line.id}`.concat('-error') : undefined} type="text" inputmode="decimal" required bind:value={lineDraft.unitCostNok} disabled={busy} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>NOK</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{@render fieldError(`${fieldId}-cost-${line.id}`)}</Field.Field>
+										<Field.Field width="medium"><Field.Label for={`${fieldId}-sku-${line.id}`}>{m.supplierSku}</Field.Label><Input id={`${fieldId}-sku-${line.id}`} aria-invalid={invalidInput === `${fieldId}-sku-${line.id}`} aria-describedby={invalidInput === `${fieldId}-sku-${line.id}` ? `${fieldId}-sku-${line.id}`.concat('-error') : undefined} maxlength={2000} bind:value={lineDraft.supplierSku} disabled={busy} />{@render fieldError(`${fieldId}-sku-${line.id}`)}</Field.Field>
 									</Field.Group>
-									<Field.Field><Field.Label for={`${fieldId}-url-${line.id}`}>{m.purchaseUrl}</Field.Label><Input id={`${fieldId}-url-${line.id}`} type="url" bind:value={lineDraft.purchaseUrl} disabled={busy} /></Field.Field>
-									<Button type="submit" disabled={busy || Boolean(command)}><ButtonLabel pending={busy} pendingLabel={m.working} label={m.saveLineMetadata} /></Button>
+									<Field.Field><Field.Label for={`${fieldId}-url-${line.id}`}>{m.purchaseUrl}</Field.Label><Input id={`${fieldId}-url-${line.id}`} aria-invalid={invalidInput === `${fieldId}-url-${line.id}`} aria-describedby={invalidInput === `${fieldId}-url-${line.id}` ? `${fieldId}-url-${line.id}`.concat('-error') : undefined} type="url" autocapitalize="none" enterkeyhint="go" bind:value={lineDraft.purchaseUrl} disabled={busy} />{@render fieldError(`${fieldId}-url-${line.id}`)}</Field.Field>
+									<Button type="submit" disabled={loading || failed || busy || Boolean(command)}><ButtonLabel pending={busy} pendingLabel={m.working} label={m.saveLineMetadata} /></Button>
 								</form>
 							</Collapsible.Content>
 						</Collapsible.Root>
@@ -383,21 +405,21 @@
 					<Field.Field>
 						<Field.Label for={`${fieldId}-cancel-${line.id}`} class={nameWrap}>{productName(line.productId)}{#if unit}<span class="sr-only">{` (${unit})`}</span>{/if}</Field.Label>
 						<Field.Description id={`${fieldId}-cancel-hint-${line.id}`}>{m.lineNumber(line.lineNumber)} · {m.outstanding} <span class="font-mono">{formatDecimal(line.outstandingQuantity, i18n.locale)} {unitLabel(unit, i18n.locale, line.outstandingQuantity)}</span></Field.Description>
-						<InputGroup.Root class="max-w-48"><InputGroup.Input id={`${fieldId}-cancel-${line.id}`} type="text" inputmode="decimal" autocomplete="off" aria-describedby={`${fieldId}-cancel-hint-${line.id}`} bind:value={cancellationQuantities[line.id]} disabled={busy || Boolean(command)} />{#if unit}<InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unit}</InputGroup.Text></InputGroup.Addon>{/if}</InputGroup.Root>
-					</Field.Field>
+						<InputGroup.Root class="max-w-48"><InputGroup.Input id={`${fieldId}-cancel-${line.id}`} aria-invalid={invalidInput === `${fieldId}-cancel-${line.id}`} type="text" inputmode="decimal" autocomplete="off" aria-describedby={`${fieldId}-cancel-hint-${line.id}${invalidInput === `${fieldId}-cancel-${line.id}` ? ` ${fieldId}-cancel-${line.id}-error` : ''}`} bind:value={cancellationQuantities[line.id]} disabled={loading || failed || busy || Boolean(command)} />{#if unit}<InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unit}</InputGroup.Text></InputGroup.Addon>{/if}</InputGroup.Root>
+					{@render fieldError(`${fieldId}-cancel-${line.id}`)}</Field.Field>
 				{/each}
-				<Field.Field><Field.Label for={`${fieldId}-cancel-reason`}>{m.cancelReason}</Field.Label><Textarea id={`${fieldId}-cancel-reason`} rows={2} maxlength={2000} required bind:value={cancellationReason} disabled={busy || Boolean(command)} /></Field.Field>
+				<Field.Field><Field.Label for={`${fieldId}-cancel-reason`}>{m.cancelReason}</Field.Label><Textarea id={`${fieldId}-cancel-reason`} aria-invalid={invalidInput === `${fieldId}-cancel-reason`} aria-describedby={invalidInput === `${fieldId}-cancel-reason` ? `${fieldId}-cancel-reason`.concat('-error') : undefined} rows={2} maxlength={2000} required bind:value={cancellationReason} disabled={loading || failed || busy || Boolean(command)} />{@render fieldError(`${fieldId}-cancel-reason`)}</Field.Field>
 				<Button bind:ref={cancelTrigger} type="submit" disabled={busy || loading || failed || !storageReady || wrongIdentity || Boolean(command && (!pendingHere || command.kind !== 'cancel'))}><ButtonLabel pending={busy} pendingLabel={m.working} label={command?.kind === 'cancel' && pendingHere ? m.retrySame : m.cancelSelected} reserveLabels={[m.retrySame, m.cancelSelected]} /></Button>
 			</form>
 			<AlertDialog.Root bind:open={cancelConfirmOpen}>
 				<AlertDialog.Content preventScroll={false} onCloseAutoFocus={(event) => { event.preventDefault(); cancelTrigger?.focus({ preventScroll: true }); }}>
 					<AlertDialog.Header>
 						<AlertDialog.Title>{m.cancelSelected}</AlertDialog.Title>
-						<AlertDialog.Description>{m.cancelConfirm}</AlertDialog.Description>
+						<AlertDialog.Description aria-label={m.cancelSelected}>{m.cancelConfirm}</AlertDialog.Description>
 					</AlertDialog.Header>
 					<AlertDialog.Footer>
 						<AlertDialog.Cancel>{m.keepOrder}</AlertDialog.Cancel>
-						<AlertDialog.Action disabled={busy} onclick={() => { cancelConfirmOpen = false; void submit('cancel'); }}>{m.cancelSelected}</AlertDialog.Action>
+						<AlertDialog.Action disabled={admin.status !== 'ready' || loading || failed || busy} onclick={() => { cancelConfirmOpen = false; void submit('cancel'); }}>{m.cancelSelected}</AlertDialog.Action>
 					</AlertDialog.Footer>
 				</AlertDialog.Content>
 			</AlertDialog.Root>
@@ -436,10 +458,10 @@
 					<Item.Description>{formatCountedAt(entry.recordedAt, i18n.locale)} · {m.recordedBy(actors.get(entry.createdBy) ?? '')} · {line ? `${m.lineNumber(line.lineNumber)} · ${productName(line.productId)}` : entry.orderLineId} · <span class="font-mono">{formatDecimal(entry.quantity, i18n.locale)} {line ? unitLabel(products.get(line.productId)?.unit_code, i18n.locale, entry.quantity) : ''}</span></Item.Description>
 					<p class="text-sm">{entry.reason}</p>
 					{#if !entry.reversesId && !reversedIds.has(entry.id)}
-						<Collapsible.Root open={reversingId === entry.id} disabled={busy || Boolean(command)} onOpenChange={(open) => { reversingId = open ? entry.id : null; reversalReason = ''; }}>
+						<Collapsible.Root open={reversingId === entry.id} disabled={loading || failed || busy || Boolean(command)} onOpenChange={(open) => { reversingId = open ? entry.id : null; reversalReason = ''; }}>
 							<DisclosureTrigger>{m.reverseCancellation}</DisclosureTrigger>
 							<Collapsible.Content>
-								<form class={[formLayout, 'mt-3']} onsubmit={(event) => submit('reverse', event)}><Field.Field><Field.Label for={`${fieldId}-reverse-${entry.id}`}>{m.reason}</Field.Label><Textarea id={`${fieldId}-reverse-${entry.id}`} rows={2} maxlength={2000} required bind:value={reversalReason} disabled={busy || Boolean(command)} /></Field.Field><Button type="submit" disabled={busy || !storageReady || wrongIdentity || Boolean(command && (!pendingHere || command.kind !== 'reverse'))}><ButtonLabel pending={busy} pendingLabel={m.working} label={command?.kind === 'reverse' && pendingHere ? m.retrySame : m.reverseCancellation} reserveLabels={[m.retrySame, m.reverseCancellation]} /></Button></form>
+								<form class={[formLayout, 'mt-3']} onsubmit={(event) => submit('reverse', event)}><Field.Field><Field.Label for={`${fieldId}-reverse-${entry.id}`}>{m.reason}</Field.Label><Textarea id={`${fieldId}-reverse-${entry.id}`} aria-invalid={invalidInput === `${fieldId}-reverse-${entry.id}`} aria-describedby={invalidInput === `${fieldId}-reverse-${entry.id}` ? `${fieldId}-reverse-${entry.id}-error` : undefined} rows={2} maxlength={2000} required bind:value={reversalReason} disabled={loading || failed || busy || Boolean(command)} />{@render fieldError(`${fieldId}-reverse-${entry.id}`)}</Field.Field><Button type="submit" disabled={busy || !storageReady || wrongIdentity || Boolean(command && (!pendingHere || command.kind !== 'reverse'))}><ButtonLabel pending={busy} pendingLabel={m.working} label={command?.kind === 'reverse' && pendingHere ? m.retrySame : m.reverseCancellation} reserveLabels={[m.retrySame, m.reverseCancellation]} /></Button></form>
 							</Collapsible.Content>
 						</Collapsible.Root>
 					{/if}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import AdminAccessGate from '$lib/AdminAccessGate.svelte';
 	import { unitLabel } from '$lib/format';
 	import { Separator } from '$lib/components/ui/separator';
 	import { Skeleton } from '$lib/components/ui/skeleton';
@@ -60,8 +61,9 @@
 	async function observe() {
 		if (busy || command || admin.status !== 'ready') return;
 		expanded = true; busy = true; status = 'loading'; snapshot = null; result = null; rejectedObservation = null; quantity = ''; note = ''; paused = false;
-		const version = ++generation; const session = admin.credentials();
+		const version = ++generation;
 		try {
+			const session = admin.credentials();
 			const loaded = await readCountInventory(session, product.id);
 			if (mounted && version === generation && admin.session?.user.id === session.userId) { snapshot = loaded; status = 'idle'; }
 		} catch (error) { if (mounted && version === generation) status = 'failed'; await admin.permissionFailure(error); }
@@ -73,10 +75,11 @@
 		let observed: string;
 		try { observed = validCountQuantity(quantity, product.stock_step, i18n.locale); }
 		catch { status = 'invalid'; quantityField?.focus(); return; }
-		const session = admin.credentials(); busy = true; result = null; status = 'idle';
-		const candidate: CountCommand = command ?? { kind: 'count', userId: session.userId, requestId: crypto.randomUUID(), productId: product.id, batchId: batchId ?? null, revision: snapshot.revision, expected: snapshot.quantity, quantity: observed, note: note.trim() || null };
+		busy = true; result = null; status = 'idle';
 		let frozen: CountCommand | null = null;
 		try {
+			const session = admin.credentials();
+			const candidate: CountCommand = command ?? { kind: 'count', userId: session.userId, requestId: crypto.randomUUID(), productId: product.id, batchId: batchId ?? null, revision: snapshot.revision, expected: snapshot.quantity, quantity: observed, note: note.trim() || null };
 			frozen = await updateCountStorage((storage) => saveCountCommand(storage, candidate));
 			command = frozen;
 			const saved = await runCountCommand(session, frozen);
@@ -161,8 +164,8 @@
 				</Dialog.Close>
 			</Dialog.Header>
 			<!-- svelte-ignore a11y_no_noninteractive_tabindex (Named count region supports native keyboard scrolling.) -->
-			<div class="count-body min-h-0 overflow-y-auto overscroll-contain px-4 py-4" role="region" aria-labelledby={`${id}-title`} tabindex="0" inert={admin.status !== 'ready'}>
-				{@render countBody()}
+			<div class="count-body min-h-0 overflow-y-auto overscroll-contain px-4 py-4" role="region" aria-labelledby={`${id}-title`} tabindex="0">
+				<AdminAccessGate>{@render countBody()}</AdminAccessGate>
 			</div>
 			<Dialog.Footer class="mx-0 mb-0">{@render countActions()}</Dialog.Footer>
 		</Dialog.Content>

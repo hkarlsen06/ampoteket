@@ -48,7 +48,7 @@
 			data-sidebar="sidebar"
 			data-slot="sidebar"
 			data-mobile="true"
-			class="inset-y-0 left-0 flex h-dvh w-(--sidebar-width) max-w-[calc(100%-3rem)] translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-0 bg-sidebar p-0 text-sidebar-foreground data-open:zoom-in-100 data-closed:zoom-out-100"
+			class="inset-y-0 left-0 flex h-dvh max-h-dvh w-(--sidebar-width) max-w-[calc(100%-3rem)] translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-0 bg-sidebar p-0 text-sidebar-foreground data-open:zoom-in-100 data-closed:zoom-out-100"
 			style="--sidebar-width: {SIDEBAR_WIDTH_MOBILE};"
 			preventScroll={false}
 			aria-describedby={undefined}

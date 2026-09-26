@@ -328,6 +328,55 @@ try {
 	await call(page, 'finishRegistration', [overlap, guestResult]);
 	assert.equal(await sql(`SELECT count(*) FROM app.sales WHERE checkout_id='${overlap.checkoutId}'`), '1');
 	console.log('PASS: real staff recovery and guest confirmation converge on the same registered purchase');
+	// Staff registration has no local storage event in the buyer's browser.
+	// Reconcile on return/reconnect, and check remotely before leaving for Vipps.
+	let openedVipps = false;
+	await page.route('https://qr.vipps.no/**', route => { openedVipps = true; return route.abort('failed'); });
+	for (const trigger of ['focus', 'online', 'payment']) {
+		await probe(page);
+		const remotelyRegistered = await begin(page);
+		await page.goto(`${origin}/en/checkout/${remotelyRegistered.checkoutId}`);
+		await expect(page.getByRole('link', { name: 'Open Vipps', exact: true })).toBeVisible();
+		const result = await fetch(`${api.origin}/rest/v1/rpc/amp_recover_checkout`, {
+			method: 'POST', headers: { apikey: publicKey, Authorization: `Bearer ${staffToken}`, 'Content-Type': 'application/json' },
+			body: JSON.stringify({ p_request_id: crypto.randomUUID(), p_checkout_id: remotelyRegistered.checkoutId, p_reason: 'Disposable buyer freshness proof' })
+		});
+		assert.ok(result.ok); await result.body?.cancel();
+		if (trigger === 'payment') await page.getByRole('link', { name: 'Open Vipps', exact: true }).click();
+		else await page.evaluate(event => window.dispatchEvent(new Event(event)), trigger);
+		await expect(page.getByText('Purchase registered.', { exact: true })).toBeVisible();
+		await expect(page.getByRole('link', { name: 'Open Vipps', exact: true })).toHaveCount(0);
+		await expect(page.getByRole('button', { name: 'Change cart', exact: true })).toHaveCount(0);
+		await probe(page); assert.equal(await call(page, 'readActiveAttempt'), null);
+		assert.equal(await sql(`SELECT count(*) FROM app.sales WHERE checkout_id='${remotelyRegistered.checkoutId}'`), '1');
+	}
+	await probe(page);
+	const delayedPayment = await begin(page);
+	await page.goto(`${origin}/en/checkout/${delayedPayment.checkoutId}`);
+	await expect(page.getByRole('link', { name: 'Open Vipps', exact: true })).toBeVisible();
+	let releasePaymentRead!: () => void, paymentReadHeld = false, paymentReadReleased = false;
+	const paymentReadGate = new Promise<void>(resolve => { releasePaymentRead = resolve; });
+	await page.route(`**/api/checkouts/${delayedPayment.checkoutId}`, async route => {
+		const request = route.request();
+		const response = await fetch(request.url(), {
+			method: request.method(), headers: await request.allHeaders(), body: request.postData(), tls: { ca }, redirect: 'manual'
+		});
+		const body = await response.text(); paymentReadHeld = true;
+		await paymentReadGate;
+		await route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body }); paymentReadReleased = true;
+	}, { times: 1 });
+	await page.getByRole('link', { name: 'Open Vipps', exact: true }).click();
+	await expect.poll(() => paymentReadHeld).toBe(true);
+	await page.locator('.site-header').getByRole('link', { name: 'Parts catalog', exact: true }).click();
+	await expect(page).toHaveURL(`${origin}/en/p`);
+	releasePaymentRead();
+	await expect.poll(() => paymentReadReleased).toBe(true);
+	await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+	assert.equal(page.url(), `${origin}/en/p`, 'A late payment read never navigates away from the next page');
+	assert.equal(openedVipps, false, 'Registered or abandoned payment actions never open Vipps');
+	await probe(page); await complete(page, delayedPayment);
+	await page.unroute('https://qr.vipps.no/**');
+	console.log('PASS: remote staff registration reconciles on focus/reconnect and before payment without replacing the original checkout');
 	// Real method/origin/content/body limits, including error cache policy.
 	for (const test of [
 		{ method: 'GET', expected: 405 },

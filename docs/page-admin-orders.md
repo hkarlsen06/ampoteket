@@ -16,6 +16,8 @@ and RPCs in [datamodell.md](datamodell.md).
 - `?new=<product ids>` prefills lines with saved purchase links; quantity and cost stay
   blank.
 - Quantities follow the stock step; quantities and costs stay strings.
+- Invalid values show an associated field error and move focus to the first invalid
+  field. A generic form failure does not replace quantity, cost or product guidance.
 - Recording an order changes no stock.
 - Add line stays in the scrollable sheet body and Save in its fixed footer, so the two
   are never confused.
@@ -40,8 +42,14 @@ No history is overwritten. Metadata edits are limited to the fields in
 - An uncertain result keeps the command frozen for an identical retry; a timeout never
   becomes a second receipt. Warn only if the request ends without a confirmed result.
 - A successful receipt closes the sheet and refreshes the list.
+- An open receipt sheet revalidates on tab return and reconnect, keeping its selection
+  and typed quantities. Changed outstanding quantities require review rather than
+  silently changing what the operator will receive.
 - Conflicts release the command only after a fresh review. Another identity cannot
   continue a pending command.
+- Access failures retain drafts and pending commands, gate writes and offer access
+  retry inside the active sheet. Credential checks cannot leave the sheet busy after
+  a synchronous failure.
 
 Browser checks: `./scripts/test-web.sh --orders`; results in
 [VALIDATION.md](../VALIDATION.md).

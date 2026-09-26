@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { productName } from '$lib/catalog';
 	import { Separator } from '$lib/components/ui/separator';
 	import { codeText, formLayout, formStatus, itemTitle, lede, nameWrap, pageHeader, pageHeading, section, sectionHeading } from '$lib/ui';
 	import * as Alert from '$lib/components/ui/alert';
@@ -41,8 +42,8 @@
 		if (!uuidPattern.test(ref)) { outcome = 'invalid'; return; }
 		busy = true; outcome = 'idle'; snapshot = null; contact = null; contactShown = false;
 		if (!command) { reason = ''; identified = false; }
-		const session = admin.credentials();
 		try {
+			const session = admin.credentials();
 			const result = await readStaffCheckout(session, ref);
 			if (admin.session?.user.id !== session.userId) return;
 			snapshot = result; if (!snapshot) outcome = 'missing';
@@ -52,9 +53,10 @@
 		} catch (error) { outcome = 'failed'; await admin.permissionFailure(error); } finally { busy = false; }
 	}
 	async function recover(event: SubmitEvent) {
-		event.preventDefault(); if (!snapshot || busy || !identified || !storageReady || wrongIdentity) return;
-		const session = admin.credentials(); busy = true; outcome = 'idle';
+		event.preventDefault(); if (admin.status !== 'ready' || !snapshot || busy || !identified || !storageReady || wrongIdentity) return;
+		busy = true; outcome = 'idle';
 		try {
+			const session = admin.credentials();
 			if (!command) command = saveRecoveryCommand(sessionStorage, { userId: session.userId, requestId: crypto.randomUUID(), checkoutId: snapshot.id, reason: reason.trim() });
 			// Always read the durable command again; never reconstruct an uncertain retry.
 			const saved = readRecoveryCommand(sessionStorage);
@@ -67,8 +69,9 @@
 		} catch (error) { outcome = command ? 'unknown' : 'failed'; await admin.permissionFailure(error); } finally { busy = false; }
 	}
 	async function loadContact() {
-		if (!snapshot || busy) return; busy = true; outcome = 'idle'; const session = admin.credentials();
+		if (admin.status !== 'ready' || !snapshot || busy) return; busy = true; outcome = 'idle';
 		try {
+			const session = admin.credentials();
 			const rows = await staffRequest(session, 'amp_checkout_contacts', { select: 'checkout_id,contact_text', checkout_id: `eq.${snapshot.id}`, limit: '2' });
 			if (!Array.isArray(rows) || rows.length > 1) throw new Error();
 			let value: string | null = null;
@@ -77,8 +80,9 @@
 		} catch (error) { outcome = 'failed'; await admin.permissionFailure(error); } finally { busy = false; }
 	}
 	async function clearContact() {
-		if (!snapshot || busy) return; clearOpen = false; busy = true; const session = admin.credentials();
+		if (admin.status !== 'ready' || !snapshot || busy) return; clearOpen = false; busy = true;
 		try {
+			const session = admin.credentials();
 			const result = object(await staffRequest(session, 'rpc/amp_clear_checkout_contact', {}, { p_checkout_id: snapshot.id }));
 			if (result.checkout_id !== snapshot.id || typeof result.contact_removed !== 'boolean') throw new Error();
 			if (admin.session?.user.id === session.userId) contact = null;
@@ -111,7 +115,7 @@
 			{#each snapshot.items as item, index (item.productId)}
 				{#if index > 0}<Item.Separator />{/if}
 				<Item.Root variant="row" role="listitem" class="md:grid md:grid-cols-[1fr_20rem]">
-					<Item.Content class="min-w-0"><Item.Title class={[itemTitle, nameWrap]}>{i18n.locale === 'nb' ? item.name_nb : item.name_en}</Item.Title><Item.Description class={codeText}>{item.code}</Item.Description></Item.Content>
+					<Item.Content class="min-w-0"><Item.Title class={[itemTitle, nameWrap]}>{productName(item, i18n.locale)}</Item.Title><Item.Description class={codeText}>{item.code}</Item.Description></Item.Content>
 					<dl class="m-0 w-full [&>div]:flex [&>div]:justify-between [&>div]:gap-4 [&_dd]:m-0 [&_dd]:text-right">
 						<div><dt>{m.quantity}</dt><dd>{i18n.m.shop.quantity(formatDecimal(item.quantity, i18n.locale), unitLabel(item.unit, i18n.locale, item.quantity))}</dd></div>
 						<div><dt>{m.unitPrice}</dt><dd class="font-mono">{formatMoney(item.unitPrice, i18n.locale)}</dd></div>
@@ -148,11 +152,11 @@
 				<AlertDialog.Content preventScroll={false}>
 					<AlertDialog.Header>
 						<AlertDialog.Title>{m.clearContact}</AlertDialog.Title>
-						<AlertDialog.Description>{m.confirmClear}</AlertDialog.Description>
+						<AlertDialog.Description aria-label={m.clearContact}>{m.confirmClear}</AlertDialog.Description>
 					</AlertDialog.Header>
 					<AlertDialog.Footer>
 						<AlertDialog.Cancel>{m.cancel}</AlertDialog.Cancel>
-						<AlertDialog.Action disabled={busy} onclick={clearContact}>{m.clearContact}</AlertDialog.Action>
+						<AlertDialog.Action disabled={admin.status !== 'ready' || busy} onclick={clearContact}>{m.clearContact}</AlertDialog.Action>
 					</AlertDialog.Footer>
 				</AlertDialog.Content>
 			</AlertDialog.Root>

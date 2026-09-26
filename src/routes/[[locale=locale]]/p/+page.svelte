@@ -323,7 +323,7 @@
 		<Field.Field>
 			<Field.Label for="catalog-search">{m.searchLabel}</Field.Label>
 			<div class={formActions}>
-				<Input id="catalog-search" class="min-w-0 flex-[1_1_12rem]" name="q" type="search" maxlength={200} placeholder={m.searchPlaceholder} bind:value={q} />
+				<Input id="catalog-search" class="min-w-0 flex-[1_1_12rem]" name="q" type="search" inputmode="search" autocomplete="off" autocapitalize="none" enterkeyhint="search" maxlength={200} placeholder={m.searchPlaceholder} bind:value={q} />
 				<Button class="search-submit min-w-28" type="submit" disabled={!data.config}>{m.search}</Button>
 			</div>
 		</Field.Field>

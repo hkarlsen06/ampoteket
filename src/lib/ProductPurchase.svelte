@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, tick } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import Icon from '$lib/Icon.svelte';
 	import QrCodeIcon from 'phosphor-svelte/lib/QrCodeIcon';
 	import { Button, ButtonLabel } from '$lib/components/ui/button';
@@ -15,9 +15,11 @@
 
 	// Shared by product details and scanner confirmation. The scanner owns only
 	// camera lifecycle; quantity validation, cart writes and feedback live here.
-	let { product, compact = false, onscan, onpending, onadded }: {
+	let { product, compact = false, unavailable = false, showCartNotice = true, onscan, onpending, onadded }: {
 		product: CatalogProduct;
 		compact?: boolean;
+		unavailable?: boolean;
+		showCartNotice?: boolean;
 		onscan?: () => void;
 		onpending?: (pending: boolean) => void;
 		onadded?: (returnFocus: boolean) => void;
@@ -39,17 +41,23 @@
 	let mounted = false;
 	onMount(() => { mounted = true; return () => { mounted = false; }; });
 	const disabled = $derived(!editable || pending || error === 'storage');
+	const addDisabled = $derived(disabled || unavailable);
+	const productId = $derived(product.product_id);
 	// Indicative, like the cart line; the database computes the real total.
 	const total = $derived.by(() => {
 		try { return lineTotal(validQuantity(quantity, product.sale_step, i18n.locale), product.sale_unit_price_nok); } catch { return null; }
 	});
 	$effect(() => {
-		quantity = normalizeDecimal(product.sale_step).replace('.', i18n.locale === 'nb' ? ',' : '.');
-		added = false; error = null;
+		void productId;
+		const locale = i18n.locale;
+		untrack(() => {
+			quantity = normalizeDecimal(product.sale_step).replace('.', locale === 'nb' ? ',' : '.');
+			added = false; error = null;
+		});
 	});
 	async function add(event: SubmitEvent) {
 		event.preventDefault();
-		if (disabled) return;
+		if (addDisabled) return;
 		const returnFocus = event.submitter?.matches(':focus-visible') ?? false;
 		pending = true; added = false; error = null; onpending?.(true);
 		try {
@@ -80,7 +88,7 @@
 	}
 </script>
 
-<form class={compact ? 'mt-4 grid gap-2' : 'mt-5 grid justify-items-start'} onsubmit={add} novalidate>
+<form class={compact ? 'grid gap-2' : 'mt-5 grid justify-items-start'} onsubmit={add} novalidate>
 	<!-- Compact puts the stepper under the thumb at the right edge and the labelled
 	     total left of it; the stepper's +/− make its label visually redundant. -->
 	<div class={compact ? 'flex flex-row-reverse items-end justify-between gap-4' : 'contents'}>
@@ -97,7 +105,7 @@
 	<!-- Compact buttons share a row when both fit and otherwise each fill their own. -->
 	<div class={[formActions, compact ? 'items-stretch' : 'mt-4']}>
 		{#if onscan}<Button variant="outline" class={compact ? 'flex-auto' : undefined} type="button" disabled={pending} onclick={onscan}><Icon icon={QrCodeIcon} />{i18n.m.scanner.action}</Button>{/if}
-		<Button variant="default" class={compact ? 'flex-[1_1_9rem]' : undefined} type="submit" {disabled}><ButtonLabel label={m.add} pendingLabel={m.adding} {pending} /></Button>
+		<Button variant="default" class={compact ? 'flex-[1_1_9rem]' : undefined} type="submit" disabled={addDisabled}><ButtonLabel label={m.add} pendingLabel={m.adding} {pending} /></Button>
 	</div>
 	<div id={resultId} class={['basket-error', compact ? 'text-sm [&:not(:has(*))]:hidden' : formStatus]} role={error ? 'alert' : 'status'}>
 		{#if error}<Field.Error role={undefined}>{error === 'storage' ? i18n.m.scanner.reviewBasket : i18n.m.cart.errors[error]}{#if error === 'quantity'}{` ${m.step(formatDecimal(product.sale_step, i18n.locale), unitLabel(product.unit_symbol, i18n.locale, product.sale_step))}`}{/if}</Field.Error>
@@ -105,4 +113,4 @@
 	</div>
 	{#if error === 'storage'}<a href={i18n.href('/cart')}>{m.cart}</a>{/if}
 </form>
-<CartNotice state={$cart} />
+{#if showCartNotice}<CartNotice state={$cart} />{/if}
