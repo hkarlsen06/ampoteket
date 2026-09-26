@@ -85,7 +85,8 @@ reading never depends on the DSEG7 font.
 
 A full-width night stage with the bench photograph and the heading over it. The whole
 photograph is always shown, never cropped. With scroll motion it switches on like a CRT
-(`power-on`, `view()` timeline). The figure must not get `overflow: hidden`: that makes
+(`power-on`, `view()` timeline) by clip-path alone; the photograph is colour graded,
+so no filter, overlay or scrim may change its tones. The figure must not get `overflow: hidden`: that makes
 it the image's scroll container and stops the timeline.
 
 Below it, two panels (equipment; courses, project evenings, prototypes and

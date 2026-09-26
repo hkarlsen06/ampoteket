@@ -233,7 +233,8 @@
 }
 /* A dark photograph switches on like a CRT while its middle rises through
    the lower half of the viewport:
-   a dot, a line, then the picture. */
+   a dot, a line, then the picture. Only the shape animates: the photograph
+   is colour graded, so no filter may touch its brightness. */
 @utility power-on {
   animation: power-on ease-out both;
   animation-timeline: view();
@@ -245,10 +246,9 @@
 @keyframes walk-inside { from { opacity: 0; } 35% { opacity: 1; } to { opacity: 1; scale: 1.1; } }
 @keyframes walk-quote { from { opacity: 0; translate: 0 1.5rem; } }
 @keyframes power-on {
-  from { clip-path: inset(49.6% 50%); filter: brightness(4); }
-  25% { clip-path: inset(49.6% 0); filter: brightness(4); }
-  70% { clip-path: inset(0); filter: brightness(1.5); }
-  to { clip-path: inset(0); filter: none; }
+  from { clip-path: inset(49.6% 50%); }
+  25% { clip-path: inset(49.6% 0); }
+  70%, to { clip-path: inset(0); }
 }
 
 @media (min-width: 48rem) { :root { --gutter: 2rem; } }
