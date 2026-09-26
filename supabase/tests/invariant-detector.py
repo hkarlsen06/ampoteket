@@ -110,6 +110,11 @@ ALTER TABLE app.inventory_movements DISABLE TRIGGER immutable_rows;
 UPDATE app.inventory_movements SET quantity_delta=-999 WHERE event_id IN (SELECT event_id FROM app.sales);
 ALTER TABLE app.inventory_movements ENABLE TRIGGER immutable_rows;
 """, 'sale_does_not_match_snapshot'),
+    ('sale has duplicate matching movements', """
+INSERT INTO app.inventory_movements(event_id,product_id,quantity_delta)
+ SELECT m.event_id,m.product_id,m.quantity_delta FROM app.inventory_movements m
+ JOIN app.sales s ON s.event_id=m.event_id;
+""", 'sale_does_not_match_snapshot'),
 ]
 
 for label, mutation, expected in mutations:

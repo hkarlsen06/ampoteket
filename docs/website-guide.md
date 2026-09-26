@@ -324,6 +324,8 @@ sheets or silently truncate or over-shrink specs. See [page-labels.md](page-labe
 
 ## 8. Security obligations (Worker + frontend)
 
+- Pages forbid embedding with `Content-Security-Policy: frame-ancestors 'none'`,
+  configured through SvelteKit, so another site cannot disguise staff controls.
 - Guest RPCs are `service_role`-only; browsers reach them **only** through the Worker,
   which validates every guest input and enforces size limits, rate limits and
   origin/CSRF checks. Prices and totals come from the database.

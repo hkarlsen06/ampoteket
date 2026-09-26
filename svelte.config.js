@@ -6,7 +6,8 @@ const config = {
 	preprocess: vitePreprocess(),
 	kit: {
 		// Cloudflare Workers deployment (docs/prosjektoversikt.md §3). Config in wrangler.jsonc.
-		adapter: adapter()
+		adapter: adapter(),
+		csp: { directives: { 'frame-ancestors': ['none'] } }
 	},
 	compilerOptions: {
 		// Runes mode for our own code; libraries in node_modules decide for themselves.

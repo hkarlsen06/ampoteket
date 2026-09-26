@@ -41,6 +41,10 @@ bun install --frozen-lockfile
 bun run development           # disposable database + test admin + dev server
 ```
 
+The `cookie` override keeps SvelteKit on a patched serializer while its dependency
+still requests `^0.6.0`. Remove it when SvelteKit requires a patched version;
+`bun audit` checks the resolved dependency tree.
+
 Open <http://localhost:5174> and sign in at `/admin/login` as **`test@test.no` /
 `test`**. Every start creates a fresh, empty database, and Ctrl-C removes it.
 Useful options (after `--`):

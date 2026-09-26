@@ -98,8 +98,8 @@ BEGIN
   SELECT count(*), min(s.checkout_id::text) INTO v_count, v_example FROM app.sales s
     WHERE EXISTS (
         SELECT 1 FROM app.checkout_lines l WHERE l.checkout_id = s.checkout_id
-          AND NOT EXISTS (SELECT 1 FROM app.inventory_movements m
-            WHERE m.event_id = s.event_id AND m.product_id = l.product_id AND m.quantity_delta = -l.quantity))
+          AND (SELECT count(*) FROM app.inventory_movements m
+            WHERE m.event_id = s.event_id AND m.product_id = l.product_id AND m.quantity_delta = -l.quantity) <> 1)
        OR EXISTS (
         SELECT 1 FROM app.inventory_movements m WHERE m.event_id = s.event_id
           AND NOT EXISTS (SELECT 1 FROM app.checkout_lines l

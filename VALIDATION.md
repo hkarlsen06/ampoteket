@@ -7,17 +7,19 @@ append a diary.
 
 ## Current checks
 
-Last full runs: database chain 2026-09-25; `shop`, `checkout`, `admin`, `statistics`,
-`scanner` and `labels` 2026-09-25; `shelf` and `orders` earlier, not rerun since.
+Last full runs: database chain, `boundary` and `checkout` 2026-09-26; `shop`,
+`admin`, `statistics`, `scanner` and `labels` 2026-09-25; `shelf` and `orders`
+earlier, not rerun since.
 
 | Check | Result |
 | --- | --- |
 | `bun run check`, `bun run check:scripts`, `bun run lint` | PASS, 0 errors/warnings |
 | `bun test` | PASS, 216 tests |
-| `./scripts/test-database.sh` | PASS: rollback/retry, ACLs/RLS, acceptance, filters, statistics, malformed input, concurrency, restore, schema/docs comparison, signed-JWT HTTP |
+| `bun audit` | PASS, no reported vulnerabilities |
+| `./scripts/test-database.sh` | PASS: rollback/retry, ACLs/RLS, acceptance, filters, statistics, malformed input, 10 stored-data corruption cases including duplicate sale movements, concurrency, restore, schema/docs comparison, signed-JWT HTTP |
 | `./scripts/test-web.sh` | PASS: real local Auth, public/staff/Worker boundaries, exact decimal transport |
 | `./scripts/test-web.sh --shop` | PASS |
-| `./scripts/test-web.sh --checkout` | PASS, including Auth invitation/recovery emails in Mailpit |
+| `./scripts/test-web.sh --checkout` | PASS, including framing protection headers and Auth invitation/recovery emails in Mailpit |
 | `./scripts/test-web.sh --admin` | PASS, including `dragOneColumnWider` and focus on an invalid specification after one Save click |
 | `./scripts/test-web.sh --statistics` | PASS |
 | `./scripts/test-web.sh --scanner` | PASS (Firefox and WebKit, synthetic camera) |

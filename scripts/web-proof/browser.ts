@@ -4,7 +4,7 @@ import { readCatalogPage, readCompleteCatalog, lookupCatalogProduct } from '../.
 import { requestApiJson } from '../../src/lib/api';
 
 const config = await (await fetch('/proof/config')).json();
-const auth = createBrowserAdminAuth(config);
+const auth = await createBrowserAdminAuth(config);
 async function session() {
 	const { data, error } = await auth.getSession();
 	if (error || !data.session) throw new Error('Proof session missing');

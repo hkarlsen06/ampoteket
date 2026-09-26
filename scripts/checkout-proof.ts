@@ -169,12 +169,14 @@ try {
 	const shell = await fetch(page.url(), { tls: { ca } });
 	assert.equal(shell.headers.get('cache-control'), 'no-store');
 	assert.equal(shell.headers.get('referrer-policy'), 'no-referrer');
+	assert.equal(shell.headers.get('content-security-policy'), "frame-ancestors 'none'");
 	assert.ok(!(await shell.text()).includes('private-test-contact'));
 	for (const path of [`/en/%63heckout/${prepared.checkoutId}`, '/%61dmin/login']) {
 		const encoded = await fetch(origin + path, { tls: { ca } });
 		assert.equal(encoded.status, 200);
 		assert.equal(encoded.headers.get('cache-control'), 'no-store');
 		assert.equal(encoded.headers.get('referrer-policy'), 'no-referrer');
+		assert.equal(encoded.headers.get('content-security-policy'), "frame-ancestors 'none'");
 		assert.ok(!/<(?:link[^>]+rel="canonical"|meta[^>]+property="og:url")/.test(await encoded.text()));
 	}
 	for (const locale of ['', '/en']) for (const colorScheme of ['light', 'dark'] as const) for (const width of [360, 1280]) {
