@@ -29,6 +29,9 @@ export const ogLocale: Record<Locale, string> = { nb: 'nb_NO', en: 'en_US' };
 /** The social card served as `og:image`, 1200 x 630 (docs/design-system.md §6). */
 export const SOCIAL_CARD = '/photos/social-card.jpg';
 
+/** Permanent invite to the Ampoteket Discord server (never expires, no use limit). */
+export const DISCORD_INVITE = 'https://discord.gg/X7xp3vgfyH';
+
 export function isLocale(value: string | undefined | null): value is Locale {
 	return typeof value === 'string' && (locales as readonly string[]).includes(value);
 }

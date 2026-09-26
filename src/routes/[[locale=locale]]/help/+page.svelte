@@ -1,12 +1,13 @@
 <script lang="ts">
 	import Icon from '$lib/Icon.svelte';
 	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
+	import DiscordLogo from '$lib/DiscordLogo.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as Alert from '$lib/components/ui/alert';
 	import * as Item from '$lib/components/ui/item';
 	import * as Empty from '$lib/components/ui/empty';
 	import { itemTitle, pageContainer, pageHeader, pageHeading, section, sectionHeading } from '$lib/ui';
-	import { getI18n } from '$lib/i18n';
+	import { DISCORD_INVITE, getI18n } from '$lib/i18n';
 	import type { PageProps } from './$types';
 	let { data }: PageProps = $props(); const i18n = getI18n(); const m = $derived(i18n.m.help);
 </script>
@@ -38,6 +39,7 @@
 				{/each}
 			</Item.Group>
 		{/if}
+		<Button variant="outline" class="justify-self-start" href={DISCORD_INVITE}><DiscordLogo />{m.discord}</Button>
 	</section>
 	<div class={section()}><Button variant="link" href={i18n.href('/cart')}><Icon icon={ArrowLeftIcon} />{i18n.m.checkout.backToCart}</Button></div>
 </div>

@@ -7,6 +7,9 @@
 	import QrCodeIcon from 'phosphor-svelte/lib/QrCodeIcon';
 	import CpuIcon from 'phosphor-svelte/lib/CpuIcon';
 	import CameraIcon from 'phosphor-svelte/lib/CameraIcon';
+	import DiscordLogo from '$lib/DiscordLogo.svelte';
+	import * as Alert from '$lib/components/ui/alert';
+	import StateBadge from '$lib/StateBadge.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Separator } from '$lib/components/ui/separator';
@@ -22,7 +25,7 @@
 	// The page renders without API reads, so nothing delays its first byte; the shelf
 	// picker loads live topology and drawer contents in the browser when opened.
 	import { goto } from '$app/navigation';
-	import { getI18n } from '$lib/i18n';
+	import { DISCORD_INVITE, getI18n } from '$lib/i18n';
 
 	let { data }: { data: PageData } = $props();
 	const i18n = getI18n();
@@ -69,6 +72,31 @@
 		const walking = getComputedStyle(walkMark).display !== 'none';
 		const observer = new IntersectionObserver(([entry]) => { scanDocked = walking ? entry.isIntersecting : entry.intersectionRatio === 1; }, { rootMargin: `-${header} 0px 0px`, threshold: walking ? 0 : 1 });
 		observer.observe(walking ? walkMark : scanDock);
+		return () => observer.disconnect();
+	});
+	// Discord's online members load through the Worker once their card is about a screen
+	// away. undefined: loading; null: unavailable, never shown as 0.
+	type DiscordStatus = 'online' | 'idle' | 'dnd';
+	type DiscordMembers = { online: number; members: { name: string; status: DiscordStatus; avatar: string | null }[] };
+	// Discord's own shapes carry the status; the colour only repeats it.
+	const discordStatusColor: Record<DiscordStatus, string> = { online: 'text-success', idle: 'text-warning', dnd: 'text-destructive' };
+	let discord = $state<DiscordMembers | null>();
+	let discordCard = $state<HTMLElement | null>(null);
+	let discordStatus = $state<HTMLElement>();
+	async function loadDiscord(retry = false) {
+		const body = await fetch('/api/discord').then((response) => response.ok ? response.json() as Promise<DiscordMembers> : null).catch(() => null);
+		discord = typeof body?.online === 'number' && Array.isArray(body.members) ? body : null;
+		// The retry button leaves with the error, so keep focus in the status line.
+		if (retry && discord) discordStatus?.focus({ preventScroll: true });
+	}
+	$effect(() => {
+		if (!discordCard) return;
+		const observer = new IntersectionObserver(([entry]) => {
+			if (!entry.isIntersecting) return;
+			observer.disconnect();
+			void loadDiscord();
+		}, { rootMargin: '100% 0px' });
+		observer.observe(discordCard);
 		return () => observer.disconnect();
 	});
 	// Photograph derivatives from scripts/build-photos.ts.
@@ -564,14 +592,53 @@
 	<div class={pageContainer()}>
 		<h2 id="who-title" class={sectionTitle}>{m.who.title}</h2>
 		<Separator class={headingTrace} />
-		<div class="grid gap-12 md:mt-8 md:grid-cols-2">
-			{#each m.who.groups as group (group.title)}
-				<div class="grid content-start gap-3">
-					<h3 class={stepTitle}>{group.title}</h3>
-					<p class="text-muted-foreground">{group.text}</p>
+		<!-- Who, then the clock footnote, beside the Discord card from 48rem; phones end on the invite. -->
+		<div class="grid items-start gap-12 md:mt-8 md:grid-cols-2">
+			<div class="grid content-start gap-12">
+				{#each m.who.groups as group (group.title)}
+					<div class="grid content-start gap-3">
+						<h3 class={stepTitle}>{group.title}</h3>
+						<p class="text-muted-foreground">{group.text}</p>
+					</div>
+				{/each}
+				<p class="max-w-[var(--measure)] text-muted-foreground">{m.who.hours} <a href={m.hero.hoursSource} rel="external">{m.hero.hours}</a>.</p>
+			</div>
+			<Card.Root bind:ref={discordCard} class="grid min-w-0 gap-4 p-5 md:p-6">
+				<div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+					<h3 class={stepTitle}>{m.who.discord.title}</h3>
+					<div bind:this={discordStatus} tabindex="-1" class="flex flex-wrap items-center gap-3 outline-none no-js:hidden">
+						{#if discord === undefined}
+							<span class="text-sm text-muted-foreground">{m.who.discord.loading}</span>
+						{:else if discord === null}
+							<Alert.Message role="status" appearance="inline" variant="destructive">{m.who.discord.unavailable}</Alert.Message>
+							<Button variant="outline" size="sm" onclick={() => loadDiscord(true)}>{m.who.discord.retry}</Button>
+						{:else}
+							<StateBadge tone="success">{m.who.discord.online(discord.online)}</StateBadge>
+						{/if}
+					</div>
 				</div>
-			{/each}
+				<p class="text-muted-foreground">{m.who.discord.text}</p>
+				{#if discord}
+					<ul class="m-0 flex w-full list-none flex-wrap gap-2 p-0" aria-label={m.who.discord.online(discord.online)}>
+						{#each discord.members as member, index (index)}
+							<li class="inline-flex max-w-full min-w-0 items-center gap-2 rounded-full bg-muted py-1 pr-3 pl-1 text-sm">
+								<span class="relative shrink-0">
+									{#if member.avatar}<img class="size-6 rounded-full" src={member.avatar} alt="" width="24" height="24" loading="lazy" decoding="async" />{:else}<DiscordLogo class="size-6 p-1" />{/if}
+									<svg class={['absolute -right-1 -bottom-1 size-3.5 rounded-full bg-muted p-0.5', discordStatusColor[member.status]]} viewBox="0 0 10 10" aria-hidden="true" focusable="false">
+										<circle cx="5" cy="5" r="5" fill="currentColor" />
+										{#if member.status === 'idle'}<circle cx="2.5" cy="2.5" r="3.5" class="fill-muted" />{:else if member.status === 'dnd'}<rect x="2" y="4" width="6" height="2" rx="1" class="fill-muted" />{/if}
+									</svg>
+								</span>
+								<span class="truncate">{member.name}<span class="sr-only">, {m.who.discord.status[member.status]}</span></span>
+							</li>
+						{/each}
+						{#if discord.online > discord.members.length}
+							<li class="inline-flex items-center px-2 text-sm text-muted-foreground">{m.who.discord.more(discord.online - discord.members.length)}</li>
+						{/if}
+					</ul>
+				{/if}
+				<Button class="justify-self-start" href={DISCORD_INVITE}><DiscordLogo />{m.who.discord.join}</Button>
+			</Card.Root>
 		</div>
-		<p class="mt-12 max-w-[var(--measure)] text-muted-foreground">{m.who.hours} <a href={m.hero.hoursSource} rel="external">{m.hero.hours}</a></p>
 	</div>
 </section>

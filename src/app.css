@@ -170,7 +170,7 @@
   --radius-xl: calc(var(--radius) * 2);
 }
 
-/* The homepage header meter lights up with document scroll where the browser
+/* The homepage header hairline fills with document scroll where the browser
    supports scroll-driven animations; elsewhere it stays unlit. */
 @utility scroll-meter {
   clip-path: inset(0 100% 0 0);

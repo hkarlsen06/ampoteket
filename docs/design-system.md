@@ -179,8 +179,8 @@ or suppresses it.
   - P2S printer rotation, plus a hover-follow tilt within its range;
   - soldering-iron movement from holder to board, with the withdrawn iron following
     the mouse;
-  - header scroll meter beside the wordmark from 64rem (`scroll-meter` in `app.css`),
-    unlit without support, hidden for reduced motion.
+  - header scroll meter, a primary hairline filling along the header's bottom edge
+    (`scroll-meter` in `app.css`), unlit without support, hidden for reduced motion.
 
   CSS lives in `app.css` (`scroll-motion:` variant, `walk-*`/`power-on`);
   details in [page-home.md](page-home.md). Nothing else moves with scroll.

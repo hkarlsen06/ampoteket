@@ -124,7 +124,8 @@ export const en: Messages = {
 		payment: "If you have already paid, don't pay again. Try registering the purchase again from the same checkout, or contact a volunteer.",
 		contacts: 'Contact a volunteer', unavailable: 'The contact list is unavailable. Try again, or ask a volunteer in the workshop.',
 		empty: 'No contacts are listed yet. Ask a volunteer in the workshop.',
-		retry: 'Try again', contactLink: (name: string) => `Contact link for ${name}`
+		retry: 'Try again', contactLink: (name: string) => `Contact link for ${name}`,
+		discord: 'Ask on Discord'
 	},
 	adminLabels: {
 		title: 'Product labels | Admin | Ampoteket', heading: 'Product labels',
@@ -410,6 +411,7 @@ export const en: Messages = {
 		cartLoading: ', loading',
 		cartUnavailable: ', needs attention',
 		admin: 'Admin',
+		discord: 'Ampoteket on Discord',
 		cartLines: (n: number) => (n === 1 ? ', 1 part' : `, ${n} parts`)
 	},
 	footer: {
@@ -637,7 +639,18 @@ export const en: Messages = {
 					text: 'Ampoteket is run by volunteers, students who keep the room and the shelf in order. Want to help out? Talk to The Resistance or RoboMEK.'
 				}
 			],
-			hours: 'The clock at the top of the page is green while OsloMet’s Pilestredet buildings are open. Those are building hours, not when Ampoteket is staffed. Source:'
+			hours: 'Open weekdays 06–22 and weekends 08–22, with access card and PIN after 16:00, according to',
+			discord: {
+				title: 'Ampoteket on Discord',
+				text: 'Ask questions and share projects with others who use the workshop.',
+				join: 'Join on Discord',
+				online: (n: number) => `${n} online`,
+				more: (n: number) => `and ${n} more`,
+				status: { online: 'online', idle: 'idle', dnd: 'do not disturb' },
+				loading: 'Loading online count …',
+				unavailable: 'Online count unavailable.',
+				retry: 'Try again'
+			}
 		}
 	},
 	notFound: {

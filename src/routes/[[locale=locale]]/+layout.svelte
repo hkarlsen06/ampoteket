@@ -7,6 +7,7 @@
 	import TranslateIcon from 'phosphor-svelte/lib/TranslateIcon';
 	import XIcon from 'phosphor-svelte/lib/XIcon';
 	import QrCodeIcon from 'phosphor-svelte/lib/QrCodeIcon';
+	import DiscordLogo from '$lib/DiscordLogo.svelte';
 	import { onMount, setContext, untrack } from 'svelte';
 	import { AdminContext, setAdminContext } from '$lib/admin-context.svelte';
 	import { Button } from '$lib/components/ui/button';
@@ -28,6 +29,7 @@
 		locales,
 		messagesFor,
 		ogLocale,
+		DISCORD_INVITE,
 		PROD_ORIGIN,
 		SOCIAL_CARD,
 		setI18n,
@@ -161,20 +163,27 @@
 
 <a class="absolute -top-25 left-[var(--gutter)] z-100 rounded-md bg-warning px-4 py-3 font-bold text-on-warning no-underline focus:top-3" href="#main">{m.header.skip}</a>
 
+<!-- Discord sits left of the catalog at every width (the catalog icon is phone:hidden);
+     Admin, once confirmed, enters at the far left so nothing else moves. -->
+{#snippet discordLink()}
+	<Tooltip.Root>
+		<Tooltip.Trigger>
+			{#snippet child({ props })}
+				<Button {...props} href={DISCORD_INVITE} variant="ghost" size="icon-sm" class="shrink-0" aria-label={m.header.discord}><DiscordLogo class="size-5" /></Button>
+			{/snippet}
+		</Tooltip.Trigger>
+		<Tooltip.Content side="bottom">{m.header.discord}</Tooltip.Content>
+	</Tooltip.Root>
+{/snippet}
+
 <header class="site-header sticky top-0 z-40 bg-card" bind:this={headerEl}>
 	<div class={pageContainer({ class: "max-w-none px-5 flex min-h-[var(--header-h)] items-center gap-4 py-2 phone:gap-3 phone:py-1 no-js:flex-wrap" })}>
-		<a class={['mr-auto inline-flex min-h-11 min-w-0 items-center rounded-md font-extrabold text-foreground no-underline', bare === '/' && 'lg:mr-0']} href={i18n.href('/')} aria-label={m.header.home}>
+		<a class="mr-auto inline-flex min-h-11 min-w-0 items-center rounded-md font-extrabold text-foreground no-underline" href={i18n.href('/')} aria-label={m.header.home}>
 			<img class="h-auto w-44 brightness-50 saturate-[1.9] dark:brightness-100 dark:saturate-100 phone:w-36" src="/brand/wordmark-flat.png" alt="Ampoteket" width="756" height="139" />
 		</a>
-		{#if bare === '/'}
-			<!-- Homepage only: a short LED bar graph beside the wordmark that lights up as the page scrolls. Decorative. -->
-			<span class="relative mr-auto ml-8 hidden h-6 w-40 lg:block" aria-hidden="true">
-				<span class="absolute inset-0 bg-[repeating-linear-gradient(90deg,var(--border)_0_2px,transparent_2px_6px)]"></span>
-				<span class="scroll-meter absolute inset-0 bg-[repeating-linear-gradient(90deg,var(--primary)_0_2px,transparent_2px_6px)] motion-reduce:hidden"></span>
-			</span>
-		{/if}
 		<Tooltip.Provider>
 			{#each headerLinks as item (item.href)}
+				{#if item.href === '/p'}{@render discordLink()}{/if}
 				<Tooltip.Root>
 					<Tooltip.Trigger>
 						{#snippet child({ props })}
@@ -263,6 +272,10 @@
 		</Collapsible.Root>
 	</div>
 	<Separator />
+	{#if bare === '/'}
+		<!-- Homepage only: a hairline over the header's bottom edge that fills as the page scrolls. Decorative. -->
+		<span class="scroll-meter absolute inset-x-0 bottom-0 h-0.5 bg-primary motion-reduce:hidden" aria-hidden="true"></span>
+	{/if}
 </header>
 
 <main id="main" tabindex="-1" class="min-h-[calc(100dvh-var(--header-h))] flex-[1_0_auto] outline-none">

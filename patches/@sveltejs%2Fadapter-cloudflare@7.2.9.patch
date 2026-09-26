@@ -1,0 +1,17 @@
+diff --git a/index.js b/index.js
+index 24e2dd503f078033c601eb65a5eab373f68f1028..565f57c48e6b20d344e4cf25709e211c6d8bbbaf 100644
+--- a/index.js
++++ b/index.js
+@@ -207,8 +207,10 @@ export default function (options = {}) {
+ 
+ 			return {
+ 				platform: async ({ prerender }) => {
+-					emulated ??= await get_emulated();
+-					return prerender ? emulated.prerender_platform : emulated.platform;
++					// cache the promise, not the result, so concurrent first requests share one workerd
++					emulated ??= get_emulated();
++					const { platform, prerender_platform } = await emulated;
++					return prerender ? prerender_platform : platform;
+ 				}
+ 			};
+ 		},

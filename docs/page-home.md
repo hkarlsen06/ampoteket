@@ -41,7 +41,9 @@ eyebrows or section numbers.
 
 ### 2.1 Header and footer (`+layout.svelte`)
 
-The header holds the wordmark, the cart icon (badge from
+The header holds the wordmark, Discord's official symbol (`DiscordLogo.svelte`, foreground
+colour only, per Discord's brand rules, left of the catalog icon) linking the permanent invite
+(`DISCORD_INVITE` in `src/lib/i18n/index.ts`), the cart icon (badge from
 `localStorage["ampoteket:cart"]`), the scanner trigger and a menu button. The catalog
 link, Admin link and language picker live in the menu panel at every width, so nothing
 moves when it opens. Without JavaScript the button is hidden and the panel is the
@@ -158,8 +160,19 @@ reconnect, selection preservation and stale-response rejection.
 ### 2.7 «Hvem kan bruke Ampoteket?»
 
 Students (join The Resistance or RoboMEK to help run it) and volunteers. Access requires
-membership; there is no visitor option. One line says the clock follows OsloMet's
-building hours, with the source link.
+membership; there is no visitor option. One line gives OsloMet's building hours
+(card and PIN after 16), linked to the source.
+
+From 48rem the groups and the clock line form the left column beside a Card for the
+Ampoteket Discord server; phones stack them and end on the invite. The Card shows the
+online count, the first 12 members (avatar and name) with the rest counted, and the invite
+button. Members sort online, idle, do not disturb; each avatar carries Discord's own
+status shape (dot, crescent, bar), with the status word in visually hidden text. The members
+load from `GET /api/discord` when the Card is about a screen away, never before the
+first byte; avatars come through `/api/discord/avatar/…`, so the browser never contacts
+Discord. A failed load reads «Antall pålogget er utilgjengelig.» with a retry, never 0.
+Without JavaScript only the invite button shows. The server's widget must stay enabled
+in Discord (Server Settings, Engagement, Server Widget).
 
 ## 3. Visual rules
 

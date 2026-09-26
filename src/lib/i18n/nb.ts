@@ -123,7 +123,8 @@ export const nb = {
 		payment: 'Har du allerede betalt, ikke betal på nytt. Prøv å registrere kjøpet igjen fra samme kasse, eller kontakt en frivillig.',
 		contacts: 'Kontakt en frivillig', unavailable: 'Kontaktlisten er utilgjengelig. Prøv igjen, eller spør en frivillig i verkstedet.',
 		empty: 'Ingen kontaktpersoner er lagt ut ennå. Spør en frivillig i verkstedet.',
-		retry: 'Prøv igjen', contactLink: (name: string) => `Kontaktlenke for ${name}`
+		retry: 'Prøv igjen', contactLink: (name: string) => `Kontaktlenke for ${name}`,
+		discord: 'Spør på Discord'
 	},
 	adminLabels: {
 		title: 'Produktetiketter | Admin | Ampoteket', heading: 'Produktetiketter',
@@ -416,6 +417,7 @@ export const nb = {
 		cartLoading: ', laster',
 		cartUnavailable: ', må sjekkes',
 		admin: 'Admin',
+		discord: 'Ampoteket på Discord',
 		cartLines: (n: number) => (n === 1 ? ', 1 del' : `, ${n} deler`)
 	},
 	footer: {
@@ -643,7 +645,18 @@ export const nb = {
 					text: 'Ampoteket drives av frivillige studenter som holder rommet og hylla i orden. Vil du hjelpe til, snakk med The Resistance eller RoboMEK.'
 				}
 			],
-			hours: 'Klokka øverst på siden er grønn når OsloMets bygg i Pilestredet er åpne. Det er byggets åpningstider, ikke når Ampoteket er bemannet. Kilde:'
+			hours: 'Åpent hverdager 06–22 og helger 08–22, med adgangskort og PIN etter kl. 16, ifølge',
+			discord: {
+				title: 'Ampoteket på Discord',
+				text: 'Still spørsmål og del prosjekter med andre som bruker verkstedet.',
+				join: 'Bli med på Discord',
+				online: (n: number) => `${n} pålogget`,
+				more: (n: number) => `og ${n} til`,
+				status: { online: 'pålogget', idle: 'inaktiv', dnd: 'ikke forstyrr' },
+				loading: 'Henter antall pålogget …',
+				unavailable: 'Antall pålogget er utilgjengelig.',
+				retry: 'Prøv igjen'
+			}
 		}
 	},
 	notFound: {

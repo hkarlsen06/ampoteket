@@ -103,10 +103,11 @@ labels always use the Norwegian, unprefixed address.
 | `/p/[code]` | Product page and QR target, e.g. `/p/RES-A3F09` ([page-product.md](page-product.md)) |
 | `/cart` | The cart ([page-cart.md](page-cart.md)) |
 | `/checkout/[id]` | Saved checkout, Vipps instructions, registration and retry ([page-checkout.md](page-checkout.md)) |
-| `/help` | Volunteer contacts, maintained at `/admin/help` |
+| `/help` | Volunteer contacts, maintained at `/admin/help`, and the Discord invite |
 | `/admin` | Overview, statistics, products, shelf, counts, labels, stock corrections, audit ([page-admin-stock.md](page-admin-stock.md), [page-labels.md](page-labels.md)) |
 | `/admin/orders` | Orders and receipts ([page-admin-orders.md](page-admin-orders.md)) |
 | `POST /api/checkouts/…` | Worker-only checkout endpoints. Browsers never call the checkout RPCs directly. |
+| `GET /api/discord`, `/api/discord/avatar/…` | Online members of the Ampoteket Discord server and their avatars, proxied and edge-cached so browsers never contact Discord |
 
 One scanner dialog is shared by all shopping pages ([scanner.md](scanner.md)).
 **Scanning never registers a purchase by itself.**
