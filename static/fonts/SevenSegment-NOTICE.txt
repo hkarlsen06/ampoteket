@@ -1,0 +1,10 @@
+Seven Segment (SevenSegment-led.woff2)
+Copyright (c) Krafti Lab, Onur Cem Tan. http://www.kraftilab.com
+Source: https://www.dafont.com/seven-segment.font
+
+Subset to digits and . - : with digit widths equalised for LED cells.
+The original font is also Ampoteket's logo typeface.
+
+Used with attribution. The font is offered free for personal use; Ampoteket has not
+bought Krafti Lab's commercial licence. Rights holders: contact the Ampoteket
+maintainers and the font will be removed.

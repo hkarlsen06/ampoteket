@@ -28,7 +28,7 @@
 {#if showBrand}
 	<div class={pageContainer({ class: "pt-4" })}>
 		<Button variant="ghost" class="min-h-11 p-0" href={homeHref} aria-label={header.home}>
-			<img class="h-8 w-auto brightness-50 saturate-[1.9] dark:brightness-100 dark:saturate-100" src="/brand/wordmark-flat.png" alt="Ampoteket" width="756" height="139" />
+			<img class="h-8 w-auto brightness-50 saturate-[1.9] dark:brightness-100 dark:saturate-100" src="/brand/wordmark.svg" alt="Ampoteket" width="756" height="139" />
 		</Button>
 	</div>
 {/if}

@@ -10,9 +10,9 @@
 @custom-variant no-js (.no-js &);
 
 @font-face {
-  font-family: 'DSEG7';
-  src: url('/fonts/DSEG7Classic-Bold.woff2') format('woff2');
-  font-weight: 700;
+  font-family: 'Seven Segment';
+  src: url('/fonts/SevenSegment-led.woff2') format('woff2');
+  font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
@@ -27,7 +27,7 @@
   --measure-lede: 42ch;
   --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  --font-led: 'DSEG7', monospace;
+  --font-led: 'Seven Segment', monospace;
 
   --background: #000000;
   --foreground: #edf1f6;

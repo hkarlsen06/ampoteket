@@ -15,23 +15,45 @@ not copied.
 | `wordmark-oslomet.svg` | `Forenklet OsloMet stil/Logo ampoteket oslomet stil.svg` | Formal/print: black grotesk + OsloMet yellow dash |
 | `wordmark-2d-outlined.pdf` | `Flat Logo/PDF/Logo2D.pdf` | Letters converted to paths |
 
-## What the website serves
+## The Seven Segment font
 
-The SVGs are Inkscape working files whose letters are live text in a
-**"Seven Segment"** font we do not have; served as-is they render in a serif
-fallback. So `static/brand/` serves the designer's PNG renders:
+The SVGs are Inkscape working files whose letters are live text in
+[**Seven Segment** by Krafti Lab](https://www.dafont.com/seven-segment.font),
+committed here as `SevenSegment.ttf` (install it to edit the SVGs; without it they
+render in a serif fallback).
+
+The font is free for personal use; Krafti Lab sells a commercial licence, which
+Ampoteket has not bought. We use it with attribution and will remove it if the
+rights holder asks (`static/fonts/SevenSegment-NOTICE.txt`). Removing it means
+deleting the TTF and the LED webfont and returning `--font-led` to a free font; the
+outlined `wordmark.svg` would need a decision of its own.
+
+Before serving any of these SVGs, turn the text into paths:
+
+```bash
+python3 scripts/outline-brand-text.py assets/brand/SevenSegment.ttf assets/brand/IN.svg OUT.svg
+bunx svgo@4 --multipass -p 2 OUT.svg   # strips Inkscape data and hidden layers
+```
+
+`scripts/build-led-font.py` builds the LED webfont from the TTF: digits and
+`. - :` only, with every digit widened to the advance of `8` and set flush right,
+so values line up with the `Led` component's ghost `8` cells.
+
+## What the website serves
 
 | Output | Made from | Used for |
 |---|---|---|
-| `wordmark-flat.png` (756×139) | Largest instance in `Simplified Flat Logo/Simplified_Flat.png` (a size sheet with no SVG original), black plate removed (alpha = colour coverage un-premultiplied), trimmed to the letters | Header wordmark |
-| `mark-square-512/180/64.png` | `Square Logo/Square Logo.png` (6400×6400), Lanczos downscale | App icon, `apple-touch-icon` (180), favicon (64) and footer mark. No SVG favicon |
-| `wordmark-metal-flat.png` (2939×1158) | `Flat Logo/PNG/Logo2DBluishPlate.png`, unchanged | Not currently shown |
+| `wordmark.svg` (5.6 KB) | The lit segments (faces and highlight lines) of `wordmark-metal-flat.svg` after outlining, each letter moved to its place in the designer's `Simplified Flat Logo/Simplified_Flat.png` (a PNG-only design: the same glyphs at plate-free spacing), coloured as that PNG | Header wordmark |
+| `../fonts/SevenSegment-led.woff2` (2 KB) | `SevenSegment.ttf` via `scripts/build-led-font.py` | `Led` digits (`--font-led`) |
+| `mark-square-180/64.png` | `Square Logo/Square Logo.png` (6400×6400), Lanczos downscale | `apple-touch-icon` (180), favicon (64) and footer/admin mark. No SVG favicon |
 
-`wordmark-flat.png`'s red is `#FF3C33`, the dark theme's primary and LED red. The
-light theme's `#C63933` primary matches it after the header's contrast filter.
+`wordmark.svg` is now the source for the header wordmark; edit it directly. Its red
+is `#FF3C33` at 84 % opacity, the dark theme's primary and LED red. The light
+theme's `#C63933` primary matches it after the header's contrast filter.
 
-An experimental script that outlined the letters from `wordmark-2d-outlined.pdf`
-did not match the PNGs closely enough and was removed; it is in git history.
+The square mark stays PNG: `mark-square.svg` is an earlier revision (larger `A`
+box, wide dash box) than the served `Square Logo.png`, and no SVG of that revision
+was delivered.
 
-Still wanted from the designer: SVG exports with text converted to paths, and a
+Still wanted from the designer: an SVG of the current `Square Logo`, and a
 single-colour (white/black) mark for footer, receipts and engraving.

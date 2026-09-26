@@ -2,7 +2,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { cn } from '$lib/utils';
 
-	// A brand variation of Badge. Only the visual digits use DSEG; the complete
+	// A brand variation of Badge. Only the visual digits use the LED font; the complete
 	// localized meaning remains ordinary text in the accessibility tree.
 	let { value, label, red = false, size = 'default', class: className }: {
 		value: string;
@@ -20,7 +20,7 @@
 	};
 </script>
 
-<Badge variant="outline" class={cn('relative inline-grid place-items-center gap-0 rounded-sm border-border bg-[var(--led-cell)] font-[family-name:var(--font-led)] font-bold leading-none shadow-[inset_0_0_0_1px_var(--led-off)]', red ? 'text-[var(--led-red)]' : 'text-[var(--led-green)]', sizes[size], className)}>
+<Badge variant="outline" class={cn('relative inline-grid place-items-center gap-0 rounded-sm border-border bg-[var(--led-cell)] font-[family-name:var(--font-led)] font-normal leading-none shadow-[inset_0_0_0_1px_var(--led-off)]', red ? 'text-[var(--led-red)]' : 'text-[var(--led-green)]', sizes[size], className)}>
 	<span class="col-start-1 row-start-1 text-[var(--led-off)]" aria-hidden="true">{ghost}</span>
 	<span class="col-start-1 row-start-1 [text-shadow:0_0_0.35em_currentColor]" aria-hidden="true">{value}</span>
 	<span class="sr-only">{label}</span>

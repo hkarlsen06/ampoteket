@@ -75,7 +75,7 @@ Rules:
 | Section introduction | `lede` from `$lib/ui`, `text-muted-foreground` | 1.0625 → 1.125rem, max `--measure-lede` |
 | Small | Same | 0.875rem, the minimum for content, including badges, chips and codes |
 | Code / quantity / money | `font-mono` (system mono stack) | Fits the surrounding readout |
-| LED figures | **DSEG7 Classic Bold** (`/fonts/`, SIL OFL, 5 KB, preloaded) | Sized by the cell |
+| LED figures | **Seven Segment** by Krafti Lab, the logo's font (`/fonts/SevenSegment-led.woff2`, 2 KB, preloaded; see [assets/brand/README.md](../assets/brand/README.md)) | Sized by the cell |
 
 No webfont for text: on workshop wifi the page must paint on the first round trip.
 The system and mono stacks cover æ ø å.
@@ -83,7 +83,7 @@ The system and mono stacks cover æ ø å.
 **Two measures, and only two.** `--measure` (62ch) for body prose, `--measure-lede`
 (42ch) for the hero lede, section decks and fine print.
 
-DSEG7 renders only digits and `. - :`. Use the `Led` component for display digits
+The LED font holds only digits and `. - :`. Use the `Led` component for display digits
 (step numbers, recorded counts, the opening date). Its localized plain-text label
 stays in the accessibility tree while the digit spans are `aria-hidden`. Never set
 words in it, and never use a cell for a number the reader must act on if the font
@@ -379,10 +379,10 @@ confirm each focus ring is whole.
 
 | Use | File (`static/brand/`) |
 |---|---|
-| Header wordmark | `wordmark-flat.png`: transparent letters only, up to 11rem wide (9rem on phones). Light mode darkens it with a CSS filter |
-| Mark | `mark-square-{512,180,64}.png`: favicon, touch icon, footer mark |
+| Header wordmark | `wordmark.svg`: lit segments only, up to 11rem wide (9rem on phones). Light mode darkens it with a CSS filter |
+| Mark | `mark-square-{180,64}.png`: touch icon, favicon and footer/admin mark |
 
-The designer SVGs in `assets/brand/` are not served; see
+The designer SVGs in `assets/brand/` are Inkscape sources, not served; see
 [assets/brand/README.md](../assets/brand/README.md). If the wordmark image fails,
 its `alt` «Ampoteket» renders in the link's own type.
 

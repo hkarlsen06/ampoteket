@@ -179,7 +179,7 @@
 <header class="site-header sticky top-0 z-40 bg-card" bind:this={headerEl}>
 	<div class={pageContainer({ class: "max-w-none px-5 flex min-h-[var(--header-h)] items-center gap-4 py-2 phone:gap-3 phone:py-1 no-js:flex-wrap" })}>
 		<a class="mr-auto inline-flex min-h-11 min-w-0 items-center rounded-md font-extrabold text-foreground no-underline" href={i18n.href('/')} aria-label={m.header.home}>
-			<img class="h-auto w-44 brightness-50 saturate-[1.9] dark:brightness-100 dark:saturate-100 phone:w-36" src="/brand/wordmark-flat.png" alt="Ampoteket" width="756" height="139" />
+			<img class="h-auto w-44 brightness-50 saturate-[1.9] dark:brightness-100 dark:saturate-100 phone:w-36" src="/brand/wordmark.svg" alt="Ampoteket" width="756" height="139" />
 		</a>
 		<Tooltip.Provider>
 			{#each headerLinks as item (item.href)}

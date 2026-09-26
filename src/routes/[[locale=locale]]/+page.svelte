@@ -407,7 +407,7 @@
 											{#if ASSOCIATION_SITES[chip]}
 											<Badge variant="outline" href={ASSOCIATION_SITES[chip]} target="_blank" rel="external noopener" class="min-h-11 h-auto px-2 py-1 font-normal text-foreground no-underline hover:bg-muted">{chip}<span class="sr-only"> {m.about.newTab}</span></Badge>
 											{:else}
-												<Badge variant="outline" class="h-auto px-2 py-1 font-normal">{chip}</Badge>
+												<Badge variant="outline" class="min-h-11 h-auto px-2 py-1 font-normal text-foreground">{chip}</Badge>
 											{/if}
 										</li>
 									{/each}

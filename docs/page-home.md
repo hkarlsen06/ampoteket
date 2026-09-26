@@ -87,7 +87,7 @@ engineering) and RoboMEK (robotics), supported by the Department of Mechanical,
 Electronic and Chemical Engineering (MEK) at OsloMet, students in charge. The section
 links the OsloMet story that sources the quote and facts. The opening date is an LED
 cell with `aria-hidden` digits and the readable date in visually hidden text, so
-reading never depends on the DSEG7 font.
+reading never depends on the LED font.
 
 ### 2.4 «Utstyr og aktiviteter»
 
