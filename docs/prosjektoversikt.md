@@ -41,6 +41,9 @@ Each volunteer has their own Supabase Auth login plus an explicit staff
 membership. Staff maintain products, drawers and cabinets, record orders and
 receipts, post corrections and withdrawals with a reason, run counts and erase
 buyer contact details on request.
+Active admins also invite and deactivate other admins from `/admin/admins`.
+Only the first admin needs maintainer setup; new admins set their password from
+the invitation email.
 
 ## 3. Architecture
 
@@ -51,7 +54,7 @@ Staff browser ──► SvelteKit pages ──► Supabase PostgREST (own staff 
 
 | Part | Responsibility |
 | --- | --- |
-| SvelteKit on Cloudflare Workers | All pages, plus the four checkout endpoints under `/api/checkouts`. No separate backend. |
+| SvelteKit on Cloudflare Workers | All pages, checkout endpoints under `/api/checkouts`, and authenticated admin invitations. No separate backend. |
 | Supabase Postgres 17 (Stockholm) | Data, integrity rules, history. One function call is one atomic stock operation. |
 | Supabase Auth | Staff only. Buyers have no accounts. |
 | PostgREST | Exposes only the `public` schema. The internal `app` schema is never exposed. |
@@ -93,7 +96,7 @@ The migration in `supabase/migrations/` is the authority; details are in
 
 ## 5. Routes
 
-Every route also exists in English under `/en` ([i18n.md](i18n.md)). Printed QR
+Every page route also exists in English under `/en` ([i18n.md](i18n.md)). Printed QR
 labels always use the Norwegian, unprefixed address.
 
 | Route | Content |
@@ -106,7 +109,9 @@ labels always use the Norwegian, unprefixed address.
 | `/help` | Volunteer contacts, maintained at `/admin/help`, and the Discord invite |
 | `/admin` | Overview, statistics, products, shelf, counts, labels, stock corrections, audit ([page-admin-stock.md](page-admin-stock.md), [page-labels.md](page-labels.md)) |
 | `/admin/orders` | Orders and receipts ([page-admin-orders.md](page-admin-orders.md)) |
+| `/admin/admins` | Invite, list, reactivate and deactivate admins ([website-guide.md](website-guide.md#59-admin-access)) |
 | `POST /api/checkouts/…` | Worker-only checkout endpoints. Browsers never call the checkout RPCs directly. |
+| `POST /api/admin/invitations` | Authenticated staff invitations ([api-contract.md](api-contract.md#staff-membership-and-invitations)) |
 | `GET /api/discord`, `/api/discord/avatar/…` | Online members of the Ampoteket Discord server and their avatars, proxied and edge-cached so browsers never contact Discord |
 
 One scanner dialog is shared by all shopping pages ([scanner.md](scanner.md)).
@@ -117,9 +122,9 @@ One scanner dialog is shared by all shopping pages ([scanner.md](scanner.md)).
 | Caller | Credential | Allowed |
 |---|---|---|
 | Visitor or logged-in non-staff | publishable key / own JWT | Public catalog, facets, shelf map and help directory |
-| Staff | own staff JWT (never the secret key) | Staff views and staff RPCs; no direct ledger writes |
-| Worker | secret key, server-side only | Public reads plus the three guest checkout RPCs |
-| Maintainer | direct database access | Migrations, staff provisioning, backups |
+| Staff | own staff JWT (never the secret key) | Staff views and RPCs, including audited admin management; no direct ledger or membership writes |
+| Worker | secret key, server-side only | Public reads, three guest checkout RPCs, and Auth account creation/invitation for a verified active staff caller. Membership changes use the caller's JWT |
+| Maintainer | direct database access | Migrations, first-admin bootstrap, emergency access recovery, backups |
 
 The database identifies staff with `auth.uid()`; the browser never sends an actor
 id. Removing a staff membership takes effect on the next request. A failed read
@@ -141,7 +146,7 @@ cabinets and 492 drawers.
 
 | Topic | Decision |
 |---|---|
-| Staff sign-in | Email and password; staff access is granted separately |
+| Staff sign-in | Email and password; active admins invite and manage other admins in the site, with maintainer setup for the first admin |
 | Staff devices | Personal phones and laptops only; normal sign-in and sign-out |
 | Vipps | Number 47322, QR `https://qr.vipps.no/vp/swDrxGWcp`; the buyer types the amount shown by the site |
 | Product codes | Three-letter category prefix + five random hex digits, e.g. `RES-A3F09` |

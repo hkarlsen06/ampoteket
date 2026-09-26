@@ -31,7 +31,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        proof: [boundary, shop, checkout, admin, scanner, labels, statistics]
+        proof: [boundary, shop, checkout, admin, admins, scanner, labels, statistics]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3

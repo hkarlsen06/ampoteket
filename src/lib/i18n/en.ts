@@ -290,6 +290,29 @@ export const en: Messages = {
 		tables: { staff_members: 'Admin account', help_contacts: 'Help page contact', units: 'Unit', categories: 'Category', cabinets: 'Cabinet', bins: 'Drawer', products: 'Product', attribute_definitions: 'Specification type', product_attributes: 'Product specification', purchase_orders: 'Order', purchase_order_lines: 'Order line', count_batches: 'Stocktake', checkout_contacts: 'Buyer contact detail' },
 		actions: { INSERT: 'Created', UPDATE: 'Changed', DELETE: 'Deleted', CONTACT_CLEARED: 'Contact detail cleared' }
 	},
+	adminMembers: {
+		title: 'Admins | Admin | Ampoteket', heading: 'Admins', accounts: 'Admin accounts',
+		accessHint: 'All admins can manage products and stock, invite new admins and deactivate other admins.',
+		name: 'Name', invite: 'Invite admin', resend: 'Resend invitation', reactivate: 'Activate access',
+		active: 'Active', inactive: 'Inactive', awaitingSetup: 'Awaiting password setup', accountRemoved: 'Account removed', you: '(you)',
+		deactivate: 'Deactivate access', deactivateNamed: (name: string) => `Deactivate access for ${name}`,
+		deactivateHint: (name: string) => `${name} will lose admin access immediately. Their past changes remain in the history.`,
+		confirmDeactivate: 'Confirm deactivation', close: 'Close',
+		unavailable: 'Admin accounts could not be loaded. Any accounts shown may be out of date. Try again.',
+		feedback: {
+			invited: 'Invitation sent. The recipient can follow the email link to set their password.',
+			existing_account: 'Admin access is active. This person already has an account and can sign in with it.',
+			deactivated: 'Admin access has been deactivated. The history is preserved.',
+			deactivationSuperseded: 'The deactivation was recorded, but another admin has since reactivated this account.',
+			emailFailed: 'Admin access is saved, but the invitation could not be sent. Try again, or close and resend from the account list later.',
+			unknown: 'We could not confirm whether the change completed. Try the same request again.',
+			invalid: 'Check the name and email address. The account may have been removed. Try again.',
+			superseded: 'This account or its access has changed. Review the current account details before inviting again.',
+			rateLimited: 'Too many invitations in a short time. Wait a little and try again.',
+			failed: 'The change could not be sent. Try again.',
+			self: 'You cannot deactivate your own admin access.'
+		}
+	},
 	admin: {
 		breadcrumb: 'Breadcrumb',
 		toggleSidebar: 'Toggle sidebar', closeSidebar: 'Close sidebar',

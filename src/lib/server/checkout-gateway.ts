@@ -1,4 +1,5 @@
 import { ApiError, requestApiJson } from '../api';
+import { readJsonBody, RequestBodyError } from './request-body';
 import { checkoutUuid, parseCheckoutBinding, parseCheckoutSnapshot, parsePrepareRequest, parsePrepareResponse } from '../checkout-contract';
 import { checkoutSessionFingerprint, checkoutTokenForAttempt, newCheckoutSessionSecret } from './checkout-credentials';
 
@@ -40,37 +41,6 @@ function response(body: unknown, status = 200): Response {
 	} });
 }
 
-/** Limit actual bytes, including chunked requests without Content-Length. */
-async function readBody(request: Request, maximum: number): Promise<unknown> {
-	const length = request.headers.get('Content-Length');
-	if (length !== null && (!/^\d+$/.test(length) || Number(length) > maximum)) fail('CHECKOUT_BODY_TOO_LARGE', 413);
-	if (!request.body) fail('INVALID_CHECKOUT_REQUEST');
-	const reader = request.body.getReader();
-	const chunks: Uint8Array[] = [];
-	let size = 0;
-	let timer: ReturnType<typeof setTimeout> | undefined;
-	try {
-		const timeout = new Promise<never>((_, reject) => {
-			timer = setTimeout(() => reject(new GatewayError('CHECKOUT_REQUEST_TIMEOUT', 408)), 10000);
-		});
-		for (;;) {
-			const { done, value } = await Promise.race([reader.read(), timeout]);
-			if (done) break;
-			size += value.byteLength;
-			if (size > maximum) fail('CHECKOUT_BODY_TOO_LARGE', 413);
-			chunks.push(value);
-		}
-		const bytes = new Uint8Array(size);
-		let offset = 0;
-		for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
-		try { return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); }
-		catch { return fail('INVALID_CHECKOUT_REQUEST'); }
-	} finally {
-		clearTimeout(timer);
-		void reader.cancel().catch(() => {});
-	}
-}
-
 function validateConfig(config: CheckoutGatewayConfig | null): asserts config is CheckoutGatewayConfig {
 	if (!config) fail('CHECKOUT_UNAVAILABLE', 503);
 	try {
@@ -104,7 +74,7 @@ export async function checkoutGateway(operation: CheckoutOperation, context: Gat
 		}
 		const limiter = operation === 'session' ? config.sessionLimit : config.operationLimit;
 		if (!(await limiter.limit({ key: `ip:${context.clientAddress}` })).success) fail('CHECKOUT_RATE_LIMITED', 429);
-		const body = await readBody(request, operation === 'prepare' ? 32768 : 1024);
+		const body = await readJsonBody(request, operation === 'prepare' ? 32768 : 1024);
 		if (operation === 'session') {
 			if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length) fail('INVALID_CHECKOUT_REQUEST');
 			// A present malformed cookie is a visible credential error, never silently replaced.
@@ -141,6 +111,7 @@ export async function checkoutGateway(operation: CheckoutOperation, context: Gat
 		}
 		return response(snapshot);
 	} catch (error) {
+		if (error instanceof RequestBodyError) return response({ error: error.code === 'INVALID_REQUEST' ? 'INVALID_CHECKOUT_REQUEST' : `CHECKOUT_${error.code}` }, error.status);
 		if (error instanceof GatewayError) return response({ error: error.code }, error.status);
 		if (error instanceof Error && credentialErrors.has(error.message)) return response({ error: error.message }, 409);
 		if (error instanceof ApiError && error.body && typeof error.body === 'object' && 'message' in error.body) {

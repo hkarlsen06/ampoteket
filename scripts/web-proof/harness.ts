@@ -90,7 +90,8 @@ export async function proofEnvironment() {
 				SUPABASE_SECRET_KEY: gatewayKey, CHECKOUT_ALLOWED_ORIGIN: origin },
 			ratelimits: [
 				{ name: 'CHECKOUT_SESSION_LIMIT', namespace_id: '4732201', simple: { limit: 20, period: 60 } },
-				{ name: 'CHECKOUT_OPERATION_LIMIT', namespace_id: '4732202', simple: { limit: 120, period: 60 } }
+				{ name: 'CHECKOUT_OPERATION_LIMIT', namespace_id: '4732202', simple: { limit: 120, period: 60 } },
+				{ name: 'ADMIN_INVITATION_LIMIT', namespace_id: '4732203', simple: { limit: 10, period: 60 } }
 			]
 		}));
 		// Never read the repository's .env/.dev.vars or hosted Cloudflare credentials.

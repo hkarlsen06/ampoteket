@@ -7,22 +7,23 @@ append a diary.
 
 ## Current checks
 
-Last full runs: database chain and all nine web modes (`boundary`, `shop`,
-`checkout`, `admin`, `statistics`, `scanner`, `labels`, `shelf`, `orders`)
-2026-09-26. The design fixes reran the eight UI modes; database and boundary
-results are from the earlier security validation on the same date.
+Admin management: database chain, type/lint checks and `--admins` acceptance
+rerun on 2026-09-27. The other nine web modes (`boundary`, `shop`, `checkout`,
+`admin`, `statistics`, `scanner`, `labels`, `shelf`, `orders`) were last run on
+2026-09-26 and were not rerun for this change.
 
 | Check | Result |
 | --- | --- |
 | `bun run check`, `bun run check:scripts`, `bun run lint` | PASS, 0 errors/warnings |
-| `bun test` | PASS, 217 tests |
+| `bun test` | PASS, 221 tests |
 | `python3 scripts/test-check-clipped-ink.py`, `bun run check:ink` | PASS: checker regressions and static SVG checks; dynamic shelf geometry explicitly reported for manual review |
 | `bun audit` | PASS, no reported vulnerabilities |
-| `./scripts/test-database.sh` | PASS: rollback/retry, ACLs/RLS, acceptance, filters, statistics, malformed input, 10 stored-data corruption cases including duplicate sale movements, concurrency, restore, schema/docs comparison, signed-JWT HTTP |
+| `./scripts/test-database.sh` | PASS: rollback/retry, ACLs/RLS, acceptance, filters, statistics, malformed input, 10 stored-data corruption cases including duplicate sale movements, concurrency including mutual admin deactivation and stale invitations, restore, schema/docs comparison, signed-JWT HTTP |
 | `./scripts/test-web.sh` | PASS: real local Auth, public/staff/Worker boundaries, exact decimal transport |
 | `./scripts/test-web.sh --shop` | PASS: lifecycle freshness, retained drafts, invalid saved quantities, removal focus and visible mobile drawer addresses |
 | `./scripts/test-web.sh --checkout` | PASS: remote staff recovery, pre-payment recheck and navigation during that read; framing protection and Auth invitation/recovery emails in Mailpit |
 | `./scripts/test-web.sh --admin` | PASS: access recovery, retained cached content and partial-inventory retry, stock field validation, audit freshness with older pages retained; drawer resizing and specification error focus |
+| `./scripts/test-web.sh --admins` | PASS: real Auth/Worker/Mailpit invitations in both locales, password setup/login, permissions and audit, replay/stale-resend safeguards; 360/1280 px in both locales/themes, retained drafts/focus on read failure, deactivation/reactivation |
 | `./scripts/test-web.sh --statistics` | PASS: localized responsive charts, retained data and focus after a failed background read |
 | `./scripts/test-web.sh --scanner` | PASS: Firefox and WebKit with synthetic camera; named long-content scrolling keeps Add/Scan visible |
 | `./scripts/test-web.sh --labels` | PASS: decoded PDF QR payloads, geometry |
@@ -36,7 +37,7 @@ are fill-only, with no clipped strokes. The static checker does not validate
 dynamic geometry. Short-viewport checks do not prove physical phone keyboard behavior.
 
 CI runs the database chain and the `boundary`, `shop`, `checkout`, `admin`,
-`scanner`, `labels` and `statistics` browser modes. These results are local runs,
+`admins`, `scanner`, `labels` and `statistics` browser modes. These results are local runs,
 not CI claims.
 
 Responsive browser regressions include 320×256, 667×375 and 844×390 viewports,
@@ -55,7 +56,10 @@ Update this section whenever a migration changes (`sha256sum supabase/migrations
 - `20260924000100_archive_empty_cabinet.sql`: SHA-256
   `503d75885d3774a967f4cad7a3b891b94b4f62020a393d5620220a997be6b7d6`
 
-24 app tables, four exact numeric domains, 26 public RPCs, 29 staff views and five
+- `20260927000100_staff_management.sql`: SHA-256
+  `34b57a63292f58cc92304d0846f2c621ce7a971d11d6550498682003ab2875d4`
+
+24 app tables, four exact numeric domains, 29 public RPCs, 29 staff views and five
 internal derived views. All views are security invoker; only `public` is exposed.
 Initial data: 12 cabinets, 492 drawers and reference units; no products or stock.
 
@@ -79,7 +83,10 @@ the selected products. It is a regression check, not a hosted latency guarantee.
 - **Hosted setup** (needs the explicit deploy decision): Supabase/Cloudflare
   configuration, Auth mail delivery (custom SMTP), the Data API cutover barrier
   and a full hosted restore drill ([deploy](docs/runbook-deploy.md),
-  [backup](docs/runbook-backup-restore.md)).
+  [backup](docs/runbook-backup-restore.md)). The owner reports Resend connected
+  with sender `Ampoteket <noreply@notify.ampoteket.no>`; hosted invitation/reset
+  delivery has not been independently verified. The admin-management migration
+  and app changes have not been deployed.
 - **Owners and targets:** name operators and accept RPO/RTO, backup storage and
   drill schedule. The backup runbook proposes 24 hours each, daily off-platform
   backups and a drill each semester; none of this is accepted yet.

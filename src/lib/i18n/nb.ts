@@ -289,6 +289,29 @@ export const nb = {
 		tables: { staff_members: 'Adminkonto', help_contacts: 'Kontakt på hjelpesiden', units: 'Enhet', categories: 'Kategori', cabinets: 'Skap', bins: 'Skuff', products: 'Produkt', attribute_definitions: 'Spesifikasjonstype', product_attributes: 'Produktspesifikasjon', purchase_orders: 'Bestilling', purchase_order_lines: 'Bestillingslinje', count_batches: 'Tellerunde', checkout_contacts: 'Kjøperens kontaktopplysning' },
 		actions: { INSERT: 'Opprettet', UPDATE: 'Endret', DELETE: 'Slettet', CONTACT_CLEARED: 'Kontaktopplysning slettet' }
 	},
+	adminMembers: {
+		title: 'Administratorer | Admin | Ampoteket', heading: 'Administratorer', accounts: 'Adminkontoer',
+		accessHint: 'Alle administratorer kan endre varer og lager, invitere nye administratorer og deaktivere andres tilgang.',
+		name: 'Navn', invite: 'Inviter administrator', resend: 'Send invitasjon på nytt', reactivate: 'Aktiver tilgang',
+		active: 'Aktiv', inactive: 'Inaktiv', awaitingSetup: 'Venter på passordoppsett', accountRemoved: 'Konto fjernet', you: '(deg)',
+		deactivate: 'Deaktiver tilgang', deactivateNamed: (name: string) => `Deaktiver tilgangen til ${name}`,
+		deactivateHint: (name: string) => `${name} mister admintilgangen med én gang. Tidligere endringer blir liggende i historikken.`,
+		confirmDeactivate: 'Bekreft deaktivering', close: 'Lukk',
+		unavailable: 'Administratorkontoene kunne ikke hentes. Listen som vises kan være utdatert. Prøv igjen.',
+		feedback: {
+			invited: 'Invitasjonen er sendt. Mottakeren kan følge lenken i e-posten for å sette opp passord.',
+			existing_account: 'Admintilgangen er aktiv. Personen har allerede en konto og kan logge inn med den.',
+			deactivated: 'Admintilgangen er deaktivert. Historikken er bevart.',
+			deactivationSuperseded: 'Deaktiveringen ble registrert, men en annen administrator har siden aktivert tilgangen igjen.',
+			emailFailed: 'Admintilgangen er lagret, men invitasjonen kunne ikke sendes. Prøv igjen, eller lukk og send invitasjonen fra kontolisten senere.',
+			unknown: 'Vi vet ikke om endringen ble fullført. Prøv igjen med den samme forespørselen.',
+			invalid: 'Sjekk navnet og e-postadressen. Kontoen kan ha blitt fjernet. Prøv igjen.',
+			superseded: 'Kontoen eller tilgangen er endret. Se gjennom kontodetaljene før du inviterer på nytt.',
+			rateLimited: 'For mange invitasjoner på kort tid. Vent litt og prøv igjen.',
+			failed: 'Endringen kunne ikke sendes. Prøv igjen.',
+			self: 'Du kan ikke deaktivere din egen admintilgang.'
+		}
+	},
 	admin: {
 		breadcrumb: 'Brødsmulesti',
 		toggleSidebar: 'Vis eller skjul sidepanelet', closeSidebar: 'Lukk sidepanelet',

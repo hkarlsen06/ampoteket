@@ -65,6 +65,7 @@ cmp "$test_dir/first-install.json" "$test_dir/repeated-install.json"
 psql -X -v ON_ERROR_STOP=1 -f supabase/tests/permissions.sql
 psql -X -v ON_ERROR_STOP=1 -f supabase/tests/protections.sql
 psql -X -v ON_ERROR_STOP=1 -f supabase/tests/acceptance.sql
+psql -X -v ON_ERROR_STOP=1 -f supabase/tests/staff-management.sql
 psql -X -v ON_ERROR_STOP=1 -f supabase/tests/audit-regressions.sql
 psql -X -v ON_ERROR_STOP=1 -f supabase/tests/numeric-read-models.sql
 psql -X -v ON_ERROR_STOP=1 -f supabase/tests/admin-statistics.sql

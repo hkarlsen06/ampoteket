@@ -1,6 +1,6 @@
 # Required two-connection tests
 
-Cases 1–6 and 8–14 are automated in `supabase/tests/concurrency.py`, run by `./scripts/test-database.sh`. Each overlapping case holds the first transaction open until the second is seen waiting on a lock, and runs both orders where listed. Case 7 is partly automated by `./scripts/test-api.sh` and partly a manual launch check. Results are in [VALIDATION.md](../VALIDATION.md).
+Cases 1–6 and 8–15 are automated in `supabase/tests/concurrency.py`, run by `./scripts/test-database.sh`. Each overlapping case holds the first transaction open until the second is seen waiting on a lock, and runs both orders where listed. Case 7 is partly automated by `./scripts/test-api.sh` and partly a manual launch check. Results are in [VALIDATION.md](../VALIDATION.md).
 
 When adding a case, use two real connections (or two concurrent HTTP requests); sequential calls on one connection prove nothing about locks. Use `READ COMMITTED` and short `lock_timeout`/`statement_timeout` so a regression fails instead of hanging. Lock orders are in [datamodell.md](datamodell.md) §8.
 
@@ -42,7 +42,7 @@ Not automated: Supabase Auth signup, login, refresh and account deletion, the ma
 
 - Anon can read `amp_catalog`, `amp_catalog_facets`, `amp_shelf_map` and `amp_help_directory`, and nothing else.
 - A logged-in non-staff user sees no staff rows and cannot change stock.
-- Active staff can edit allowed metadata and call stock RPCs, but cannot write ledger rows or grant staff access.
+- Active staff can edit allowed metadata, call stock RPCs and manage other staff through the audited membership RPCs. They cannot write ledger or membership rows directly.
 - The Worker key can call the three checkout RPCs and has no direct table access.
 - A wrong checkout secret fails for reads and confirmations.
 - Disabling a staff row, or deleting the Auth account, removes access on the next request. A recreated account needs deliberate relinking, not name matching.
@@ -94,3 +94,13 @@ Races against `amp_save_shelf_layout`, each expecting the waiting side to fail c
 - A product assignment against removing or absorbing its drawer: the layout fails with `LAYOUT_HAS_PRODUCTS`, or the assignment fails with `PRODUCT_BIN_UNAVAILABLE`. An expanded drawer keeps its products either way.
 
 The layout RPC locks drawers in UUID order, then the cabinet, and never takes product locks after drawer locks; product assignment share-locks its target drawer. Keep these orders when extending placement operations. Non-overlapping layout rules are in `supabase/tests/shelf-layout.sql`.
+
+## 15. Staff access changes
+
+Races use real separate sessions and wait for an observed lock overlap:
+
+- Two active members deactivate each other, in both orders: the first succeeds, and the waiting member fails with `STAFF_REQUIRED`. The winner stays active and the failed request leaves no retry record.
+- Deactivation wins over the target member granting access: the waiting grant fails with `STAFF_REQUIRED` and creates no member. This also applies when the first caller uses the maintainer revoke helper.
+- Duplicate invitation grants with one request ID: both return the same staff ID; exactly one membership and audit insert exist.
+
+`supabase/tests/staff-management.sql` additionally covers self/final-member protection, normalization, retry payload and actor binding, reactivation without history loss, active-member name preservation, deleted Auth identities, audit attribution, and anonymous/service/non-staff/disabled access denial. Supabase Auth delivery and full Worker/browser invitation behavior require the real Auth checks in §7.

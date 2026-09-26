@@ -15,6 +15,7 @@
 	import QuestionIcon from 'phosphor-svelte/lib/QuestionIcon';
 	import UsersIcon from 'phosphor-svelte/lib/UsersIcon';
 	import UserCircleIcon from 'phosphor-svelte/lib/UserCircleIcon';
+	import UserGearIcon from 'phosphor-svelte/lib/UserGearIcon';
 	import SignOutIcon from 'phosphor-svelte/lib/SignOutIcon';
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
 	import { Button } from '$lib/components/ui/button';
@@ -51,7 +52,8 @@
 		{ path: '/admin/statistics', label: i18n.m.adminStatistics.heading, icon: ChartLineUpIcon },
 		{ path: '/admin/audit', label: i18n.m.adminAudit.heading, icon: ClockCounterClockwiseIcon },
 		{ path: '/admin/privacy', label: m.recoveryHeading, icon: QuestionIcon },
-		{ path: '/admin/help', label: m.directoryHeading, icon: UsersIcon }
+		{ path: '/admin/help', label: m.directoryHeading, icon: UsersIcon },
+		{ path: '/admin/admins', label: i18n.m.adminMembers.heading, icon: UserGearIcon }
 	]);
 	const currentPath = $derived(stripLocale(page.url.pathname));
 	// Longest prefix wins so /admin/products/labels marks the labels entry, not products.

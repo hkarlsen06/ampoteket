@@ -7,5 +7,5 @@ export function isPrivateRoute(routeId: string | null, pathname: string): boolea
 	// retaining escaped separators and safely handling malformed escapes.
 	let path = pathname;
 	try { path = decodeURI(pathname); } catch { /* Fall back to the original path. */ }
-	return /^\/(?:checkout|admin|api\/checkouts)(?:\/|$)/.test(stripLocale(path));
+	return /^\/(?:checkout|admin|api\/(?:checkouts|admin))(?:\/|$)/.test(stripLocale(path));
 }

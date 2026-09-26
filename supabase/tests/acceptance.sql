@@ -210,8 +210,8 @@ DO $$ BEGIN
     RAISE EXCEPTION 'FAIL: staff wrote ledger directly';
   EXCEPTION WHEN insufficient_privilege THEN RAISE NOTICE 'PASS: staff direct ledger write denied'; END;
   BEGIN UPDATE public.amp_staff_members SET is_active=true;
-    RAISE EXCEPTION 'FAIL: staff managed access grants';
-  EXCEPTION WHEN insufficient_privilege THEN RAISE NOTICE 'PASS: staff cannot grant staff access'; END;
+    RAISE EXCEPTION 'FAIL: staff wrote memberships directly';
+  EXCEPTION WHEN insufficient_privilege THEN RAISE NOTICE 'PASS: staff cannot bypass membership RPCs'; END;
 END $$;
 RESET ROLE;
 
@@ -323,9 +323,7 @@ BEGIN
     'abandoned closure leaves stock and original count attribution intact');
 END $$;
 RESET ROLE;
--- Maintainer staff-access helpers work by email address (the disposable Auth
--- stand-in has no email column, so the test adds it; rolled back below).
-ALTER TABLE auth.users ADD COLUMN email text;
+-- Maintainer staff-access helpers work by email address.
 INSERT INTO auth.users(id, email) VALUES
   ('71300000-0000-4000-8000-000000000001', 'new.staff@example.test'),
   ('71300000-0000-4000-8000-000000000002', 'leaving.staff@example.test');

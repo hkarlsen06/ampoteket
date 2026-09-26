@@ -7,6 +7,7 @@ const session = { config: { url: 'https://fixture.invalid', publishableKey: 'sb_
 test('admin returns allow only built local destinations without callback material', () => {
 	for (const value of ['//evil.invalid', 'https://evil.invalid', '/en/admin', '/admin?token=secret', '/admin/password', '/admin\\evil', '/admin/%2f%2fevil', null]) expect(adminReturnPath(value)).toBe('/admin');
 	expect(adminReturnPath('/admin/privacy')).toBe('/admin/privacy');
+	expect(adminReturnPath('/admin/admins')).toBe('/admin/admins');
 	for (const path of ['/admin/products', '/admin/products/new', '/admin/products/labels', `/admin/products/${command.userId}`, '/admin/shelf', '/admin/stock', '/admin/audit', '/admin/counts', `/admin/counts/${command.requestId}`]) expect(adminReturnPath(path)).toBe(path);
 	for (const path of ['/admin/products/bad-id', '/admin/counts/new', '/admin/shelf?token=secret', '/admin/products/../../password']) expect(adminReturnPath(path)).toBe('/admin');
 });

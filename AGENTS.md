@@ -67,7 +67,9 @@ Rules for schema work:
 - Keep `app` out of the Data API exposed-schema list. Public reads go through
   `public.amp_catalog`, `public.amp_catalog_facets`, `public.amp_shelf_map`
   and `public.amp_help_directory`; staff use their own JWT; the Worker uses the secret key
-  server-side only for the three guest checkout RPCs (prepare/get/confirm).
+  server-side only for the three guest checkout RPCs (prepare/get/confirm) and
+  Auth account creation/invitation after verifying an active staff caller.
+  Membership changes use that caller's own JWT.
 - No ORM, Edge Functions, realtime subscriptions, job queue, or JS-float money
   handling. Quantities/prices/totals travel as strings; the database computes totals.
 - After amending the migration, re-run `./scripts/test-database.sh` and update the

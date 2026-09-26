@@ -8,7 +8,7 @@ How clients read and write database values without losing precision or silently 
 - Quantities, money, bigint IDs and revisions stay strings in client state and in requests (including RPC item arrays). Values such as `999999999998.999999` and `9007199254740993` must survive an unedited round trip. No decimal library is needed; the database computes amounts.
 - Structural integers (coordinates, line numbers) also arrive as strings. Convert them only after checking format, `Number.isSafeInteger` and range; never convert quantities or money.
 - The helper returns `unknown`. Each screen validates the shape and shows an unavailable state on invalid data. It throws on HTTP errors rather than returning an empty result.
-- Deadline: 15 seconds for headers and body, 25 seconds for checkout. A timeout means the write is uncertain, never that it rolled back.
+- Deadline: 15 seconds for headers and body, 25 seconds for checkout, 60 seconds for admin invitations. A timeout means the write is uncertain, never that it rolled back.
 - Requests use `redirect: 'manual'` and redirect responses are rejected, so keys, JWTs and checkout bodies never reach a redirect target. (Workers do not support `redirect: 'error'`.)
 - The helper never logs URLs, tokens, contact text or bodies. Do not log `body` without removing personal data and credentials.
 - `amp_catalog` and guest RPCs return decimals as SQL text; staff views return native numbers, which the parser keeps exact. When updating `lossless-json`, run `bun test src/lib/api.test.ts` and `bun run check`.
@@ -36,6 +36,64 @@ Staff edit through `amp_help_contacts` with their own JWT:
 - Insert with a fresh client UUID, so a lost response can be reconciled.
 - PATCH filters `id=eq.<id>` and `edit_revision=eq.<original>`, sends the same original `edit_revision` in the body, and uses `Prefer: return=representation`. Only one returned row means saved. Zero rows or `STALE_HELP_CONTACT` means someone else edited: keep the draft, refresh and review, never overwrite.
 - Send blank optional contact methods as `null`. Entries cannot be deleted; unpublish instead.
+
+## Staff membership and invitations
+
+All membership RPCs require the active staff member's own JWT. Anon and service
+role have no execution grant; non-staff and inactive callers get `STAFF_REQUIRED`.
+The actor comes from the JWT, never a submitted staff ID.
+
+`amp_list_staff()` returns one JSON array, complete regardless of the API row cap:
+
+```text
+[{ id, auth_user_id: uuid | null, display_name, email: string | null,
+   is_active: boolean, email_confirmed: boolean }]
+```
+
+The UI shows a deleted account when `auth_user_id` is null, inactive when
+`is_active` is false, pending when the active account's email is unconfirmed, and
+active otherwise. Email comes from Auth and is visible only to active staff.
+
+- `amp_grant_staff_access(p_request_id uuid, p_email text, p_display_name text, p_expected_staff_id uuid = null, p_expected_active boolean = null)`
+  returns the membership UUID, granting or reactivating access to an existing
+  Auth account. The Worker creates an absent account first.
+- `amp_deactivate_staff(p_request_id uuid, p_staff_id uuid)` returns the membership
+  UUID and sets it inactive. `STAFF_SELF_DEACTIVATION` forbids deactivating the
+  caller; `STAFF_NOT_FOUND` rejects an unknown target.
+- Both writes use `command_requests` idempotency and audit the signed-in actor.
+  Reuse the original actor, request ID and exact payload after an uncertain result.
+  Membership writes serialize and recheck caller access, so mutual deactivation
+  cannot disable both callers. A completed grant replay returns its result
+  without undoing a later deactivation.
+
+`POST /api/admin/invitations` requires `Authorization: Bearer <caller JWT>`, JSON,
+the exact configured `CHECKOUT_ALLOWED_ORIGIN` and the `ADMIN_INVITATION_LIMIT`
+binding. Request and success response:
+
+```text
+{ requestId: uuid, email: string, displayName: string, targetId: uuid | null, targetActive: boolean | null, locale: "nb" | "en" }
+{ status: "invited" | "existing_account", staffId: uuid }
+```
+
+The Worker validates the request, limits its body and request rate, and verifies
+active staff before using the secret key for Auth account creation/invitation.
+The body is capped at 2,048 bytes. The native rate binding allows 10 requests per
+minute for each IP and each authenticated actor. Upstream work has a shared
+45-second deadline; the client allows 60 seconds for the complete request.
+It grants membership with the caller's JWT. For resend/reactivation, `targetId`
+binds the request to the listed membership and `targetActive` to its current
+access state. The database rejects a changed/deleted identity or access state
+before granting access, so stale resend actions cannot reactivate someone.
+New invitations use null for both fields. New accounts remain unconfirmed until
+the recipient follows the email link to set a password at the fixed localized
+`/admin/password?next=%2Fadmin` URL. Existing confirmed accounts retain their
+password and return `existing_account` without an invitation email.
+
+Email delivery is separate from the database transaction. `INVITATION_EMAIL_FAILED`
+means membership is saved but delivery failed; retry the same request to retry
+delivery. Resending a pending invitation uses the same endpoint. A replay after
+the membership was deactivated returns `INVITATION_SUPERSEDED` (409), preserving
+that deactivation. An uncertain response never means access was rolled back.
 
 ## Staff statistics
 

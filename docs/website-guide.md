@@ -10,6 +10,7 @@ this guide has a bug. Project context is in [prosjektoversikt.md](prosjektoversi
 ```
 Buyer browser ──► SvelteKit pages ──► Worker / server endpoints ──► Supabase Postgres (RPCs)
 Staff browser ──► SvelteKit pages ──► Supabase PostgREST directly (staff JWT) ──► Postgres
+Staff invitations ──► Worker (verified staff JWT) ──► Supabase Auth admin API
 ```
 
 - One database function call is one transaction and one atomic stock operation.
@@ -27,7 +28,7 @@ Never commit secrets; `.env.example` holds placeholders.
 | `PUBLIC_SUPABASE_URL` | Browser + server | Local: `http://127.0.0.1:54321`. |
 | `PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Browser | Public, not a password. |
 | `SUPABASE_SECRET_KEY` | Worker/server only | Bypasses RLS. Never in the browser bundle, repo, logs or URLs. |
-| `CHECKOUT_ALLOWED_ORIGIN` | Worker + Auth callback configuration | Exact HTTPS origin. Never derive trust from the request Host header. |
+| `CHECKOUT_ALLOWED_ORIGIN` | Checkout and invitation Workers + Auth callbacks | Exact HTTPS origin. Never derive trust from the request Host header. |
 
 The Worker also needs the native `CHECKOUT_SESSION_LIMIT` and
 `CHECKOUT_OPERATION_LIMIT` bindings from `wrangler.jsonc`: 20 initializations per
@@ -37,35 +38,36 @@ Bodies are capped at 32 KiB for prepare and 1 KiB otherwise, with a 10-second bo
 deadline and a 15-second upstream deadline. A timeout keeps the original attempt
 for retry; it never proves the database rolled back.
 
+Admin invitations also require the native `ADMIN_INVITATION_LIMIT` binding.
+The invitation endpoint fails closed when its configuration or binding is absent;
+its transport and retry rules are in [api-contract.md](api-contract.md#staff-membership-and-invitations).
+
 Local setup, the disposable seed and the trusted HTTPS proxy that checkout needs
 are in [README](../README.md).
 
 ## 2. Identity, roles and the access matrix
 
 Staff sign in with individual email/password Supabase Auth accounts, with password
-setup and recovery but no public registration or in-app membership management.
+setup and recovery, but no public registration. Active admins manage access at
+`/admin/admins` (§5.9).
 Signed-out admin visits redirect (replacing history) to the same locale's
 `/admin/login?next=<path>`. Unavailable Auth and missing/revoked access are
 distinct error states. The header Admin link shows only after membership is
 confirmed; that visibility never replaces database authorization.
 
-A Supabase login alone grants nothing. A maintainer creates the membership row:
-
-```sql
-INSERT INTO app.staff_members(auth_user_id, display_name)
-VALUES ('<real auth.users UUID>', 'Display name');
-```
-
-Disable with `is_active=false`; never delete people with history. History survives
-a deleted Auth account.
+A Supabase login alone grants nothing. A maintainer provisions the first admin
+using the [deployment runbook](runbook-deploy.md#5-first-staff-member-and-opening-stock).
+After that, any active admin can invite others or deactivate another admin.
+Deactivation keeps the membership and history; history also survives a deleted
+Auth account. Admins cannot deactivate themselves.
 
 | Caller | Credential | Allowed |
 |---|---|---|
 | Public visitor | anon / publishable key | `amp_catalog`, `amp_catalog_facets`, `amp_shelf_map` and published `amp_help_directory` reads only |
 | Logged-in non-staff | own user JWT | Same as public; zero staff rows, zero stock operations |
-| Staff | own staff JWT (never the service key plus a hand-supplied user id) | Staff read views, controlled master-data edits, all staff RPCs. No direct ledger writes, staff grants or token digests. Optional contacts are staff-only and erasable |
-| Website backend ("Worker") | secret key, server-side only | Public reads + exactly three guest checkout RPCs: prepare / get / confirm. No direct table privileges |
-| Maintainer | direct DB access | Migrations, staff provisioning, backups |
+| Staff | own staff JWT (never the service key plus a hand-supplied user id) | Staff read views, controlled master-data edits, all staff RPCs including audited membership management. No direct ledger or membership writes, or token digests. Optional contacts are staff-only and erasable |
+| Website backend ("Worker") | secret key, server-side only | Public reads, three guest checkout RPCs (prepare / get / confirm), and Auth account creation/invitation after checking the caller's staff JWT. Membership RPCs use that JWT; no direct table privileges |
+| Maintainer | direct DB access | Migrations, first-admin bootstrap, emergency access recovery, backups |
 
 The database resolves `auth.uid()` to a staff identity. The browser never sends
 `created_by`/`actor_id`. Deactivation takes effect on the next request.
@@ -273,6 +275,26 @@ retry. Rows expand to key and before/after JSON with exact numeric strings. Ther
 is no contact search. Movements, orders, counts and checkout recovery live on their
 own screens.
 
+### 5.9 Admin access
+
+`/admin/admins` lists memberships with name, email and a visible status: active,
+invitation pending, inactive or Auth account deleted. This is private staff data.
+Any active admin can invite or reactivate a person by name and email, resend a
+pending invitation, or deactivate another admin. There is one staff role.
+
+Invitations use the authenticated Worker endpoint described in the
+[API contract](api-contract.md#staff-membership-and-invitations). New admins follow
+an email link to the localized `/admin/password` page and set their password.
+An existing confirmed account keeps its password and can sign in immediately
+after access is granted. Email delivery failure keeps the saved membership and
+offers a delivery retry; it does not claim the invitation was sent.
+
+Deactivation is confirmed within the existing row and preserves its audit history.
+The database forbids self-deactivation and serializes membership changes, so two
+admins cannot deactivate each other concurrently and leave nobody able to sign in.
+Pending commands keep their original actor, request ID and exact payload for retry.
+A retry after a later deactivation never silently restores access.
+
 ## 6. Numbers the frontend must respect
 
 - **Steps:** `stock_step` is recording precision, `sale_step` the sellable
@@ -329,6 +351,9 @@ sheets or silently truncate or over-shrink specs. See [page-labels.md](page-labe
 - Guest RPCs are `service_role`-only; browsers reach them **only** through the Worker,
   which validates every guest input and enforces size limits, rate limits and
   origin/CSRF checks. Prices and totals come from the database.
+- Admin invitations also check the exact allowed origin, input/body limits and a
+  rate limit. Verify active staff with the caller's JWT before privileged Auth
+  calls; use that same JWT for membership changes and audit attribution.
 - No keys, passwords or checkout secrets in the repo, URLs or logs.
 - Error mapping: stale → conflict needing user action; retry-same → silent success;
   validation → field error; auth/privilege → access error with re-login. Timeouts
@@ -347,10 +372,10 @@ migration can raise.
 | Category → UI treatment | Error names |
 |---|---|
 | **Retry-safe conflict**: same request already done or racing; re-read state, show the saved result, never repost | `IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_INPUT` (same key, different payload, a client bug, never auto-retried), `STAFF_ALREADY_ACTIVE` (maintainer helper: the account already has access) |
-| **Stale form / conflict**: someone else changed state; refresh, show current data, ask the user to confirm again | `STALE_SHELF_LAYOUT`, `LAYOUT_HAS_PRODUCTS`, `STALE_HELP_CONTACT`, `STALE_STOCK_COUNT`, `PRODUCT_BIN_UNAVAILABLE`, `BIN_STILL_HAS_PRODUCTS`, `CABINET_STILL_HAS_BINS`, `BIN_ARCHIVED`, `CABINET_ARCHIVED`, `CORRECTION_REQUIRES_RECOUNT`, `STALE_STOCK_CORRECTION`, `STALE_BIN_POSITION`, `STALE_CABINET_POSITION`, `BIN_POSITION_OCCUPIED`, `BIN_DOES_NOT_FIT_CABINET_GRID`, `CABINET_SHRINK_WOULD_ORPHAN_BINS`, `RECEIPT_EXCEEDS_OUTSTANDING_QUANTITY`, `RECEIPT_ORDER_LINE_MISMATCH`, `INVALID_CANCELLATION_QUANTITY`, `RECEIPT_CORRECTION_OUT_OF_RANGE`, `COUNT_BATCH_FINISHED`, `CANCELLATION_ALREADY_REVERSED`, `CANNOT_REVERSE_A_REVERSAL`, `COUNT_BATCH_OWNER_STILL_ACTIVE` |
+| **Stale form / conflict**: someone else changed state; refresh, show current data, ask the user to confirm again | `INVITATION_SUPERSEDED`, `STALE_SHELF_LAYOUT`, `LAYOUT_HAS_PRODUCTS`, `STALE_HELP_CONTACT`, `STALE_STOCK_COUNT`, `PRODUCT_BIN_UNAVAILABLE`, `BIN_STILL_HAS_PRODUCTS`, `CABINET_STILL_HAS_BINS`, `BIN_ARCHIVED`, `CABINET_ARCHIVED`, `CORRECTION_REQUIRES_RECOUNT`, `STALE_STOCK_CORRECTION`, `STALE_BIN_POSITION`, `STALE_CABINET_POSITION`, `BIN_POSITION_OCCUPIED`, `BIN_DOES_NOT_FIT_CABINET_GRID`, `CABINET_SHRINK_WOULD_ORPHAN_BINS`, `RECEIPT_EXCEEDS_OUTSTANDING_QUANTITY`, `RECEIPT_ORDER_LINE_MISMATCH`, `INVALID_CANCELLATION_QUANTITY`, `RECEIPT_CORRECTION_OUT_OF_RANGE`, `COUNT_BATCH_FINISHED`, `CANCELLATION_ALREADY_REVERSED`, `CANNOT_REVERSE_A_REVERSAL`, `COUNT_BATCH_OWNER_STILL_ACTIVE` |
 | **Validation**: reject the field/form with a specific message | `INVALID_SHELF_LAYOUT`, `INVALID_HELP_PAGE_SIZE`, `INVALID_HELP_CURSOR`, `INVALID_CATALOG_PAGE_SIZE`, `INVALID_CATALOG_QUERY`, `UNKNOWN_CATALOG_CATEGORY`, `UNKNOWN_CATALOG_ATTRIBUTE`, `INVALID_CATALOG_FILTER`, `CATALOG_CURSOR_MISSING`, `STAFF_EMAIL_REQUIRED`, `STAFF_DISPLAY_NAME_REQUIRED`, `CORRECTION_REVISION_REQUIRED`, `DUPLICATE_CORRECTION_REFERENCE`, `ITEMS_MUST_BE_ARRAY`, `INVALID_ITEM_COUNT`, `INVALID_ITEM`, `PRODUCT_ID_REQUIRED`, `QUANTITY_REQUIRED`, `INVALID_QUANTITY_STEP`, `POSITIVE_CART_QUANTITY_REQUIRED`, `POSITIVE_RECEIPT_QUANTITY_REQUIRED`, `DUPLICATE_OR_MISSING_CART_PRODUCT`, `DUPLICATE_OR_MISSING_ORDER_LINE`, `RECEIPT_ORDER_LINE_REQUIRED`, `UNPLANNED_RECEIPT_REQUIRES_SOURCE_NOTE`, `UNPLANNED_RECEIPT_CANNOT_HAVE_ORDER_LINE`, `RECOVERY_REASON_REQUIRED`, `REASON_REQUIRED`, `CLOSURE_REASON_REQUIRED`, `PLACED_AT_REQUIRED`, `ORDER_PLACED_IN_FUTURE`, `NEGATIVE_PHYSICAL_COUNT`, `INVALID_WITHDRAWAL`, `INVALID_CHECKOUT_TOKEN`, `DISCRETE_UNIT_REQUIRES_WHOLE_QUANTITIES`, `ATTRIBUTE_VALUE_TYPE_MISMATCH`, `TWO_DISTINCT_BINS_AND_POSITIONS_REQUIRED`, `TWO_DISTINCT_CABINETS_AND_POSITIONS_REQUIRED`, `REQUEST_ID_REQUIRED` |
-| **Not found**: the referenced object does not exist (bad id, deleted link, wrong order); refresh and re-select | `PRODUCT_NOT_FOUND`, `STAFF_USER_NOT_FOUND`, `STAFF_NOT_ACTIVE`, `PRODUCT_NOT_FOR_SALE`, `ORDER_NOT_FOUND`, `ORDER_LINE_NOT_FOUND`, `BIN_NOT_FOUND`, `CABINET_NOT_FOUND`, `CANCELLATION_NOT_FOUND`, `COUNT_BATCH_NOT_FOUND`, `CORRECTED_MOVEMENT_NOT_FOUND` |
-| **Access**: sign-in/permission problem; access error, offer re-login | `STAFF_REQUIRED`, `CHECKOUT_NOT_FOUND_OR_NOT_AUTHORISED` (an id without its secret is treated as not found), `COUNT_BATCH_BELONGS_TO_ANOTHER_STAFF_MEMBER` |
+| **Not found**: the referenced object does not exist (bad id, deleted link, wrong order); refresh and re-select | `PRODUCT_NOT_FOUND`, `STAFF_USER_NOT_FOUND`, `STAFF_NOT_FOUND`, `STAFF_NOT_ACTIVE`, `PRODUCT_NOT_FOR_SALE`, `ORDER_NOT_FOUND`, `ORDER_LINE_NOT_FOUND`, `BIN_NOT_FOUND`, `CABINET_NOT_FOUND`, `CANCELLATION_NOT_FOUND`, `COUNT_BATCH_NOT_FOUND`, `CORRECTED_MOVEMENT_NOT_FOUND` |
+| **Access**: sign-in/permission problem; access error, offer re-login where applicable | `STAFF_REQUIRED`, `STAFF_SELF_DEACTIVATION` (another admin must deactivate this account), `CHECKOUT_NOT_FOUND_OR_NOT_AUTHORISED` (an id without its secret is treated as not found), `COUNT_BATCH_BELONGS_TO_ANOTHER_STAFF_MEMBER` |
 | **Guarded invariant**: the operation tried to change something immutable; this is a client bug, never a user-facing retry | `STORAGE_IDENTITY_IS_IMMUTABLE`, `IMMUTABLE_RECORD`, `PRODUCT_IDENTITY_AND_STOCK_UNIT_ARE_IMMUTABLE`, `ORDER_LINE_IDENTITY_AND_ORDERED_QUANTITY_ARE_IMMUTABLE`, `ATTRIBUTE_MEANING_IS_IMMUTABLE`, `INVALID_CORRECTION_REFERENCE`, `INVALID_RECEIPT_ALLOCATION`, `INVALID_MOVEMENT_SIGN`, `INVALID_MANUAL_KIND`, `INVALID_COMMAND_COMPLETION` |
 | **Configuration**: deployment misconfiguration, page an operator | `READ_COMMITTED_REQUIRED`, `UNREVIEWED_PUBLIC_FUNCTION` (migration-time only) |
 
@@ -373,6 +398,9 @@ These need real HTTP with real staff and non-staff JWTs; SQL alone cannot prove 
 | Stock reconciled against history | Balances equal movement sums |
 | QR scanned on a physical phone with app-switching | Correct object opens; full buy flow survives |
 | Staff deactivated | Subsequent operations rejected |
+| Admin invited or reactivated | Caller is audited; new account can set its password through the localized email link; confirmed account keeps its password |
+| Invitation email fails or a response is lost | Membership remains, retry uses the same command, and later deactivation is never undone by a replay |
+| Self-deactivation / concurrent mutual deactivation | Rejected / one admin remains active |
 | Box swap retried / from stale form | Executes once / rejected without double-move |
 | Abandoned batch closed | Owner preserved, closer + reason audited, stock untouched |
 

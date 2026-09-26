@@ -135,7 +135,7 @@ The guest protocol and retries are owned by [checkout-recovery.md](checkout-reco
 
 - Each stock-changing action is one RPC and one transaction; an error rolls everything back. Separate REST calls do not share a transaction.
 - Inventory writers lock affected product rows `FOR NO KEY UPDATE` in sorted UUID order and read balances only after locking. Order operations lock the order first (several orders in sorted order), so receipts, cancellations and receipt corrections cannot race over outstanding amounts.
-- Stock RPCs and direct bin/cabinet placement writes require `READ COMMITTED` (else `READ_COMMITTED_REQUIRED`): they must see rows committed while they waited. No transaction stays open while a person counts or pays.
+- Stock RPCs, staff-access changes and direct bin/cabinet placement writes require `READ COMMITTED` (else `READ_COMMITTED_REQUIRED`): they must see rows committed while they waited. No transaction stays open while a person counts or pays.
 
 ```text
 idempotency request, where applicable
@@ -148,6 +148,8 @@ idempotency request, where applicable
 - `command_requests` stores actor, input digest and result. Concurrent duplicates wait and get the same result. Reusing a key with other input or another actor fails.
 - Confirmation, finishing a batch and clearing a contact are repeat-safe by object identity. Other RPCs: reuse the same `p_request_id` on retry. Product edits filter by `metadata_revision` (separate from the stock revision) and require exactly one updated row.
 
+Staff-access changes take a `SHARE ROW EXCLUSIVE` lock on `staff_members` before the idempotency request and recheck the actor after waiting. This serializes invitations, reactivation and deactivation, including maintainer helpers; a deactivated actor cannot finish a waiting access change. No self-deactivation is allowed, so mutually revoking staff cannot remove every active account. Ordinary operations keep the lock order above.
+
 The two-connection cases are in [concurrency-tests.md](concurrency-tests.md).
 
 ## 9. API and Supabase permissions
@@ -158,9 +160,9 @@ Keep `app` out of the Data API's exposed schemas; `public` holds only the explic
 | --- | --- |
 | Public `anon` | `amp_catalog(...)`, `amp_catalog_facets(...)`, `amp_shelf_map()` and `amp_help_directory(...)` only. |
 | Logged-in non-staff | Catalogue/facets, shelf map and published help directory; no staff rows or staff operations. |
-| Active staff JWT | Staff read views, controlled master-data edits and authorised operational RPCs. |
+| Active staff JWT | Staff read views, controlled master-data edits, membership management and authorised operational RPCs. |
 | Worker `service_role` | Catalogue/facets, shelf map, published help directory and the three guest checkout RPCs; no blanket app-table grants. |
-| Database maintainer | Migrations and explicit staff provisioning. Treat as privileged access outside ordinary operations. |
+| Database maintainer | Migrations, first-staff bootstrap and emergency access recovery. Treat as privileged access outside ordinary operations. |
 
 - Staff views are `security_invoker=true`. Public reads are narrow `SECURITY DEFINER` functions.
 - Every grant is explicit, including for `service_role`; bypassing RLS does not grant object privileges.
@@ -175,14 +177,21 @@ Keep `app` out of the Data API's exposed schemas; `public` holds only the explic
 
 ### Staff provisioning
 
-After creating the Auth user, a maintainer runs in the SQL editor:
+Active staff invite, reactivate and deactivate other members from the Admins page. The Worker validates the staff JWT, creates a missing Auth account, grants membership with that same JWT, then sends the invitation. Existing Auth accounts can be linked deliberately by email; invited users follow the email link to set their password. SMTP and the first account remain deployment tasks ([runbook-deploy.md](runbook-deploy.md)).
+
+- `amp_list_staff()` returns the complete membership directory as a JSON array: `id`, `auth_user_id`, `display_name`, `email`, `is_active`, `email_confirmed`. Only active staff may call it. Deleted Auth accounts have null identity/email and `email_confirmed=false`.
+- `amp_grant_staff_access(p_request_id,p_email,p_display_name,p_expected_staff_id DEFAULT NULL,p_expected_active DEFAULT NULL)` requires exactly one existing Auth account for the case-insensitive email, creates or reactivates its membership, and returns the staff UUID. An already-active membership is a no-op and keeps its current name. Reactivation preserves the ID and applies the supplied name. Resend/reactivation from an existing row supplies its staff ID; if the email now belongs to another identity, it raises `INVITATION_SUPERSEDED` before membership writes. An existing row also supplies its expected active state: true for resend, false for explicit reactivation; a mismatch raises `INVITATION_SUPERSEDED`, so a stale resend cannot undo revocation. A null expected ID is a deliberate email-based invitation. Retry keys bind the normalized email/name, expected staff ID/state and acting staff member.
+- `amp_deactivate_staff(p_request_id,p_staff_id)` returns the staff UUID and sets `is_active=false`. Repeated deactivation is a no-op. The caller cannot deactivate themselves (`STAFF_SELF_DEACTIVATION`); an unknown ID raises `STAFF_NOT_FOUND`. Access changes recheck the actor under the shared lock described in §8.
+- Both writes use `command_requests`, preserve historical foreign keys and audit the acting staff member. Neither anonymous users nor the Worker service key can execute these RPCs. A deleted Auth account nulls `auth_user_id`; recreating that email creates a new identity and never relinks old history automatically.
+
+For the first member or emergency recovery, create the Auth user and run as a database maintainer:
 
 ```sql
 SELECT app.grant_staff_access('person@example.no', 'Staff display name');
 SELECT app.revoke_staff_access('person@example.no');
 ```
 
-Granting reactivates a revoked membership. Revoking sets `is_active=false`; never delete staff rows. A deleted Auth account nulls `auth_user_id` and keeps the staff ID for history. Staff cannot grant access through the API. See [runbook-deploy.md](runbook-deploy.md).
+These helpers remain unavailable to API roles. Granting reactivates a revoked membership; an active membership raises `STAFF_ALREADY_ACTIVE`. Privileged revocation can remove the final member, so use it only with a deliberate recovery plan. Never delete staff rows.
 
 ## 10. RPC contracts
 
@@ -194,6 +203,8 @@ All RPCs are in `public`; helpers in `app` are not client APIs. Signatures are i
 | `amp_shelf_map` | Public | Complete live cabinets and bins with `has_products`. |
 | `amp_help_directory` | Public | Published support contacts. |
 | `amp_admin_statistics` | Staff | Sales summary and overview ([response](api-contract.md#staff-statistics)). |
+| `amp_list_staff` | Staff | Complete membership directory and Auth invitation state. |
+| `amp_grant_staff_access`, `amp_deactivate_staff` | Staff | Add/reactivate or deactivate another member; returns their staff UUID. |
 | `amp_prepare_checkout`, `amp_get_checkout`, `amp_confirm_checkout` | Worker | Freeze, read and register a checkout. |
 | `amp_recover_checkout` | Staff | Register the original checkout with a reason; converges with guest retries. |
 | `amp_record_order` | Staff | Record an already-placed order. |
@@ -271,7 +282,7 @@ CREATE TABLE app.units (
 
 ### `staff_members`
 
-Internal staff IDs survive Auth-account removal. Access is granted and revoked by a maintainer (§9).
+Internal staff IDs survive Auth-account removal. Active staff manage access through audited RPCs; maintainers bootstrap or recover access (§9).
 
 ```sql
 CREATE TABLE app.staff_members (

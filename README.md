@@ -88,7 +88,7 @@ original developer used Tailscale with `dev.ampoteket.no`.
 | `bun run check:ink` | Catch clipped SVG/CSS edges |
 | `bun run i18n` | Side-by-side editor for the Norwegian and English strings, port 5175 ([i18n.md](docs/i18n.md)) |
 | `./scripts/test-database.sh` | Full database suite in a throwaway PostgreSQL |
-| `./scripts/test-web.sh [--mode]` | Real browser tests against a throwaway stack |
+| `./scripts/test-web.sh [--mode]` | Real browser or HTTP tests against a throwaway stack |
 | `./scripts/seed-test.sh` | A separate throwaway catalog for experiments (`--count N`, `--check`, `--workshop`) |
 | `/slopo-review`, `/slopo-analyze-ignore`, `/slopo-analyze-one` | Claude Code skills that find non-exact duplicate code with [Slopo](https://slopo.dev) (`uv tool install slopo`, key in `.env` as `SLOPO_EMBEDDING_API_KEY`, config in `slopo.conf.yaml`) |
 
@@ -103,11 +103,16 @@ push.
 `./scripts/test-web.sh` builds the real Worker and drives Firefox against a
 throwaway Supabase stack with real Auth. Modes: none (boundary checks), `--shop`,
 `--checkout`, `--admin`, `--statistics`, `--scanner`, `--labels`, `--shelf`,
-`--orders`. It also needs OpenSSL, `certutil` (`libnss3-tools`) and
+`--orders`, `--admins`. It also needs OpenSSL, `certutil` (`libnss3-tools`) and
 `bunx --no-install playwright install --with-deps firefox`. `--scanner` also needs
 WebKit. `--labels` needs PyMuPDF 1.28.2 on `PATH`, for example from a venv
 (`python3 -m venv .venv-proof && .venv-proof/bin/pip install PyMuPDF==1.28.2`).
 Screenshots go to `test-results/`, which is ignored by git.
+
+`./scripts/test-web.sh --admins` checks admin invitations over real HTTP through
+the built Worker, local Auth and Mailpit: email links, password setup, permissions,
+audit attribution and safe membership retries. It also checks the Admins page at
+360 and 1280 px, in both languages and colour schemes.
 
 Manual proofs run against a running dev server: `scripts/admin-sidebar-proof.ts`,
 `scripts/home-printer-proof.ts` and `scripts/home-soldering-proof.ts`

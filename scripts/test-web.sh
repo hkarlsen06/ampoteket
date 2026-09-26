@@ -16,6 +16,9 @@ elif [[ ${1:-} == --scanner && $# == 1 ]]; then
 elif [[ ${1:-} == --admin && $# == 1 ]]; then
   runner=scripts/admin-proof.ts
   row_cap=17
+elif [[ ${1:-} == --admins && $# == 1 ]]; then
+  runner=scripts/admin-access-proof.ts
+  row_cap=2
 elif [[ ${1:-} == --statistics && $# == 1 ]]; then
   runner=scripts/statistics-proof.ts
   row_cap=2
@@ -29,12 +32,13 @@ elif [[ ${1:-} == --orders && $# == 1 ]]; then
   runner=scripts/orders-proof.ts
   row_cap=2
 elif [[ $# != 0 ]]; then
-  echo 'Usage: ./scripts/test-web.sh [--shop|--checkout|--scanner|--admin|--statistics|--labels|--shelf|--orders]' >&2; exit 1
+  echo 'Usage: ./scripts/test-web.sh [--shop|--checkout|--scanner|--admin|--admins|--statistics|--labels|--shelf|--orders]' >&2; exit 1
 fi
 for executable in docker psql supabase bun openssl certutil python3 flock; do
   command -v "$executable" >/dev/null || { echo "Missing tool: $executable" >&2; exit 1; }
 done
 # Fail before starting containers or building if the selected browser is absent.
+if [[ $runner != scripts/admin-access-proof.ts ]]; then
 bun --eval 'import { firefox, webkit } from "@playwright/test";
 for (const browser of [firefox, ...(process.argv.at(-1) === "scripts/scanner-proof.ts" ? [webkit] : [])]) {
   if (!await Bun.file(browser.executablePath()).exists()) {
@@ -42,6 +46,7 @@ for (const browser of [firefox, ...(process.argv.at(-1) === "scripts/scanner-pro
     process.exit(1);
   }
 }' "$runner"
+fi
 if [[ $runner == scripts/labels-proof.ts ]] && ! python3 -c 'import pymupdf' >/dev/null 2>&1; then
   echo 'Label PDF acceptance requires Python PyMuPDF (pymupdf).' >&2; exit 1
 fi
@@ -85,7 +90,7 @@ PY
 )
 mailpit_enabled=false
 excluded_services='realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor'
-if [[ $runner == scripts/checkout-proof.ts ]]; then
+if [[ $runner == scripts/checkout-proof.ts || $runner == scripts/admin-access-proof.ts ]]; then
   mailpit_enabled=true
   excluded_services='realtime,storage-api,imgproxy,postgres-meta,studio,edge-runtime,logflare,vector,supavisor'
 fi

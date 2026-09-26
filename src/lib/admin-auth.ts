@@ -78,5 +78,5 @@ export async function readAdminMembership(
 
 /** A return path never carries credentials, another origin or an unbuilt screen. */
 export function adminReturnPath(value: string | null): string {
-	return value && /^\/admin(?:\/(?:privacy|help|shelf|stock|audit|products(?:\/(?:new|labels|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))?|(?:counts|orders)(?:\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?))?$/.test(value) ? value : '/admin';
+	return value && /^\/admin(?:\/(?:privacy|help|admins|shelf|stock|audit|products(?:\/(?:new|labels|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))?|(?:counts|orders)(?:\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?))?$/.test(value) ? value : '/admin';
 }

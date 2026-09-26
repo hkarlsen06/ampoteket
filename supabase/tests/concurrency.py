@@ -480,3 +480,54 @@ race(retire_call(uid(), layout_cabinet(retire_second), layout_bins(retire_second
      assign, error='PRODUCT_BIN_UNAVAILABLE')
 assert run('SELECT bin_id IS NULL FROM app.products WHERE id=' + quote(retire_product) + ';') == 't'
 print('PASS: duplicate cabinet retirement has one audit set and concurrent assignment cannot attach to archived drawers', flush=True)
+
+# Membership RPCs recheck the acting member after the shared access lock.
+member_auth_a, member_auth_b, member_auth_c = uid(), uid(), uid()
+member_a, member_b = uid(), uid()
+run('INSERT INTO auth.users(id,email) VALUES('
+    + quote(member_auth_a) + ",'race-a@example.test'),(" + quote(member_auth_b)
+    + ",'race-b@example.test'),(" + quote(member_auth_c) + ",'race-c@example.test');"
+    + 'INSERT INTO app.staff_members(id,auth_user_id,display_name) VALUES('
+    + quote(member_a) + ',' + quote(member_auth_a) + ",'Race A'),("
+    + quote(member_b) + ',' + quote(member_auth_b) + ",'Race B');")
+member_role_a = STAFF.replace('71000000-0000-4000-8000-000000000001', member_auth_a)
+member_role_b = STAFF.replace('71000000-0000-4000-8000-000000000001', member_auth_b)
+
+def deactivate_member(request, member):
+    return 'SELECT public.amp_deactivate_staff(' + quote(request) + ',' + quote(member) + ');'
+
+for winner, loser, winner_role, loser_role in [
+    (member_a, member_b, member_role_a, member_role_b),
+    (member_b, member_a, member_role_b, member_role_a),
+]:
+    run('UPDATE app.staff_members SET is_active=true WHERE id IN (' + quote(member_a) + ',' + quote(member_b) + ');')
+    failed_request = uid()
+    race(deactivate_member(uid(), loser), deactivate_member(failed_request, winner),
+         winner_role, loser_role, 'STAFF_REQUIRED')
+    assert run('SELECT is_active FROM app.staff_members WHERE id=' + quote(winner) + ';') == 't'
+    assert run('SELECT is_active FROM app.staff_members WHERE id=' + quote(loser) + ';') == 'f'
+    assert run('SELECT count(*) FROM app.command_requests WHERE id=' + quote(failed_request) + ';') == '0'
+print('PASS: mutual staff deactivation preserves the winner in both lock orders', flush=True)
+
+run('UPDATE app.staff_members SET is_active=true WHERE id IN (' + quote(member_a) + ',' + quote(member_b) + ');')
+invitation_request = uid()
+invitation = ('SELECT public.amp_grant_staff_access(' + quote(invitation_request)
+              + ",'race-c@example.test','Race C');")
+race(deactivate_member(uid(), member_b), invitation, member_role_a, member_role_b, 'STAFF_REQUIRED')
+assert run('SELECT count(*) FROM app.staff_members WHERE auth_user_id=' + quote(member_auth_c) + ';') == '0'
+print('PASS: deactivated staff cannot finish a concurrent grant after waiting', flush=True)
+
+run('UPDATE app.staff_members SET is_active=true WHERE id=' + quote(member_b) + ';')
+first, retry = race(invitation, invitation, member_role_b, member_role_b)
+assert first == retry
+assert run("SELECT count(*) FROM app.audit_log WHERE table_name='staff_members' AND action='INSERT' "
+           "AND row_key->>'id'=" + quote(first) + ';') == '1'
+assert run('SELECT count(*) FROM app.staff_members WHERE auth_user_id=' + quote(member_auth_c) + ';') == '1'
+print('PASS: concurrent invitation retries create one membership and one audit entry', flush=True)
+
+# A maintainer revocation uses the same lock and invalidates a waiting API grant.
+race("SELECT app.revoke_staff_access('race-b@example.test');",
+     "SELECT public.amp_grant_staff_access(" + quote(uid()) + ",'race-c@example.test','Changed');",
+     '', member_role_b, 'STAFF_REQUIRED')
+assert run('SELECT display_name FROM app.staff_members WHERE auth_user_id=' + quote(member_auth_c) + ';') == 'Race C'
+print('PASS: maintainer revocation also rejects a waiting staff grant', flush=True)

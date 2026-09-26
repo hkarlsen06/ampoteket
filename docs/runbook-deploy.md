@@ -130,10 +130,15 @@ connection:
 SELECT app.grant_staff_access('<verified real address>', '<display name>');
 ```
 
-Record who granted access and why. Disable leavers with
-`SELECT app.revoke_staff_access('<address>')`; their rows and actor IDs stay.
-Replace accounts only through the verified mapping in the
-[restore runbook](runbook-backup-restore.md) §4.
+Record who granted the first access and why. Once signed in, admins invite,
+reactivate and deactivate other admins at `/admin/admins`; ordinary onboarding
+needs no dashboard or SQL. Membership changes are attributed to the signed-in
+admin, and self-deactivation is forbidden.
+
+Keep `app.grant_staff_access` and `app.revoke_staff_access` for bootstrap and
+emergency maintainer recovery only; record the operator and reason. Deactivation
+keeps rows and actor IDs. Replace deleted accounts only through the verified
+mapping in the [restore runbook](runbook-backup-restore.md) §4.
 
 Enter products and opening stock through count batches, following the
 [counting procedure](operating-procedures.md). No invented receipts or hidden
@@ -143,8 +148,8 @@ inventory/placement manifest and check physical labels.
 
 ## 6. Worker and Auth
 
-`wrangler.jsonc` defines the Worker name, assets and checkout rate limits. Use
-the locked Wrangler (`bunx --no-install`), check the account with
+`wrangler.jsonc` defines the Worker name, assets, checkout rate limits and
+`ADMIN_INVITATION_LIMIT`. Use the locked Wrangler (`bunx --no-install`), check the account with
 `wrangler whoami`, and record the Cloudflare zone/account. Add the reviewed
 public values before building:
 
@@ -171,15 +176,27 @@ Configure hosted Auth for the same HTTPS origin before granting staff access:
   `recovery.html` into the hosted email-template settings; `config.toml` does
   not publish them.
 - Both templates need a localized `redirectTo` ending in `?next=...`, because
-  the link appends the token to that query. Send invitations through the Auth
-  admin invitation API with `redirectTo` containing `?next=%2Fadmin`; a
-  Dashboard invitation without it does not work.
+  the link appends the token to that query. The site's invitation endpoint sends
+  the fixed localized password URL with `?next=%2Fadmin`. A manual first-admin
+  invitation must use that same Auth admin invitation API return URL; a Dashboard
+  invitation without it does not work.
 - The password page accepts PKCE `code` callbacks, or `token_hash` with
   `type=invite` / `type=recovery`. It rejects implicit `#access_token` callbacks.
 - The built-in sender only delivers to project-team addresses (about 2
   emails/hour, no SLA). Production needs
   [custom SMTP](https://supabase.com/docs/guides/auth/auth-smtp). Rehearse real
-  invitation and reset delivery.
+  invitation and reset delivery before launch. SMTP is hosted Auth configuration,
+  not an application setting. A failed invitation email keeps the membership so
+  an admin can retry delivery after the sender is configured.
+
+For Resend, first verify the sending domain in Resend. In Supabase Authentication
+→ Email → SMTP Settings, enable custom SMTP and set host `smtp.resend.com`, port
+`465`, username `resend` and the Resend API key as the password. Set sender name
+`Ampoteket` and sender address `noreply@notify.ampoteket.no`, after
+`notify.ampoteket.no` is verified. See the
+[Resend Supabase SMTP guide](https://resend.com/docs/send-with-supabase-smtp).
+The key belongs in hosted Auth's SMTP settings; no Resend SDK, application
+environment variable or Worker secret is needed.
 
 ### Publish
 
