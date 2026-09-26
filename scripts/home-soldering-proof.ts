@@ -65,7 +65,7 @@ try {
 			const tip = root.getObjectByName('IronTipPivot');
 			const target = root.getObjectByName('SolderContactTarget');
 			const socket = root.getObjectByName('IronCableSocket');
-			const station = root.getObjectByName('Station_and_board_—_Black_moulded_enclosure');
+			const station = root.getObjectByName('Station_and_board_\u2014_Black_moulded_enclosure');
 			const cable = root.getObjectByName('Flexible_iron_lead') as Cable | undefined;
 			if (!tip || !target || !socket || !station || !cable) throw new Error('Iron/station/cable nodes missing from the GLB');
 			const tipPosition = tip.getWorldPosition(tip.position.clone());
@@ -172,9 +172,9 @@ try {
 	for (const mode of ['reduced-motion', 'no-js', 'load-error'] as const) {
 		const context = await browser.newContext({ viewport: { width: 360, height: 900 },
 			reducedMotion: mode === 'reduced-motion' ? 'reduce' : 'no-preference', javaScriptEnabled: mode !== 'no-js' });
-		if (mode === 'load-error') await context.route('**/models/soldering-station.glb', route => route.abort());
+		if (mode === 'load-error') await context.route('**/models/soldering-station.glb.gz', route => route.abort());
 		const page = await context.newPage();
-		const failed = mode === 'load-error' ? page.waitForEvent('requestfailed', { predicate: request => request.url().endsWith('/models/soldering-station.glb') }) : null;
+		const failed = mode === 'load-error' ? page.waitForEvent('requestfailed', { predicate: request => request.url().endsWith('/models/soldering-station.glb.gz') }) : null;
 		await page.goto(origin);
 		await page.locator(`${selector}, ${stillSelector}`).scrollIntoViewIfNeeded();
 		if (failed) await failed;

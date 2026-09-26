@@ -17,11 +17,10 @@
 	import Led from '$lib/Led.svelte';
 	import { Badge } from '$lib/components/ui/badge';
 	import Brackets from '$lib/Brackets.svelte';
-	import ShelfMap from '$lib/ShelfMap.svelte';
 	import type { PageData } from './$types';
 	import { pageContainer, formActions, sheetBody } from '$lib/ui';
-	// Workshop content renders without API reads; the shared shelf picker loads
-	// live topology and selected drawer contents in the browser.
+	// The page renders without API reads, so nothing delays its first byte; the shelf
+	// picker loads live topology and drawer contents in the browser when opened.
 	import { goto } from '$app/navigation';
 	import { getI18n } from '$lib/i18n';
 
@@ -78,6 +77,7 @@
 	let code = $state('');
 	let showModels = $state(false);
 	let solderingFailed = $state(false);
+	let printerSrc = $state<string>(), solderingSrc = $state<string>();
 	let shelfOpen = $state(false), shelfMounted = $state(false);
 	let shelfBody = $state<HTMLDivElement>();
 	let printerStage = $state<HTMLDivElement>();
@@ -107,6 +107,7 @@
 		let pointerX = 0, pointerY = 0;
 		let solderingX = 0, solderingY = 0;
 		let solderingPointer: ReturnType<typeof createSolderingPointer> = null;
+		let unpacking = false;
 		const stage = printerStage;
 		const soldering = solderingStage;
 		const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -173,6 +174,18 @@
 			try { const canvas = document.createElement('canvas'); return Boolean(canvas.getContext('webgl2') ?? canvas.getContext('webgl')); }
 			catch { return false; }
 		};
+		// Cloudflare serves model/gltf-binary uncompressed, so the models ship gzipped
+		// (scripts/compress-model.sh) and are unpacked here into object URLs. A server
+		// that labels .gz as Content-Encoding (Vite's) has the browser unpack it first.
+		const unpack = async (name: string) => {
+			const response = await fetch(`/models/${name}.glb.gz`);
+			if (!response.ok) throw new Error(`Model ${name}: HTTP ${response.status}`);
+			let blob = await response.blob();
+			const [a, b] = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
+			if (a === 0x1f && b === 0x8b) blob = await new Response(blob.stream().pipeThrough(new DecompressionStream('gzip'))).blob();
+			if (!mounted) throw new Error('Unmounted');
+			return URL.createObjectURL(blob);
+		};
 		const updateModels = () => {
 			if (reducedMotion.matches) {
 				pointerX = pointerY = 0;
@@ -186,6 +199,14 @@
 			// Without WebGL model-viewer cannot render (and throws while syncing its
 			// camera); the still renders are the complete fallback.
 			if (!webgl()) { showModels = false; return; }
+			// Data Saver keeps the posters: the viewer and models are about 1.5 MB.
+			if ((navigator as { connection?: { saveData?: boolean } }).connection?.saveData) return;
+			if (!unpacking) {
+				unpacking = true;
+				// A printer that fails keeps its poster; the soldering stage swaps to its still.
+				unpack('bambu-p2s').then((url) => { printerSrc = url; }, () => {});
+				unpack('soldering-station').then((url) => { solderingSrc = url; }, () => { if (mounted) solderingFailed = true; });
+			}
 			void import('@google/model-viewer')
 				.then(({ ModelViewerElement }) => {
 					// model-viewer uses three's bundled meshopt decoder once a script at this
@@ -206,6 +227,7 @@
 		soldering?.addEventListener('pointerleave', resetSoldering);
 		return () => {
 			mounted = false;
+			for (const url of [printerSrc, solderingSrc]) if (url) URL.revokeObjectURL(url);
 			nearby.disconnect();
 			cancelAnimationFrame(frame);
 			solderingPointer?.dispose();
@@ -409,7 +431,7 @@
 				</div>
 				<div bind:this={printerStage} class={modelStage}>
 					{#if showModels}
-						<model-viewer id="home-printer" class="block size-full [&::part(default-progress-bar)]:hidden" src="/models/bambu-p2s.glb" poster="/models/bambu-p2s.webp" alt={m.facilities.printerAlt} loading="lazy" camera-orbit="{PRINTER_START.azimuth}deg {PRINTER_START.polar}deg 1.4m" exposure="1" shadow-intensity="0.6" shadow-softness="1"></model-viewer>
+						<model-viewer id="home-printer" class="block size-full [&::part(default-progress-bar)]:hidden" src={printerSrc} poster="/models/bambu-p2s.webp" alt={m.facilities.printerAlt} loading="lazy" camera-orbit="{PRINTER_START.azimuth}deg {PRINTER_START.polar}deg 1.4m" exposure="1" shadow-intensity="0.6" shadow-softness="1"></model-viewer>
 					{:else}
 						<img class="size-full object-contain" src="/models/bambu-p2s.webp" alt={m.facilities.printerAlt} width="1100" height="1100" loading="lazy" decoding="async" />
 					{/if}
@@ -427,7 +449,7 @@
 				</div>
 				<div bind:this={solderingStage} class={modelStage}>
 					{#if showModels && !solderingFailed}
-						<model-viewer id="home-soldering" class="block size-full [&::part(default-progress-bar)]:hidden" src="/models/soldering-station.glb" poster="/models/soldering-station.webp" alt={m.facilities.solderingAlt} loading="lazy" animation-name="Soldering" camera-orbit="20deg 62deg 1.0m" camera-target="0.03m 0.115m 0m" exposure="1" shadow-intensity="0.6" shadow-softness="1" onerror={() => solderingFailed = true}></model-viewer>
+						<model-viewer id="home-soldering" class="block size-full [&::part(default-progress-bar)]:hidden" src={solderingSrc} poster="/models/soldering-station.webp" alt={m.facilities.solderingAlt} loading="lazy" animation-name="Soldering" camera-orbit="20deg 62deg 1.0m" camera-target="0.03m 0.115m 0m" exposure="1" shadow-intensity="0.6" shadow-softness="1" onerror={() => solderingFailed = true}></model-viewer>
 					{:else}
 						<img class="size-full object-contain" src="/models/soldering-station.webp" alt={m.facilities.solderingAlt} width="1100" height="1100" loading="lazy" decoding="async" />
 					{/if}
@@ -516,7 +538,8 @@
 									</Dialog.Header>
 									<!-- svelte-ignore a11y_no_noninteractive_tabindex (Named scroll region supports native keyboard scrolling.) -->
 									<div bind:this={shelfBody} class={["shelf-picker-body", sheetBody]} role="region" aria-labelledby="home-shelf-title" tabindex="0">
-										<ShelfMap stacked initialTopology={data.shelfTopology} config={data.catalogConfig} labelledby="home-shelf-title" onreveal={shelfOpen ? revealShelfSection : undefined} />
+										<!-- Loaded on first open: the picker is most of this page's own script. -->
+										{#await import('$lib/ShelfMap.svelte') then { default: ShelfMap }}<ShelfMap stacked config={data.adminConfig} labelledby="home-shelf-title" onreveal={shelfOpen ? revealShelfSection : undefined} />{/await}
 									</div>
 								</Dialog.Content>
 							{/if}

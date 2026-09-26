@@ -33,9 +33,9 @@ not CI claims.
 
 Update this section whenever a migration changes (`sha256sum supabase/migrations/*`).
 
-- `20260917000100_ampoteket_initial.sql` — SHA-256
+- `20260917000100_ampoteket_initial.sql`: SHA-256
   `0eda5217b038887d44b1960983f7df650f6ba44458bb1f05f5f5808b5e99c69b`
-- `20260924000100_archive_empty_cabinet.sql` — SHA-256
+- `20260924000100_archive_empty_cabinet.sql`: SHA-256
   `503d75885d3774a967f4cad7a3b891b94b4f62020a393d5620220a997be6b7d6`
 
 24 app tables, four exact numeric domains, 26 public RPCs, 29 staff views and five

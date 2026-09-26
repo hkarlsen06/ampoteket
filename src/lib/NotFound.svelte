@@ -7,7 +7,7 @@
 	// Shared body for every error page: the locale `+error.svelte` (inside the
 	// header/footer layout) and the root `+error.svelte` (the fallback for paths
 	// that never match the locale layout, e.g. `/nb/...`). Copy comes from the
-	// `notFound` dictionaries, links go through `localizeHref` — never hard-code
+	// `notFound` dictionaries, links go through `localizeHref`; never hard-code
 	// either here (docs/i18n.md §2).
 	import { localizeHref, messagesFor, type Locale } from '$lib/i18n';
 

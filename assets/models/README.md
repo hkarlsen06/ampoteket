@@ -12,7 +12,7 @@ blender -b --python assets/models/build-p2s.py
 blender -b --python assets/models/build-soldering-station.py
 ```
 
-Rebuilding **overwrites** the `.blend`, `static/models/<name>.glb` and
+Rebuilding **overwrites** the `.blend`, `static/models/<name>.glb.gz` and
 `static/models/<name>.webp`, so port hand edits back into the generator first. No
 downloaded assets or external Python packages are needed; compression needs
 `bun install`. Sources use metres, Z up, negative Y forward; glTF export converts
@@ -26,7 +26,9 @@ behaviour belongs to [page-home.md](../../docs/page-home.md).
 
 Blender writes its raw export to the ignored `assets/models/build/`; each generator
 then runs `scripts/compress-model.sh <name>`, which writes the served GLB with
-Meshopt geometry, quantized attributes and WebP textures. Run the script alone after
+Meshopt geometry, quantized attributes and WebP textures of at most 1024 px, gzipped
+(Cloudflare does not compress `model/gltf-binary`; the homepage unpacks it with
+`DecompressionStream` into an object URL for `model-viewer`). Run the script alone after
 changing its options. It keeps the scene graph intact (no flattening, joining,
 instancing or empty-node pruning) because the homepage and proofs look up named
 nodes. The homepage gives `model-viewer` an empty inline decoder script so 4.3.1
@@ -67,13 +69,13 @@ board and lowers its tip onto a pad, and a solder fillet grows.
 
 Named nodes the homepage depends on (keep them when editing):
 
-- `IronTipPivot` — animated parent of the rigid iron parts, origin at the tip.
-- `SolderContactTarget` — the landing point.
-- `IronPointerPivot` — child used for the independent mouse lean.
-- `IronCableSocket` — where the cable meets the handle.
-- `Flexible iron lead` — 30 animated shape keys; UV U runs from controller (0) to
+- `IronTipPivot`: animated parent of the rigid iron parts, origin at the tip.
+- `SolderContactTarget`: the landing point.
+- `IronPointerPivot`: child used for the independent mouse lean.
+- `IronCableSocket`: where the cable meets the handle.
+- `Flexible iron lead`: 30 animated shape keys; UV U runs from controller (0) to
   handle (1), and the browser deforms its last span with the mouse lean.
-- `Fresh solder fillet` — the final joint animation.
+- `Fresh solder fillet`: the final joint animation.
 
 The cable is shape keys, not a physics simulation; the pointer deforms a float copy
 of the quantized positions without clamping. Node manipulation uses the pinned

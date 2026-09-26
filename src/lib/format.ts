@@ -90,7 +90,7 @@ function measurementPrefixes(unit: string | null): Map<string, number> {
  * category's `unit`, bare shorthand such as "4p7" or "10k" → "4,7 pF", "10 kΩ". */
 export function tidyNameMeasurements(text: string, unit: string | null, locale: Locale): string {
 	const prefixes = [...measurementPrefixes(unit).keys()].join('');
-	const shorthand = prefixes && new RegExp(String.raw`(?<![\p{L}\p{N}_./+,−–—-])\d+(?:[.,]\d+)?[${prefixes}]\d*(?![\p{L}\p{N}_−–—-])`, 'gu');
+	const shorthand = prefixes && new RegExp(String.raw`(?<![\p{L}\p{N}_./+,−–\u2014-])\d+(?:[.,]\d+)?[${prefixes}]\d*(?![\p{L}\p{N}_−–\u2014-])`, 'gu');
 	const expanded = shorthand ? text.replace(shorthand, (token) => {
 		try { return formatMeasurement(parseMeasurement(token, unit, locale), unit, locale); }
 		catch { return token; }
@@ -121,7 +121,7 @@ for (const unit of ['Ω', 'F', 'H', 'V', 'A', 'W', 'Hz']) {
 	}
 }
 const measurementInName = new RegExp(
-	String.raw`(?<![\p{L}\p{N}_./+,−–—-])([+-]?(?:\d(?:[\d.,/ −–—\u00a0\u202f-]*\d)?|[.,]\d+))\s*(${[...nameUnits.keys()].sort((a, b) => b.length - a.length).join('|')})(?![\p{L}\p{N}_−–—-])`, 'gu'
+	String.raw`(?<![\p{L}\p{N}_./+,−–\u2014-])([+-]?(?:\d(?:[\d.,/ −–\u2014\u00a0\u202f-]*\d)?|[.,]\d+))\s*(${[...nameUnits.keys()].sort((a, b) => b.length - a.length).join('|')})(?![\p{L}\p{N}_−–\u2014-])`, 'gu'
 );
 
 /** `from` reads the numbers in another language, e.g. when a Norwegian name is translated. */

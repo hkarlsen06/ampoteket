@@ -25,9 +25,9 @@ SOURCE = ROOT / "assets/models/soldering-station.blend"
 # The raw export is compressed into static/models/ by scripts/compress-model.sh.
 GLB = ROOT / "assets/models/build/soldering-station.glb"
 GLB.parent.mkdir(parents=True, exist_ok=True)
-SERVED_GLB = ROOT / "static/models/soldering-station.glb"
+SERVED_GLB = ROOT / "static/models/soldering-station.glb.gz"
 WEBP = ROOT / "static/models/soldering-station.webp"
-model = new_model("Soldering station — original geometry")
+model = new_model("Soldering station \u2014 original geometry")
 cylinder = partial(helpers.cylinder, cap=.0004)
 scene = bpy.context.scene
 scene.unit_settings.system = "METRIC"
@@ -347,7 +347,7 @@ for i in range(7):
     cylinder("Connector boot rib",(-.033,-.022-i*.0015,-.008),.0049-i*.0002,.0006,rubber,(pi/2,0,0),40)
 for obj in set(model.objects)-start:
     obj.parent=panel
-station_root=bpy.data.objects.new("Control unit — 91 mm overall height",None)
+station_root=bpy.data.objects.new("Control unit \u2014 91 mm overall height",None)
 station_root.scale.z=.91
 model.objects.link(station_root)
 for obj in set(model.objects)-station_start-{station_root}:
@@ -604,7 +604,7 @@ for (group,name),objects in groups.items():
     bpy.context.view_layer.objects.active=objects[0]
     if len(objects)>1:
         bpy.ops.object.join()
-    objects[0].name=group+" — "+name
+    objects[0].name=group+" \u2014 "+name
 for obj in model.objects:
     if obj not in [iron_root,iron_pointer,iron_socket,contact,cable,joint]:
         obj.hide_render=True

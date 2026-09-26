@@ -275,7 +275,7 @@
 		return standard ? m.typeNames[standard.prefix] : saved ? categoryLabel(saved.name, i18n.locale) : m.noCategory;
 	}
 	function comparable(row: ProductWrite) {
-		return [[m.nameNb, row.name_nb], [m.nameEn, row.name_en], [m.description, row.description ?? '—'], [m.category, categoryName(row.category_id)], [m.placement, binLabel(row.bin_id)], [m.locationNote, row.location_note ?? '—'], [m.saleStep, row.sale_step], [m.price, row.sale_unit_price_nok], [m.minimumStock, row.minimum_stock], [m.datasheet, row.datasheet_url ?? '—'], [m.purchaseUrl, row.purchase_url ?? '—'], [m.stateFilter, row.is_active ? m.active : m.inactive]];
+		return [[m.nameNb, row.name_nb], [m.nameEn, row.name_en], [m.description, row.description ?? '–'], [m.category, categoryName(row.category_id)], [m.placement, binLabel(row.bin_id)], [m.locationNote, row.location_note ?? '–'], [m.saleStep, row.sale_step], [m.price, row.sale_unit_price_nok], [m.minimumStock, row.minimum_stock], [m.datasheet, row.datasheet_url ?? '–'], [m.purchaseUrl, row.purchase_url ?? '–'], [m.stateFilter, row.is_active ? m.active : m.inactive]];
 	}
 </script>
 <svelte:head><title>{productCode ? `${productCode} | ${m.title}` : m.title}</title></svelte:head>

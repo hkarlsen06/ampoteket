@@ -1,4 +1,4 @@
-// Norwegian (bokmål) — the source language. Add a key here first, then in every
+// Norwegian (bokmål): the source language. Add a key here first, then in every
 // other dictionary; `Messages` makes a missing key a compile error.
 // See docs/i18n.md.
 
@@ -14,7 +14,7 @@ export const nb = {
 		found: (name: string) => `Del funnet: ${name}.`,
 		reviewBasket: 'Vi vet ikke om delen ble lagt i handlekurven. Sjekk handlekurven før du legger den til igjen.',
 		camera: {
-			closed: '', starting: 'Starter kameraet …', scanning: '',
+			closed: 'Lukket', starting: 'Starter kameraet …', scanning: 'Skanner…',
 			denied: 'Kameraet er blokkert. Gi nettleseren tilgang og prøv igjen, eller skriv inn koden.',
 			unavailable: 'Kameraet er ikke tilgjengelig. Du kan skrive inn koden i stedet.',
 			interrupted: 'Kameraet stoppet. Start det igjen, eller skriv inn koden.',
@@ -45,7 +45,7 @@ export const nb = {
 		removeColumn: 'Fjern kolonne',
 
 		title: 'Plassering | Admin | Ampoteket', heading: 'Kabinetter og skuffer',
-		retryLoad: 'Prøv igjen', loading: 'Laster plasseringer …', unavailable: 'Plasseringene er utilgjengelige.',
+		retryLoad: 'Prøv igjen', loading: 'Laster plasseringer…', unavailable: 'Plasseringene er utilgjengelige.',
 		layoutHeading: 'Skuffeinndeling', layoutHint: 'Nye ruter blir egne skuffer.',
 		layoutCount: (count: number, removed: number) => `${count === 1 ? '1 skuff' : `${count} skuffer`}.${removed ? ` ${removed === 1 ? '1 tom skuff' : `${removed} tomme skuffer`} fjernes når du lagrer.` : ''}`,
 		layoutPreview: 'Forhåndsvisning av skuffeinndeling',
@@ -151,7 +151,7 @@ export const nb = {
 	},
 	adminProducts: {
 		unset: 'Ikke oppgitt', attributeChanged: (current: string) => `Noen andre endret verdien til ${current}. Lagre igjen for å erstatte den.`,
-		specificationsNotSaved: 'Noen spesifikasjoner ble ikke lagret – se Spesifikasjoner ovenfor.',
+		specificationsNotSaved: 'Noen spesifikasjoner ble ikke lagret. Se Spesifikasjoner ovenfor.',
 		closeDrawer: 'Lukk skuffvelger', useDrawer: 'Bruk skuffen',
 		addAttribute: 'Legg til spesifikasjon',
 		reviewSpecifications: 'Gjennomgå spesifikasjoner',
@@ -179,7 +179,7 @@ export const nb = {
 		moveTitle: 'Flytte produktet?', confirmMove: 'Flytt', cancelMove: 'Avbryt',
 		moveDescription: (from: string, to: string) => `Fra ${from} til ${to}. Flyttingen lagres når du velger «Lagre produkt».`,
 		nameHint: 'Verdier ryddes når du går ut av feltet: 100 uF blir 100 µF. For motstander og kondensatorer holder 4k7 og 4p7.', nameNb: 'Navn på norsk', nameEn: 'Navn på engelsk', description: 'Beskrivelse', category: 'Kategori', noCategory: 'Ingen kategori', chooseCategory: 'Velg kategori', identity: 'Kategori og navn', placementHeading: 'Plassering', descriptionAndLinks: 'Beskrivelse og lenker', unit: 'Enhet', stockStep: 'Minste lagersteg', saleStep: 'Minste salgssteg', price: 'Enhetspris', minimumStock: 'Minimum på lager', minimumStockHint: '0 varsler bare når det er tomt.', datasheet: 'Lenke til datablad', purchaseUrl: 'Kjøpslenke', placement: 'Skuff', unplaced: 'Ingen skuff', chooseDrawer: 'Velg skuff', clearPlacement: 'Fjern fra skuffen', cabinet: 'Kabinett', activeLabel: 'Publiser i katalogen', activeHint: 'Å avpublisere sletter ingenting.', notInDrawer: 'Ligger ikke i en skuff', locationNote: 'Plassering uten skuff', locationNoteHint: 'Vises for kjøpere, f.eks. «Filamenthylla ved 3D-printeren». Tomt felt viser «Spør en frivillig».', immutable: 'Enhet og minste lagersteg kan ikke endres senere.', inventory: 'Beholdning', inventoryUnavailable: 'Beholdningen er utilgjengelig.', neverCounted: 'Aldri telt', lastCount: 'Sist telt', publicProduct: 'Se produktet i katalogen', manageShelf: 'Endre kabinetter og skuffer',
-		invalid: 'Kontroller feltene og prøv igjen.', failed: 'Endringen ble avvist. Det du skrev er beholdt – kontroller feltene og prøv igjen.', unknown: 'Vi vet ikke om lagringen gikk gjennom. Prøv igjen – den blir ikke lagret to ganger.', stale: 'Noen andre har endret produktet mens du redigerte. Det du skrev er beholdt. Se over endringene før du lagrer.', review: 'Vis endringene', reviewed: 'Fortsett med mine endringer', currentValues: 'Lagret nå', pending: 'En tidligere produktlagring er ikke fullført. Fullfør den før du lagrer et annet produkt.', resume: 'Gå til produktet', storage: 'Nettleseren blokkerer lagring av nettstedsdata, så du kan ikke lagre her. Tillat nettstedsdata, eller bruk en annen nettleser.', wrongIdentity: 'En ufullført endring tilhører en annen konto. Logg inn med den kontoen for å fullføre den.', retrySave: 'Prøv lagringen igjen',
+		invalid: 'Kontroller feltene og prøv igjen.', failed: 'Endringen ble avvist. Det du skrev er beholdt. Kontroller feltene og prøv igjen.', unknown: 'Vi vet ikke om lagringen gikk gjennom. Prøv igjen. Den blir ikke lagret to ganger.', stale: 'Noen andre har endret produktet mens du redigerte. Det du skrev er beholdt. Se over endringene før du lagrer.', review: 'Vis endringene', reviewed: 'Fortsett med mine endringer', currentValues: 'Lagret nå', pending: 'En tidligere produktlagring er ikke fullført. Fullfør den før du lagrer et annet produkt.', resume: 'Gå til produktet', storage: 'Nettleseren blokkerer lagring av nettstedsdata, så du kan ikke lagre her. Tillat nettstedsdata, eller bruk en annen nettleser.', wrongIdentity: 'En ufullført endring tilhører en annen konto. Logg inn med den kontoen for å fullføre den.', retrySave: 'Prøv lagringen igjen',
 		printLabel: 'Skriv ut', printLabelName: 'Skriv ut etikett', printingLabel: 'Skriver …', labelPrinted: 'Etiketten er skrevet ut. Den kommer ut når du skriver ut neste etikett, eller trykk på kutteknappen på skriveren.',
 		labelPrinter: { unsupported: 'Etikettskriveren kan bare brukes fra Chrome eller Edge på en datamaskin.', busy: 'Fikk ikke kontakt med etikettskriveren. Sjekk at den er koblet til og slått på, og at ikke et annet program eller en annen fane bruker den.', cover: 'Dekselet på etikettskriveren er åpent. Lukk det og prøv igjen.', tape: 'Etikettskriveren mangler tape eller har en tape den ikke kan bruke. Sett inn 18 eller 24 mm TZe-tape.', fit: 'Etiketten får ikke plass på tapen som står i. Bruk 18 eller 24 mm tape.', unconfirmed: 'Skriveren bekreftet ikke utskriften. Se etter etiketten før du prøver igjen.', failed: 'Etiketten ble ikke skrevet ut. Prøv igjen.' },
 		saleAndStock: 'Salg og lager', attributes: 'Spesifikasjoner', attributesHint: 'Prefikser går fint: skriv for eksempel 27p, 4,7k eller 4k7.', chooseAttribute: 'Velg spesifikasjon', yes: 'Ja', no: 'Nei', noAttributes: 'Ingen spesifikasjoner er lagret.', newDefinition: 'Ny spesifikasjon', categoryName: 'Kategorinavn', definitionCode: 'Kode', definitionLabel: 'Navn', valueType: 'Type', numberType: 'Tall', textType: 'Tekst', booleanType: 'Ja/nei', canonicalUnit: 'Grunnenhet (valgfri)', saveReference: 'Legg til', referenceSaved: 'Lagret.', referenceInvalid: 'Kontroller navnet og typen og prøv igjen.', cancel: 'Lukk', location: (cabinet: string, drawer: string) => `Kabinett ${cabinet} · skuff ${drawer}`
@@ -196,7 +196,7 @@ export const nb = {
 		cameraDenied: 'Kameraet er blokkert. Gi nettleseren tilgang og prøv igjen, eller kryss av linjene nedenfor.', cameraInterrupted: 'Kameraet stoppet. Prøv igjen, eller kryss av linjene nedenfor.', cameraUnavailable: 'Kameraet er ikke tilgjengelig. Prøv igjen, eller kryss av linjene nedenfor.',
 		sourceNote: 'Kilde, for eksempel giver', working: 'Registrerer …', storageUnavailable: 'Nettleseren blokkerer lagring av nettstedsdata, så du kan ikke lagre her. Tillat nettstedsdata, eller bruk en annen nettleser.',
 		wrongIdentity: 'En ufullført endring tilhører en annen konto. Logg inn med den kontoen for å fullføre den.', invalidDate: 'Oppgi et gyldig tidspunkt. Det kan ikke ligge fram i tid.', ambiguousDate: 'Dette klokkeslettet fantes to ganger fordi klokka ble stilt tilbake. Velg hvilket du mener.', offset: 'Før eller etter at klokka ble stilt tilbake?', chooseOffset: 'Velg', beforeClockChange: 'Før', afterClockChange: 'Etter',
-		unknown: 'Vi vet ikke om registreringen gikk gjennom. Prøv igjen – den blir ikke registrert to ganger.', invalid: 'Kontroller feltene og prøv igjen.',
+		unknown: 'Vi vet ikke om registreringen gikk gjennom. Prøv igjen. Den blir ikke registrert to ganger.', invalid: 'Kontroller feltene og prøv igjen.',
 		pendingElsewhere: 'En tidligere registrering er ikke fullført. Fullfør den først.', resumePending: 'Fullfør den', retrySame: 'Prøv registreringen igjen', conflict: 'Noe ble endret i mellomtiden, så ingenting ble registrert. Se over og prøv igjen.',
 		ordered: 'Bestilt', received: 'Mottatt', cancelled: 'Kansellert', outstanding: 'Gjenstår',
 		receiveHeading: 'Registrer mottak',
@@ -219,10 +219,10 @@ export const nb = {
 		kindLabels: { receipt: 'Mottak', sale: 'Registrert kjøp', count: 'Telling', adjustment: 'Justering', withdrawal: 'Uttak' },
 		load: 'Henter lagerhistorikk …', unavailable: 'Lagerhistorikken er utilgjengelig.', noProducts: 'Ingen produkter er registrert.', retry: 'Prøv igjen', invalid: 'Kontroller antallet og begrunnelsen. Antallet må følge produktets trinn.',
 		working: 'Registrerer …', save: 'Registrer', retrySame: 'Prøv igjen', saved: 'Endringen er registrert.',
-		unknown: 'Vi vet ikke om endringen ble registrert. Prøv igjen – den blir ikke registrert to ganger.', stale: 'Beholdningen har endret seg i mellomtiden. Se over historikken før du korrigerer.',
+		unknown: 'Vi vet ikke om endringen ble registrert. Prøv igjen. Den blir ikke registrert to ganger.', stale: 'Beholdningen har endret seg i mellomtiden. Se over historikken før du korrigerer.',
 		recountRequired: 'Produktet er telt etter denne bevegelsen. Tell det på nytt før du korrigerer.',
 		storage: 'Nettleseren blokkerer lagring av nettstedsdata, så du kan ikke lagre her. Tillat nettstedsdata, eller bruk en annen nettleser.', wrongIdentity: 'En ufullført endring tilhører en annen konto. Logg inn med den kontoen for å fullføre den.',
-		pendingElsewhere: 'Fullfør den uavsluttede endringen på et annet produkt først.', noteHint: 'Ikke skriv personopplysninger – begrunnelsen blir liggende i historikken.'
+		pendingElsewhere: 'Fullfør den uavsluttede endringen på et annet produkt først.', noteHint: 'Ikke skriv personopplysninger. Begrunnelsen blir liggende i historikken.'
 	},
 	adminCounts: {
 		closeCount: 'Lukk telling',
@@ -233,10 +233,10 @@ export const nb = {
 		storageUnavailable: 'Nettleseren blokkerer lagring av nettstedsdata, så du kan ikke lagre her. Tillat nettstedsdata, eller bruk en annen nettleser.',
 		wrongIdentity: 'En ufullført endring tilhører en annen konto. Logg inn med den kontoen for å fullføre den.',
 		pendingElsewhere: 'Fullfør den uavsluttede registreringen først.', resumePending: 'Gå til den',
-		unknownStart: 'Vi vet ikke om tellerunden ble startet. Prøv igjen – det blir ikke opprettet to.',
+		unknownStart: 'Vi vet ikke om tellerunden ble startet. Prøv igjen. Det blir ikke opprettet to.',
 		unknownFinish: 'Vi vet ikke om tellerunden ble avsluttet. Prøv igjen.',
-		unknown: 'Vi vet ikke om tellingen ble registrert. Prøv igjen – den blir ikke registrert to ganger.',
-		owner: 'Ansvarlig', batchStates: { owner: 'Åpen – din', other: 'Åpen — annen ansvarlig', abandoned: 'Åpen – ansvarlig mangler tilgang', finished: 'Avsluttet' },
+		unknown: 'Vi vet ikke om tellingen ble registrert. Prøv igjen. Den blir ikke registrert to ganger.',
+		owner: 'Ansvarlig', batchStates: { owner: 'Åpen (din)', other: 'Åpen (annen ansvarlig)', abandoned: 'Åpen (ansvarlig mangler tilgang)', finished: 'Avsluttet' },
 		started: (time: string) => `Startet ${time}`, finished: (time: string, name: string) => `Avsluttet ${time} av ${name}`,
 		detailTitle: 'Tellerunde | Admin | Ampoteket', detailHeading: 'Tellerunde', missing: 'Tellerunden finnes ikke.',
 		immediate: 'Hver telling oppdaterer beholdningen med en gang. Registrer også tellinger uten avvik.',
@@ -245,7 +245,7 @@ export const nb = {
 		recorded: 'Registrert beholdning', lastCount: (time: string) => `Sist telt ${time}`,
 		observed: 'Opptalt mengde', expected: 'Forventet mengde', quantityHint: (step: string, unit: string) => `I trinn på ${step} ${unit}. Skriv 0 hvis det ikke er noen igjen.`,
 		invalidQuantity: (step: string) => `Oppgi 0 eller mer, i trinn på ${step}.`,
-		difference: 'Avvik', enterQuantity: 'Oppgi opptalt mengde', note: 'Merknad (valgfri)', noteHint: 'Ikke skriv personopplysninger – merknaden blir liggende i historikken.',
+		difference: 'Avvik', enterQuantity: 'Oppgi opptalt mengde', note: 'Merknad (valgfri)', noteHint: 'Ikke skriv personopplysninger. Merknaden blir liggende i historikken.',
 		differenceNote: 'Forklar gjerne avviket.', pauseConfirmed: 'Skuffen har vært i ro mens jeg talte.', saveCount: 'Registrer telling', retryCount: 'Prøv tellingen igjen',
 		saved: (quantity: string, difference: string) => `Tellingen er registrert: ${quantity}. Avvik: ${difference}.`,
 		stale: 'Beholdningen endret seg mens du talte, så tellingen ble ikke registrert. Tell på nytt.',
@@ -352,7 +352,7 @@ export const nb = {
 		cancel: 'Avbryt', applyFilters: 'Vis resultater',
 		min: 'Fra og med', max: 'Til og med',
 		fromValue: (value: string) => `Fra ${value}`, upToValue: (value: string) => `Til ${value}`,
-		betweenValues: (from: string, to: string) => `${from} – ${to}`,
+		betweenValues: (from: string, to: string) => `${from}–${to}`,
 		noLowerBound: 'Ingen nedre grense', noUpperBound: 'Ingen øvre grense',
 		anyValue: 'Alle verdier', emptyValue: '(tom verdi)',
 		noScript: 'Filtrene krever JavaScript. Søk og bla fungerer uten.',
@@ -448,10 +448,10 @@ export const nb = {
 		browse: 'Finn flere deler',
 		empty: 'Handlekurven er tom.',
 		storage: 'Handlekurven kan ikke lagres i denne nettleseren. Tillat informasjonskapsler og nettstedsdata for denne siden, og prøv igjen.',
-		invalid: 'Handlekurven kan ikke leses. Kan du ha betalt for eller tatt med deler, ikke tøm den – spør en frivillig.',
+		invalid: 'Handlekurven kan ikke leses. Kan du ha betalt for eller tatt med deler, ikke tøm den. Spør en frivillig.',
 		reset: 'Tøm handlekurven',
 		resetQuestion: 'Tøm bare hvis du verken har betalt for eller tatt med noen av delene.',
-		resetConfirm: 'Ingenting betalt eller tatt med – tøm',
+		resetConfirm: 'Ingenting betalt eller tatt med, tøm',
 		cancel: 'Avbryt',
 		resetDone: 'Handlekurven er tømt.',
 		retry: 'Prøv igjen',
@@ -495,7 +495,7 @@ export const nb = {
 		confirming: 'Vi vet ikke ennå om kjøpet ble registrert. Ikke betal på nytt.',
 		registered: 'Kjøpet er registrert.',
 		needsAttention: 'Kjøpet er ikke fullført.',
-		registeredNote: 'Betalingen sjekkes ikke her – vi stoler på deg.',
+		registeredNote: 'Betalingen sjekkes ikke her. Vi stoler på deg.',
 		contact: 'Telefon eller e-post (valgfritt)',
 		reviewNeeded: 'Se over delene i handlekurven før du går videre.',
 		proceed: 'Gå til kassen',
@@ -511,14 +511,14 @@ export const nb = {
 		paymentInstructions: 'Betal beløpet ovenfor i Vipps, og kom tilbake hit for å registrere kjøpet.',
 		openVipps: 'Åpne Vipps',
 		qrAlt: 'QR-kode for å åpne Vipps til mottaker 47322',
-		paid: 'Jeg har betalt – registrer kjøpet',
+		paid: 'Jeg har betalt, registrer kjøpet',
 		free: 'Registrer delene',
 		pending: 'Registrerer kjøpet …',
 		help: 'Kontakt en frivillig',
 		helpInstructions: 'Ta et skjermbilde av siden, så kan en frivillig finne kjøpet. Har du betalt, noter beløpet og ikke betal på nytt.',
 		setAside: 'Endre handlekurven',
 		setAsideQuestion: 'Gjør dette bare hvis du verken har betalt eller tatt med deg noen av delene.',
-		setAsideConfirm: 'Ingenting betalt eller tatt med – endre handlekurven',
+		setAsideConfirm: 'Ingenting betalt eller tatt med, endre handlekurven',
 		setAsideDone: 'Nå kan du endre handlekurven.',
 		otherAttempt: 'Du har et annet kjøp i gang. Fullfør det først, eller fortsett med dette i stedet.',
 		resumeSaved: 'Fortsett dette kjøpet',
@@ -528,7 +528,7 @@ export const nb = {
 		errors: {
 			storage: 'Nettleseren kunne ikke lagre kjøpet. Prøv igjen, eller spør en frivillig om hjelp.',
 			missing: 'Kjøpet finnes ikke i denne nettleseren. Åpne det i nettleseren der du startet det, eller spør en frivillig.',
-			credentials: 'Kjøpet kan ikke åpnes i denne nettleseren. Ikke start et nytt kjøp for de samme delene – vis referansen til en frivillig.',
+			credentials: 'Kjøpet kan ikke åpnes i denne nettleseren. Ikke start et nytt kjøp for de samme delene. Vis referansen til en frivillig.',
 			payload: 'Kjøpet kan bare lagres fra fanen der du startet det. Gå tilbake dit, eller spør en frivillig.',
 			unavailable: 'Kjøpet er utilgjengelig akkurat nå. Prøv igjen om litt.',
 			conflict: 'Kjøpet ble endret i en annen fane. Prøv igjen for å se hvordan det står nå.',
@@ -623,7 +623,7 @@ export const nb = {
 			],
 			stepLabel: (n: string) => `Steg ${n}`,
 			retryStrong: 'Mistet du nettet etter at du betalte?',
-			retry: 'Gå til handlekurven og fortsett kjøpet der. Ikke betal på nytt – spør en frivillig hvis det ikke går.'
+			retry: 'Gå til handlekurven og fortsett kjøpet der. Ikke betal på nytt. Spør en frivillig hvis det ikke går.'
 		},
 		find: {
 			codeLabel: 'Delekode',
@@ -636,7 +636,7 @@ export const nb = {
 			groups: [
 			{
 				title: 'Studenter',
-				text: 'Studerer du elektronikk eller mekatronikk, er dette ditt rom. Bli med i The Resistance eller RoboMEK hvis du vil bruke det.'
+				text: 'Studerer du elektro, er dette rommet for deg. Bli med i The Resistance eller RoboMEK hvis du vil bruke det.'
 			},
 			{
 				title: 'Frivillige',

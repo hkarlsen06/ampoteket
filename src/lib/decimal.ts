@@ -70,7 +70,7 @@ export function shiftDecimal(value: string, power: number): string {
 	return normalizeDecimal((negative ? '-' : '') + shifted);
 }
 
-/** quantity × unit price rounded once to two decimals, ties away from zero — the
+/** quantity × unit price rounded once to two decimals, ties away from zero; the
  * database's per-line checkout rule. Indicative only; the database stays authoritative. */
 export function lineTotal(quantity: string, unitPrice: string): string {
 	const amount = parts(quantity);

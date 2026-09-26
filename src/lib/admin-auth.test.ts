@@ -7,8 +7,8 @@ const userId = 'df5aa780-0f36-44d4-a05f-d61206cc8bc9';
 const member = { id: '11111111-1111-4111-8111-111111111111', auth_user_id: userId, display_name: 'Volunteer', is_active: true };
 
 describe('admin Auth boundary', () => {
-	test('requires browser ownership, never a shared SSR Auth client', () => {
-		expect(() => createBrowserAdminAuth(config)).toThrow('requires a browser');
+	test('requires browser ownership, never a shared SSR Auth client', async () => {
+		await expect(createBrowserAdminAuth(config)).rejects.toThrow('requires a browser');
 	});
 
 	test('uses the current user JWT and an explicit own-membership projection', async () => {

@@ -17,7 +17,7 @@ the solution without depending on the original developer.**
 
 Read the relevant documents below before changing their area. They describe current
 contracts; they are not a checklist for unrelated work. The migration is the
-enforcement layer — where docs disagree with it, the migration wins; file a bug
+enforcement layer. Where docs disagree with it, the migration wins; file a bug
 against the doc. Historical implementations are context, not permanent requirements.
 When behavior changes, update its owning contract and remove conflicting guidance
 elsewhere. Keep current requirements separate from historical execution records;
@@ -85,10 +85,15 @@ remain domain work. Current routes belong in `docs/prosjektoversikt.md`,
 validation status in `VALIDATION.md`, component conventions in `docs/design-system.md`,
 and setup/check commands in `README.md`. Dev and preview use port **5174**.
 
+No em dashes (U+2014) anywhere in the repo, and no spaced hyphen, en dash or em
+dash splitting a sentence in UI copy, components or docs; `bun run lint` fails on
+them. Use a comma, colon or full stop. Unspaced en dashes stay for ranges and pairs
+(`1–200`, `male–male`). Only `supabase/migrations/` is exempt.
+
 The UI is bilingual: Norwegian at `/`, English at `/en`, all copy in
 `src/lib/i18n/{nb,en}.ts`, every page under `src/routes/[[locale=locale]]/`.
 Never put user-visible text in a component and never write a bare internal
-`href` — use `i18n.href(path)`. Read `docs/i18n.md` before touching routes,
+`href`; use `i18n.href(path)`. Read `docs/i18n.md` before touching routes,
 links or copy. The colour scheme follows the OS; there is no theme toggle.
 
 ## Git history
@@ -101,7 +106,7 @@ merge commit unless the user explicitly requests one or rebasing would rewrite s
 
 **Do not run `git checkout -- <file>` (or `git restore <file>`) unless you have just checked that
 the file contains no changes but your own.** It discards everything uncommitted in that file, and
-work that was never staged is not recoverable — not from the reflog, not from a stash.
+work that was never staged is not recoverable, not from the reflog, not from a stash.
 
 Files may contain the user's uncommitted work. Inspect the current diff before experimenting.
 Backing an experiment out means inverting **your** edits: edit them back or reverse-apply
@@ -112,7 +117,7 @@ editor undo buffer before attempting reconstruction.
 
 ## Parallel work
 
-Parallelize independent work with subagents where it saves time or improves quality —
+Parallelize independent work with subagents where it saves time or improves quality:
 independent routes, docs plus schema plus test triples. Keep messages to other
 agents legible, with proper spacing between words, since a human may read them.
 
@@ -165,11 +170,11 @@ testing only when new changes, failures, or unresolved concerns justify it.
 - Schema/RPC changes: `supabase/tests/acceptance.sql` and `permissions.sql` via
   `psql -X -v ON_ERROR_STOP=1 -f ...` against the disposable DB, plus the full
   `./scripts/test-database.sh` chain before calling it done.
-- Stock-changing behavior must hold under overlap — check the relevant
+- Stock-changing behavior must hold under overlap. Check the relevant
   two-connection case in `docs/concurrency-tests.md` (duplicate confirms,
   sale/count races, bin/cabinet-swap races, abandoned-batch closure, …).
 - Production acceptance (§9 of `website-guide.md`) needs real HTTP with real
-  staff/non-staff JWTs — SQL alone cannot do it; say so when it remains unverified.
+  staff/non-staff JWTs. SQL alone cannot do it; say so when it remains unverified.
 
 ## Final responses
 

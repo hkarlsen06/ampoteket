@@ -20,6 +20,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Separator } from '$lib/components/ui/separator';
 	import { Skeleton } from '$lib/components/ui/skeleton';
+	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { getI18n, stripLocale } from '$lib/i18n';
@@ -30,6 +31,8 @@
 	const m = $derived(i18n.m.admin);
 	// Reuse the site layout's Auth client and membership state.
 	const admin = getAdminContext();
+	// Runs before the site layout's start, so admin pages always load Auth.
+	onMount(() => { void admin.start(true); });
 	const authPage = $derived(['/admin/login', '/admin/password'].includes(stripLocale(page.url.pathname)));
 	$effect(() => {
 		if (admin.status === 'signedOut' && !authPage) {

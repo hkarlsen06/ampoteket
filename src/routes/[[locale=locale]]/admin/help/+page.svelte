@@ -146,9 +146,9 @@
 			{#if current}
 				<dl class="grid gap-3 md:grid-cols-2 [&_dt]:text-sm [&_dt]:text-muted-foreground [&_dd]:wrap-anywhere">
 					<div><dt>{m.contactName}</dt><dd>{current.display_name}</dd></div>
-					<div><dt>{m.contactEmail}</dt><dd>{current.email ?? '—'}</dd></div>
-					<div><dt>{m.contactPhone}</dt><dd>{current.phone ?? '—'}</dd></div>
-					<div><dt>{m.contactUrl}</dt><dd>{current.contact_url ?? '—'}</dd></div>
+					<div><dt>{m.contactEmail}</dt><dd>{current.email ?? '–'}</dd></div>
+					<div><dt>{m.contactPhone}</dt><dd>{current.phone ?? '–'}</dd></div>
+					<div><dt>{m.contactUrl}</dt><dd>{current.contact_url ?? '–'}</dd></div>
 					<div><dt>{m.displayOrder}</dt><dd>{current.display_order}</dd></div>
 					<div><dt>{m.publishContact}</dt><dd>{current.is_published ? m.published : m.unpublished}</dd></div>
 				</dl>

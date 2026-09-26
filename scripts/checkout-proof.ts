@@ -185,13 +185,13 @@ try {
 		await page.screenshot({ path: `${artifacts}/checkout-${locale ? 'en' : 'nb'}-${colorScheme}-${width}.png`, fullPage: true });
 	}
 	await page.goto(`${origin}/en/checkout/${prepared.checkoutId}`);
-	await expect(page.getByRole('button', { name: 'I have paid — register purchase', exact: true })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'I have paid, register purchase', exact: true })).toBeVisible();
 	// Confirm commits; lost response + failed read must keep registration ambiguity durable.
 	await page.route(`**/api/checkouts/${prepared.checkoutId}/confirm`, async (route) => {
 		await commitThenDrop(route);
 	}, { times: 1 });
 	await page.route(`**/api/checkouts/${prepared.checkoutId}`, (route) => route.abort('failed'));
-	await page.getByRole('button', { name: 'I have paid — register purchase', exact: true }).click();
+	await page.getByRole('button', { name: 'I have paid, register purchase', exact: true }).click();
 	await expect(page.getByRole('button', { name: 'Try registering again', exact: true })).toBeVisible();
 	await probe(page);
 	assert.equal((await call<ActiveAttempt>(page, 'readActiveAttempt')).state, 'confirming');
@@ -269,7 +269,7 @@ try {
 	const claimed = await call<ActiveAttempt>(owner, 'prepareCheckout', [claimA]);
 	await page.goto(`${origin}/en/checkout/${claimed.checkoutId}`);
 	await page.getByRole('button', { name: 'Change cart', exact: true }).click();
-	await page.getByRole('button', { name: 'Nothing paid or taken – change cart', exact: true }).click();
+	await page.getByRole('button', { name: 'Nothing paid or taken, change cart', exact: true }).click();
 	await expect(page.getByText('You can change your cart now.', { exact: true })).toBeVisible();
 	await probe(page); assert.equal(await call(page, 'readActiveAttempt'), null);
 	await page.getByRole('button', { name: 'Continue this purchase', exact: true }).click();

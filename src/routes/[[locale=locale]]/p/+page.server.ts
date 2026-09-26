@@ -25,7 +25,7 @@ export const load: PageServerLoad = async ({ url, platform, request, fetch, setH
 	catch (error) { queryError = error instanceof CatalogQueryError ? error.issue : 'invalidQuery'; }
 	const config = getCatalogConfig(platform, request);
 	// Unified search: a query that is exactly one existing part code opens that
-	// part directly — the label fast path, working without JavaScript and before
+	// part directly, the label fast path, working without JavaScript and before
 	// other catalog data has loaded. A code-shaped query for a part that does
 	// not exist falls through to ordinary text search (codes are searchable text
 	// too), and a probe failure never blocks the search flow.

@@ -9,7 +9,7 @@
  *
  * It replaces only the string literals you actually changed, so comments,
  * formatting, arrow functions and untouched strings stay byte for byte the same.
- * It does not reflow long lines — run your formatter afterwards if you care.
+ * It does not reflow long lines; run your formatter afterwards if you care.
  *
  * Runs on Bun only and sits outside the app's type-check scope (`scripts/**` is
  * excluded in tsconfig.json), so an editor without `@types/bun` will flag `Bun`

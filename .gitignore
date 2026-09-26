@@ -1,4 +1,4 @@
-# Ampoteket — filer som ikke skal spores i git
+# Ampoteket: filer som ikke skal spores i git
 # Basert på docs/prosjektoversikt.md §3 (SvelteKit + Cloudflare Workers + Supabase),
 # §6 (ingen hemmeligheter i repoet) og §8 (migrasjoner spores, lokal kjøring holdes utenfor).
 #

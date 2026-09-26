@@ -236,7 +236,7 @@
 								<div class="flex flex-wrap items-center justify-between gap-2">
 									<Field.Field orientation="horizontal" class="min-w-0 flex-1 gap-3">
 										<Checkbox id={`${id}-full-${line.id}`} checked={full(line)} onCheckedChange={(checked) => chooseFull(line, checked === true)} disabled={busy || Boolean(command)} />
-										<div class="min-w-0"><Field.Label for={`${id}-full-${line.id}`} class={['cursor-pointer', nameWrap]}>{#if product}<span class={codeText}>{product.code}</span> — {i18n.locale === 'nb' ? product.name_nb : product.name_en}{:else}{line.productId}{/if}</Field.Label><Field.Description>{m.lineNumber(line.lineNumber)} · {m.outstanding} <span class="font-mono">{formatDecimal(line.outstandingQuantity, i18n.locale)} {unitLabel(product?.unit_code, i18n.locale, line.outstandingQuantity)}</span></Field.Description></div>
+										<div class="min-w-0"><Field.Label for={`${id}-full-${line.id}`} class={['cursor-pointer', nameWrap]}>{#if product}<span class={codeText}>{product.code}</span>: {i18n.locale === 'nb' ? product.name_nb : product.name_en}{:else}{line.productId}{/if}</Field.Label><Field.Description>{m.lineNumber(line.lineNumber)} · {m.outstanding} <span class="font-mono">{formatDecimal(line.outstandingQuantity, i18n.locale)} {unitLabel(product?.unit_code, i18n.locale, line.outstandingQuantity)}</span></Field.Description></div>
 									</Field.Field>
 									{#if !manual.has(line.id)}<Button type="button" variant="ghost" size="sm" onclick={() => override(line)} disabled={busy || Boolean(command)}>{m.differentQuantity}</Button>{/if}
 								</div>

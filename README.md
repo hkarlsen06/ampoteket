@@ -79,7 +79,7 @@ original developer used Tailscale with `dev.ampoteket.no`.
 | --- | --- |
 | `bun run dev` / `bun run preview` | Vite dev server / production build in the Workers runtime (needs `.env`, see `.env.example`) |
 | `bun run check` / `bun run check:scripts` | Type-check the app / the scripts and browser proofs |
-| `bun run lint` | oxlint + ESLint |
+| `bun run lint` | em dash ban (`check:dashes`), oxlint + ESLint |
 | `bun test` | Unit tests (`src/lib/*.test.ts`) |
 | `bun run check:ink` | Catch clipped SVG/CSS edges |
 | `bun run i18n` | Side-by-side editor for the Norwegian and English strings, port 5175 ([i18n.md](docs/i18n.md)) |

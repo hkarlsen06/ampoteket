@@ -1,4 +1,3 @@
-import { createClient } from '@supabase/supabase-js';
 import { requestApiJson, type Fetcher } from './api';
 
 /** Public configuration only; the service credential never enters the browser. */
@@ -22,12 +21,24 @@ function baseUrl(config: AdminAuthConfig): URL {
  * Recovery callbacks will explicitly exchange their allowlisted code; merely
  * visiting a URL must not consume credentials from an arbitrary fragment.
  */
-export function createBrowserAdminAuth(config: AdminAuthConfig) {
+export async function createBrowserAdminAuth(config: AdminAuthConfig) {
 	if (typeof window === 'undefined') throw new Error('Admin Auth requires a browser');
 	baseUrl(config);
+	// supabase-js is most of a public page's script, so only staff download it.
+	const { createClient } = await import('@supabase/supabase-js');
 	return createClient(config.url, config.publishableKey, {
-		auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, flowType: 'pkce' }
+		auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, flowType: 'pkce', storageKey: adminStorageKey(config) }
 	}).auth;
+}
+
+/** supabase-js's own default key, named here so guests can be told apart without loading it. */
+function adminStorageKey(config: AdminAuthConfig) {
+	return `sb-${baseUrl(config).hostname.split('.')[0]}-auth-token`;
+}
+
+/** True when this browser may hold a staff session (or storage cannot be read). */
+export function mayHaveAdminSession(config: AdminAuthConfig) {
+	try { return localStorage.getItem(adminStorageKey(config)) !== null; } catch { return true; }
 }
 
 /**

@@ -28,10 +28,10 @@ SOURCE = ROOT / "assets/models/bambu-p2s.blend"
 # The raw export is compressed into static/models/ by scripts/compress-model.sh.
 GLB = ROOT / "assets/models/build/bambu-p2s.glb"
 GLB.parent.mkdir(parents=True, exist_ok=True)
-SERVED_GLB = ROOT / "static/models/bambu-p2s.glb"
+SERVED_GLB = ROOT / "static/models/bambu-p2s.glb.gz"
 WEBP = ROOT / "static/models/bambu-p2s.webp"
 WEBP.parent.mkdir(parents=True, exist_ok=True)
-model = helpers.new_model("P2S — original unbranded geometry")
+model = helpers.new_model("P2S \u2014 original unbranded geometry")
 material = partial(helpers.material, ior=1.46, backface_culling=True)
 
 

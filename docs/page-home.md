@@ -1,4 +1,4 @@
-# `/` — landing page
+# `/`: landing page
 
 Implemented in `src/routes/[[locale=locale]]/+page.svelte`; header and footer in the
 sibling `+layout.svelte`. Also served at `/en`. Copy lives in `src/lib/i18n/{nb,en}.ts`
@@ -8,21 +8,24 @@ under `home` (picker copy under `shelfMap`). Design rules:
 ## 1. Job of the page
 
 `ampoteket.no` is the whole place, not just the shop. The page first **says what
-Ampoteket is** — a student-run electronics workshop at Pilestredet 35 with equipment,
-courses and people — and then **gets a phone to the parts shelf in one tap**: someone
+Ampoteket is**: a student-run electronics workshop at Pilestredet 35 with equipment,
+courses and people. It then **gets a phone to the parts shelf in one tap**: someone
 at the shelf must reach the scanner or `/p` without reading anything. The shelf comes
 after the workshop.
 
 Hard constraints:
 
-- **Optional server topology.** The server reads `amp_shelf_map` with a three-second
-  deadline; on failure the workshop content still renders and the map falls back to a
-  client read. The homepage shows no quantities or prices.
+- **No API reads before the first byte.** The server renders without reading the
+  database, and the response is cacheable (no `no-store`, so the back/forward cache
+  works). The shelf picker and its code load in the browser on first open. The
+  homepage shows no quantities or prices.
 - **Readable and navigable without JavaScript**, including the language picker.
 - **First paint on one round trip on bad wifi:** HTML + CSS < 30 KB and one 5 KB
   webfont. The hero photograph is the only eager image (`fetchpriority="high"`); every
-  photograph sits in a CSS-sized box so nothing shifts. The 3D viewer loads only when
-  the equipment models are within one viewport height.
+  photograph sits in a CSS-sized box so nothing shifts. The 3D viewer and the gzipped
+  models load only when the equipment models are within one viewport height, and not
+  at all with Data Saver on. Guests never download the Auth client: the layout loads
+  supabase-js only on admin routes or when a staff session is stored.
 - **Payment is never described as verified. Scanning never buys.** Static copy never
   contains a payment recipient or Vipps number; checkout is the only source.
 - **Facts must be sourced** from the OsloMet story linked on the page (§2.2, §2.3).
@@ -91,8 +94,8 @@ it the image's scroll container and stops the timeline.
 
 Below it, two panels (equipment; courses, project evenings, prototypes and
 collaboration), each with a 3D model. WebP posters are the loading state and remain
-without JavaScript, without WebGL (the viewer is never mounted), with reduced motion
-and if the GLB fails. Viewers have fixed dimensions and localized alternative text. The
+without JavaScript, without WebGL (the viewer is never mounted), with reduced motion,
+with Data Saver and if the GLB fails. Viewers have fixed dimensions and localized alternative text. The
 models must stay browser-rendered 3D meshes, never image sequences or video. Touch
 never tilts them. Sources and limits: [`assets/models/README.md`](../assets/models/README.md).
 

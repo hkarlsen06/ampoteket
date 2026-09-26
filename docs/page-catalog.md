@@ -1,4 +1,4 @@
-# `/p` — catalog
+# `/p`: catalog
 
 Implemented in `src/routes/[[locale=locale]]/p/+page.{server.ts,svelte}`; URL parsing
 and search in `src/lib/catalog-search.ts`, reads in `src/lib/catalog.ts`. Also at

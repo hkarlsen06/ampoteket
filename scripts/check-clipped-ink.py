@@ -3,7 +3,7 @@
 
 Check 1 (failure): stroked SVG ink touching a viewBox edge. SVG strokes are
 centred on the shape edge, so a rect authored at x="0" with a 1px stroke loses
-half its outline to the viewport — the leftmost column of the landing-page
+half its outline to the viewport: the leftmost column of the landing-page
 shelf diagram once rendered exactly that way. Fill-only shapes (no stroke
 anywhere on the element or its ancestors, e.g. the decorative QR modules) may
 legitimately sit flush to the edge and are exempt. Every potentially-stroked
@@ -15,7 +15,7 @@ needs proportionally more padding by hand.
 
 Check 2 (advisory note): CSS `overflow` that clips. An ancestor with
 overflow hidden/scroll/auto/clip cuts outlines, box-shadows and focus rings
-of everything inside it — the same bug class as check 1, e.g. a header
+of everything inside it, the same bug class as check 1, e.g. a header
 button's :focus-visible ring sliced by a clipping header. The script lists
 every clipping declaration; each one must either contain no focusable
 element or be a named §4.2 interior scroll region. Focus rings need 4px of
@@ -268,7 +268,7 @@ def audit_overflow(path):
             selector = re.sub(r"\s+", " ", m.group(1)).strip()[-80:]
             line = text.count("\n", 0, base + m.start()) + 1
             notes.append(
-                f"{path}:{line}: overflow:{m.group(3)} on `{selector}` — "
+                f"{path}:{line}: overflow:{m.group(3)} on `{selector}`: "
                 "must contain no focusable element (or be a named §4.2 scroll region)"
             )
     return notes

@@ -13,7 +13,8 @@
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:scripts": "svelte-kit sync && tsc --project tsconfig.scripts.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-		"lint": "oxlint && eslint .",
+		"lint": "bun run check:dashes && oxlint && eslint .",
+		"check:dashes": "! git grep -nI '\u2014' -- ':!supabase/migrations' && ! git grep -nI ' - ' -- 'src/lib/i18n' && ! git grep -nIE ' [\u2013\u2014] ' -- src scripts docs '*.md' || (echo 'dash used as a sentence break; use a comma, colon or full stop' && exit 1)",
 		"check:ink": "python3 scripts/check-clipped-ink.py",
 		"test": "bun test"
 	},

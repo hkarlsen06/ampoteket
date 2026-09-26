@@ -1,4 +1,4 @@
-# Ampoteket — project overview
+# Ampoteket: project overview
 
 Start here. This page explains what the system does and how it is put together.
 Rules for one area live in the document listed for it in the

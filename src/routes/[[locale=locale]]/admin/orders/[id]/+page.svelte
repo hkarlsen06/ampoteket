@@ -71,7 +71,7 @@
 
 	function productName(productId: string): string {
 		const product = products.get(productId);
-		return product ? `${product.code} — ${i18n.locale === 'nb' ? product.name_nb : product.name_en}` : productId;
+		return product ? `${product.code}: ${i18n.locale === 'nb' ? product.name_nb : product.name_en}` : productId;
 	}
 	function syncPending() {
 		if (sendingCommand) return;

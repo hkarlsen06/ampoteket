@@ -571,7 +571,7 @@ try {
 	assert.equal(await quantity(page), '2', 'Global scanner respects the active checkout lock');
 	await action(page, 'Close scanner').click(); await camera(page, 'closed');
 	await page.goto(checkoutUrl);
-	await page.getByRole('button', { name: 'I have paid — register purchase', exact: true }).click();
+	await page.getByRole('button', { name: 'I have paid, register purchase', exact: true }).click();
 	await expect(page.getByText('Purchase registered.', { exact: true })).toBeVisible();
 	assert.equal(await sql('SELECT count(*) FROM app.sales'), '1');
 	await expect.poll(() => quantity(page)).toBeNull();

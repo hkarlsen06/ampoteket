@@ -51,7 +51,7 @@
 	const m = $derived(i18n.m);
 	// One browser Auth client is shared by the header and all admin pages.
 	const admin = setAdminContext(untrack(() => new AdminContext(data.adminConfig, data.callbackOrigin)));
-	onMount(() => admin.start());
+	onMount(() => { void admin.start(); });
 	function checkAccess() { if (document.visibilityState === 'visible') void admin.refresh(); }
 
 	/** Current path with the locale prefix removed, so the picker can swap it. */
@@ -59,7 +59,7 @@
 	const privatePage = $derived(isPrivateRoute(page.route.id, page.url.pathname));
 	const buyerScanPage = $derived(bare === '/' || bare === '/p' || bare.startsWith('/p/') || bare === '/cart');
 
-	/** Always the production URL, never a preview origin — see PROD_ORIGIN. */
+	/** Always the production URL, never a preview origin; see PROD_ORIGIN. */
 	const canonical = $derived(PROD_ORIGIN + localizeHref(bare, data.locale));
 
 	// A layout-owned store is shared with product/cart pages, never across SSR requests.
@@ -90,7 +90,7 @@
 	// Above 40rem the header row holds the wordmark, catalog/admin/cart icons and the
 	// menu button; the menu holds the scanner and the language picker. On phones the
 	// destinations move into the menu and the scanner floats (Scanner.svelte).
-	// Pure enhancement — `html.no-js` (src/app.html) hides the button and leaves
+	// Pure enhancement: `html.no-js` (src/app.html) hides the button and leaves
 	// the menu open, so the links are reachable without JavaScript.
 	let menuOpen = $state(false);
 	let headerEl: HTMLElement | undefined = $state();
@@ -141,7 +141,7 @@
 	<link rel="alternate" hreflang="x-default" href={PROD_ORIGIN + bare} />
 
 	<!-- Link previews. Without these, ampoteket.no pasted into a chat renders as a
-	     bare grey link — the most-seen unstyled surface the site has. og:title and
+	     bare grey link, the most-seen unstyled surface the site has. og:title and
 	     og:description are per page, beside that page's <title>. -->
 	<meta property="og:type" content="website" />
 	<meta property="og:site_name" content="Ampoteket" />

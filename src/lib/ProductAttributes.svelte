@@ -77,7 +77,7 @@
 		return pending && id === pendingId ? asText(pending.after as AttributeValue | null, unit) : id in edits ? edits[id] : asText(saved(id), unit);
 	}
 	function display(value: AttributeValue | null, unit: string | null): string {
-		return !value ? '—' : value.number_value !== null ? formatMeasurement(value.number_value, unit, i18n.locale)
+		return !value ? '–' : value.number_value !== null ? formatMeasurement(value.number_value, unit, i18n.locale)
 			: value.text_value !== null ? value.text_value : value.boolean_value ? m.yes : m.no;
 	}
 	function unitOf(definition: AttributeDefinition) { return definition.value_type === 'number' ? definition.canonical_unit : null; }
