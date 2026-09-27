@@ -184,7 +184,7 @@
 			{:else if busy}<span class="sr-only">{m.loading}</span>
 			{:else if error}{m.needsAttention}
 			{:else if asideDone}{m.setAsideDone}
-			{:else if snapshot && active}{m.prepared}
+			{:else if snapshot && active}<span class="sr-only">{m.prepared}</span>
 			{:else if snapshot}{m.otherAttempt}{/if}
 		</Alert.Description>
 	</Alert.Root>

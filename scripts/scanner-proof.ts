@@ -607,9 +607,9 @@ try {
 	await action(page, 'Add to cart').click(); await expect.poll(() => quantity(page, 27)).toBe('1');
 	await action(page, 'Close scanner').click();
 	await page.getByRole('button', { name: 'Go to checkout', exact: true }).click();
-	await expect(page.getByRole('button', { name: 'Register parts', exact: true })).toBeVisible({ timeout: 30000 });
+	await expect(page.getByRole('button', { name: 'Complete purchase', exact: true })).toBeVisible({ timeout: 30000 });
 	await expect(page.getByRole('link', { name: 'Open Vipps', exact: true })).toHaveCount(0);
-	await page.getByRole('button', { name: 'Register parts', exact: true }).click();
+	await page.getByRole('button', { name: 'Complete purchase', exact: true }).click();
 	await expect(page.getByText('Purchase registered.', { exact: true })).toBeVisible();
 	assert.equal(await sql('SELECT count(*) FROM app.sales'), '2');
 	assert.deepEqual(errors, [], 'No browser runtime errors');

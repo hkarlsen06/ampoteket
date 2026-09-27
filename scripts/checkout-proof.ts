@@ -216,7 +216,7 @@ try {
 	assert.equal((await call<ActiveAttempt>(page, 'readActiveAttempt')).requestId, free.requestId);
 	assert.ok((await page.evaluate(() => localStorage.getItem('ampoteket:cart')))?.includes(freeProduct));
 	await page.goto(`${origin}/en/checkout/${free.checkoutId}`);
-	await expect(page.getByRole('button', { name: 'Register parts', exact: true })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Complete purchase', exact: true })).toBeVisible();
 	await expect(page.getByRole('link', { name: 'Open Vipps', exact: true })).toHaveCount(0);
 	await probe(page); await probe(other);
 	const [a, b] = await Promise.all([call<CheckoutSnapshot>(page, 'confirmCheckout', [free]), call<CheckoutSnapshot>(other, 'confirmCheckout', [free])]);
@@ -275,7 +275,7 @@ try {
 	await expect(page.getByText('You can change your cart now.', { exact: true })).toBeVisible();
 	await probe(page); assert.equal(await call(page, 'readActiveAttempt'), null);
 	await page.getByRole('button', { name: 'Continue this purchase', exact: true }).click();
-	await expect(page.getByRole('button', { name: 'Register parts', exact: true })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Complete purchase', exact: true })).toBeVisible();
 	await complete(page, claimed);
 	assert.equal(await sql(`SELECT count(*) FROM app.checkouts WHERE request_id='${claimed.requestId}'`), '1');
 	console.log('PASS: simultaneous attempt claims converge; explicit unpaid/uncollected set-aside and resumption preserve identity');

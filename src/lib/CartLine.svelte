@@ -42,6 +42,7 @@
 		try { validQuantity(line.quantity, fact.product.sale_step); return null; }
 		catch { return 'quantity'; }
 	});
+	const notice = $derived(!!displayError || (!!fact && fact.kind !== 'ready'));
 	let stepper: QuantityStepper | undefined = $state();
 	let revision = 0;
 	let saving: Promise<boolean> | null = null;
@@ -140,7 +141,7 @@
 					{/if}
 				</div>
 			</Item.Content>
-			<form class="grid min-w-0 content-start" onsubmit={(event) => { event.preventDefault(); void save(true); if (error === 'quantity') stepper?.focus(); }} novalidate>
+			<form class="grid min-w-0 content-start gap-2" onsubmit={(event) => { event.preventDefault(); void save(true); if (error === 'quantity') stepper?.focus(); }} novalidate>
 				<Field.Label class="sr-only" for={`quantity-${line.product_id}`}>{m.quantity}{#if unitLabel(product?.unit_symbol, i18n.locale) ?? unitLabel(line.unit_symbol, i18n.locale)} ({unitLabel(product?.unit_symbol, i18n.locale) ?? unitLabel(line.unit_symbol, i18n.locale)}){/if}</Field.Label>
 				<Item.Actions class="flex-wrap gap-2">
 					<div class="min-w-0 flex-[1_1_8rem]">
@@ -162,11 +163,12 @@
 						<Icon icon={TrashIcon} />
 					</Button>
 				</Item.Actions>
+				<p class="min-h-6 text-right font-mono text-base font-semibold tabular-nums">{#if total !== null}<span class="sr-only">{m.lineTotal} </span>{formatMoney(total, i18n.locale)}{/if}</p>
 			</form>
 		</div>
-		<Item.Footer class="mt-2 min-h-6 flex-wrap items-baseline gap-x-4 gap-y-1">
+		<Item.Footer class={['flex-wrap items-baseline gap-x-4 gap-y-1', notice && 'mt-2']}>
 			<p class="sr-only" id={`step-${line.product_id}`}>{#if product}{m.step(formatDecimal(product.sale_step, i18n.locale), unitLabel(product.unit_symbol, i18n.locale, product.sale_step))}{/if}</p>
-			<div class={['min-w-0 text-sm', !displayError && (!fact || fact.kind === 'ready') && 'sr-only']} id={`result-${line.product_id}`} role={displayError ? 'alert' : 'status'}>
+			<div class={['min-w-0 text-sm', !notice && 'sr-only']} id={`result-${line.product_id}`} role={displayError ? 'alert' : 'status'}>
 				{#if displayError}<Field.Error role={undefined}>{m.errors[displayError]}{#if displayError === 'quantity' && product} {m.step(formatDecimal(product.sale_step, i18n.locale), unitLabel(product.unit_symbol, i18n.locale, product.sale_step))}{/if}</Field.Error>
 				{:else if fact?.kind === 'unavailable'}<Alert.Message role={undefined} appearance="inline" variant="destructive">{m.factsUnavailable}</Alert.Message>
 				{:else if fact?.kind === 'missing'}<Field.Description>{m.missing}</Field.Description>
@@ -176,9 +178,6 @@
 			</div>
 			{#if !displayError && fact?.kind === 'unavailable' && onretry}
 				<div class="basis-full"><Button variant="outline" type="button" onclick={onretry}>{m.retry}</Button></div>
-			{/if}
-			{#if total !== null}
-				<p class="ml-auto font-mono text-base font-semibold tabular-nums"><span class="sr-only">{m.lineTotal} </span>{formatMoney(total, i18n.locale)}</p>
 			{/if}
 		</Item.Footer>
 	</Item.Root>

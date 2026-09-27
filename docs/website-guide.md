@@ -101,7 +101,7 @@ post a second withdrawal, and a missing payment must never restock automatically
    Discard the pre-prepare cart display.
 4. If `payment_required`, the buyer pays in Vipps and presses "I have paid". If the
    total is `0.00` (free price or per-line rounding), skip Vipps and offer
-   "Register parts"; never invent a minimum charge.
+   "Complete purchase"; never invent a minimum charge.
 5. The Worker calls `amp_confirm_checkout`. Only on success show "Purchase
    registered" and clear the cart.
 6. On network failure after payment, **never advise paying again**. Re-read with

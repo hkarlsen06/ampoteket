@@ -132,6 +132,9 @@ Keep these boundaries in every UI change:
 - Trust familiar controls and visual cues. Do not add copy that explains obvious
   interaction or repeats a heading, label or visible state. Keep guidance only when
   it supplies a non-obvious constraint, consequence, recovery step or accessible equivalent.
+- Don't write what the UI can show. If an icon, badge, control state or the visible
+  result already says it (saved, added, selected, done), use that and give screen
+  readers an `sr-only` equivalent. Routine success needs no sentence.
 - Mobile first: design every screen at 360 px and derive the desktop layout from it
   (one DOM, CSS-only adaptation, breakpoints 48/64rem). No horizontal page scroll at
   any width; wide data reflows into stacked rows instead of a scrolling table.

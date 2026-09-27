@@ -424,7 +424,7 @@
 			<ul class="cards m-0 mt-6 grid list-none grid-cols-1 gap-4 p-0 md:grid-cols-2 lg:grid-cols-3" aria-label={m.results}>
 				{#each displayed as product (product.product_id)}
 					<li class="row-span-2 grid min-w-0 grid-rows-subgrid">
-					<Card.Root class={cardLink}>
+					<Card.Root class="{cardLink} ring-0">
 						<Card.Header class="grid grid-cols-[minmax(0,1fr)_5rem] content-start items-start gap-3 p-0">
 							<ProductIdentity {product} showCategory stretchLink />
 							<div class="h-16"><CategoryGraphic category={product.category_name} /></div>

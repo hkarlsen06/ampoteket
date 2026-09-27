@@ -36,6 +36,8 @@
 	let contact = $state('');
 	let readyLines = $state<Record<string, boolean>>({});
 	const checkoutReady = $derived(!factsPending && $cart.status === 'ready' && !$cart.activeAttempt && $cart.lines.length > 0 && $cart.lines.every((line) => readyLines[line.product_id]));
+	// Starting a checkout claims the attempt just before navigating; hide the returning-buyer notice meanwhile.
+	const attempt = $derived(checkoutPending ? null : $cart.activeAttempt);
 	const locked = $derived($cart.status !== 'ready' || !!$cart.activeAttempt || checkoutPending);
 	const identity = $derived(JSON.stringify($cart.lines.map(({ product_id, code }) => ({ product_id, code }))));
 	const factsLoaded = $derived($cart.lines.every((line) => !!facts[line.product_id]));
@@ -147,7 +149,7 @@
 		<p class="min-h-5 text-sm text-muted-foreground">{#if $cart.status === 'ready'}{m.lines($cart.lines.length)}{/if}</p>
 		<div class={formActions}><Button id="cart-browse" variant="outline" href={i18n.href('/p')}>{m.browse}</Button></div>
 	</header>
-	<CartNotice state={$cart} />
+	<CartNotice state={{ ...$cart, activeAttempt: attempt }} />
 	<noscript><p class="text-sm text-muted-foreground">{m.noJavascript}</p></noscript>
 	{#if $cart.status === 'invalid' && !$cart.activeAttempt}
 		<Collapsible.Root bind:open={resetOpen} class="my-4 grid justify-items-start gap-4">
@@ -180,9 +182,9 @@
 	{/if}
 	{#if $cart.activeAttempt || $cart.lines.length}
 	<Card.Root class="mt-8 gap-3 p-5 md:p-6">
-		{#if $cart.activeAttempt}
+		{#if attempt}
 			<div class={formActions}>
-				<Button variant="default" href={i18n.href($cart.activeAttempt.checkoutId ? `/checkout/${$cart.activeAttempt.checkoutId}` : '/checkout')}>{i18n.m.checkout.resume}</Button>
+				<Button variant="default" href={i18n.href(attempt.checkoutId ? `/checkout/${attempt.checkoutId}` : '/checkout')}>{i18n.m.checkout.resume}</Button>
 				<a href={i18n.href('/help')}>{i18n.m.checkout.help}</a>
 			</div>
 		{:else}

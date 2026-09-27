@@ -426,6 +426,9 @@ needs verified rights for every use and crop; a credit alone is not enough.
   selected outline, no checkbox or search tutorials, no text repeating a heading,
   label or visible result. Keep non-obvious constraints, payment/counting
   consequences and error recovery where they matter.
+- Show, don't write. A message an icon, badge, control state or the visible result
+  can carry gets no sentence: routine confirmations such as «Kjøpet er lagret» are
+  `sr-only` announcements, at most a small icon with an accessible name.
 - Say what happens, in this order: *skann → betal → registrer*.
 - Payment: «Betal i Vipps, og registrer kjøpet etterpå.» Never «Betal nå», never
   «bekreftet av Vipps», never a green check on payment. Success is neutral:

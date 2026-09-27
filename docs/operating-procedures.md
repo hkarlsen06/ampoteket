@@ -55,7 +55,7 @@ See [checkout-recovery.md](checkout-recovery.md) for when this path is needed.
 
 ## Free items
 
-A zero total works: the buyer uses "Register parts", skips Vipps, and stock is
+A zero total works: the buyer uses "Complete purchase", skips Vipps, and stock is
 withdrawn with no payment claim. Which products are free is a pricing decision.
 
 ## Storage changes

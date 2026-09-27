@@ -11,6 +11,22 @@ shadcn-svelte and Tailwind CSS 4. Norwegian at `/`, English at `/en`.
 **Status:** validated locally, not deployed. [VALIDATION.md](VALIDATION.md) lists
 what has been run and what is still needed before launch.
 
+## Access for maintainers
+
+A maintainer needs an account with access to each of these. At every handover,
+add the new maintainers and check that at least two people can reach each one.
+
+| Service | Used for | Where |
+| --- | --- | --- |
+| GitHub | Code, issues and CI | [hkarlsen06/ampoteket](https://github.com/hkarlsen06/ampoteket), moving to an `ampoteket` organization |
+| Supabase | Database, Auth and backups | [Project `mqzcbdorjuefefzvuefa`](https://supabase.com/dashboard/project/mqzcbdorjuefefzvuefa) |
+| Resend | Invitation and password emails from `noreply@notify.ampoteket.no`, sent through Supabase SMTP | [resend.com](https://resend.com) |
+| Cloudflare | The `ampoteket` Worker and DNS for `ampoteket.no` | A private account for now, moving to a shared team account |
+| Domeneshop | Renewing `ampoteket.no`, which is registered to a private owner; changes go through them | [domene.shop](https://domene.shop) |
+
+Staff access to the shop itself is separate: an active admin invites you at
+`/admin/admins`.
+
 ## Where to read
 
 Start with the [project overview](docs/prosjektoversikt.md). Then read only the
