@@ -1,3 +1,47 @@
-<p>Du er invitert til Ampoteket. / You have been invited to Ampoteket.</p>
-<p><a href="{{ .RedirectTo }}&amp;token_hash={{ .TokenHash }}&amp;type=invite">Sett opp passord / Set up password</a></p>
-<p>Hvis du ikke ventet denne invitasjonen, kan du ignorere e-posten. / If you did not expect this invitation, ignore this email.</p>
+<!doctype html>
+<html lang="nb">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<title>Invitasjon til Ampoteket</title>
+<style>
+  body { margin: 0; padding: 0; }
+  a.button:focus-visible { outline: 3px solid #0a4dc8; outline-offset: 2px; }
+  @media (prefers-color-scheme: dark) {
+    .page { background: #000000 !important; }
+    .card { background: #0d0d0e !important; border-color: #2a2a2d !important; }
+    .text { color: #edf1f6 !important; }
+    .muted { color: #a1a1a8 !important; }
+    .rule { border-color: #2a2a2d !important; }
+    a.button { background: #ff3c33 !important; border-color: #ff3c33 !important; color: #000000 !important; }
+  }
+</style>
+</head>
+<body class="page" style="margin:0;padding:0;background:#f2f4f7;">
+<div style="display:none;max-height:0;overflow:hidden;">Velg et passord for å ta i bruk admintilgangen. Choose a password to start using your admin access.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="page" style="background:#f2f4f7;">
+<tr><td align="center" style="padding:24px 12px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" style="max-width:560px;background:#ffffff;border:1px solid #c9d1db;border-radius:4px;border-collapse:separate;overflow:hidden;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<tr><td style="padding:24px 24px 0;">
+  <img src="{{ .SiteURL }}/brand/wordmark-email.png" width="216" height="56" alt="Ampoteket" style="display:block;border:0;background:#000000;color:#ff3c33;font-size:20px;font-weight:800;">
+</td></tr>
+<tr><td style="padding:24px;">
+  <h1 class="text" style="margin:0 0 12px;font-size:24px;line-height:1.2;font-weight:700;color:#0f141b;">Du er invitert til Ampoteket</h1>
+  <p class="text" style="margin:0 0 24px;font-size:16px;line-height:1.55;color:#0f141b;">Du har fått admintilgang som <strong>{{ .Email }}</strong>. Velg et passord for å logge inn.</p>
+  <a href="{{ .RedirectTo }}&amp;token_hash={{ .TokenHash }}&amp;type=invite" class="button" style="display:inline-block;padding:12px 24px;background:#c63933;border:1px solid #c63933;border-radius:2px;color:#ffffff;font-size:16px;font-weight:700;line-height:20px;text-decoration:none;">Sett opp passord</a>
+  <p class="muted" style="margin:24px 0 0;font-size:14px;line-height:1.55;color:#4b586a;">Lenken kan bare brukes én gang. Ventet du ikke denne invitasjonen, kan du se bort fra e-posten.</p>
+
+  <div lang="en" class="rule" style="margin-top:32px;padding-top:32px;border-top:1px solid #c9d1db;">
+    <h2 class="text" style="margin:0 0 12px;font-size:24px;line-height:1.2;font-weight:700;color:#0f141b;">You are invited to Ampoteket</h2>
+    <p class="text" style="margin:0 0 24px;font-size:16px;line-height:1.55;color:#0f141b;">You have been given admin access as <strong>{{ .Email }}</strong>. Choose a password to sign in.</p>
+    <a href="{{ .RedirectTo }}&amp;token_hash={{ .TokenHash }}&amp;type=invite" class="button" style="display:inline-block;padding:12px 24px;background:#c63933;border:1px solid #c63933;border-radius:2px;color:#ffffff;font-size:16px;font-weight:700;line-height:20px;text-decoration:none;">Set up password</a>
+    <p class="muted" style="margin:24px 0 0;font-size:14px;line-height:1.55;color:#4b586a;">The link works once. If you did not expect this invitation, you can ignore this email.</p>
+  </div>
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>

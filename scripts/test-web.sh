@@ -118,7 +118,7 @@ enable_confirmations = false
 subject = "Ampoteket: Invitasjon / Invitation"
 content_path = "./supabase/templates/invite.html"
 [auth.email.template.recovery]
-subject = "Ampoteket: Tilbakestill passord / Reset password"
+subject = "Ampoteket: Velg passord / Choose password"
 content_path = "./supabase/templates/recovery.html"
 [studio]
 enabled = false

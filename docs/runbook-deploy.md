@@ -175,6 +175,8 @@ Configure hosted Auth for the same HTTPS origin before granting staff access:
 - Copy the HTML and subjects of `supabase/templates/invite.html` and
   `recovery.html` into the hosted email-template settings; `config.toml` does
   not publish them.
+  The header image loads from `{{ .SiteURL }}/brand/wordmark-email.png`, so the
+  Site URL must be the production origin.
 - Both templates need a localized `redirectTo` ending in `?next=...`, because
   the link appends the token to that query. The site's invitation endpoint sends
   the fixed localized password URL with `?next=%2Fadmin`. A manual first-admin
