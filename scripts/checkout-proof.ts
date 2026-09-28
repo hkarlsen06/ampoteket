@@ -207,6 +207,18 @@ try {
 	assert.equal(await call(page, 'readActiveAttempt'), null);
 	assert.equal(await sql(`SELECT count(*) FROM app.sales WHERE checkout_id='${prepared.checkoutId}'`), '1');
 	assert.equal(await sql(`SELECT count(*) FROM app.inventory_movements m JOIN app.sales s ON s.event_id=m.event_id WHERE s.checkout_id='${prepared.checkoutId}'`), '1');
+	// Receipts: the proof Worker has no Resend key, so a valid address reaches the real 503.
+	const receiptEmail = page.getByLabel('Email for receipt', { exact: true });
+	const sendReceipt = page.getByRole('button', { name: 'Send receipt', exact: true });
+	await receiptEmail.fill('98765432'); await sendReceipt.click();
+	await expect(page.getByText('Enter a valid email address.', { exact: true })).toBeVisible();
+	await receiptEmail.fill('buyer@example.test'); await sendReceipt.click();
+	await expect(page.getByText("The receipt wasn't sent. Try again in a moment.", { exact: true })).toBeVisible();
+	await page.route(`**/api/checkouts/${prepared.checkoutId}/receipt`, (route) => route.fulfill({ json: { sent: true } }), { times: 1 });
+	await sendReceipt.click();
+	await expect(page.getByRole('button', { name: 'Sent', exact: true })).toBeVisible();
+	await expect(page.getByRole('status').filter({ hasText: 'The receipt was sent to buyer@example.test.' })).toHaveCount(1);
+	assert.equal(await sql(`SELECT count(*) FROM app.checkout_contacts WHERE contact_text LIKE '%buyer@example.test%'`), '0');
 	console.log('PASS: actual cart/checkout, lost prepare and confirmation, exact frozen amounts, cross-tab payload ownership, Worker restart and one withdrawal');
 	await sql(`UPDATE app.products SET is_active=true WHERE id='${paidProduct}'`);
 	// A registered old page must not remove a new active checkout or its basket.

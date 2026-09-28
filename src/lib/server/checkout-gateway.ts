@@ -1,9 +1,10 @@
 import { ApiError, requestApiJson } from '../api';
 import { readJsonBody, RequestBodyError } from './request-body';
 import { checkoutUuid, parseCheckoutBinding, parseCheckoutSnapshot, parsePrepareRequest, parsePrepareResponse } from '../checkout-contract';
+import { receiptAddress, sendReceipt, type ReceiptConfig } from './receipt-email';
 import { checkoutSessionFingerprint, checkoutTokenForAttempt, newCheckoutSessionSecret } from './checkout-credentials';
 
-export type CheckoutOperation = 'session' | 'prepare' | 'get' | 'confirm';
+export type CheckoutOperation = 'session' | 'prepare' | 'get' | 'confirm' | 'receipt';
 export type CheckoutRateLimit = { limit(options: { key: string }): Promise<{ success: boolean }> };
 export type CheckoutGatewayConfig = {
 	origin: string;
@@ -11,6 +12,8 @@ export type CheckoutGatewayConfig = {
 	secretKey: string;
 	sessionLimit: CheckoutRateLimit;
 	operationLimit: CheckoutRateLimit;
+	/** Absent: receipt requests fail with RECEIPT_UNAVAILABLE. */
+	receipt?: ReceiptConfig;
 };
 export const CHECKOUT_COOKIE = '__Host-amp_checkout';
 export const CHECKOUT_COOKIE_OPTIONS = {
@@ -85,16 +88,23 @@ export async function checkoutGateway(operation: CheckoutOperation, context: Gat
 		}
 		let binding;
 		let prepared;
+		let receiptTo: string | null = null;
 		try {
 			if (operation === 'prepare') { prepared = parsePrepareRequest(body); binding = prepared; }
-			else binding = parseCheckoutBinding(body);
+			else if (operation === 'receipt') {
+				const { email, ...rest } = body as Record<string, unknown>;
+				binding = parseCheckoutBinding(rest);
+				receiptTo = receiptAddress(email);
+			} else binding = parseCheckoutBinding(body);
 		} catch { return fail('INVALID_CHECKOUT_REQUEST'); }
+		if (operation === 'receipt' && !receiptTo) fail('INVALID_RECEIPT_EMAIL');
+		if (operation === 'receipt' && !config.receipt) fail('RECEIPT_UNAVAILABLE', 503);
 		if (operation !== 'prepare' && (!context.checkoutId || !checkoutUuid.test(context.checkoutId))) fail('INVALID_CHECKOUT_REQUEST');
 		const root = cookies.get(CHECKOUT_COOKIE);
 		const token = await checkoutTokenForAttempt(root, binding.request_id, binding.fingerprint);
 		if (!(await config.operationLimit.limit({ key: `session:${binding.fingerprint}` })).success) fail('CHECKOUT_RATE_LIMITED', 429);
 		cookies.set(CHECKOUT_COOKIE, root!, CHECKOUT_COOKIE_OPTIONS);
-		const rpc = operation === 'prepare' ? 'amp_prepare_checkout' : operation === 'get' ? 'amp_get_checkout' : 'amp_confirm_checkout';
+		const rpc = operation === 'prepare' ? 'amp_prepare_checkout' : operation === 'confirm' ? 'amp_confirm_checkout' : 'amp_get_checkout';
 		const payload = prepared
 			? { p_request_id: prepared.request_id, p_token: token, p_items: prepared.items, p_contact_text: prepared.contact }
 			: { p_checkout_id: context.checkoutId, p_token: token };
@@ -108,6 +118,13 @@ export async function checkoutGateway(operation: CheckoutOperation, context: Gat
 		const snapshot = parseCheckoutSnapshot(result);
 		if (snapshot.checkout_id !== context.checkoutId || (operation === 'confirm' && snapshot.status !== 'confirmed')) {
 			fail('CHECKOUT_UNAVAILABLE', 503);
+		}
+		if (operation === 'receipt') {
+			if (snapshot.status !== 'confirmed') fail('CHECKOUT_NOT_REGISTERED', 409);
+			// Spam guard: a few addresses per checkout; the operation limits apply too.
+			if (!(await config.receipt!.limit.limit({ key: `receipt:${snapshot.checkout_id}` })).success) fail('CHECKOUT_RATE_LIMITED', 429);
+			if (!await sendReceipt(snapshot, receiptTo!, { ...config.receipt!, origin: config.origin }, context.fetcher)) fail('RECEIPT_UNAVAILABLE', 503);
+			return response({ sent: true });
 		}
 		return response(snapshot);
 	} catch (error) {

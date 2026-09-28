@@ -28,6 +28,7 @@ Never commit secrets; `.env.example` holds placeholders.
 | `PUBLIC_SUPABASE_URL` | Browser + server | Local: `http://127.0.0.1:54321`. |
 | `PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Browser | Public, not a password. |
 | `SUPABASE_SECRET_KEY` | Worker/server only | Bypasses RLS. Never in the browser bundle, repo, logs or URLs. |
+| `RESEND_API_KEY` | Worker/server only | Sends buyer receipts (§4.2); never in logs or the browser bundle. Missing: receipts are unavailable. |
 | `CHECKOUT_ALLOWED_ORIGIN` | Checkout and invitation Workers + Auth callbacks | Exact HTTPS origin. Never derive trust from the request Host header. |
 
 The Worker also needs the native `CHECKOUT_SESSION_LIMIT` and
@@ -135,6 +136,20 @@ Bigint ids also need lossless handling.
 The contact is optional, unverified, 1–300 chars and not authentication. It is
 stored separately so staff can erase it (`amp_clear_checkout_contact`). Never copy
 it into notes or logs.
+
+Receipts are requested after registration, not from the contact. The registered
+checkout page offers an optional email field; the browser posts the saved binding
+plus `email` to `/api/checkouts/[id]/receipt`. The Worker reads the checkout with
+`amp_get_checkout`, requires `status=confirmed` (`CHECKOUT_NOT_REGISTERED`
+otherwise) and sends a bilingual receipt through the Resend HTTP API
+(`src/lib/server/receipt-email.ts`, styled like `supabase/templates/`). It lists
+items (names link to the localized `/p/[code]` page) and total and says payment
+is not checked. The address is used for that one
+send and never stored or logged. `RECEIPT_LIMIT` allows 3 sends per checkout per
+minute on top of the checkout limits; the Resend idempotency key (checkout ID plus
+address hash) turns a repeated send to the same address within 24 hours into one
+email. Errors: `INVALID_RECEIPT_EMAIL` (400), `CHECKOUT_RATE_LIMITED` (429),
+`RECEIPT_UNAVAILABLE` (503: no key, no binding or Resend failed).
 
 ### 4.3 Secrets, persistence and retries
 
@@ -358,8 +373,9 @@ sheets or silently truncate or over-shrink specs. See [page-labels.md](page-labe
 - Error mapping: stale → conflict needing user action; retry-same → silent success;
   validation → field error; auth/privilege → access error with re-login. Timeouts
   mean "retry the same request", never "pay again".
-- Buyer privacy: no accounts, names or emails. The contact string is optional and
-  erasable. Staff actions are attributed through their own JWT.
+- Buyer privacy: no accounts, names or stored emails. The contact string is optional
+  and erasable; a receipt address is used once and never stored. Staff actions are
+  attributed through their own JWT.
 
 ### 8.1 Error catalog (database → UI mapping)
 

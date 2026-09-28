@@ -172,6 +172,17 @@ export async function confirmCheckout(attempt: ActiveAttempt): Promise<CheckoutS
 	return snapshot;
 }
 
+/** Sends to this one address; it is never stored. Resolves 'invalid' for a rejected address. */
+export async function sendCheckoutReceipt(attempt: ActiveAttempt, email: string): Promise<'sent' | 'invalid' | 'failed'> {
+	if (!attempt.checkoutId) return 'failed';
+	try {
+		await post(`/api/checkouts/${attempt.checkoutId}/receipt`, { ...binding(attempt), email });
+		return 'sent';
+	} catch (error) {
+		return error instanceof ApiError && (error.body as { error?: unknown } | null)?.error === 'INVALID_RECEIPT_EMAIL' ? 'invalid' : 'failed';
+	}
+}
+
 /** Apply only a validated confirmed snapshot for this identity. Clear cart before pointer. */
 export async function finishRegistration(attempt: ActiveAttempt, snapshot: CheckoutSnapshot): Promise<ActiveAttempt> {
 	if (snapshot.status !== 'confirmed' || snapshot.checkout_id !== attempt.checkoutId) throw new CheckoutError('conflict');

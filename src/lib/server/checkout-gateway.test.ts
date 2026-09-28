@@ -29,7 +29,7 @@ function harness() {
 	};
 	let rpcBody: unknown = snapshot;
 	let rpcStatus = 200;
-	const post = async (operation: 'session' | 'prepare' | 'get' | 'confirm', body: unknown,
+	const post = async (operation: 'session' | 'prepare' | 'get' | 'confirm' | 'receipt', body: unknown,
 		init: RequestInit = {}, id = checkout_id) => {
 		const response = await checkoutGateway(operation, {
 			request: new Request(`${origin}/api/checkouts/test`, {
@@ -144,6 +144,25 @@ describe('checkout gateway trust boundary', () => {
 		h.rpc(snapshot); expect((await h.post('confirm', binding)).response.status).toBe(503);
 		const confirmed = { ...snapshot, status: 'confirmed', confirmed_at: snapshot.created_at, registration_method: 'buyer' };
 		h.rpc(confirmed); expect((await h.post('confirm', binding)).body).toEqual(confirmed);
+	});
+	test('receipts go only to a registered checkout, validated address and within the limit', async () => {
+		const h = harness(); h.jar.set(CHECKOUT_COOKIE, root);
+		const confirmed = { ...snapshot, status: 'confirmed', confirmed_at: snapshot.created_at, registration_method: 'buyer' };
+		const request = { ...binding, email: ' buyer@example.test ' };
+		expect((await h.post('receipt', request)).body).toEqual({ error: 'RECEIPT_UNAVAILABLE' });
+		let allowed = true;
+		h.config.receipt = { resendApiKey: 're_test', limit: { limit: async () => ({ success: allowed }) } };
+		expect((await h.post('receipt', { ...binding, email: '98765432' })).response.status).toBe(400);
+		expect((await h.post('receipt', { ...binding, email: 'a@b.no', extra: 1 })).response.status).toBe(400);
+		expect(h.calls).toHaveLength(0);
+		h.rpc(snapshot); expect((await h.post('receipt', request)).body).toEqual({ error: 'CHECKOUT_NOT_REGISTERED' });
+		h.rpc(confirmed); expect((await h.post('receipt', request)).body).toEqual({ sent: true });
+		expect(h.calls.map((call) => call.url)).toEqual(['https://database.example.test/rest/v1/rpc/amp_get_checkout',
+			'https://database.example.test/rest/v1/rpc/amp_get_checkout', 'https://api.resend.com/emails']);
+		expect(JSON.parse(String(h.calls[2].init?.body)).to).toEqual(['buyer@example.test']);
+		allowed = false; expect((await h.post('receipt', request)).response.status).toBe(429);
+		allowed = true; h.rpc(confirmed, 500);
+		expect((await h.post('receipt', request)).response.status).toBe(503);
 	});
 	test('database errors never leak details, tokens or contact', async () => {
 		const h = harness(); h.jar.set(CHECKOUT_COOKIE, root);

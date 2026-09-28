@@ -47,7 +47,7 @@ Revalidation never creates a replacement checkout or implies verified payment.
 | Prepared, zero total | Snapshot and direct registration |
 | Confirm in flight | Keep layout; announce pending; block new commands |
 | Confirmation unknown | Read or retry the same confirmation; never pay again |
-| Registered | Result, read-only lines, cart cleanup, explicit new purchase |
+| Registered | Result, read-only lines, cart cleanup, optional receipt email, explicit new purchase |
 | Missing/changed credentials | No cookie replacement; reference and `/help` |
 | Different active attempt | Reading is safe; resolve the attempt before acting |
 | Unavailable snapshot | Retry or help; never invent a total or advise re-payment |
@@ -56,6 +56,14 @@ Persist the move to confirmation before sending it; if that fails, do not send. 
 registration response applies only to its own attempt; retries reuse the same
 credentials and request ID. Duplicate confirmations and staff recovery converge on one
 sale; disabled buttons are not that guarantee. Staff logout keeps guest credentials.
+
+## Receipt
+
+A registered checkout opened with its saved binding shows an optional email field and
+Send receipt. Success turns the button into a checked "Sent" with an `sr-only`
+announcement; editing the address allows another send. A rejected address is a field
+error, any other failure a retryable message. Nothing is stored in the browser or the
+database. Transport and limits: [website-guide.md](website-guide.md) §4.2.
 
 ## Help
 

@@ -31,7 +31,7 @@ never appears in responses, browser storage, URLs, analytics or logs. There is n
 global pepper or server-side session store. **Keep the `v1` derivation for existing
 attempts**; changing it makes their saved digests unreachable.
 
-Every prepare/read/confirm request sends its saved request ID and fingerprint, and
+Every prepare/read/confirm/receipt request sends its saved request ID and fingerprint, and
 the Worker checks them against the cookie before calling an RPC. The fingerprint is
 a binding value, not authentication. `CHECKOUT_SESSION_MISSING`,
 `CHECKOUT_SESSION_CHANGED`, `INVALID_CHECKOUT_SESSION` and `INVALID_CHECKOUT_ATTEMPT`

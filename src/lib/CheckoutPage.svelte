@@ -4,7 +4,10 @@
 	import * as Item from '$lib/components/ui/item';
 	import * as Collapsible from '$lib/components/ui/collapsible';
 	import { Skeleton } from '$lib/components/ui/skeleton';
-	import { Button } from '$lib/components/ui/button';
+	import { Button, ButtonLabel } from '$lib/components/ui/button';
+	import * as Field from '$lib/components/ui/field';
+	import { Input } from '$lib/components/ui/input';
+	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
 	import Icon from '$lib/Icon.svelte';
 	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
 	import CheckoutReferences from '$lib/CheckoutReferences.svelte';
@@ -15,7 +18,7 @@
 	import { getCartContext, type ActiveAttempt } from './cart';
 	import {
 		canOpenPayment, checkoutErrorCode, confirmCheckout, findCheckoutAttempt, finishRegistration,
-		prepareCheckout, readCheckout, resumeCheckout, setAsideCheckout, type CheckoutErrorCode
+		prepareCheckout, readCheckout, resumeCheckout, sendCheckoutReceipt, setAsideCheckout, type CheckoutErrorCode
 	} from './checkout';
 	import type { CheckoutSnapshot } from './checkout-contract';
 	import { formatDecimal, formatMeasurementText, formatMoney, unitLabel } from './format';
@@ -35,6 +38,9 @@
 	let paymentHeight = $state(0);
 	let linesHeight = $state(0);
 	let generation = 0;
+	let receiptEmail = $state('');
+	let receipt = $state<'sending' | 'sent' | 'invalid' | 'failed' | null>(null);
+	let sentTo = $state('');
 	const active = $derived($cart.activeAttempt?.requestId === attempt?.requestId ? $cart.activeAttempt : null);
 	const registered = $derived(snapshot?.status === 'confirmed');
 	const confirmationAttempted = $derived(attempt?.state === 'confirming' || active?.state === 'confirming' || active?.state === 'registered');
@@ -160,6 +166,14 @@
 		catch (failure) { error = checkoutErrorCode(failure); }
 		finally { await cart.refresh(); busy = null; reconcilePending(); }
 	}
+	async function sendReceipt(event: SubmitEvent) {
+		event.preventDefault();
+		const email = receiptEmail.trim();
+		if (!attempt || receipt === 'sending' || (receipt === 'sent' && email === sentTo)) return;
+		receipt = 'sending';
+		receipt = await sendCheckoutReceipt(attempt, email);
+		if (receipt === 'sent') sentTo = email;
+	}
 	const money = (value: string) => formatMoney(value, i18n.locale);
 </script>
 
@@ -245,6 +259,24 @@
 	</div>
 	<div class={['purchase-actions mt-4 grid justify-items-start gap-4', !error && 'min-h-20', (confirmationAttempted || busy === 'confirming') && 'content-end']} style:min-height={!registered && paymentHeight ? `${paymentHeight}px` : undefined}>
 		{#if registered && !busy && !error && !active}
+			{#if attempt?.checkoutId === snapshot?.checkout_id}
+				<form class="grid w-full gap-3" onsubmit={sendReceipt} novalidate>
+					<Field.Group layout="row">
+						<Field.Field width="grow" class="max-w-md">
+							<Field.Label for="receipt-email">{m.receiptEmail}</Field.Label>
+							<Input id="receipt-email" type="email" autocomplete="email" enterkeyhint="send" maxlength={254} bind:value={receiptEmail}
+								aria-invalid={receipt === 'invalid'} aria-describedby={receipt === 'invalid' || receipt === 'failed' ? 'receipt-error' : undefined}
+								oninput={() => { if (receipt !== 'sending') receipt = null; }} />
+						</Field.Field>
+						<Button variant="outline" type="submit" disabled={receipt === 'sending'}>
+							{#if receipt === 'sent' && receiptEmail.trim() === sentTo}<Icon icon={CheckIcon} />{m.receiptSent}
+							{:else}<ButtonLabel label={m.sendReceipt} pendingLabel={m.sendingReceipt} pending={receipt === 'sending'} reserveLabels={[m.receiptSent]} />{/if}
+						</Button>
+					</Field.Group>
+					<p class="sr-only" role="status">{#if receipt === 'sent'}{m.receiptSentTo(sentTo)}{/if}</p>
+					{#if receipt === 'invalid' || receipt === 'failed'}<Field.Error id="receipt-error">{receipt === 'invalid' ? m.receiptInvalid : m.receiptFailed}</Field.Error>{/if}
+				</form>
+			{/if}
 			<Button variant="default" href={i18n.href('/p')}>{m.newPurchase}</Button>
 		{:else if canPay && snapshot?.payment_required}
 			<section class="payment grid justify-items-start gap-4" aria-labelledby="payment-heading" bind:clientHeight={paymentHeight}>
