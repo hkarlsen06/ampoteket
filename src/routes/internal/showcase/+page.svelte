@@ -24,6 +24,8 @@
 	import type { TapeBitmap } from '$lib/labels/render';
 	import CaretLeftIcon from 'phosphor-svelte/lib/CaretLeftIcon';
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
+	import CornersInIcon from 'phosphor-svelte/lib/CornersInIcon';
+	import CornersOutIcon from 'phosphor-svelte/lib/CornersOutIcon';
 	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
 	import SealWarningIcon from 'phosphor-svelte/lib/SealWarningIcon';
 	import ArrowsClockwiseIcon from 'phosphor-svelte/lib/ArrowsClockwiseIcon';
@@ -31,6 +33,7 @@
 	import QrCodeIcon from 'phosphor-svelte/lib/QrCodeIcon';
 	import * as data from './fixtures';
 	import Phone from './Phone.svelte';
+	import poster from './img/kjopsplakat.jpg';
 	import printer from './img/printer.webp';
 	import qr from './img/qr.svg';
 
@@ -38,15 +41,19 @@
 	const i18n = setI18n({ locale: 'nb', m: messagesFor('nb'), href: (path: string) => path });
 
 	const W = 1600, H = 900;
-	const MIRROR = 2, LABEL = 3, FIND = 4, REGISTER = 7, OVERVIEW = 9, LABELS = 11, TRACE = 12;
+	const MIRROR = 2, LABEL = 3, FIND = 5, REGISTER = 8, OVERVIEW = 10, LABELS = 12, TRACE = 13;
 	let i = $state(0);
 	let innerWidth = $state(W), innerHeight = $state(H);
 	const k = $derived(Math.min(innerWidth / W, innerHeight / H));
 	let still = $state(false);
+	let fullscreen = $state(false);
 
 	function go(next: number) {
 		i = Math.max(0, Math.min(slides.length - 1, next));
 		history.replaceState(null, '', `#${i + 1}`);
+	}
+	function toggleFullscreen() {
+		void (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen());
 	}
 	function key(event: KeyboardEvent) {
 		// Space and Enter on a focused button already click it.
@@ -55,7 +62,7 @@
 		if (step) go(i + step);
 		else if (event.key === 'Home') go(0);
 		else if (event.key === 'End') go(slides.length - 1);
-		else if (event.key === 'f') void (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen());
+		else if (event.key === 'f') toggleFullscreen();
 		else return;
 		event.preventDefault();
 	}
@@ -116,10 +123,128 @@
 	// The volunteers' admin window: where it sits on each admin slide.
 	const desk = [[600, 170, 1], [80, 170, 1], [80, 230, 740 / 920]] as const;
 	const pose = $derived(desk[Math.max(0, Math.min(2, i - OVERVIEW))]);
-	// Two coloured glows drift behind every slide: [red x, red y, green x, green y].
-	const glows = [[1100, -200, -300, 500], [-200, 450, 300, -400], [1200, 400, -200, -300], [700, 500, -300, -200], [1100, 300, -300, 400],
-		[-200, 200, 1200, 400], [1000, -200, 100, 500], [1200, 500, -200, -100], [-200, -300, 1200, 400], [900, -300, -300, 400],
-		[-300, -200, 1100, 500], [800, 400, -300, -300], [-200, 400, 1100, -300], [1100, -300, -100, 400], [-300, 500, 1100, -300], [500, -350, 400, 600]];
+	// Backdrop drawn the way Apple Music's web player does it (reverse-engineered in
+	// aadishv.dev/music; constants from AMLL's PixiRenderer): four copies of an
+	// artwork, stretched square at √2, 0.8, 0.5 and 0.25 of the stage's long side,
+	// each turning at its own speed while the third drifts, then blurred hard,
+	// saturated, darkened and given contrast. Like the original it renders small and
+	// is scaled up; each slide's artwork fades in over one second, like a new song.
+	// A WebGL pass then bends the result with slow, layered waves, standing in for
+	// Apple's twist filters and AMLL's warped mesh: that is what makes it flow.
+	// The colour comes only from the artwork: the slide's own photograph where it is
+	// full-bleed, otherwise a cover filled with shades of the one or two hues its
+	// elements show.
+	const artwork: (string | string[])[] = [
+		'/photos/storefront-960.webp',
+		'/photos/drawers-960.webp',
+		['--drawer-edge', '--link'], // the shelf map
+		['--drawer-edge', '--yellow'], // A1 picked out in yellow
+		['--led-red'], // the poster's step lights
+		['--led-red', '--led-green'], // catalog: step light, stock badges
+		['--led-red'], // cart total
+		['--led-red'], // the Vipps amount
+		['--led-green', '--led-red'], // «Kjøpet er registrert», step 3
+		['--primary'], // the trust icons
+		['--link'], // the overview's sales chart
+		['--led-green', '--yellow'], // stock history badges
+		['--led-green'], // label count
+		['--led-green', '--yellow'], // purchase and log badges
+		['--led-green'], // test count and checks
+		['--led-red'], // the four launch points
+		['--led-red', '--led-green'] // the sign again
+	];
+	// A 3×3 cover: every cell a shade of the slide's hues, the second hue in three cells.
+	const shades = [1, 0.2, 0.7, 0.12, 0.9, 0.3, 0.6, 0.15, 0.45], second = [2, 4, 6];
+	function artworkImage(art: string | string[], style: CSSStyleDeclaration) {
+		if (typeof art === 'string') return Object.assign(new Image(), { src: art });
+		const cover = document.createElement('canvas');
+		cover.width = cover.height = 3;
+		const context = cover.getContext('2d')!;
+		shades.forEach((shade, n) => {
+			const hex = style.getPropertyValue(art[second.includes(n) ? art.length - 1 : 0]).trim();
+			const [r, g, b] = [1, 3, 5].map((at) => Math.round(parseInt(hex.slice(at, at + 2), 16) * shade));
+			context.fillStyle = `rgb(${r} ${g} ${b})`;
+			context.fillRect(n % 3, Math.floor(n / 3), 1, 1);
+		});
+		return cover;
+	}
+	const spin = [6e-5, -1.2e-4, 6e-5, -8e-5]; // radians per ms: AMLL's 1/1000, 1/500, 1/1000, 1/750 per 60 fps frame
+	const warp = `precision mediump float;
+		uniform sampler2D art;
+		uniform float t;
+		varying vec2 uv;
+		void main() {
+			vec2 p = uv;
+			p += 0.07 * vec2(sin(p.y * 4.0 + t * 0.5), cos(p.x * 3.5 - t * 0.4));
+			p += 0.05 * vec2(sin((p.x + p.y) * 6.0 - t * 0.6), cos((p.x - p.y) * 5.0 + t * 0.45));
+			gl_FragColor = texture2D(art, p);
+		}`;
+	function backdrop(canvas: HTMLCanvasElement) {
+		const gl = canvas.getContext('webgl');
+		if (!gl) return; // ponytail: no WebGL, no backdrop; the stage stays black
+		const w = 200, h = 113, long = Math.max(w, h), blur = 14, margin = blur * 3;
+		const scratch = document.createElement('canvas'), art = document.createElement('canvas');
+		scratch.width = w + 2 * margin; scratch.height = h + 2 * margin;
+		art.width = w; art.height = h;
+		// Both CPU-backed, so WebGL can take each frame without reading back from the GPU.
+		const paint = scratch.getContext('2d', { willReadFrequently: true })!, view = art.getContext('2d', { willReadFrequently: true })!;
+		const program = gl.createProgram()!;
+		for (const [type, source] of [[gl.VERTEX_SHADER, 'attribute vec2 at; varying vec2 uv; void main() { uv = at * 0.5 + 0.5; uv.y = 1.0 - uv.y; gl_Position = vec4(at, 0.0, 1.0); }'], [gl.FRAGMENT_SHADER, warp]] as const) {
+			const shader = gl.createShader(type)!;
+			gl.shaderSource(shader, source);
+			gl.compileShader(shader);
+			gl.attachShader(program, shader);
+		}
+		gl.linkProgram(program);
+		gl.useProgram(program);
+		gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+		gl.enableVertexAttribArray(0);
+		gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+		gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
+		for (const [name, value] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, name, value);
+		const clock = gl.getUniformLocation(program, 't');
+		const moving = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+		const layers: { image: HTMLImageElement | HTMLCanvasElement; alpha: number; turn: number[] }[] = [];
+		let current = -1, time = 0, last = 0, frame = 0;
+		function draw(now: number) {
+			frame = requestAnimationFrame(draw);
+			if (now - last < 1000 / 30) return; // AMLL caps the original at 30 fps
+			const dt = last ? Math.min(now - last, 100) : 0;
+			last = now;
+			if (i !== current) {
+				current = i;
+				layers.push({ image: artworkImage(artwork[i], getComputedStyle(canvas)), alpha: 0, turn: spin.map(() => Math.random() * 2 * Math.PI) });
+			}
+			if (moving) time += dt;
+			paint.globalAlpha = 1;
+			paint.fillStyle = 'black';
+			paint.fillRect(0, 0, scratch.width, scratch.height);
+			for (const layer of layers) {
+				if (layer.image instanceof HTMLImageElement && !layer.image.complete) continue;
+				layer.alpha = moving ? Math.min(1, layer.alpha + dt / 1000) : 1;
+				if (moving) layer.turn = layer.turn.map((angle, n) => angle + spin[n] * dt);
+				const drift = (w / 4) * Math.cos(time * 4.5e-5);
+				const sprites = [[w / 2, h / 2, long * Math.SQRT2], [w / 2.5, h / 2.5, long * 0.8], [w / 2 + drift, h / 2 + drift, long * 0.5], [w / 2 + w / 40, h / 2 + w / 40, long * 0.25]];
+				paint.globalAlpha = layer.alpha;
+				sprites.forEach(([x, y, size], n) => {
+					paint.setTransform(1, 0, 0, 1, x + margin, y + margin);
+					paint.rotate(layer.turn[n]);
+					paint.drawImage(layer.image, -size / 2, -size / 2, size, size);
+				});
+				paint.setTransform(1, 0, 0, 1, 0, 0);
+			}
+			while (layers.length > 1 && layers[1].alpha >= 1) layers.shift();
+			view.filter = `blur(${blur}px) saturate(1.2) brightness(0.6) contrast(1.3)`;
+			view.drawImage(scratch, -margin, -margin);
+			gl!.texImage2D(gl!.TEXTURE_2D, 0, gl!.RGB, gl!.RGB, gl!.UNSIGNED_BYTE, art);
+			gl!.uniform1f(clock, time / 1000);
+			gl!.drawArrays(gl!.TRIANGLES, 0, 3);
+		}
+		frame = requestAnimationFrame(draw);
+		return () => cancelAnimationFrame(frame);
+	}
+
 
 	// Label artwork from the same code the admin pages print with.
 	let drawerLabel = $state<string>(), sheetLabels = $state<string[]>([]);
@@ -127,7 +252,7 @@
 	onMount(() => {
 		still = matchMedia('(prefers-reduced-motion: reduce)').matches;
 		const n = Number(location.hash.slice(1));
-		if (n >= 1 && n <= slides.length) i = n - 1;
+		if (Number.isInteger(n) && n >= 1 && n <= slides.length) i = n - 1;
 		const demo = { id: 'demo', code: data.resistor.code, lines: [data.resistor.name_nb] };
 		void import('$lib/labels/render').then(async ({ prepareLabels, prepareTapeLabel }) => {
 			const settings = { ...proportionalLabelSettings(45), copies: 1 };
@@ -150,10 +275,11 @@
 		{ head: 'Endringslogg', text: 'Hvem gjorde hva, og når', rows: [['Ingrid endret prisen på RES-00005', '10:02', 'time'], ['Jonas flyttet CAP-00045 til C1', '09:47', 'time'], ['Sara inviterte en lageransvarlig', 'i går', 'time']] },
 		{ head: 'Administratorer', text: 'Inviter og fjern lageransvarlige', rows: [['Ingrid', 'Aktiv', 'success'], ['Jonas', 'Aktiv', 'success'], ['Sara', 'Invitert', 'warning']] }
 	];
-	const slides = [cover, today, mirror, label, find, fill, pay, register, trust, overview, stockLog, labels, trace, tested, launch, questions];
+	const slides = [cover, today, mirror, label, sign, find, fill, pay, register, trust, overview, stockLog, labels, trace, tested, launch, questions];
 </script>
 
 <svelte:window bind:innerWidth bind:innerHeight onkeydown={key} />
+<svelte:document onfullscreenchange={() => (fullscreen = !!document.fullscreenElement)} />
 <svelte:head>
 	<title>Ampoteket</title>
 	<meta name="robots" content="noindex" />
@@ -170,23 +296,26 @@
 		{#each labels as text (text)}<Badge variant="outline" class="h-auto border-border px-4 py-2 text-[22px] text-foreground">{text}</Badge>{/each}
 	</div>
 {/snippet}
-{#snippet stat(value: string, caption: string, red = false)}
+{#snippet stat(value: string, caption: string, red = false, spoken = value)}
 	<div class="flex items-center gap-5">
-		<Led {value} label={caption} {red} class="px-5 py-3 text-[88px]" />
+		<Led {value} label={`${spoken.replace('.', ',')} ${caption}`} {red} class="px-5 py-3 text-[88px]" />
 		<span class="text-[26px] text-muted-foreground" aria-hidden="true">{caption}</span>
 	</div>
 {/snippet}
 
 <!-- Slide copy. -->
 {#snippet cover()}
-	<div class="absolute inset-0 overflow-hidden">
-		<img class="size-full object-cover" src="/photos/storefront-1920.webp" alt="" {@attach drift} />
-		<div class="absolute inset-0 bg-radial from-background/30 to-background"></div>
+	<!-- The lit storefront, its real sign beside the wordmark; the camera pulls back from the sign. -->
+	<div class="absolute top-0 right-0 h-full w-[1000px] overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_35%)]">
+		<img class="size-full origin-[25%_25%] object-cover object-left" src="/photos/storefront-1920.webp" alt="" {@attach drift} />
 	</div>
-	<div class="absolute inset-x-0 top-[300px] text-center" data-group>
-		<h1 {@attach flicker}><img class="mx-auto h-[110px]" src="/brand/wordmark.svg" alt="Ampoteket" /></h1>
-		<p class="mt-12 text-[38px]">Selvbetjent delebutikk og lagersystem for verkstedet</p>
-		<p class="mt-4 text-[24px] text-muted-foreground">ampoteket.no · Pilestredet 35 · 1. oktober 2026</p>
+	<div class="absolute top-[250px] left-[80px] w-[640px]" data-group>
+		<h1><img class="h-[110px]" src="/brand/wordmark.svg" alt="Ampoteket" {@attach flicker} /></h1>
+		<p class="mt-14 text-[44px] leading-tight font-semibold">Selvbetjent delebutikk og lagersystem for verkstedet</p>
+		<div class="mt-12 flex items-center gap-6">
+			<Led value="01.10.26" label="1. oktober 2026" class="px-4 py-2 text-[44px]" />
+			<span class="text-[26px] text-muted-foreground">ampoteket.no · Pilestredet 35</span>
+		</div>
 	</div>
 {/snippet}
 
@@ -196,25 +325,31 @@
 		<div class="absolute inset-0 bg-linear-to-r from-background to-transparent to-60%"></div>
 	</div>
 	{@render title('Delehylla i dag')}
-	<div class="absolute top-[290px] left-[80px] flex gap-12" {@attach count(counters.cabinets, 12)} {@attach count(counters.drawers, 492)}>
-		{@render stat(shown(counters.cabinets, 2), 'kabinetter', true)}{@render stat(shown(counters.drawers, 3), 'skuffer', true)}
+	<div class="absolute top-[270px] left-[80px] flex flex-col gap-6" {@attach count(counters.cabinets, 12)} {@attach count(counters.drawers, 492)}>
+		{@render stat(shown(counters.cabinets, 2), 'kabinetter', true, '12')}{@render stat(shown(counters.drawers, 3), 'potensielle skuffer', true, '492')}
 	</div>
-	{@render body('Ingen vet sikkert hva som er på lager, eller hva som er betalt. Lageransvarlige oppdager at noe er tomt når det allerede er tomt.', 'left-[80px] top-[480px] w-[620px]')}
+	{@render body('Ingen vet sikkert hva som er på lager, eller hva som er betalt. Lageransvarlige oppdager at noe er tomt når det allerede er tomt.', 'left-[80px] top-[660px] w-[620px]')}
 {/snippet}
 
 {#snippet mirror()}
 	{@render title('Et digitalt speil av hylla', 'left-[80px] top-[150px] w-[520px]')}
-	<div class="absolute top-[300px] left-[80px] flex flex-col gap-6" data-group>{@render stat('12', 'kabinetter')}{@render stat('492', 'skuffer')}</div>
-	{@render body('Lagersystemet vet hvor hver del ligger og hvor mye som er igjen.', 'left-[80px] top-[680px] w-[500px]')}
+	<div class="absolute top-[300px] left-[80px] flex flex-col gap-6" data-group>{@render stat('12', 'kabinetter')}{@render stat('492', 'potensielle skuffer')}</div>
+	{@render body('Lagersystemet viser hvor hver del skal ligge og hvor mange som er registrert.', 'left-[80px] top-[680px] w-[500px]')}
 {/snippet}
 
 {#snippet label()}
-	{@render title('Hver skuff har sin egen lapp', 'left-[80px] top-[150px] w-[600px]')}
-	{@render body('QR-koden åpner bare delens side. Pris og beholdning hentes alltid fra lageret, så lappen blir aldri utdatert.', 'left-[80px] top-[330px] w-[540px]')}
+	{@render title('Hver del har sin egen etikett', 'left-[80px] top-[150px] w-[600px]')}
+	{@render body('QR-koden åpner bare delens side. Pris og beholdning hentes fra lageret, så etiketten må ikke byttes når prisen endres.', 'left-[80px] top-[330px] w-[540px]')}
 	<div class="absolute top-[745px] left-[620px] flex h-0 items-center" data-delay="1300">
-		{#if drawerLabel}<img class="w-[214px] rounded-md bg-[var(--paper)] p-2 shadow-2xl" src={drawerLabel} alt="Lappen til RES-00005, 1 kΩ motstand" />{/if}
+		{#if drawerLabel}<img class="w-[214px] rounded-md bg-[var(--paper)] p-2 shadow-2xl" src={drawerLabel} alt="Etiketten til RES-00005, 1 kΩ motstand" />{/if}
 		<div class="h-[3px] w-[98px] bg-primary shadow-[0_0_8px_var(--led-red)]"></div>
 	</div>
+{/snippet}
+
+{#snippet sign()}
+	{@render title('Plakaten ved hylla', 'left-[80px] top-[150px] w-[700px]')}
+	{@render body('Tre steg og Vippsnummeret, på norsk og engelsk. QR-koden åpner ampoteket.no.', 'left-[80px] top-[260px] w-[620px]')}
+	<img class="absolute top-[60px] left-[960px] h-[780px] rotate-2 shadow-2xl ring-1 ring-night-border" src={poster} alt="Kjøpsplakaten: slik kjøper du deler, i tre steg" />
 {/snippet}
 
 {#snippet find()}
@@ -232,13 +367,13 @@
 {#snippet pay()}
 	{@render title('Betal i Vipps', 'left-[80px] top-[150px] w-[900px]')}
 	<div class="absolute top-[290px] left-[80px]">{@render stat('14.50', 'kr til Vipps 47322', true)}</div>
-	{@render body('Kjøperen betaler i sin egen Vipps-app. Mister hen nettet etterpå, fortsetter hen samme kjøp og betaler aldri to ganger.', 'left-[80px] top-[470px] w-[860px]')}
+	{@render body('Kjøperen betaler i sin egen Vipps-app. Mister de nettet etterpå, fortsetter de samme kjøp uten å betale på nytt.', 'left-[80px] top-[470px] w-[860px]')}
 {/snippet}
 
 {#snippet register()}
 	{@render title('Registrer kjøpet', 'left-[80px] top-[150px] w-[900px]')}
 	{@render body('Trykk «Jeg har betalt». Delene trekkes fra lageret med en gang, så lageransvarlige ser når de må bestille mer.', 'left-[80px] top-[260px] w-[860px]')}
-	{@render chips(['Lageret oppdateres', 'Kvittering på e-post'], 'left-[80px] top-[460px] w-[860px]')}
+	{@render chips(['Lageret oppdateres', 'Kvittering på e-post hvis du vil'], 'left-[80px] top-[460px] w-[860px]')}
 {/snippet}
 
 {#snippet trust()}
@@ -270,16 +405,15 @@
 
 {#snippet labels()}
 	{@render title('Etiketter på A4-ark eller fra skriveren', 'left-[80px] top-[100px] w-[1440px]')}
-	<div class="absolute top-[740px] left-[80px]">{@render stat('48', 'etiketter på 3 A4-ark fra kabinett A1')}</div>
-	<img class="absolute top-[360px] left-[1070px] w-[450px]" src={printer} alt="Brother PT-P700" />
+	<img class="absolute top-[280px] left-[1200px] h-[420px]" src={printer} alt="Brother PT-P700" />
 	{#if tape}
-		<div class="absolute top-[330px] left-[840px] rotate-[-5deg] rounded-lg bg-[var(--paper)] p-4 shadow-2xl" role="img" aria-label="Etiketten skriveren lager for RES-00005">
+		<div class="absolute top-[330px] left-[890px] rotate-[-5deg] rounded-lg bg-[var(--paper)] p-4 shadow-2xl" role="img" aria-label="Etiketten skriveren lager for RES-00005">
 			<canvas class="block w-[224px] [image-rendering:pixelated]" {@attach drawTape}></canvas>
 		</div>
 	{/if}
 	<div class="absolute top-[740px] left-[900px] w-[620px]">
 		<p class="text-[30px] font-semibold">Brother PT-P700</p>
-		<p class="mt-1 text-[26px] text-muted-foreground">Én etikett om gangen, rett fra produktsiden</p>
+		<p class="mt-1 text-[26px] text-muted-foreground">Én etikett om gangen, fra produktet i admin</p>
 	</div>
 {/snippet}
 
@@ -317,8 +451,8 @@
 	{@render title('Før lansering trenger jeg fra dere', 'left-[80px] top-[110px] w-[1440px]')}
 	{#each [
 		{ head: 'Klarsignal', text: 'Ja til å publisere på ampoteket.no' },
-		{ head: 'Startlager', text: 'Lageransvarlige teller skuffene inn, med stikkprøver' },
-		{ head: 'Lapper på skuffene', text: 'Testark, mål og skanning i verkstedlyset' },
+		{ head: 'Startlager', text: 'Jeg lærer opp lageransvarlige, og vi teller skuffene inn sammen' },
+		{ head: 'Etiketter på skuffene', text: 'Testark, mål og skanning i verkstedlyset' },
 		{ head: 'Kontaktpersoner', text: 'Navn og kontaktmåte til hjelpesiden' }
 	] as card, index (card.head)}
 		<div class="absolute flex h-[230px] w-[700px] items-center gap-8 rounded-3xl border border-border bg-background/60 px-10 backdrop-blur"
@@ -344,11 +478,7 @@
      the stage around them stays dark. -->
 <main class="fixed inset-0 overflow-hidden bg-night">
 	<div class="absolute top-1/2 left-1/2 h-[900px] w-[1600px] overflow-hidden" style:transform="translate(-50%, -50%) scale({k})">
-		{#each [['var(--led-red)', 0], ['var(--led-green)', 2]] as [colour, at] (at)}
-			<div class="absolute top-0 left-0 size-[900px] rounded-full transition-[translate] duration-[1600ms] ease-in-out motion-reduce:transition-none" aria-hidden="true"
-				style:background="radial-gradient(closest-side, color-mix(in oklab, {colour} 16%, transparent), transparent)"
-				style:translate="{glows[i][+at]}px {glows[i][+at + 1]}px"></div>
-		{/each}
+		<canvas class="scheme-night absolute inset-0 size-full" width="320" height="180" aria-hidden="true" {@attach backdrop}></canvas>
 
 		{#if i === MIRROR || i === LABEL}
 			<div class="absolute inset-0" in:fly={enter} out:fade={leave} inert>
@@ -438,6 +568,11 @@
 			</div>
 		{/if}
 
+		{#if (i >= FIND && i <= REGISTER) || (i >= OVERVIEW && i <= TRACE)}
+			<!-- Sales, stock, history and names on these slides are invented. -->
+			<p class="scheme-night absolute top-6 right-10 text-[18px] text-muted-foreground" transition:fade={leave}>Eksempeldata</p>
+		{/if}
+
 		{#key i}
 			<section class="scheme-night absolute inset-0" in:rise out:fade={leave} aria-label="Lysbilde {i + 1} av {slides.length}">
 				{@render slides[i]()}
@@ -448,5 +583,6 @@
 		<Button variant="ghost" size="icon" aria-label="Forrige lysbilde" onclick={() => go(i - 1)}><Icon icon={CaretLeftIcon} size={18} /></Button>
 		<span class="tabular-nums" aria-live="polite">{i + 1} / {slides.length}</span>
 		<Button variant="ghost" size="icon" aria-label="Neste lysbilde" onclick={() => go(i + 1)}><Icon icon={CaretRightIcon} size={18} /></Button>
+		<Button variant="ghost" size="icon" aria-label="Fullskjerm" aria-pressed={fullscreen} onclick={toggleFullscreen}><Icon icon={fullscreen ? CornersInIcon : CornersOutIcon} size={18} /></Button>
 	</nav>
 </main>

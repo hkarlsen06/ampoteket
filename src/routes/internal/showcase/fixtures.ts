@@ -49,9 +49,10 @@ export const stockHistory = [
 	{ kind: 'Korrigering', change: '−4', balance: '36', when: '18. sep. 2026, 09:31', by: 'Sara', tone: 'warning' }
 ] as const;
 
-// One A4 sheet of cabinet A1's drawer labels.
-export const sheet = ['1 Ω', '2,2 Ω', '10 Ω', '22 Ω', '47 Ω', '100 Ω', '220 Ω', '330 Ω', '470 Ω', '1 kΩ', '2,2 kΩ', '4,7 kΩ',
-	'10 kΩ', '22 kΩ', '47 kΩ', '100 kΩ', '220 kΩ', '470 kΩ', '1 MΩ', '10 MΩ'].map((value, index) => ({
+// One A4 sheet of cabinet A1's labels. The codes agree with `search` above
+// (RES-00001 1 Ω, RES-00003 100 Ω, RES-00005 1 kΩ, RES-00007 10 kΩ).
+export const sheet = ['1 Ω', '10 Ω', '100 Ω', '470 Ω', '1 kΩ', '4,7 kΩ', '10 kΩ', '47 kΩ', '100 kΩ', '1 MΩ', '2,2 Ω', '22 Ω',
+	'220 Ω', '2,2 kΩ', '22 kΩ', '220 kΩ', '4,7 Ω', '47 Ω', '470 kΩ', '10 MΩ'].map((value, index) => ({
 	id: `sheet-${index}`, code: `RES-${(index + 1).toString(16).toUpperCase().padStart(5, '0')}`, lines: [`${value} motstand`]
 }));
 
