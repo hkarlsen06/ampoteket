@@ -169,6 +169,7 @@ try {
   await expect(page.getByText('0.4 m', { exact: true })).toBeVisible();
   await expect(page.getByRole('img', { name: en.adminStatistics.chartTitle })).toHaveAttribute('aria-label', /0\.1 m/);
 
+  let drafted = false; // The product draft survives each later reload.
   for (const locale of ['nb', 'en'] as const) for (const colorScheme of ['light', 'dark'] as const) for (const width of [360, 768, 1280]) {
     const messages = locale === 'nb' ? nb : en;
     const m = messages.adminStatistics;
@@ -184,8 +185,9 @@ try {
         await expect(page.getByRole('link', { name: `${locale === 'nb' ? longNameNb : longName} ${locale === 'nb' ? 'uten beholdning' : 'out of stock'}`, exact: false })).toHaveAttribute('href', `${prefix}/admin/products/${outOfStockId}`);
       } else if (path.endsWith(productId)) {
         const name = page.getByLabel(fieldLabel(messages.adminProducts.nameEn));
-        await expect(name).toHaveValue(longName);
+        await expect(name).toHaveValue(drafted ? `${longName} unsaved` : longName);
         await name.fill(`${longName} unsaved`);
+        drafted = true;
         const tab = page.getByRole('tab', { name: m.heading, exact: true });
         const before = await tab.evaluate(el => el.getBoundingClientRect().top + window.scrollY);
         await tab.click();
