@@ -86,10 +86,13 @@ the selected products. It is a regression check, not a hosted latency guarantee.
   locales, switched 2026-10-01 13:06 UTC), the repo email templates, and Data API
   schema `public` only. The Worker serves `ampoteket.no` and `www.ampoteket.no` (308
   to the apex, Google Trust Services certificate) as version
-  `a34fc006-0aac-4d69-b29f-ae4fa009800e` (`634513d` plus only `c90ce91`'s Discord
-  retry, `--env production`, built from a clean worktree, deployed 2026-10-01 14:39 UTC,
-  previous `fe231e66-a89b-4457-b68f-63ac7ce4d490` from `634513d`; the workers.dev
-  rehearsal address is off; `39c016c`, `285f4b4` and `54d7f5e` are not deployed) with `SALES_OPEN=false`: `/`, `/en`, `/help`, `/privacy` and
+  `3c1e5819-e3ec-493b-afde-f5e2aa55d359` (commit `116c724`, `bun run deploy:production`,
+  deployed 2026-10-01 15:39 UTC, which verified the vars, rate limits, secrets and the
+  `/help` contact list; the workers.dev rehearsal address is off). It replaced
+  `1b0b327c-27ce-4ddb-9ee6-81298ad998fd`, uploaded 14:43 UTC from outside this repo's
+  deploy path without any vars, which made `/help` report the contact list unavailable;
+  the version before it was `a34fc006-0aac-4d69-b29f-ae4fa009800e` (`634513d` plus
+  `c90ce91`) with `SALES_OPEN=false`: `/`, `/en`, `/help`, `/privacy` and
   `/admin` answer 200, `/p`, `/cart`, `/checkout` and `/p/<code>` answer 503 "shop
   opens soon", and `POST /api/checkouts/session|prepare` answers
   `503 CHECKOUT_UNAVAILABLE`. From Cloudflare's network, 11 of 24 Discord widget requests
