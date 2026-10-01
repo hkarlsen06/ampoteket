@@ -1,7 +1,7 @@
 -- Volunteers are mostly reached on the workshop Discord, so a Discord username
 -- alone is enough to publish a help contact. The responsibility says what to ask them about.
 ALTER TABLE app.help_contacts
-  ADD COLUMN responsibility text CHECK (responsibility IS NULL OR (length(btrim(responsibility)) BETWEEN 1 AND 80
+  ADD COLUMN responsibility text CHECK (responsibility IS NULL OR (length(btrim(responsibility)) >= 1 AND length(btrim(responsibility)) <= 80
     AND responsibility !~ '[[:cntrl:]]')),
   -- Current Discord usernames: 2–32 of a-z, 0-9, '_' and '.', never two periods in a row.
   ADD COLUMN discord text CHECK (discord IS NULL OR (discord ~ '^[a-z0-9_.]{2,32}$' AND discord !~ '\.\.'));

@@ -77,8 +77,11 @@ the selected products. It is a regression check, not a hosted latency guarantee.
   app tables all have RLS. Hosted Auth now has public signup off, Site URL and
   password return URLs for `https://ampoteket.hkarlsen06.workers.dev`, the repo
   email templates, and Data API schema `public` only. The Worker runs there as
-  rehearsal version `cb393b25-3936-485b-9572-e6249f3b1af4`, not on
-  `ampoteket.no`. The first admin (`hjalmar@hkarlsen06.dev`, Hjalmar Karlsen) was
+  version `172d6e70-68f1-4593-ac66-818650a7f5ff` (commit `df6ab1c`, deployed
+  2026-10-01 12:20 UTC, previous `cb393b25-3936-485b-9572-e6249f3b1af4`) with
+  `SALES_OPEN=false`: `/p`, `/cart` and `/checkout` answer 503 "shop opens soon" in
+  both locales and `/api/checkouts/…` answers `503 CHECKOUT_UNAVAILABLE`. It is not
+  on `ampoteket.no` yet. The first admin (`hjalmar@hkarlsen06.dev`, Hjalmar Karlsen) was
   granted with `app.grant_staff_access` by Claude Code at the owner's request. Still
   open: custom SMTP
   invitation/reset delivery (the owner reports Resend connected as

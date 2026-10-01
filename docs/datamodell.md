@@ -319,7 +319,7 @@ CREATE TABLE app.help_contacts (
   edit_revision bigint NOT NULL DEFAULT 1 CHECK (edit_revision > 0),
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  responsibility text CHECK (responsibility IS NULL OR (length(btrim(responsibility)) BETWEEN 1 AND 80
+  responsibility text CHECK (responsibility IS NULL OR (length(btrim(responsibility)) >= 1 AND length(btrim(responsibility)) <= 80
     AND responsibility !~ '[[:cntrl:]]')),
   -- Current Discord usernames: 2–32 of a-z, 0-9, '_' and '.', never two periods in a row.
   discord text CHECK (discord IS NULL OR (discord ~ '^[a-z0-9_.]{2,32}$' AND discord !~ '\.\.')),
