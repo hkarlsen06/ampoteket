@@ -87,7 +87,7 @@ the selected products. It is a regression check, not a hosted latency guarantee.
   schema `public` only. The Worker serves `ampoteket.no` and `www.ampoteket.no` (308
   to the apex, Google Trust Services certificate) as version
   `fe231e66-a89b-4457-b68f-63ac7ce4d490` (commit `634513d`, `--env production`, built
-  from a clean worktree, deployed 2026-10-01 13:24 UTC, previous
+  from a clean worktree, deployed 2026-10-01 13:43 UTC, previous
   `2499119e-7eee-423b-be6d-fb24a69f28c9` from `551798a`; the workers.dev rehearsal
   address is off) with `SALES_OPEN=false`: `/`, `/en`, `/help`, `/privacy` and
   `/admin` answer 200, `/p`, `/cart`, `/checkout` and `/p/<code>` answer 503 "shop
