@@ -5,7 +5,7 @@ declare global {
 		interface Platform {
 			env: Env;
 			ctx: ExecutionContext;
-			caches: CacheStorage;
+			caches: CacheStorage & { default: Cache };
 			cf?: IncomingRequestCfProperties
 		}
 

@@ -197,7 +197,10 @@ button. Members sort online, idle, do not disturb; each avatar carries Discord's
 status shape (dot, crescent, bar), with the status word in visually hidden text. The members
 load from `GET /api/discord` when the Card is about a screen away, never before the
 first byte; avatars come through `/api/discord/avatar/…`, so the browser never contacts
-Discord. A failed load reads «Antall pålogget er utilgjengelig.» with a retry, never 0.
+Discord. Each Cloudflare data centre asks Discord at most once a minute and, when Discord
+refuses (it throttles Cloudflare's shared egress), serves its last good answer for up to an
+hour. Only with no such answer does the load fail, reading «Antall pålogget er utilgjengelig.»
+with a retry, never 0.
 Without JavaScript only the invite button shows. The server's widget must stay enabled
 in Discord (Server Settings, Engagement, Server Widget).
 
