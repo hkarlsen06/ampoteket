@@ -1043,6 +1043,8 @@ try {
   await fits(page);
   console.log('PASS: stock field validation and retained failed-read drafts; audit freshness keeps older pages, open details and focus');
   await page.goto(`${origin}/en/admin/shelf`);
+  // Revoked (not merely no access) needs the reloaded page to have admitted this user first.
+  await expect(page.getByRole('button', { name: sh.newCabinet, exact: true })).toBeVisible();
   await sql(`UPDATE app.staff_members SET is_active=false WHERE auth_user_id='${staffId}'`);
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(page.getByText(en.admin.revoked, { exact: true })).toBeVisible();
