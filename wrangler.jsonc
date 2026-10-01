@@ -1,6 +1,8 @@
 {
 	"$schema": "./node_modules/wrangler/config-schema.json",
-	"name": "ampoteket",
+	// Local only; production is env.production below, so a deploy without --env
+	// cannot replace the live Worker.
+	"name": "ampoteket-local",
 	"compatibility_date": "2026-09-18",
 	"compatibility_flags": ["nodejs_als"],
 	"main": ".svelte-kit/cloudflare/_worker.js",
@@ -15,7 +17,33 @@
 		{ "name": "CHECKOUT_OPERATION_LIMIT", "namespace_id": "4732202", "simple": { "limit": 120, "period": 60 } },
 		{ "name": "ADMIN_INVITATION_LIMIT", "namespace_id": "4732203", "simple": { "limit": 10, "period": 60 } },
 		{ "name": "RECEIPT_LIMIT", "namespace_id": "4732204", "simple": { "limit": 3, "period": 60 } }
-	]
+	],
+	// Production: `wrangler deploy --env production`. Kept out of the top level so
+	// `vite dev` and `wrangler dev` never pick up hosted settings. Bindings are not
+	// inherited, so the rate limits are repeated (same namespaces).
+	"env": {
+		"production": {
+			"name": "ampoteket",
+			"vars": {
+				"PUBLIC_SUPABASE_URL": "https://mqzcbdorjuefefzvuefa.supabase.co",
+				"PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_Hw7RYzd3kJ8efR-NIv5S0w_VEisoMNU",
+				"CHECKOUT_ALLOWED_ORIGIN": "https://ampoteket.no",
+				// Exactly "true" opens buying (docs/website-guide.md §1.1).
+				"SALES_OPEN": "false"
+			},
+			// www answers only to redirect to the apex (src/hooks.server.ts).
+			"routes": [
+				{ "pattern": "ampoteket.no", "custom_domain": true },
+				{ "pattern": "www.ampoteket.no", "custom_domain": true }
+			],
+			"ratelimits": [
+				{ "name": "CHECKOUT_SESSION_LIMIT", "namespace_id": "4732201", "simple": { "limit": 20, "period": 60 } },
+				{ "name": "CHECKOUT_OPERATION_LIMIT", "namespace_id": "4732202", "simple": { "limit": 120, "period": 60 } },
+				{ "name": "ADMIN_INVITATION_LIMIT", "namespace_id": "4732203", "simple": { "limit": 10, "period": 60 } },
+				{ "name": "RECEIPT_LIMIT", "namespace_id": "4732204", "simple": { "limit": 3, "period": 60 } }
+			]
+		}
+	},
 	// Secrets (SUPABASE_SECRET_KEY, …) are never written here: use `wrangler secret put`
 	// in production and `.dev.vars` locally. See docs/website-guide.md §1.1.
 }

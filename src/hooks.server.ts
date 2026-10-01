@@ -6,6 +6,9 @@ import { htmlLang, localeFromPathname } from '$lib/i18n';
 import { isPrivateRoute } from '$lib/private-route';
 
 export const handle: Handle = async ({ event, resolve }) => {
+	if (event.url.hostname === 'www.ampoteket.no') {
+		return new Response(null, { status: 308, headers: { Location: `https://ampoteket.no${event.url.pathname}${event.url.search}` } });
+	}
 	const response = await resolve(event, {
 		transformPageChunk: ({ html }) =>
 			html.replace('%lang%', htmlLang[localeFromPathname(event.url.pathname)])

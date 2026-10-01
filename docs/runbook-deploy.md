@@ -148,20 +148,14 @@ inventory/placement manifest and check physical labels.
 
 ## 6. Worker and Auth
 
-`wrangler.jsonc` defines the Worker name, assets, checkout rate limits and
-`ADMIN_INVITATION_LIMIT`. Use the locked Wrangler (`bunx --no-install`), check the account with
-`wrangler whoami`, and record the Cloudflare zone/account. Add the reviewed
-public values before building:
-
-```jsonc
-"vars": {
-  "PUBLIC_SUPABASE_URL": "https://<reviewed-project>.supabase.co",
-  "PUBLIC_SUPABASE_PUBLISHABLE_KEY": "<reviewed-publishable-key>",
-  "CHECKOUT_ALLOWED_ORIGIN": "https://ampoteket.no",
-  "SALES_OPEN": "false"
-},
-"routes": [{ "pattern": "ampoteket.no", "custom_domain": true }]
-```
+`wrangler.jsonc` holds the reviewed production settings in `env.production`: the
+Worker name `ampoteket`, the public Supabase URL and publishable key,
+`CHECKOUT_ALLOWED_ORIGIN`, `SALES_OPEN`, the `ampoteket.no` and `www.ampoteket.no`
+custom domains (www redirects to the apex) and the rate limits. The top level is
+local only (`ampoteket-local`, no vars), so `vite dev` and `wrangler dev` never read
+hosted settings and a deploy without `--env production` cannot replace the live
+Worker. Use the locked Wrangler (`bunx --no-install`), check the account with
+`wrangler whoami`, and record the Cloudflare zone/account.
 
 `SALES_OPEN` stays `"false"` (shop shown as opening soon) until the people who
 administer sales are ready; set it to `"true"` and redeploy to open buying.
@@ -202,7 +196,7 @@ For Resend, first verify the sending domain in Resend. In Supabase Authenticatio
 [Resend Supabase SMTP guide](https://resend.com/docs/send-with-supabase-smtp).
 For Auth emails the key belongs in hosted Auth's SMTP settings. Buyer receipts
 are sent by the Worker itself, so also run
-`bunx --no-install wrangler secret put RESEND_API_KEY` (a sending-only key is
+`bunx --no-install wrangler secret put RESEND_API_KEY --env production` (a sending-only key is
 enough) and keep the `RECEIPT_LIMIT` binding from `wrangler.jsonc`. Without either,
 purchases still work but the receipt form reports that sending failed.
 
@@ -210,17 +204,17 @@ purchases still work but the receipt form reports that sending failed.
 
 ```sh
 bun run build
-bunx --no-install wrangler deploy --dry-run
-bunx --no-install wrangler secret put SUPABASE_SECRET_KEY
-bunx --no-install wrangler deployments list
-bunx --no-install wrangler deploy
-bunx --no-install wrangler deployments list
+bunx --no-install wrangler deploy --env production --dry-run
+bunx --no-install wrangler secret put SUPABASE_SECRET_KEY --env production
+bunx --no-install wrangler deployments list --env production
+bunx --no-install wrangler deploy --env production
+bunx --no-install wrangler deployments list --env production
 ```
 
 Review the dry run's bindings and assets. Enter the secret at the prompt, never
 as an argument; if Wrangler offers to create the Worker, confirm account and name. Record the previous deployment ID before publishing and the new
 one after. Every deploy must carry the full vars, routes and rate-limit
-bindings; do not rely on dashboard-only values. The custom domain needs the
+bindings from `env.production`; do not rely on dashboard-only or command-line values. The custom domain needs the
 zone in the same Cloudflare account and no conflicting DNS record; confirm the
 certificate before opening. `workers_dev` is off.
 
@@ -237,7 +231,7 @@ If verification fails, turn the Data API off again first. If the previous
 Worker is compatible with the schema, roll back to it:
 
 ```sh
-bunx --no-install wrangler rollback '<previous-worker-version-id>' \
+bunx --no-install wrangler rollback '<previous-worker-version-id>' --env production \
   --message 'Release verification failed; see the deployment record'
 ```
 
