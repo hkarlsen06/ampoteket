@@ -69,6 +69,14 @@ remain outside the scrolling region.
   the history-derived `purchase_order_lines.purchase_url`.
 - The editor counts through CountForm in a dialog and prints through **Print**
   ([P-touch tape labels](page-labels.md#p-touch-tape-labels)).
+- A new product takes its opening stock and a **Print label** choice in the same
+  form. The quantity travels in the creation command and is posted once that command is
+  acknowledged, as a single count against balance 0 at revision 0 (empty means never
+  counted, zero is a count). A stored count that fails is reopened by the count dialog;
+  one that could not be stored keeps the editor open with an error. **Print label**
+  (checked once this browser holds the printer) picks the printer during the Save
+  click and prints once the editor opens on the product's route; a cancelled picker
+  just leaves **Print**.
 - Drawers are picked on the shelf graphic (`ShelfPlacementPicker`), never a coordinate
   dropdown (design-system §5). Changing an existing placement is confirmed in an
   `AlertDialog`, changes only the draft, and is saved by **Save product**.

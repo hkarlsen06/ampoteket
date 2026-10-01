@@ -192,7 +192,8 @@ export function generateProductCode(family: ProductFamily, cryptoSource: Pick<Cr
 	const bytes = cryptoSource.getRandomValues(new Uint8Array(3)); return `${family}-${Array.from(bytes, n => n.toString(16).padStart(2, '0')).join('').slice(0, 5).toUpperCase()}`;
 }
 export type ProductAttributeDraft = Omit<AttributeValue, 'product_id'>;
-export type ProductCommand = { userId: string; payload: ProductWrite; revision: string | null; attributes?: ProductAttributeDraft[]; attributeBefore?: ProductAttributeDraft[] };
+// `opening` is a new product's first count, posted once the creation is acknowledged.
+export type ProductCommand = { userId: string; payload: ProductWrite; revision: string | null; attributes?: ProductAttributeDraft[]; attributeBefore?: ProductAttributeDraft[]; opening?: string };
 export class ProductSpecificationsError extends Error {
 	constructor(cause: unknown) { super('Product saved; specifications incomplete', { cause }); }
 }
@@ -218,6 +219,10 @@ export function readProductCommand(storage: Pick<Storage, 'getItem'>): ProductCo
 	const command: ProductCommand = { userId: identifier(c.userId), payload: parseProductWrite(c.payload), revision: c.revision as string | null };
 	if ('attributes' in c) command.attributes = commandAttributes({ ...command, attributes: c.attributes as ProductAttributeDraft[] });
 	if ('attributeBefore' in c) command.attributeBefore = commandAttributeBefore({ ...command, attributeBefore: c.attributeBefore as ProductAttributeDraft[] });
+	if ('opening' in c) {
+		if (command.revision !== null || typeof c.opening !== 'string' || !/^\d+(\.\d+)?$/.test(c.opening)) throw new Error('Invalid opening stock');
+		command.opening = c.opening;
+	}
 	return command;
 }
 export function persistProductCommand(storage: Pick<Storage, 'getItem' | 'setItem'>, command: ProductCommand): void {
@@ -229,7 +234,7 @@ export function persistProductCommand(storage: Pick<Storage, 'getItem' | 'setIte
 export function clearProductCommand(storage: Pick<Storage, 'getItem' | 'removeItem'>, command: ProductCommand): void {
 	const current = readProductCommand(storage); if (current && sameCommand(current, command)) storage.removeItem(productCommandKey);
 }
-function sameCommand(a: ProductCommand, b: ProductCommand): boolean { return a.userId === b.userId && a.revision === b.revision && JSON.stringify(parseProductWrite(a.payload)) === JSON.stringify(parseProductWrite(b.payload)) && JSON.stringify(commandAttributes(a)) === JSON.stringify(commandAttributes(b)) && JSON.stringify(commandAttributeBefore(a)) === JSON.stringify(commandAttributeBefore(b)); }
+function sameCommand(a: ProductCommand, b: ProductCommand): boolean { return a.userId === b.userId && a.revision === b.revision && JSON.stringify(parseProductWrite(a.payload)) === JSON.stringify(parseProductWrite(b.payload)) && JSON.stringify(commandAttributes(a)) === JSON.stringify(commandAttributes(b)) && JSON.stringify(commandAttributeBefore(a)) === JSON.stringify(commandAttributeBefore(b)) && a.opening === b.opening; }
 export type ProductSpecificationReview = { product: AdminProduct; attributes: AttributeValue[] };
 function reviewProductIdentity(command: ProductCommand, product: AdminProduct) {
 	if (command.revision !== null || command.attributes === undefined || ['id', 'code', 'unit_code', 'stock_step'].some(key => command.payload[key as keyof ProductWrite] !== product[key as keyof ProductWrite])) throw new Error('Product review identity changed');

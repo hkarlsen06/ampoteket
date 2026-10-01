@@ -1,4 +1,12 @@
+<script module lang="ts">
+	// Creating a product remounts its editor on the product's own route; a label
+	// requested with the save prints from there. Memory only, so reload never reprints,
+	// and the product's editor clears it on leaving, so Back never does either.
+	let queued: { productId: string; userId: string } | null = null;
+	export function queueLabelPrint(job: { productId: string; userId: string } | null) { queued = job; }
+</script>
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { Button, ButtonLabel } from '$lib/components/ui/button';
 	import * as Alert from '$lib/components/ui/alert';
 	import Icon from '$lib/Icon.svelte';
@@ -31,6 +39,10 @@
 			if (!kind) await admin.permissionFailure(error);
 		} finally { busy = false; }
 	}
+	onMount(() => {
+		const job = queued; queued = null;
+		if (job?.productId === product.id && job.userId === admin.session?.user.id) void print();
+	});
 </script>
 <!-- Two cells of the product editor's header grid: the button under the category
      illustration, and a full-width status row below the heading. -->

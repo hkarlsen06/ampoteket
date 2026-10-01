@@ -439,6 +439,7 @@ try {
   await categoryCard(m.typeNames.RES).click();
   await page.getByLabel(fieldLabel(m.nameNb)).fill('Kollisjonstest');
   await page.getByLabel(fieldLabel(m.nameEn)).fill('Code collision proof');
+  await page.getByLabel(m.openingStock, { exact: false }).fill('7');
   const collisionBodies: { id: string; code: string }[] = [];
   const productEndpoint = `${api.origin}/rest/v1/amp_products*`;
   await page.route(productEndpoint, async (route) => {
@@ -453,6 +454,24 @@ try {
   await page.unroute(productEndpoint);
   expect(collisionBodies).toHaveLength(2); expect(collisionBodies[1].id).toBe(collisionBodies[0].id); expect(collisionBodies[1].code).not.toBe(collisionBodies[0].code);
   expect(await sql(`SELECT count(*) FROM app.products WHERE name_en=${literal(`${en.categories.resistors} · Code collision proof`)}`)).toBe('1');
+  const openedId = await sql(`SELECT id FROM app.products WHERE name_en=${literal(`${en.categories.resistors} · Code collision proof`)}`);
+  await expect(page.locator('.product-stock').getByText('7 pieces', { exact: true })).toBeVisible();
+  expect(await sql(`SELECT quantity||'/'||(last_counted_at IS NOT NULL) FROM app.inventory WHERE product_id=${literal(openedId)}`)).toBe('7/true');
+  await page.goto(`${origin}/en/admin/products/new`);
+  await categoryCard(m.typeNames.RES).click();
+  await page.getByLabel(fieldLabel(m.nameNb)).fill('Tapt svar med lager');
+  await page.getByLabel(fieldLabel(m.nameEn)).fill('Lost reply with stock');
+  await page.getByLabel(m.openingStock, { exact: false }).fill('3');
+  const openedLost = await lostResponse(page, 'amp_products', 'POST', () => page.getByRole('button', { name: m.save, exact: true }).click());
+  await expect(page.getByText(m.unknown, { exact: true })).toBeVisible();
+  const openedLostId: string = JSON.parse(openedLost.commands[0]).id;
+  await page.reload();
+  await expect(page.getByLabel(m.openingStock, { exact: false })).toHaveValue('3');
+  await page.getByRole('button', { name: m.retrySave, exact: true }).click();
+  await expect(page).toHaveURL(`${origin}/en/admin/products/${openedLostId}`);
+  await openedLost.stop();
+  expect(await sql(`SELECT quantity||'/'||(SELECT count(*) FROM app.stock_counts WHERE product_id=${literal(openedLostId)}) FROM app.inventory WHERE product_id=${literal(openedLostId)}`)).toBe('3/1');
+  console.log('PASS: opening stock entered on a new product is posted once as its first count, also after a lost creation reply and reload');
   await page.goto(`${origin}/en/admin/products/${productId}`);
   await expect(page.getByLabel(fieldLabel(m.nameEn))).toHaveValue(`${longName} reviewed`);
   console.log('PASS: product creation lost response/reload, exact price, stale review, inactive/unassigned and reactivation');

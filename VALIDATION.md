@@ -46,10 +46,17 @@ Update this section whenever a migration changes (`sha256sum supabase/migrations
   `503d75885d3774a967f4cad7a3b891b94b4f62020a393d5620220a997be6b7d6`
 - `20260927000100_staff_management.sql`: SHA-256
   `a894879c2707f3d11542aed1131f4245e8445e433122ed1ef0416a4157edfde8`
+- `20261001000100_help_contact_discord.sql`: SHA-256
+  `f7bcedb3b2e2f7a03455c06664e4e97833b00fe7b07f004ba29255bdd73b673a`
+- `20261001000200_volunteer_contacts.sql`: SHA-256
+  `7b0888d92f33d4c5927abc81249230d7763012e625268de26d34c59fcc3239ba`
+- `20261001000300_help_contact_order.sql`: SHA-256
+  `99c58f4e01fda5334d07698c889f40e9207fb302afd7687839215e22545af76c`
 
-24 app tables, four exact numeric domains, 29 public RPCs, 29 staff views and five
+24 app tables, four exact numeric domains, 30 public RPCs, 29 staff views and five
 internal derived views. All views are security invoker; only `public` is exposed.
-Initial data: 12 cabinets, 492 drawers and reference units; no products or stock.
+Initial data: 12 cabinets, 492 drawers, reference units and 12 published volunteer
+contacts; no products or stock.
 
 A 5,002-product / 250,000-movement workload checks that catalog reads touch only
 the selected products. It is a regression check, not a hosted latency guarantee.
@@ -70,7 +77,7 @@ the selected products. It is a regression check, not a hosted latency guarantee.
   margins, attach it to real drawers and scan it in the workshop's light. For the
   P-touch printer, a WebUSB print from the admin editor and scanning the printed
   tape QR with a phone.
-- **Hosted setup:** on 2026-10-01 (commit `e2f4096`, CI green) the three
+- **Hosted setup:** on 2026-10-01 (commit `e2f4096`, CI green) the first three
   migrations above were applied with `supabase migration up --linked` to project
   `mqzcbdorjuefefzvuefa` (Stockholm, PostgreSQL 17); history and hashes match.
   `permissions.sql`, `protections.sql` and `v1-invariants.sql` passed there; 24
@@ -82,12 +89,27 @@ the selected products. It is a regression check, not a hosted latency guarantee.
   `SALES_OPEN=false`: `/p`, `/cart` and `/checkout` answer 503 "shop opens soon" in
   both locales and `/api/checkouts/…` answers `503 CHECKOUT_UNAVAILABLE`. It is not
   on `ampoteket.no` yet. The first admin (`hjalmar@hkarlsen06.dev`, Hjalmar Karlsen) was
-  granted with `app.grant_staff_access` by Claude Code at the owner's request. Still
+  granted with `app.grant_staff_access` by Claude Code at the owner's request. A test
+  admin, "Hjalmar 2", whose Auth account had already been deleted and which no
+  record referenced, was deleted by Claude Code at the owner's request on 2026-10-01,
+  with the `keep_records` trigger disabled for that one transaction. Still
   open: custom SMTP
   invitation/reset delivery (the owner reports Resend connected as
   `Ampoteket <noreply@notify.ampoteket.no>`) and the receipt email are unverified; the Data API
   cutover barrier, a full hosted restore drill and the production domain cutover
   ([deploy](docs/runbook-deploy.md), [backup](docs/runbook-backup-restore.md)).
+- **Volunteer Discord contacts:** `20261001000100` and `20261001000200` were applied
+  to the hosted project on 2026-10-01 12:42 UTC with `supabase migration up --linked`;
+  history and hashes match. The function-privilege check from `permissions.sql` and
+  the help-contact column grants, RLS and view options from `protections.sql` passed
+  there (run through the Supabase connector, the full `protections.sql` and
+  `v1-invariants.sql` were not rerun). Both locales of `/help` on the rehearsal
+  Worker list the 12 volunteers. Still open: saving the new fields in `/admin/help`
+  and `/help` at 360 px.
+- **Volunteer list ordering:** `20261001000300` is not on the hosted project. It
+  revokes the `display_order` column grant, so deploy it together with a Worker
+  built from the same commit: the current rehearsal Worker still sends the order on
+  every save and would be refused.
 - **Owners and targets:** name operators and accept RPO/RTO, backup storage and
   drill schedule. The backup runbook proposes 24 hours each, daily off-platform
   backups and a drill each semester; none of this is accepted yet.

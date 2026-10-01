@@ -173,7 +173,7 @@ Keep `app` out of the Data API's exposed schemas; `public` holds only the explic
 
 ### Public volunteer directory
 
-`help_contacts` is deliberately public and grants no access. Never put buyer contact data in it. Publishing requires at least one valid Discord username, email, phone or HTTPS URL (DNS hostname; no credentials, whitespace, control characters or backslashes). Render fields as text and validate links in the frontend too. `amp_help_directory` exposes only published rows. Staff edit through `amp_help_contacts` with an `edit_revision` guard ([protocol](api-contract.md#public-volunteer-directory)). Entries are unpublished, never deleted, and every change is audited.
+`help_contacts` is deliberately public and grants no access. Never put buyer contact data in it. Publishing requires at least one valid Discord username, email, phone or HTTPS URL (DNS hostname; no credentials, whitespace, control characters or backslashes). Render fields as text and validate links in the frontend too. `amp_help_directory` exposes only published rows. Staff edit through `amp_help_contacts` with an `edit_revision` guard and arrange the list with `amp_reorder_help_contacts`; `display_order` is never typed ([protocol](api-contract.md#public-volunteer-directory)). Entries are unpublished, never deleted, and every change is audited.
 
 ### Staff provisioning
 
@@ -218,6 +218,7 @@ All RPCs are in `public`; helpers in `app` are not client APIs. Signatures are i
 | `amp_save_shelf_layout`, `amp_archive_empty_cabinet` | Staff | Save or retire a whole cabinet. |
 | `amp_swap_bins`, `amp_swap_cabinets` | Staff | Exchange two occupied positions. |
 | `amp_clear_checkout_contact` | Staff | Remove the optional contact. |
+| `amp_reorder_help_contacts` | Staff | Rearrange the volunteer contact list. |
 
 ### JSON items
 

@@ -34,4 +34,7 @@ UPDATE app.cabinets SET is_archived=true WHERE code='EMPTY-CAB-40';
 INSERT INTO app.help_contacts(display_name,email,display_order,is_published)
 SELECT 'Directory fixture '||i,'volunteer'||i||'@example.invalid',i/50,true
 FROM generate_series(1,83) i;
+-- Inserts always go last; force the ties the cursor must survive.
+UPDATE app.help_contacts SET display_order=substring(display_name FROM '[0-9]+$')::integer/50
+WHERE display_name LIKE 'Directory fixture %';
 INSERT INTO app.help_contacts(display_name) VALUES ('Private directory draft');

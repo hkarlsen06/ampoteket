@@ -71,15 +71,23 @@ type UsbDevice = {
 type Usb = { getDevices(): Promise<UsbDevice[]>; requestDevice(options: { filters: typeof ptouchFilter[] }): Promise<UsbDevice> };
 function usb(): Usb | undefined { return (navigator as Navigator & { usb?: Usb }).usb; }
 
+const granted = async (api: Usb) => (await api.getDevices()).find(item => item.vendorId === ptouchFilter.vendorId && item.productId === ptouchFilter.productId);
+
 async function device(): Promise<UsbDevice> {
 	const api = usb();
 	if (!api) throw new PtouchError('unsupported');
-	const known = (await api.getDevices()).find(item => item.vendorId === ptouchFilter.vendorId && item.productId === ptouchFilter.productId);
+	const known = await granted(api);
 	if (known) return known;
 	// Must run inside the click that started printing (transient user activation).
 	try { return await api.requestDevice({ filters: [ptouchFilter] }); }
 	catch (error) { throw new PtouchError(error instanceof DOMException && error.name === 'NotFoundError' ? 'cancelled' : 'failed'); }
 }
+
+/** Grants the printer during a click, so a later print needs no user gesture. */
+export async function choosePrinter(): Promise<void> { await device(); }
+export const printerSupported = () => Boolean(usb());
+/** Whether this browser already holds the printer, so printing opens no picker. */
+export async function printerGranted(): Promise<boolean> { const api = usb(); return Boolean(api && await granted(api).catch(() => null)); }
 
 /** Prints one label. `render` receives the printable dots for the loaded tape;
  * its errors propagate unchanged. Resolves after the printer reports completion. */

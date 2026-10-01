@@ -132,3 +132,7 @@ export async function readAdminHelp(session: StaffSession, fetcher: Fetcher = fe
 	return (await allRows(session, 'amp_help_contacts', 'id,display_name,responsibility,email,phone,contact_url,discord,display_order,is_published,edit_revision', 'id', {}, fetcher)).map(parseEditableHelpContact)
 		.sort((a, b) => a.display_order - b.display_order || a.id.localeCompare(b.id));
 }
+/** `ids` is every contact, drafts included, in the new order; `STALE_HELP_ORDER` means re-read first. */
+export async function reorderHelpContacts(session: StaffSession, ids: string[], fetcher: Fetcher = fetch) {
+	await staffRequest(session, 'rpc/amp_reorder_help_contacts', {}, { p_ids: ids }, 'POST', fetcher);
+}

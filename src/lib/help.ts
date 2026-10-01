@@ -6,7 +6,7 @@ export type HelpContact = {
 	contact_url: string | null; discord: string | null; display_order: number;
 };
 /** Whether the row has a way to reach the person, which publishing requires. */
-export const reachable = (contact: HelpContact) => Boolean(contact.email || contact.phone || contact.contact_url || contact.discord);
+export const reachable = (contact: Pick<HelpContact, 'email' | 'phone' | 'contact_url' | 'discord'>) => Boolean(contact.email || contact.phone || contact.contact_url || contact.discord);
 export type EditableHelpContact = HelpContact & { is_published: boolean; edit_revision: string };
 export function parseHelpContact(value: unknown): HelpContact {
 	const row = object(value);

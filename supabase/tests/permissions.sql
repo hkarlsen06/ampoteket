@@ -8,6 +8,7 @@ INSERT INTO expected_functions VALUES
  ('public.amp_catalog_facets(text[])',ARRAY['anon','authenticated','service_role']::name[]),
  ('public.amp_help_directory(integer,uuid,integer)',ARRAY['anon','authenticated','service_role']::name[]),
  ('public.amp_shelf_map()',ARRAY['anon','authenticated','service_role']::name[]),
+ ('public.amp_reorder_help_contacts(uuid[])',ARRAY['authenticated']::name[]),
  ('public.amp_admin_statistics(uuid)',ARRAY['authenticated']::name[]),
  ('public.amp_list_staff()',ARRAY['authenticated']::name[]),
  ('public.amp_grant_staff_access(uuid,text,text,uuid,boolean)',ARRAY['authenticated']::name[]),

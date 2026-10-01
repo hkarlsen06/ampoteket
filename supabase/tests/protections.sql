@@ -45,8 +45,8 @@ CREATE TEMP TABLE expected_columns(
   PRIMARY KEY (relation_name, privilege)
 );
 INSERT INTO expected_columns VALUES
- ('help_contacts','INSERT',ARRAY['id','display_name','email','phone','contact_url','display_order','is_published','responsibility','discord']::name[]),
- ('help_contacts','UPDATE',ARRAY['display_name','email','phone','contact_url','display_order','is_published','edit_revision','responsibility','discord']::name[]),
+ ('help_contacts','INSERT',ARRAY['id','display_name','email','phone','contact_url','is_published','responsibility','discord']::name[]),
+ ('help_contacts','UPDATE',ARRAY['display_name','email','phone','contact_url','is_published','edit_revision','responsibility','discord']::name[]),
  ('products','INSERT',ARRAY['id','code','name_nb','name_en','description','category_id','bin_id','location_note','unit_code','stock_step','sale_step','sale_unit_price_nok','minimum_stock','datasheet_url','purchase_url','is_active']::name[]),
  ('products','UPDATE',ARRAY['name_nb','name_en','description','category_id','bin_id','location_note','sale_step','sale_unit_price_nok','minimum_stock','datasheet_url','purchase_url','is_active']::name[]),
  ('attribute_definitions','UPDATE',ARRAY['label']::name[]),

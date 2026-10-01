@@ -9,6 +9,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Switch } from '$lib/components/ui/switch';
+	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import * as Field from '$lib/components/ui/field';
 	import * as NativeSelect from '$lib/components/ui/native-select';
@@ -39,7 +40,9 @@
 	import CountForm from '$lib/CountForm.svelte';
 	import StockBadge from '$lib/StockBadge.svelte';
 	import ProductAttributes from '$lib/ProductAttributes.svelte';
-	import LabelPrintButton from '$lib/LabelPrintButton.svelte';
+	import LabelPrintButton, { queueLabelPrint } from '$lib/LabelPrintButton.svelte';
+	import { choosePrinter, printerGranted, printerSupported } from '$lib/labels/ptouch';
+	import { clearCountCommand, readCountCommand, runCountCommand, saveCountCommand, updateCountStorage, validCountQuantity, type CountCommand } from '$lib/admin-counts';
 	import ProductSpecificationRecovery from '$lib/ProductSpecificationRecovery.svelte';
 	import { parseAttribute, ProductSpecificationsError, type ProductAttributeDraft } from '$lib/admin-products';
 	import ShelfPlacementPicker from '$lib/ShelfPlacementPicker.svelte';
@@ -66,6 +69,11 @@
 		offShelf = true; await tick();
 		document.getElementById('product-location-note')?.focus({ preventScroll: true });
 	}
+	// A new product's stock is its first count, posted right after creation; empty means
+	// not counted. Its label can print as the editor opens on the product's route.
+	let openingStock = $state(''); let openingInvalid = $state(false);
+	let printAfterSave = $state(false); let canPrint = $state(false);
+	const openingCount = (step: string) => openingStock.trim() ? validCountQuantity(openingStock, step, i18n.locale) : null;
 	let proposedPlacement = $state<{ from: string | null; to: string } | null>(null);
 	let placementTrigger: HTMLElement | null = null;
 	let stockLoading = $state(false); let stockGeneration = 0;
@@ -123,9 +131,12 @@
 		moveOpen = false;
 	}
 	onMount(() => {
+		canPrint = printerSupported();
+		// Checked once the printer is granted, so Save never opens the picker unasked.
+		if (id === 'new') void printerGranted().then(known => { printAfterSave ||= known; });
 		try { pending = readProductCommand(sessionStorage); restoringCreation = Boolean(pending && pending.revision === null && pending.payload.id === id); const probe = 'ampoteket:product-probe'; sessionStorage.setItem(probe, '1'); if (sessionStorage.getItem(probe) !== '1') throw new Error(); sessionStorage.removeItem(probe); storageReady = true; }
 		catch { storageReady = false; }
-		void load(); return () => { alive = false; };
+		void load(); return () => { alive = false; if (id !== 'new') queueLabelPrint(null); };
 	});
 	async function refreshStock() {
 		if (!product || admin.status !== 'ready') return;
@@ -154,12 +165,14 @@
 			const [refs, item] = await Promise.all([readProductReferences(session), id === 'new' ? Promise.resolve(null) : readProduct(session, id)]);
 			if (!alive || session.userId !== admin.session?.user.id) return;
 			references = refs; product = item;
-			if (pending && ownPending && !wrongIdentity) { draft = { ...pending.payload }; staged = pending.attributes ?? []; }
+			// Unsaved input returns only onto the revision it was typed against.
+			if (pending && ownPending && !wrongIdentity) { draft = { ...pending.payload }; staged = pending.attributes ?? []; openingStock = pending.opening ?? ''; }
 			else {
 				if (item) draft = { ...item };
 				// Unsaved input returns only onto the revision it was typed against.
-				const saved = readDraft(session.userId, `product:${id}`) as { revision?: unknown; fields?: unknown; staged?: unknown } | null;
+				const saved = readDraft(session.userId, `product:${id}`) as { revision?: unknown; fields?: unknown; staged?: unknown; opening?: unknown } | null;
 				if (saved && saved.revision === (item?.metadata_revision ?? null)) {
+					if (!item && typeof saved.opening === 'string') openingStock = saved.opening;
 					draft = { ...draft, ...draftFields(blank, saved.fields) };
 					if (!item && Array.isArray(saved.staged)) try {
 						staged = saved.staged.map(row => { const { product_id, ...value } = parseAttribute({ ...row, product_id: blankId }); return value; });
@@ -180,9 +193,9 @@
 	const writeFields = (value: ProductWrite) => JSON.stringify(writeKeys.map(key => value[key]));
 	$effect(() => {
 		if (!draftLoaded || pending) return;
-		const dirty = (writeFields(draft) !== writeFields(product ?? blank) || (!product && staged.length > 0));
+		const dirty = (writeFields(draft) !== writeFields(product ?? blank) || (!product && (staged.length > 0 || openingStock !== '')));
 		writeDraft(admin.session?.user.id, `product:${product?.id ?? id}`, dirty
-			? { revision: product?.metadata_revision ?? null, fields: $state.snapshot(draft), ...(product ? {} : { staged: $state.snapshot(staged) }) } : null);
+			? { revision: product?.metadata_revision ?? null, fields: $state.snapshot(draft), ...(product ? {} : { staged: $state.snapshot(staged), opening: openingStock }) } : null);
 	});
 	async function review() {
 		if (busy || !product) return; busy = true; reviewFailed = false;
@@ -195,7 +208,7 @@
 		// Enter can submit without a change event; tidy the names as leaving them would.
 		if (!pending) nameFields.forEach(({ field }) => tidyName(field));
 		if (attributesEditor && (product || !pending) && !attributesEditor.prepare()) return;
-		busy = true; outcome = 'idle'; invalidField = null;
+		busy = true; outcome = 'idle'; invalidField = null; openingInvalid = false;
 		const existing = Boolean(product);
 		try {
 			const session = admin.credentials();
@@ -226,24 +239,56 @@
 					}
 					return;
 				}
+				let opening: string | null = null;
+				if (!product) {
+					try { opening = openingCount(payload.stock_step); }
+					catch { outcome = 'invalid'; openingInvalid = true; void tick().then(() => document.getElementById('product-opening-stock')?.focus()); return; }
+					if (opening !== null && readCountCommand(localStorage)) { outcome = 'countPending'; return; }
+				}
 				// Specification-only edits leave the product revision untouched.
 				if (!product || !sameProduct(product, payload)) {
-					const command: ProductCommand = { userId: session.userId, payload, revision: product?.metadata_revision ?? null, ...(!product && staged.length ? { attributes: staged.map(value => ({ ...value })) } : {}) };
+					const command: ProductCommand = { userId: session.userId, payload, revision: product?.metadata_revision ?? null, ...(!product && staged.length ? { attributes: staged.map(value => ({ ...value })) } : {}), ...(opening === null ? {} : { opening }) };
 					persistProductCommand(sessionStorage, command); pending = command;
 				}
 			}
+			// Picking the printer needs this click, so it comes before the first request.
+			let printLabel = false;
+			if (id === 'new' && printAfterSave && canPrint) try { await choosePrinter(); printLabel = true; } catch { /* Cancelled: the product page keeps Print. */ }
+			// The creation command carries the opening stock, whichever route resumes it.
+			const opening = pending?.revision === null ? pending.opening ?? null : null;
 			if (pending) await saveMetadata(session);
 			if (existing && attributesEditor && !(await attributesEditor.commit())) { outcome = 'specificationsNotSaved'; return; }
 			if (!alive || session.userId !== admin.session?.user.id) return;
 			outcome = 'saved';
-			if (id === 'new' && product) void goto(i18n.href(`/admin/products/${product.id}`), { replaceState: true });
-			else void refreshStock();
+			if (product && opening !== null) {
+				const stored = await countOpeningStock(session, product.id, opening);
+				if (!alive || session.userId !== admin.session?.user.id) return;
+				// Unstored, the count is lost: stay, so the count button is at hand.
+				if (!stored) { outcome = 'openingNotCounted'; void refreshStock(); return; }
+			}
+			if (id === 'new' && product) {
+				if (printLabel) queueLabelPrint({ productId: product.id, userId: session.userId });
+				void goto(i18n.href(`/admin/products/${product.id}`), { replaceState: true });
+			} else void refreshStock();
 		} catch (error) {
 			if (error instanceof ProductSpecificationsError) outcome = 'specificationsIncomplete';
 			else if (pending && (error instanceof StaleProductError || definitiveProductFailure(error))) { clearProductCommand(sessionStorage, pending); pending = null; outcome = error instanceof StaleProductError ? 'stale' : 'failed'; }
 			else outcome = pending ? 'unknown' : 'storage';
 			await admin.permissionFailure(error instanceof ProductSpecificationsError ? error.cause : error);
 		} finally { if (alive) busy = false; }
+	}
+	// A new product holds 0 at revision 0, so its first count needs no read. Once stored,
+	// a failed count is the count dialog's to retry (CountForm); false means it was never stored.
+	async function countOpeningStock(session: StaffSession, productId: string, quantity: string): Promise<boolean> {
+		const command: CountCommand = { kind: 'count', userId: session.userId, requestId: crypto.randomUUID(), productId, batchId: null, revision: '0', expected: '0', quantity, note: null };
+		let frozen: CountCommand;
+		try { frozen = await updateCountStorage(storage => saveCountCommand(storage, command)); }
+		catch { return false; }
+		try {
+			await runCountCommand(session, frozen);
+			await updateCountStorage(storage => clearCountCommand(storage, frozen));
+		} catch (error) { await admin.permissionFailure(error); }
+		return true;
 	}
 	async function saveMetadata(session: StaffSession) {
 		let result: AdminProduct | null = null;
@@ -486,7 +531,11 @@
 							<Field.Field><Field.Label for="product-price" required>{m.price} <span class="sr-only">(NOK)</span></Field.Label><InputGroup.Root><InputGroup.Input id="product-price" aria-invalid={invalidField === 'sale_unit_price_nok'} aria-describedby={invalidField === 'sale_unit_price_nok' ? 'product-price-error' : undefined} type="text" inputmode="decimal" required bind:value={draft.sale_unit_price_nok} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>NOK</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'sale_unit_price_nok'}<Field.Error id="product-price-error">{errorMessage('sale_unit_price_nok')}</Field.Error>{/if}</Field.Field>
 							<Field.Field><Field.Label for="product-minimum-stock" required>{m.minimumStock} <span class="sr-only">({unitLabel(draft.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id="product-minimum-stock" aria-invalid={invalidField === 'minimum_stock'} aria-describedby={invalidField === 'minimum_stock' ? 'product-minimum-stock-error product-minimum-stock-hint' : 'product-minimum-stock-hint'} type="text" inputmode="decimal" required bind:value={draft.minimum_stock} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(draft.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'minimum_stock'}<Field.Error id="product-minimum-stock-error">{errorMessage('minimum_stock')}</Field.Error>{/if}</Field.Field>
 							<Field.Description id="product-minimum-stock-hint" class="col-span-full">{m.minimumStockHint}</Field.Description>
-							{#if !product}<Field.Description class="col-span-full">{m.immutable}</Field.Description>{/if}
+							{#if !product}
+								<Field.Description class="col-span-full">{m.immutable}</Field.Description>
+								<Field.Field><Field.Label for="product-opening-stock">{m.openingStock} <span class="sr-only">({unitLabel(draft.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id="product-opening-stock" aria-invalid={openingInvalid} aria-describedby={openingInvalid ? 'product-opening-stock-error product-opening-stock-hint' : 'product-opening-stock-hint'} type="text" inputmode="decimal" autocomplete="off" bind:value={openingStock} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(draft.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if openingInvalid}<Field.Error id="product-opening-stock-error">{i18n.m.adminCounts.invalidQuantity(draft.stock_step)}</Field.Error>{/if}</Field.Field>
+								<Field.Description id="product-opening-stock-hint" class="col-span-full">{m.openingStockHint}</Field.Description>
+							{/if}
 						</div>
 					</section>
 					<Collapsible.Root bind:open={detailsOpen} class={section({ spacing: 'divided' })}>
@@ -499,12 +548,13 @@
 						</Collapsible.Content>
 					</Collapsible.Root>
 					<Field.Field orientation="horizontal" class="min-h-12"><Switch id="product-active" bind:checked={draft.is_active} disabled={blocked} aria-describedby="product-active-hint" /><Field.Content><Field.Label for="product-active">{m.activeLabel}</Field.Label><Field.Description id="product-active-hint">{m.activeHint}</Field.Description></Field.Content></Field.Field>
+					{#if id === 'new' && !product && canPrint}<Field.Field orientation="horizontal"><Checkbox id="product-print-label" bind:checked={printAfterSave} disabled={blocked} /><Field.Label for="product-print-label" class="cursor-pointer">{m.printLabelName}</Field.Label></Field.Field>{/if}
 					<Button type="submit" class="justify-self-start" disabled={busy || !storageReady || Boolean(pending && !ownPending) || outcome === 'stale'}><ButtonLabel pending={busy} pendingLabel={m.working} label={ownPending ? m.retrySave : m.save} reserveLabels={[m.retrySave, m.save]} /></Button>
 				{/if}
 			</form>
 			<div class={formStatus} aria-live="polite">
 				{#if !storageReady}<Alert.Message appearance="inline" role={undefined} variant="destructive">{m.storage}</Alert.Message>
-				{:else if outcome !== 'idle'}<Alert.Message appearance="inline" role={undefined} variant={outcome === 'saved' ? 'default' : 'destructive'}>{outcome === 'saved' ? m.saved : outcome === 'specificationsIncomplete' ? m.specificationsIncomplete : outcome === 'specificationsNotSaved' ? m.specificationsNotSaved : outcome === 'invalid' ? m.invalid : outcome === 'stale' ? m.stale : outcome === 'unknown' ? m.unknown : outcome === 'storage' ? m.storage : m.failed}</Alert.Message>{/if}
+				{:else if outcome !== 'idle'}<Alert.Message appearance="inline" role={undefined} variant={outcome === 'saved' ? 'default' : 'destructive'}>{outcome === 'saved' ? m.saved : outcome === 'specificationsIncomplete' ? m.specificationsIncomplete : outcome === 'specificationsNotSaved' ? m.specificationsNotSaved : outcome === 'invalid' ? m.invalid : outcome === 'stale' ? m.stale : outcome === 'countPending' ? i18n.m.adminCounts.pendingElsewhere : outcome === 'openingNotCounted' ? m.openingNotCounted : outcome === 'unknown' ? m.unknown : outcome === 'storage' ? m.storage : m.failed}</Alert.Message>{/if}
 			</div>
 			{#if outcome === 'stale'}{#if reviewFailed}<Alert.Message appearance="inline" role="status" variant="destructive" class="mb-2">{m.unavailable}</Alert.Message>{/if}<Button variant="outline" disabled={busy} onclick={review}>{m.review}</Button>{/if}
 			{#if current}

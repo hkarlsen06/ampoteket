@@ -50,8 +50,8 @@ async function readAuthEmail(type: 'invite' | 'recovery', email: string): Promis
 	throw new Error('Local Auth email was not delivered to Mailpit');
 }
 await sql((await Bun.file('scripts/web-proof/fixtures.sql').text()).replace(":'staff_id'", `'${staffId}'`));
-await sql(`INSERT INTO app.help_contacts(display_name,email,display_order,is_published)
- SELECT 'Proof volunteer ' || n, 'volunteer' || n || '@example.test', n, true FROM generate_series(1,5) n;
+await sql(`INSERT INTO app.help_contacts(display_name,email,is_published)
+ SELECT 'Proof volunteer ' || n, 'volunteer' || n || '@example.test', true FROM generate_series(1,5) n ORDER BY n;
  INSERT INTO app.help_contacts(display_name,email,is_published) VALUES ('Private directory draft','draft@example.test',false);
  NOTIFY pgrst, 'reload schema';`);
 const bundle = await Bun.build({ entrypoints: ['scripts/checkout-browser-probe.ts'], outdir: `${directory}/probe`, target: 'browser' });

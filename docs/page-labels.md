@@ -50,7 +50,8 @@ older `https://` labels. Some phone cameras may show a scheme-less address as te
 
 **Print** in a saved product's editor prints its label on a Brother PT-P700 (USB
 `04f9:2061`) over WebUSB, only in desktop Chromium browsers over HTTPS or localhost;
-elsewhere it explains why. The first print opens the device picker. `prepareTapeLabel`
+elsewhere it explains why. The first print opens the device picker. Creating a
+product with **Print label** checked prints its label as soon as it is saved. `prepareTapeLabel`
 in `render.ts` draws the label.
 
 - Same content as the sheet. Fixed geometry for the accepted 18 mm tape at 180 dpi:
