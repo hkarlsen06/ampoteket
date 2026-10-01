@@ -16,12 +16,13 @@ function platform() {
 const call = (p: ReturnType<typeof platform>) =>
 	(GET as (event: unknown) => Promise<Response>)({ platform: p, url: new URL('https://ampoteket.no/api/discord') });
 const read = async (response: Response) => (await response.json()) as Record<string, unknown>;
-const discord = (online: number | null) => {
+// Each call answers with the next status; a number is a good widget with that many online.
+const discord = (...answers: (number | 429 | 503)[]) => {
 	let calls = 0;
 	globalThis.fetch = (async () => {
-		calls++;
-		return online === null ? new Response('{"retry_after":5}', { status: 429 })
-			: Response.json({ presence_count: online, members: [{ username: 'A', status: 'idle' }] });
+		const answer = answers[Math.min(calls++, answers.length - 1)];
+		return answer === 429 || answer === 503 ? Response.json({ retry_after: 0.3 }, { status: answer })
+			: Response.json({ presence_count: answer, members: [{ username: 'A', status: 'idle' }] });
 	}) as unknown as typeof fetch;
 	return () => calls;
 };
@@ -32,7 +33,7 @@ test('a refused refresh serves the last good answer, and only a cold cache repor
 	expect(await read(await call(p))).toEqual({ online: 36, members: [{ name: 'A', status: 'idle', avatar: null }] });
 
 	// Within a minute the kept answer is reused without asking Discord.
-	const calls = discord(null);
+	const calls = discord(503);
 	expect((await read(await call(p))).online).toBe(36);
 	expect(calls()).toBe(0);
 
@@ -45,7 +46,18 @@ test('a refused refresh serves the last good answer, and only a cold cache repor
 		expect((await read(response)).online).toBe(36);
 	} finally { Date.now = realNow; }
 
+	discord(503);
 	const cold = await call(platform());
 	expect(cold.status).toBe(502);
 	expect(await read(cold)).toEqual({ online: null });
+});
+
+test('a throttled cold data centre retries until Discord answers, and gives up after five tries', async () => {
+	const calls = discord(429, 429, 25);
+	expect((await read(await call(platform()))).online).toBe(25);
+	expect(calls()).toBe(3);
+
+	const refusals = discord(429);
+	expect((await call(platform())).status).toBe(502);
+	expect(refusals()).toBe(5);
 });
