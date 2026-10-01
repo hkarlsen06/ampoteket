@@ -77,7 +77,7 @@ BEGIN
           round(v_product.sale_unit_price_nok * 0.55,2),'DEMO-'||v_product.code);
       IF n <= 22 THEN
         v_quantity := CASE WHEN n>19 OR (n%5=0 AND line_no=2)
-          THEN v_ordered/2 ELSE v_ordered END;
+          THEN round(v_ordered/2, 6) ELSE v_ordered END;
         INSERT INTO app.inventory_movements(event_id,product_id,quantity_delta)
           VALUES(v_event,v_product.id,v_quantity) RETURNING id INTO v_movement;
         INSERT INTO app.receipt_allocations(movement_id,order_line_id) VALUES(v_movement,v_line);

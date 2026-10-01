@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { ZXING_WASM_SHA256 } from 'barcode-detector/ponyfill';
 import { productCodeFromEntry, productCodeFromQr } from './payload';
 import { nearestQr, ScanGate, type QrDetection } from './selection';
 
@@ -76,5 +77,15 @@ describe('Spatial acceptance and repeat suppression', () => {
 		const gate = new ScanGate(); gate.observe([detection('A')], 0); gate.resume();
 		expect(gate.observe([detection('B', 0.2), detection('A')], 100).value).toBeNull();
 		expect(gate.observe([detection('B'), detection('A', 0.2)], 200).value).toBe('B');
+	});
+});
+
+describe('Decoder asset', () => {
+	// The worker fails closed on a hash mismatch, so a zxing-wasm pin that drifts
+	// from barcode-detector's exact dependency breaks every scan.
+	test('the reader WASM the worker imports matches the ponyfill hash', async () => {
+		const path = Bun.resolveSync('zxing-wasm/reader/zxing_reader.wasm', import.meta.dir);
+		const digest = new Bun.CryptoHasher('sha256').update(await Bun.file(path).arrayBuffer()).digest('hex');
+		expect(digest).toBe(ZXING_WASM_SHA256);
 	});
 });

@@ -52,7 +52,7 @@ The same DOM adapts through CSS, and opening the menu does not move the header.
 Without JavaScript the button is hidden and the panel is the
 header's second row (`html.no-js`, set in `src/app.html`). The Admin link appears only
 after active staff membership is confirmed; the footer login link is always there. The
-footer also states the address and operators (`footer.about`) and links help, `/privacy` and
+footer also names the operators and photographer (`footer.about`) and links help, `/privacy` and
 Discord. On
 phones (≤ 40rem) the scanner is a Scan button in the hero, then a floating button once
 that scrolls under the header. The layout emits site-wide link-preview metadata; this
@@ -64,7 +64,9 @@ A scheme-stable `--night` stage telling one walk: up to the lit storefront windo
 inside. The copy names the workshop, what is in the room and where, and leads to `/p`.
 The headline scales with its column (container query) so a wide fallback font cannot
 push it into the status strip. The catalog button stays in the first viewport down to
-320 × 568. Holding it for 600 ms opens `/admin` instead: a hidden staff shortcut,
+320 × 568. Below 64rem the photograph starts under the status strip and its height
+gives way to the copy on short screens, so the headline sits on its feathered floor;
+the actions keep whole labels and stack full width when they do not fit side by side. Holding it for 600 ms opens `/admin` instead: a hidden staff shortcut,
 not an access control (the admin layout still requires sign-in).
 
 **Walk-in.** With scroll-driven animation support, motion allowed and a viewport at
@@ -91,7 +93,7 @@ visible Open/Closed label at every width and includes its time in its accessible
 It is green while OsloMet's Pilestredet buildings are open and red when closed, per
 [student.oslomet.no/apningstider](https://student.oslomet.no/apningstider) (Mon–Fri
 06–22, weekends 08–22; holidays not modelled). These are building hours, not
-Ampoteket's staffed hours. Each photograph's credit runs along its right edge. The night stage is flat: no
+Ampoteket's staffed hours. The night stage is flat: no
 film-grain overlay and no glow on the headline or the place dot. The headline stays
 legible through the feathered photograph and the `--night` surface alone, and the LED
 glow belongs to `Led.svelte` only. Copy is specific to the place (the shelf you take

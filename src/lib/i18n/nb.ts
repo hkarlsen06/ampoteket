@@ -451,7 +451,7 @@ export const nb = {
 	},
 	footer: {
 		links: 'Lenker',
-		about: 'Pilestredet 35, Oslo. Drives av The Resistance og RoboMEK.',
+		about: 'Drives av The Resistance og RoboMEK. Foto og utvikler: Hjalmar Karlsen.',
 		help: 'Hjelp',
 		privacy: 'Personvern',
 		discord: 'Discord'
@@ -596,8 +596,6 @@ export const nb = {
 			hoursSource: 'https://student.oslomet.no/apningstider',
 		},
 		photos: {
-			credit: 'Foto',
-			photographer: 'Hjalmar Karlsen',
 			storefront:
 				'Ampoteket sett fra gata om kvelden: det lysende AMPOTEKET-skiltet henger i vinduet, og innenfor står arbeidsbord, loddeplasser og instrumenter.',
 			workshop:

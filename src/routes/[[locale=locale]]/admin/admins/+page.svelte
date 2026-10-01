@@ -157,25 +157,28 @@
 						<div class="flex flex-wrap gap-2"><StateBadge tone={!member.authUserId || !member.isActive ? 'neutral' : member.emailConfirmed ? 'success' : 'warning'}>{!member.authUserId ? m.accountRemoved : !member.isActive ? m.inactive : member.emailConfirmed ? m.active : m.awaitingSetup}</StateBadge></div>
 					</Item.Content>
 					{#if member.authUserId && member.authUserId !== admin.session?.user.id}
-						<Item.Actions>
-							{#if member.email && (!member.isActive || !member.emailConfirmed)}
-								<Button type="button" variant="outline" size="sm" disabled={locked || failed} onclick={() => inviteMember(member)}><ButtonLabel pending={busy && outcomeTarget === member.id && pending?.kind === 'invite'} label={member.isActive ? m.resend : m.reactivate} pendingLabel={i18n.m.admin.working} /></Button>
-							{/if}
-						</Item.Actions>
-						{#if member.isActive || confirmId === member.id}
-							<Collapsible.Root class="basis-full" open={confirmId === member.id} onOpenChange={open => { if (!locked) confirmId = open ? member.id : null; }}>
-								<Collapsible.Trigger disabled={locked || failed || !member.isActive}>
-									{#snippet child({ props })}<Button {...props} id={`${fieldId}-${member.id}`} type="button" variant="ghost" size="sm" aria-label={m.deactivateNamed(member.displayName)}>{m.deactivate}</Button>{/snippet}
-								</Collapsible.Trigger>
-								<Collapsible.Content class="space-y-3 pt-3">
+						<!-- `contents` lets the actions sit beside the name and the confirmation span the row. -->
+						<Collapsible.Root class="contents" open={confirmId === member.id} onOpenChange={open => { if (!locked) confirmId = open ? member.id : null; }}>
+							<Item.Actions class="flex-wrap">
+								{#if member.email && (!member.isActive || !member.emailConfirmed)}
+									<Button type="button" variant="outline" size="sm" disabled={locked || failed} onclick={() => inviteMember(member)}><ButtonLabel pending={busy && outcomeTarget === member.id && pending?.kind === 'invite'} label={member.isActive ? m.resend : m.reactivate} pendingLabel={i18n.m.admin.working} /></Button>
+								{/if}
+								{#if member.isActive || confirmId === member.id}
+									<Collapsible.Trigger disabled={locked || failed || !member.isActive}>
+										{#snippet child({ props })}<Button {...props} id={`${fieldId}-${member.id}`} type="button" variant="outline" size="sm" aria-label={m.deactivateNamed(member.displayName)}>{m.deactivate}</Button>{/snippet}
+									</Collapsible.Trigger>
+								{/if}
+							</Item.Actions>
+							{#if member.isActive || confirmId === member.id}
+								<Collapsible.Content class="basis-full space-y-3">
 									<p class="text-sm">{m.deactivateHint(member.displayName)}</p>
 									<div class={formActions}>
 										<Button type="button" variant="destructive" disabled={locked || failed || !member.isActive} onclick={() => deactivate(member)}><ButtonLabel pending={busy && outcomeTarget === member.id && pending?.kind === 'deactivate'} label={m.confirmDeactivate} pendingLabel={i18n.m.admin.working} /></Button>
 										<Button type="button" variant="ghost" disabled={busy || pendingTarget === member.id} onclick={() => closeConfirmation(member.id)}>{member.isActive ? i18n.m.admin.cancel : m.close}</Button>
 									</div>
 								</Collapsible.Content>
-							</Collapsible.Root>
-						{/if}
+							{/if}
+						</Collapsible.Root>
 					{/if}
 					<div class="min-w-0 basis-full">{@render feedback(member.id)}</div>
 				</Item.Root>

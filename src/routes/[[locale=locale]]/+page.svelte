@@ -6,7 +6,6 @@
 	import MapTrifoldIcon from 'phosphor-svelte/lib/MapTrifoldIcon';
 	import QrCodeIcon from 'phosphor-svelte/lib/QrCodeIcon';
 	import CpuIcon from 'phosphor-svelte/lib/CpuIcon';
-	import CameraIcon from 'phosphor-svelte/lib/CameraIcon';
 	import DiscordLogo from '$lib/DiscordLogo.svelte';
 	import * as Alert from '$lib/components/ui/alert';
 	import StateBadge from '$lib/StateBadge.svelte';
@@ -310,12 +309,6 @@
 	const headingTrace = 'relative mb-8 bg-border data-horizontal:h-0.5 before:absolute before:top-1/2 before:left-0 before:size-2.5 before:-translate-y-1/2 before:rounded-full before:bg-border md:mb-10';
 </script>
 
-<!-- Photo credit along the right edge of a photograph, like film-edge markings. -->
-{#snippet credit()}
-	<!-- svelte-ignore a11y_figcaption_parent (Rendered only as the last child of a photo figure.) -->
-	<figcaption class="absolute top-1/2 right-1 z-10 -translate-y-1/2 rotate-180 text-sm whitespace-nowrap text-night-muted [text-shadow:0_0_.5rem_var(--night)] [writing-mode:vertical-rl] md:right-3 flex items-center gap-[0.5em]"><Icon icon={CameraIcon} size="1.25em" class="shrink-0 rotate-90" /><span><span class="sr-only">{m.photos.credit}</span> {m.photos.photographer}</span></figcaption>
-{/snippet}
-
 <svelte:head>
 	<title>{m.title}</title>
 	<meta name="description" content={m.description} />
@@ -334,15 +327,16 @@
 	     trigger takes over when this mark, placed where the fade ends, passes the header. -->
 	<div bind:this={walkMark} class="pointer-events-none absolute top-[calc(27svh+var(--header-h))] hidden size-px walk-motion:block" aria-hidden="true"></div>
 	<div class="relative grid overflow-hidden walk-motion:sticky walk-motion:top-[var(--header-h)] walk-motion:h-[calc(100svh-var(--header-h))]">
-		<!-- Phones: the window above the copy, fading into the night. From 64rem: the
+		<!-- Phones: the window between the status strip and the copy, fading into the
+		     night; short screens give it less height so the headline stays on the
+		     feathered floor. From 64rem: the
 		     photograph fills the right of the stage, feathered on three sides, and is
 		     lowered 12% so the lit window is centred on the copy rather than riding high.
-		     The mask sits on the image, so the feather moves with it and the credit stays sharp. -->
-		<figure class="relative col-start-1 row-start-1 m-0 h-[56svh] origin-[46%_38%] lg:ml-[40%] lg:h-auto lg:origin-center walk-motion:walk-approach">
-			<img class="absolute inset-0 size-full object-cover object-[28%_50%] mask-b-from-55% lg:translate-y-[12%] lg:object-[0%_50%] lg:mask-l-from-75% lg:mask-y-from-75%"
+		     The mask sits on the image, so the feather moves with it. -->
+		<figure class="relative col-start-1 row-start-1 m-0 h-[clamp(10rem,100svh-24rem,56svh)] origin-[46%_38%] max-lg:mt-15 md:max-lg:mt-19 lg:ml-[40%] lg:h-auto lg:origin-center walk-motion:walk-approach">
+			<img class="absolute inset-0 size-full object-cover object-[28%_50%] mask-b-from-55% max-lg:mask-t-from-85% lg:translate-y-[12%] lg:object-[0%_50%] lg:mask-l-from-75% lg:mask-y-from-75%"
 				srcset={photoSrcset('storefront')} sizes="(min-width: 64rem) 60vw, 130vw" src="/photos/storefront-1280.webp" width="4066" height="3100"
 				alt={m.photos.storefront} fetchpriority="high" />
-			{@render credit()}
 		</figure>
 		<!-- Viewfinder corners around the scene; artwork only. -->
 		<div class="pointer-events-none relative z-30 col-start-1 row-start-1 hidden lg:block" aria-hidden="true"><Brackets class="inset-4 text-night-muted" /></div>
@@ -354,8 +348,8 @@
 				<h1 id="hero-title" class="w-full min-w-0 max-w-[16ch] text-[clamp(2.25rem,12.5cqi,5.25rem)] text-night-foreground [@media(max-height:40rem)]:text-[clamp(1.75rem,10cqi,3rem)]">{m.hero.title}</h1>
 				<p class="w-full min-w-0 max-w-[var(--measure-lede)] text-[clamp(1.125rem,1rem+0.6vw,1.375rem)] text-night-muted">{m.hero.lede}</p>
 				<div class={[formActions, 'min-w-0 max-w-full phone:items-stretch walk-motion:walk-hide']}>
-					<Button variant="night" class="min-w-42 px-6 phone:min-w-0 phone:flex-[1_1_10rem] phone:px-4 [-webkit-touch-callout:none]" href={i18n.href('/p')} onpointerdown={startHold} onpointerup={cancelHold} onpointerleave={cancelHold} onpointercancel={cancelHold} oncontextmenu={(event) => event.preventDefault()} onclick={(event) => { if (held) { event.preventDefault(); held = false; } }}><Icon icon={CpuIcon} />{m.hero.parts}</Button>
-					<Button variant="night" class="hidden shrink-0 px-4 no-js:hidden phone:inline-flex" aria-label={i18n.m.scanner.open} aria-haspopup="dialog" data-scanner-dock={scanDocked || undefined} bind:ref={scanDock} onclick={openScanner}><Icon icon={QrCodeIcon} />{i18n.m.scanner.action}</Button>
+					<Button variant="night" class="min-w-42 px-6 whitespace-nowrap phone:min-w-0 phone:flex-[1_1_auto] phone:px-4 [-webkit-touch-callout:none]" href={i18n.href('/p')} onpointerdown={startHold} onpointerup={cancelHold} onpointerleave={cancelHold} onpointercancel={cancelHold} oncontextmenu={(event) => event.preventDefault()} onclick={(event) => { if (held) { event.preventDefault(); held = false; } }}><Icon icon={CpuIcon} />{m.hero.parts}</Button>
+					<Button variant="night" class="hidden grow px-4 no-js:hidden phone:inline-flex" aria-label={i18n.m.scanner.open} aria-haspopup="dialog" data-scanner-dock={scanDocked || undefined} bind:ref={scanDock} onclick={openScanner}><Icon icon={QrCodeIcon} />{i18n.m.scanner.action}</Button>
 				</div>
 			</div>
 		</div>
@@ -367,7 +361,6 @@
 					srcset={photoSrcset('workshop')} sizes="(min-width: 64rem) 100vw, 230vw" src="/photos/workshop-1280.webp" width="5425" height="3876"
 					alt={m.photos.workshop} loading="lazy" decoding="async" />
 				<div class="absolute inset-0 bg-[linear-gradient(to_top,var(--night),color-mix(in_srgb,var(--night)_55%,transparent)_40%,transparent_70%)]" aria-hidden="true"></div>
-				{@render credit()}
 			</figure>
 			<figure class={pageContainer({ class: 'relative m-0 w-full pt-24 pb-24 max-md:pr-10 md:pb-16 lg:pb-24 walk-motion:walk-quote' })}>
 				<blockquote class="m-0 border-l-2 border-night-accent pl-6 md:pl-8"><p class="max-w-[24ch] text-[clamp(1.75rem,1.1rem+2.6vw,3.5rem)] leading-[1.1] font-light tracking-tight text-night-foreground">{m.about.quote}</p></blockquote>
@@ -452,7 +445,6 @@
 			<img class="block h-auto w-full mask-t-from-90% mask-b-from-70% lg:h-[min(100%,74.6vw)] lg:w-auto lg:mask-x-from-85% lg:mask-y-from-85% scroll-motion:power-on"
 				srcset={photoSrcset('bench')} sizes="(min-width: 64rem) 75vw, 100vw" src="/photos/bench-1280.webp" width="5483" height="4090"
 				alt={m.photos.bench} loading="lazy" decoding="async" />
-			{@render credit()}
 		</figure>
 	</div>
 	<div class={pageContainer()}>
@@ -514,7 +506,6 @@
 				<img class="block aspect-[4/3] w-full object-cover mask-b-from-70% md:aspect-[16/10] md:object-[50%_55%] lg:mask-b-from-45% lg:mask-b-to-88%"
 					srcset={photoSrcset('drawers')} sizes="(min-width: 72rem) 72rem, 100vw" src="/photos/drawers-1280.webp" width="3418" height="2757"
 					alt={m.photos.drawers} loading="lazy" decoding="async" />
-				{@render credit()}
 			</figure>
 			<!-- Hairline rows on phones, three columns from 48rem. -->
 			<ol class="relative col-start-1 row-start-2 m-0 -mt-8 grid list-none px-5 pb-2 md:mt-0 md:grid-cols-3 md:gap-8 md:px-8 md:pt-2 md:pb-8 lg:row-start-1 lg:self-end lg:gap-12 lg:px-10 lg:pb-10">

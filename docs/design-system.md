@@ -396,10 +396,9 @@ The served photographs are Hjalmar Karlsen's, supplied for Ampoteket
 ([assets/photos/README.md](../assets/photos/README.md)). A photograph from elsewhere
 needs verified rights for every use and crop; a credit alone is not enough.
 
-- **Every photograph carries a credit** in a `<figcaption>` naming the photographer,
-  plus a source link when external. Never a tooltip or footer line. The homepage sets
-  it vertically along the right edge with a camera icon for "Foto"/"Photo" (kept as
-  screen-reader text).
+- **The owner's photographs are credited once**, in the footer (`footer.about`), so
+  nothing sits on the pictures. A photograph from elsewhere carries its own credit in
+  a `<figcaption>` naming the photographer, plus a source link when external.
 - **Sized for its slot.** `bun scripts/build-photos.ts` builds WebP derivatives into
   `static/photos/`, selected with `srcset`/`sizes`, in a CSS-sized box. A phone's
   download stays ≤ 100 KB. Only the hero loads eagerly (`fetchpriority="high"`).
@@ -430,7 +429,7 @@ needs verified rights for every use and crop; a credit alone is not enough.
 - Codes always in mono. A page uses **one** example code throughout (the landing
   page uses `RES-00026`). Prices only in catalog and checkout, always the exact
   database string, with «kr» / “NOK” via `currency()` / `formatMoney`, mono semibold.
-- Photo credits are translated («Foto:» / “Photo:”); names are not.
+- The footer credit is translated («Foto og utvikler:» / “Photos and development:”); the name is not.
 - People: buyers (members and guests alike, no accounts) are «du». **«admin» is an
   internal role name**, used only for the Admin login link, admin screens and docs.
   Buyer copy says «en frivillig» (or «noen i komiteen»), never «spør en admin».

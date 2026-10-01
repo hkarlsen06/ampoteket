@@ -444,7 +444,7 @@ export const en: Messages = {
 	},
 	footer: {
 		links: 'Links',
-		about: 'Pilestredet 35, Oslo. Run by The Resistance and RoboMEK.',
+		about: 'Run by The Resistance and RoboMEK. Photos and development: Hjalmar Karlsen.',
 		help: 'Help',
 		privacy: 'Privacy',
 		discord: 'Discord'
@@ -589,8 +589,6 @@ export const en: Messages = {
 			hoursSource: 'https://student.oslomet.no/en/opening-hours',
 		},
 		photos: {
-			credit: 'Photo',
-			photographer: 'Hjalmar Karlsen',
 			storefront:
 				'Ampoteket from the street at night: the lit AMPOTEKET sign hangs in the window, with worktables, soldering stations and instruments inside.',
 			workshop:

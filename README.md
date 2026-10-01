@@ -92,6 +92,7 @@ as a tunnel or a private network name with a real certificate; see
 | `bun run i18n` | Side-by-side editor for the Norwegian and English strings, port 5175 ([i18n.md](docs/i18n.md)) |
 | `./scripts/test-database.sh` | Full database suite in a throwaway PostgreSQL |
 | `./scripts/test-web.sh [--mode]` | Real browser or HTTP tests against a throwaway stack |
+| `bun scripts/build-poster.ts` | The A4 buyer poster for the shelf, `assets/poster/kjopsplakat-a4.pdf` (copy follows `src/lib/i18n`; print at 100 %) |
 | `./scripts/seed-test.sh` | A separate throwaway catalog for experiments (`--count N`, `--check`, `--workshop`) |
 | `/slopo-review`, `/slopo-analyze-ignore`, `/slopo-analyze-one` | Claude Code skills that find non-exact duplicate code with [Slopo](https://slopo.dev) (`uv tool install slopo`, key in `.env` as `SLOPO_EMBEDDING_API_KEY`, config in `slopo.conf.yaml`) |
 
