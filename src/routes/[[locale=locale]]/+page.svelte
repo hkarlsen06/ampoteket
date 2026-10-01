@@ -25,7 +25,7 @@
 	// The page renders without API reads, so nothing delays its first byte; the shelf
 	// picker loads live topology and drawer contents in the browser when opened.
 	import { goto } from '$app/navigation';
-	import { DISCORD_INVITE, getI18n } from '$lib/i18n';
+	import { DISCORD_INVITE, THE_RESISTANCE, getI18n } from '$lib/i18n';
 
 	let { data }: { data: PageData } = $props();
 	const i18n = getI18n();
@@ -609,7 +609,8 @@
 				{#each m.who.groups as group (group.title)}
 					<div class="grid content-start gap-3">
 						<h3 class={stepTitle}>{group.title}</h3>
-						<p class="text-muted-foreground">{group.text}</p>
+						<!-- The association name is the same in both locales, so it is linked in place. -->
+						<p class="text-muted-foreground">{#each group.text.split('The Resistance') as part, i (i)}{#if i}<a href={THE_RESISTANCE} target="_blank" rel="external noopener">The Resistance<span class="sr-only"> {i18n.m.newTab}</span></a>{/if}{part}{/each}</p>
 					</div>
 				{/each}
 				<p class="max-w-[var(--measure)] text-muted-foreground">{m.who.hours} <a href={m.hero.hoursSource} target="_blank" rel="external noopener">{m.hero.hours}<span class="sr-only"> {i18n.m.newTab}</span></a>.</p>

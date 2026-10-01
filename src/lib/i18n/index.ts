@@ -34,6 +34,8 @@ export const DISCORD_INVITE = 'https://discord.gg/X7xp3vgfyH';
 
 export const INSTAGRAM = 'https://www.instagram.com/ampoteket';
 
+export const THE_RESISTANCE = 'https://foreninger.sio.no/foreninger/the-resistance';
+
 export function isLocale(value: string | undefined | null): value is Locale {
 	return typeof value === 'string' && (locales as readonly string[]).includes(value);
 }
