@@ -81,14 +81,18 @@ the selected products. It is a regression check, not a hosted latency guarantee.
   migrations above were applied with `supabase migration up --linked` to project
   `mqzcbdorjuefefzvuefa` (Stockholm, PostgreSQL 17); history and hashes match.
   `permissions.sql`, `protections.sql` and `v1-invariants.sql` passed there; 24
-  app tables all have RLS. Hosted Auth now has public signup off, Site URL and
-  password return URLs for `https://ampoteket.hkarlsen06.workers.dev`, the repo
-  email templates, and Data API schema `public` only. The Worker runs there as
-  version `172d6e70-68f1-4593-ac66-818650a7f5ff` (commit `df6ab1c`, deployed
-  2026-10-01 12:20 UTC, previous `cb393b25-3936-485b-9572-e6249f3b1af4`) with
-  `SALES_OPEN=false`: `/p`, `/cart` and `/checkout` answer 503 "shop opens soon" in
-  both locales and `/api/checkouts/…` answers `503 CHECKOUT_UNAVAILABLE`. It is not
-  on `ampoteket.no` yet. The first admin (`hjalmar@hkarlsen06.dev`, Hjalmar Karlsen) was
+  app tables all have RLS. Hosted Auth has public signup off, Site URL
+  `https://ampoteket.no` and password return URLs for `https://ampoteket.no` (both
+  locales, switched 2026-10-01 13:06 UTC), the repo email templates, and Data API
+  schema `public` only. The Worker serves `ampoteket.no` and `www.ampoteket.no` (308
+  to the apex, Google Trust Services certificate) as version
+  `2499119e-7eee-423b-be6d-fb24a69f28c9` (commit `551798a`, `--env production`,
+  deployed 2026-10-01 13:05 UTC, previous `172d6e70-68f1-4593-ac66-818650a7f5ff` on
+  workers.dev, now off) with `SALES_OPEN=false`: `/`, `/en`, `/help`, `/privacy` and
+  `/admin` answer 200, `/p`, `/cart`, `/checkout` and `/p/<code>` answer 503 "shop
+  opens soon", and `POST /api/checkouts/session|prepare` answers
+  `503 CHECKOUT_UNAVAILABLE`. `/api/discord` failed 2 of 5 tries (Discord throttling
+  Cloudflare egress), shown as unavailable with a retry. The first admin (`hjalmar@hkarlsen06.dev`, Hjalmar Karlsen) was
   granted with `app.grant_staff_access` by Claude Code at the owner's request. A test
   admin, "Hjalmar 2", whose Auth account had already been deleted and which no
   record referenced, was deleted by Claude Code at the owner's request on 2026-10-01,
@@ -96,7 +100,7 @@ the selected products. It is a regression check, not a hosted latency guarantee.
   open: custom SMTP
   invitation/reset delivery (the owner reports Resend connected as
   `Ampoteket <noreply@notify.ampoteket.no>`) and the receipt email are unverified; the Data API
-  cutover barrier, a full hosted restore drill and the production domain cutover
+  cutover barrier and a full hosted restore drill
   ([deploy](docs/runbook-deploy.md), [backup](docs/runbook-backup-restore.md)).
 - **Volunteer Discord contacts:** `20261001000100` and `20261001000200` were applied
   to the hosted project on 2026-10-01 12:42 UTC with `supabase migration up --linked`;
@@ -106,10 +110,12 @@ the selected products. It is a regression check, not a hosted latency guarantee.
   `v1-invariants.sql` were not rerun). Both locales of `/help` on the rehearsal
   Worker list the 12 volunteers. Still open: saving the new fields in `/admin/help`
   and `/help` at 360 px.
-- **Volunteer list ordering:** `20261001000300` is not on the hosted project. It
-  revokes the `display_order` column grant, so deploy it together with a Worker
-  built from the same commit: the current rehearsal Worker still sends the order on
-  every save and would be refused.
+- **Volunteer list ordering:** `20261001000300` was applied to the hosted project on
+  2026-10-01 13:04 UTC together with the `551798a` Worker; history and hash match.
+  Through the Supabase connector: `amp_reorder_help_contacts` is security definer
+  and executable only by `authenticated`, clients hold only `SELECT` on
+  `display_order`, and the 12 contacts have distinct positions. Still open: moving a
+  contact in `/admin/help` on the hosted site.
 - **Owners and targets:** name operators and accept RPO/RTO, backup storage and
   drill schedule. The backup runbook proposes 24 hours each, daily off-platform
   backups and a drill each semester; none of this is accepted yet.
