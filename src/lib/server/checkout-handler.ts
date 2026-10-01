@@ -23,6 +23,7 @@ export function handleCheckout(operation: CheckoutOperation, event: RequestEvent
 	try { clientAddress = event.getClientAddress(); } catch { /* A missing address shares a conservative limit. */ }
 	return checkoutGateway(operation, {
 		request: event.request, cookies: event.cookies, clientAddress,
-		checkoutId: event.params.id, fetcher: event.fetch
+		checkoutId: event.params.id, fetcher: event.fetch,
+		waitUntil: (promise) => event.platform?.ctx?.waitUntil(promise)
 	}, config);
 }

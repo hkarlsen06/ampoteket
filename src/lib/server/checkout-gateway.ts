@@ -1,7 +1,7 @@
 import { ApiError, requestApiJson } from '../api';
 import { readJsonBody, RequestBodyError } from './request-body';
 import { checkoutUuid, parseCheckoutBinding, parseCheckoutSnapshot, parsePrepareRequest, parsePrepareResponse } from '../checkout-contract';
-import { receiptAddress, sendReceipt, type ReceiptConfig } from './receipt-email';
+import { receiptAddress, sendReceipt, STAFF_RECEIPT_COPY, type ReceiptConfig } from './receipt-email';
 import { checkoutSessionFingerprint, checkoutTokenForAttempt, newCheckoutSessionSecret } from './checkout-credentials';
 
 export type CheckoutOperation = 'session' | 'prepare' | 'get' | 'confirm' | 'receipt';
@@ -26,6 +26,8 @@ type GatewayContext = {
 	clientAddress: string;
 	checkoutId?: string;
 	fetcher?: typeof fetch;
+	/** Keeps background work (the staff receipt copy) alive after the response. */
+	waitUntil?: (promise: Promise<unknown>) => void;
 };
 class GatewayError extends Error {
 	constructor(readonly code: string, readonly status: number) { super(code); }
@@ -118,6 +120,10 @@ export async function checkoutGateway(operation: CheckoutOperation, context: Gat
 		const snapshot = parseCheckoutSnapshot(result);
 		if (snapshot.checkout_id !== context.checkoutId || (operation === 'confirm' && snapshot.status !== 'confirmed')) {
 			fail('CHECKOUT_UNAVAILABLE', 503);
+		}
+		// The staff copy never delays or fails registration; the idempotency key absorbs duplicate confirms.
+		if (operation === 'confirm' && config.receipt) {
+			context.waitUntil?.(sendReceipt(snapshot, STAFF_RECEIPT_COPY, { ...config.receipt, origin: config.origin }, context.fetcher));
 		}
 		if (operation === 'receipt') {
 			if (snapshot.status !== 'confirmed') fail('CHECKOUT_NOT_REGISTERED', 409);

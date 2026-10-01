@@ -18,6 +18,7 @@ function harness() {
 	const jar = new Map<string, string>();
 	const calls: { url: string; init?: RequestInit }[] = [];
 	const cookieWrites: unknown[] = [];
+	const background: Promise<unknown>[] = [];
 	const config: CheckoutGatewayConfig = {
 		origin, apiUrl: 'https://database.example.test', secretKey: 'sb_secret_disposable-test-value',
 		sessionLimit: { limit: async () => ({ success: true }) },
@@ -39,11 +40,12 @@ function harness() {
 			fetcher: (async (url, init) => {
 				calls.push({ url: String(url), init });
 				return new Response(JSON.stringify(rpcBody), { status: rpcStatus });
-			}) as typeof fetch
+			}) as typeof fetch,
+			waitUntil: (promise) => background.push(promise)
 		}, config);
 		return { response, body: await response.json() as Record<string, unknown> };
 	};
-	return { jar, calls, cookieWrites, config, post, rpc: (body: unknown, status = 200) => { rpcBody = body; rpcStatus = status; } };
+	return { jar, calls, cookieWrites, background, config, post, rpc: (body: unknown, status = 200) => { rpcBody = body; rpcStatus = status; } };
 }
 const binding = { request_id, fingerprint: await checkoutSessionFingerprint(root) };
 const prepare = { ...binding, items: [{ product_id, quantity: '0.000001' }], contact: 'Optional contact' };
@@ -144,6 +146,16 @@ describe('checkout gateway trust boundary', () => {
 		h.rpc(snapshot); expect((await h.post('confirm', binding)).response.status).toBe(503);
 		const confirmed = { ...snapshot, status: 'confirmed', confirmed_at: snapshot.created_at, registration_method: 'buyer' };
 		h.rpc(confirmed); expect((await h.post('confirm', binding)).body).toEqual(confirmed);
+		expect(h.background).toHaveLength(0);
+	});
+	test('a registration sends the staff archive a receipt copy in the background', async () => {
+		const h = harness(); h.jar.set(CHECKOUT_COOKIE, root);
+		h.config.receipt = { resendApiKey: 're_test', limit: { limit: async () => ({ success: false }) } };
+		const confirmed = { ...snapshot, status: 'confirmed', confirmed_at: snapshot.created_at, registration_method: 'buyer' };
+		h.rpc(confirmed); expect((await h.post('confirm', binding)).body).toEqual(confirmed);
+		expect(await Promise.all(h.background)).toEqual([true]);
+		expect(h.calls.map((call) => call.url)).toEqual(['https://database.example.test/rest/v1/rpc/amp_confirm_checkout', 'https://api.resend.com/emails']);
+		expect(JSON.parse(String(h.calls[1].init?.body)).to).toEqual(['ampoteket.kvittering@outlook.com']);
 	});
 	test('receipts go only to a registered checkout, validated address and within the limit', async () => {
 		const h = harness(); h.jar.set(CHECKOUT_COOKIE, root);

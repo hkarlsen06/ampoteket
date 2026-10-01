@@ -3,6 +3,8 @@ import { formatDecimal, formatMoney, unitLabel } from '../format';
 import { localizeHref, messagesFor, type Locale } from '../i18n';
 
 export type ReceiptConfig = { resendApiKey: string; limit: { limit(options: { key: string }): Promise<{ success: boolean }> } };
+/** Staff archive: every buyer-registered checkout sends it a copy of the receipt. */
+export const STAFF_RECEIPT_COPY = 'ampoteket.kvittering@outlook.com';
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function receiptAddress(value: unknown): string | null {

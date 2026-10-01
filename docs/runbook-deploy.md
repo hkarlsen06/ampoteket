@@ -200,7 +200,8 @@ For Auth emails the key belongs in hosted Auth's SMTP settings. Buyer receipts
 are sent by the Worker itself, so also run
 `bunx --no-install wrangler secret put RESEND_API_KEY --env production` (a sending-only key is
 enough) and keep the `RECEIPT_LIMIT` binding from `wrangler.jsonc`. Without either,
-purchases still work but the receipt form reports that sending failed.
+purchases still work but the receipt form reports that sending failed and the
+staff archive gets no copies.
 
 ### Publish
 

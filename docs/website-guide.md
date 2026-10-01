@@ -27,7 +27,7 @@ Never commit secrets; `.env.example` holds placeholders.
 | `PUBLIC_SUPABASE_URL` | Browser + server | Local: `http://127.0.0.1:54321`. |
 | `PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Browser | Public, not a password. |
 | `SUPABASE_SECRET_KEY` | Worker/server only | Bypasses RLS. Never in the browser bundle, repo, logs or URLs. |
-| `RESEND_API_KEY` | Worker/server only | Sends buyer receipts (§4.2); never in logs or the browser bundle. Missing: receipts are unavailable. |
+| `RESEND_API_KEY` | Worker/server only | Sends buyer receipts and the staff copy (§4.2); never in logs or the browser bundle. Missing: receipts are unavailable. |
 | `CHECKOUT_ALLOWED_ORIGIN` | Checkout and invitation Workers + Auth callbacks | Exact HTTPS origin. Never derive trust from the request Host header. |
 | `SALES_OPEN` | Worker/server only | Exactly `true` opens buying. Anything else, including unset, closes it: `/p`, `/cart` and `/checkout` (the `(sales)` route group) render a 503 "shop opens soon" page, `/api/checkouts/…` answers `503 CHECKOUT_UNAVAILABLE`, and the header, footer, scanner and homepage hide their buying entry points. Admin is unaffected. `bun run development` sets it to `true`. |
 
@@ -144,6 +144,14 @@ minute on top of the checkout limits; the Resend idempotency key (checkout ID pl
 address hash) turns a repeated send to the same address within 24 hours into one
 email. Errors: `INVALID_RECEIPT_EMAIL` (400), `CHECKOUT_RATE_LIMITED` (429),
 `RECEIPT_UNAVAILABLE` (503: no key, no binding or Resend failed).
+
+Every successful buyer confirm also sends the same receipt to the staff archive
+`ampoteket.kvittering@outlook.com` (`STAFF_RECEIPT_COPY` in `receipt-email.ts`).
+It runs in the background (`waitUntil`) after the response, so it never delays or
+fails registration and a failed send is not retried; the idempotency key turns
+duplicate confirms within 24 hours into one email. It needs the same key and
+binding as buyer receipts. Staff recovery (`amp_recover_checkout`) goes from the
+admin browser to the database and sends no copy.
 
 ### 4.3 Secrets, persistence and retries
 
