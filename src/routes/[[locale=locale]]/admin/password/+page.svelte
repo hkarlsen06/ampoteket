@@ -12,7 +12,7 @@
 	let email = $state(''); let password = $state(''); let repeat = $state(''); let busy = $state(false);
 	let status = $state<'idle' | 'sent' | 'failed' | 'invalid' | 'saved' | 'mismatch'>('idle');
 	let callback = $state<{ code?: string; token_hash?: string; type?: 'invite' | 'recovery' } | null>(null);
-	let callbackStarted = false; let verified = $state(false); let next = $state('/admin');
+	let verified = $state(false); let next = $state('/admin');
 	onMount(() => {
 		const url = new URL(window.location.href); next = adminReturnPath(url.searchParams.get('next'));
 		const code = url.searchParams.get('code'); const token = url.searchParams.get('token_hash'); const type = url.searchParams.get('type');
@@ -25,9 +25,9 @@
 		else if (token && /^(?:pkce_)?[a-f0-9]{32,256}$/.test(token) && (type === 'invite' || type === 'recovery')) callback = { token_hash: token, type };
 		else if (code || token || type) status = 'invalid';
 	});
-	$effect(() => { if (callback && admin.auth && !callbackStarted) { callbackStarted = true; void exchange(); } });
+	// Links are single-use; wait for a click so mail scanners that open them do not consume them.
 	async function exchange() {
-		if (!callback || !admin.auth) return; busy = true;
+		if (!callback || !admin.auth || busy) return; busy = true;
 		try {
 			if (!admin.callbackOrigin || window.location.origin !== admin.callbackOrigin) throw new Error();
 			const result = callback.code ? await admin.auth.exchangeCodeForSession(callback.code)
@@ -55,6 +55,8 @@
 <header class={pageHeader}><h1 class={pageHeading}>{m.passwordHeading}</h1></header>
 {#if status === 'saved'}
 	<div class={formLayout}><Alert.Message appearance="inline" role="status">{m.passwordSaved}</Alert.Message><Button variant="default" href={i18n.href(next)}>{m.continue}</Button></div>
+{:else if callback}
+	<div class={formLayout}><Button variant="default" onclick={exchange} disabled={busy || !admin.auth}><ButtonLabel pending={busy} pendingLabel={m.working} label={m.continue} /></Button></div>
 {:else if verified}
 	<form class={[formLayout, "max-w-md"]} onsubmit={save}>
 		<Field.Field width="grow"><Field.Label for={`${fieldId}-1`}>{m.newPassword}</Field.Label><Input id={`${fieldId}-1`} type="password" autocomplete="new-password" minlength={8} required bind:value={password} disabled={busy} /></Field.Field>

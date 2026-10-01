@@ -32,6 +32,8 @@ export const SOCIAL_CARD = '/photos/social-card.jpg';
 /** Permanent invite to the Ampoteket Discord server (never expires, no use limit). */
 export const DISCORD_INVITE = 'https://discord.gg/X7xp3vgfyH';
 
+export const INSTAGRAM = 'https://www.instagram.com/ampoteket';
+
 export function isLocale(value: string | undefined | null): value is Locale {
 	return typeof value === 'string' && (locales as readonly string[]).includes(value);
 }

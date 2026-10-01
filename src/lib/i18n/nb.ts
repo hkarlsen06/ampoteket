@@ -126,7 +126,7 @@ export const nb = {
 		payment: 'Har du allerede betalt, ikke betal på nytt. Prøv å registrere kjøpet igjen fra samme kasse, eller kontakt en frivillig.',
 		contacts: 'Kontakt en frivillig', unavailable: 'Kontaktlisten er utilgjengelig. Prøv igjen, eller spør en frivillig i verkstedet.',
 		empty: 'Ingen kontaktpersoner er lagt ut ennå. Spør en frivillig i verkstedet.',
-		retry: 'Prøv igjen', contactLink: (name: string) => `Kontaktlenke for ${name}`, discordUser: 'Discord-brukernavn',
+		retry: 'Prøv igjen', contactLink: (name: string) => `Kontaktlenke for ${name}`, copyDiscord: 'Kopier Discord-brukernavn', discordCopied: 'Discord-brukernavnet er kopiert',
 		discord: 'Spør på Discord'
 	},
 	adminLabels: {
@@ -450,6 +450,7 @@ export const nb = {
 		cartUnavailable: ', må sjekkes',
 		admin: 'Admin',
 		discord: 'Ampoteket på Discord',
+		instagram: 'Ampoteket på Instagram',
 		cartLines: (n: number) => (n === 1 ? ', 1 del' : `, ${n} deler`)
 	},
 	footer: {

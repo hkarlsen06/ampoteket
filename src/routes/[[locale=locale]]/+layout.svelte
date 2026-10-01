@@ -7,6 +7,7 @@
 	import TranslateIcon from 'phosphor-svelte/lib/TranslateIcon';
 	import XIcon from 'phosphor-svelte/lib/XIcon';
 	import QrCodeIcon from 'phosphor-svelte/lib/QrCodeIcon';
+	import InstagramLogoIcon from 'phosphor-svelte/lib/InstagramLogoIcon';
 	import DiscordLogo from '$lib/DiscordLogo.svelte';
 	import { onMount, setContext, untrack } from 'svelte';
 	import { AdminContext, setAdminContext } from '$lib/admin-context.svelte';
@@ -30,6 +31,7 @@
 		messagesFor,
 		ogLocale,
 		DISCORD_INVITE,
+		INSTAGRAM,
 		PROD_ORIGIN,
 		SOCIAL_CARD,
 		setI18n,
@@ -59,8 +61,8 @@
 	/** Current path with the locale prefix removed, so the picker can swap it. */
 	const bare = $derived(stripLocale(page.url.pathname));
 	const privatePage = $derived(isPrivateRoute(page.route.id, page.url.pathname));
-	// Discord stays off the cart and checkout, where a leaving link costs a purchase in progress.
-	const showDiscord = $derived(!isCurrent('/cart') && !isCurrent('/checkout'));
+	// Discord and Instagram stay off the cart and checkout, where a leaving link costs a purchase in progress.
+	const showSocial = $derived(!isCurrent('/cart') && !isCurrent('/checkout'));
 	const buyerScanPage = $derived(data.salesOpen && (bare === '/' || bare === '/p' || bare.startsWith('/p/') || bare === '/cart'));
 
 	/** Always the production URL, never a preview origin; see PROD_ORIGIN. */
@@ -88,6 +90,8 @@
 	const catalogLink = $derived(nav.slice(0, 1));
 	const menuLinks = $derived(admin.status === 'ready' ? [...catalogLink, adminLink] : catalogLink);
 	const headerLinks = $derived(admin.status === 'ready' ? [adminLink, ...catalogLink] : catalogLink);
+	// Phone menu: catalog, Instagram, then Admin.
+	const phoneMenu = $derived(menuLinks.length > 0 || showSocial);
 
 	function isCurrent(href: string) {
 		return bare === href || bare.startsWith(href + '/');
@@ -168,8 +172,15 @@
 <a class="absolute -top-25 left-[var(--gutter)] z-100 rounded-md bg-warning px-4 py-3 font-bold text-on-warning no-underline focus:top-3" href="#main">{m.header.skip}</a>
 
 <!-- Discord sits left of the catalog at every width (the catalog link is phone:hidden),
-     except on cart and checkout; Admin, once confirmed, enters at the far left so nothing else moves. -->
-{#snippet discordLink()}
+     except on cart and checkout; Admin, once confirmed, enters at the far left so nothing else moves.
+     Instagram follows it from 40rem and moves into the menu on phones. -->
+{#snippet instagramRow()}
+	<li>
+		<Button href={INSTAGRAM} target="_blank" rel="external noopener" variant="ghost" class="w-full justify-start px-3"><Icon icon={InstagramLogoIcon} class="size-5" aria-hidden="true" />{m.header.instagram}<span class="sr-only"> {m.newTab}</span></Button>
+	</li>
+{/snippet}
+
+{#snippet socialLinks()}
 	<Tooltip.Root>
 		<Tooltip.Trigger>
 			{#snippet child({ props })}
@@ -177,6 +188,14 @@
 			{/snippet}
 		</Tooltip.Trigger>
 		<Tooltip.Content side="bottom">{m.header.discord}</Tooltip.Content>
+	</Tooltip.Root>
+	<Tooltip.Root>
+		<Tooltip.Trigger>
+			{#snippet child({ props })}
+				<Button {...props} href={INSTAGRAM} target="_blank" rel="external noopener" variant="ghost" size="icon-sm" class="shrink-0 phone:hidden" aria-label={`${m.header.instagram} ${m.newTab}`}><Icon icon={InstagramLogoIcon} class="size-5" aria-hidden="true" /></Button>
+			{/snippet}
+		</Tooltip.Trigger>
+		<Tooltip.Content side="bottom">{m.header.instagram}</Tooltip.Content>
 	</Tooltip.Root>
 {/snippet}
 
@@ -190,7 +209,7 @@
 		</a>
 		<Tooltip.Provider>
 			{#each headerLinks as item (item.href)}
-				{#if item.href === '/p' && showDiscord}{@render discordLink()}{/if}
+				{#if item.href === '/p' && showSocial}{@render socialLinks()}{/if}
 				<Tooltip.Root>
 					<Tooltip.Trigger>
 						{#snippet child({ props })}
@@ -203,7 +222,7 @@
 					<Tooltip.Content side="bottom" class="md:hidden">{item.label}</Tooltip.Content>
 				</Tooltip.Root>
 			{/each}
-			{#if !data.salesOpen}{@render discordLink()}{:else}
+			{#if !data.salesOpen}{@render socialLinks()}{:else}
 			<Tooltip.Root>
 				<Tooltip.Trigger>
 					{#snippet child({ props })}
@@ -239,9 +258,10 @@
 			<Collapsible.Content forceMount id="site-menu" class="menu absolute top-[calc(50%+var(--header-h)/2+1px)] right-0 z-10 hidden w-64 rounded-lg border bg-card p-2 shadow-card data-[state=open]:block phone:inset-x-0 phone:top-full phone:w-auto phone:rounded-none phone:border-0 phone:px-[calc(var(--gutter)-0.75rem)] phone:pt-2 phone:pb-3 phone:shadow-none no-js:relative no-js:inset-auto no-js:block no-js:w-full no-js:rounded-none no-js:border-0 no-js:px-0 no-js:pt-2 no-js:pb-3 no-js:shadow-none">
 			<Separator class="absolute inset-x-0 top-0 hidden no-js:block" />
 			<!-- Desktop has these links in the header row. -->
-			{#if menuLinks.length}
+			{#if phoneMenu}
 			<nav class="site-nav hidden phone:block" aria-label={m.header.menu}>
 				<ul class="m-0 flex list-none flex-col p-0">
+					{#if !catalogLink.length && showSocial}{@render instagramRow()}{/if}
 					{#each menuLinks as item (item.href)}
 						<li>
 							<Button
@@ -251,6 +271,7 @@
 								aria-current={isCurrent(item.href) ? 'page' : undefined}
 							><Icon icon={item.icon} class="size-5" />{item.label}</Button>
 						</li>
+						{#if item.href === '/p' && showSocial}{@render instagramRow()}{/if}
 					{/each}
 				</ul>
 			</nav>
@@ -261,8 +282,8 @@
 				</Button>
 			{/if}
 			<!-- Divided from whatever is visible above it: the phone links, or the desktop scanner row. -->
-			<nav class={['relative flex items-center', buyerScanPage ? 'mt-2 pt-2 no-js:not-phone:mt-0 no-js:not-phone:pt-0' : menuLinks.length ? 'phone:mt-2 phone:pt-2' : '']} aria-label={m.header.language}>
-				<Separator class={['absolute inset-x-0 top-0', buyerScanPage ? 'no-js:not-phone:hidden' : menuLinks.length ? 'hidden phone:block' : 'hidden']} />
+			<nav class={['relative flex items-center', buyerScanPage ? 'mt-2 pt-2 no-js:not-phone:mt-0 no-js:not-phone:pt-0' : phoneMenu ? 'phone:mt-2 phone:pt-2' : '']} aria-label={m.header.language}>
+				<Separator class={['absolute inset-x-0 top-0', buyerScanPage ? 'no-js:not-phone:hidden' : phoneMenu ? 'hidden phone:block' : 'hidden']} />
 				<Icon icon={TranslateIcon} class="mx-3 size-5" />
 				<ul class="m-0 flex list-none items-center gap-1 p-0">
 					{#each locales as loc (loc)}

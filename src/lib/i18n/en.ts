@@ -126,7 +126,7 @@ export const en: Messages = {
 		payment: "If you have already paid, don't pay again. Try registering the purchase again from the same checkout, or contact a volunteer.",
 		contacts: 'Contact a volunteer', unavailable: 'The contact list is unavailable. Try again, or ask a volunteer in the workshop.',
 		empty: 'No contacts are listed yet. Ask a volunteer in the workshop.',
-		retry: 'Try again', contactLink: (name: string) => `Contact link for ${name}`, discordUser: 'Discord username',
+		retry: 'Try again', contactLink: (name: string) => `Contact link for ${name}`, copyDiscord: 'Copy Discord username', discordCopied: 'Discord username copied',
 		discord: 'Ask on Discord'
 	},
 	adminLabels: {
@@ -443,6 +443,7 @@ export const en: Messages = {
 		cartUnavailable: ', needs attention',
 		admin: 'Admin',
 		discord: 'Ampoteket on Discord',
+		instagram: 'Ampoteket on Instagram',
 		cartLines: (n: number) => (n === 1 ? ', 1 part' : `, ${n} parts`)
 	},
 	footer: {

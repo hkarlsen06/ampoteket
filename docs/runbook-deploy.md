@@ -181,6 +181,8 @@ Configure hosted Auth for the same HTTPS origin before granting staff access:
   invitation without it does not work.
 - The password page accepts PKCE `code` callbacks, or `token_hash` with
   `type=invite` / `type=recovery`. It rejects implicit `#access_token` callbacks.
+  It spends the single-use token only when the person presses Continue, because
+  mail scanners (Microsoft 365 Safe Links on `oslomet.no`) open links first.
 - The built-in sender only delivers to project-team addresses (about 2
   emails/hour, no SLA). Production needs
   [custom SMTP](https://supabase.com/docs/guides/auth/auth-smtp). Rehearse real
