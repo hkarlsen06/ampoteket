@@ -1,6 +1,6 @@
--- Fresh install: known physical storage, no invented inventory or audit events.
+-- Fresh install: known physical storage and published volunteers, no invented inventory.
 DO $$ DECLARE t record; n bigint; BEGIN
-  FOR t IN SELECT tablename FROM pg_tables WHERE schemaname='app' AND tablename NOT IN ('units','cabinets','bins') LOOP
+  FOR t IN SELECT tablename FROM pg_tables WHERE schemaname='app' AND tablename NOT IN ('units','cabinets','bins','help_contacts','audit_log') LOOP
     EXECUTE format('SELECT count(*) FROM app.%I',t.tablename) INTO n;
     IF n<>0 THEN RAISE EXCEPTION 'FRESH_SCHEMA_HAS_INVENTED_FACTS: %',t.tablename; END IF;
   END LOOP;
@@ -8,6 +8,12 @@ DO $$ DECLARE t record; n bigint; BEGIN
      OR NOT EXISTS (SELECT FROM app.units WHERE code='pcs' AND is_discrete)
      OR NOT EXISTS (SELECT FROM app.units WHERE code='m' AND NOT is_discrete)
   THEN RAISE EXCEPTION 'FRESH_SCHEMA_UNITS_MISMATCH'; END IF;
+  -- The volunteer migration is the only audited fact: 12 published inserts without a staff actor.
+  IF (SELECT count(*) FROM app.help_contacts WHERE is_published AND discord IS NOT NULL)<>12
+     OR EXISTS (SELECT FROM app.help_contacts WHERE NOT is_published OR discord IS NULL)
+     OR (SELECT count(*) FROM app.audit_log)<>12
+     OR EXISTS (SELECT FROM app.audit_log WHERE table_name<>'help_contacts' OR action<>'INSERT' OR actor_id IS NOT NULL)
+  THEN RAISE EXCEPTION 'FRESH_SCHEMA_VOLUNTEERS_MISMATCH'; END IF;
   IF (SELECT count(*) FROM app.cabinets)<>12 OR (SELECT count(*) FROM app.bins)<>492
      OR (SELECT sum(inner_rows*inner_cols) FROM app.cabinets)<>496
      OR EXISTS (SELECT 1 FROM app.cabinet_free_cells)
@@ -39,5 +45,5 @@ DO $$ DECLARE t record; n bigint; BEGIN
   IF EXISTS (SELECT 1 FROM jsonb_array_elements(public.amp_shelf_map()->'bins') b
     WHERE b->'has_products' IS DISTINCT FROM 'false'::jsonb)
   THEN RAISE EXCEPTION 'FRESH_SCHEMA_INVENTED_DRAWER_CONTENTS'; END IF;
-  RAISE NOTICE 'PASS: initial workbook layout has 12 cabinets, 496 cells, 492 drawers and no invented inventory';
+  RAISE NOTICE 'PASS: initial workbook layout has 12 cabinets, 496 cells, 492 drawers, 12 volunteers and no invented inventory';
 END $$;

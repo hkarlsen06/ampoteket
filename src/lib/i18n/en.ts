@@ -126,7 +126,7 @@ export const en: Messages = {
 		payment: "If you have already paid, don't pay again. Try registering the purchase again from the same checkout, or contact a volunteer.",
 		contacts: 'Contact a volunteer', unavailable: 'The contact list is unavailable. Try again, or ask a volunteer in the workshop.',
 		empty: 'No contacts are listed yet. Ask a volunteer in the workshop.',
-		retry: 'Try again', contactLink: (name: string) => `Contact link for ${name}`,
+		retry: 'Try again', contactLink: (name: string) => `Contact link for ${name}`, discordUser: 'Discord username',
 		discord: 'Ask on Discord'
 	},
 	adminLabels: {
@@ -351,9 +351,9 @@ export const en: Messages = {
 		directoryTitle: 'Volunteer contact list | Admin | Ampoteket', directoryHeading: 'Volunteer contact list',
 		directoryConsent: 'Only publish contact details the person has agreed to show on the help page. Earlier versions stay in the history.',
 		newContact: 'New contact', viewPublic: 'View help page', noDirectoryContacts: 'No contacts have been added.', published: 'Published', unpublished: 'Unpublished',
-		editContact: (name: string) => `Edit ${name}`, editHeading: 'Edit contact', contactName: 'Display name', contactEmail: 'Email (optional)', contactPhone: 'Phone (optional)', contactUrl: 'Contact link (optional)',
-		displayOrder: 'Order (lowest first)', publishContact: 'Show this contact on the public help page', atLeastOneContact: 'A published contact needs an email, phone number or link.',
-		saveContact: 'Save contact', retrySave: 'Try saving again', contactSaved: 'Contact saved.', contactInvalid: 'Check the fields. Email, phone and link must be valid, the link must start with https://, and the order must be a whole number.',
+		editContact: (name: string) => `Edit ${name}`, editHeading: 'Edit contact', contactName: 'Display name', contactEmail: 'Email (optional)', contactPhone: 'Phone (optional)', contactUrl: 'Contact link (optional)', contactResponsibility: 'Responsibility (optional)', contactDiscord: 'Discord username (optional)',
+		displayOrder: 'Order (lowest first)', publishContact: 'Show this contact on the public help page', atLeastOneContact: 'A published contact needs a Discord username, email, phone number or link.',
+		saveContact: 'Save contact', retrySave: 'Try saving again', contactSaved: 'Contact saved.', contactInvalid: 'Check the fields. Email, phone and link must be valid, the Discord username is lowercase letters, digits, _ and ., the link must start with https://, and the order must be a whole number.',
 		reviewContact: 'Show the latest version', reviewedContact: 'Continue with my changes', contactStale: 'Someone else changed this contact while you were editing. Your changes are still in the form. Look at the latest version before saving.', contactUnknown: "We don't know if the contact was saved. Try saving again."
 	},
 
@@ -580,6 +580,7 @@ export const en: Messages = {
 			title: 'Solder, build and get your own parts',
 			lede: 'Soldering stations, oscilloscopes, two 3D printers and a shelf of parts, right in Pilestredet 35.',
 			parts: 'Browse parts catalog',
+			soon: 'The shop opens soon',
 			place: 'Pilestredet 35 · Oslo',
 			clock: 'Time in Oslo',
 			clockTime: (time: string) => `Time in Oslo: ${time}`,
@@ -699,7 +700,10 @@ export const en: Messages = {
 		errorHeading: 'The page could not be loaded',
 		errorBody: 'The fault is on our side. Your cart is saved in this browser, so nothing is lost.',
 		retry: 'Try again',
-		help: 'Get help'
+		help: 'Get help',
+		soonTitle: 'The shop opens soon | Ampoteket',
+		soonHeading: 'The shop opens soon',
+		soonBody: 'The parts catalog, cart and checkout are not open yet.'
 	},
 	receipt: {
 		subject: 'Receipt from Ampoteket',

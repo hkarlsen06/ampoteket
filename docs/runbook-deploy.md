@@ -157,11 +157,14 @@ public values before building:
 "vars": {
   "PUBLIC_SUPABASE_URL": "https://<reviewed-project>.supabase.co",
   "PUBLIC_SUPABASE_PUBLISHABLE_KEY": "<reviewed-publishable-key>",
-  "CHECKOUT_ALLOWED_ORIGIN": "https://ampoteket.no"
+  "CHECKOUT_ALLOWED_ORIGIN": "https://ampoteket.no",
+  "SALES_OPEN": "false"
 },
 "routes": [{ "pattern": "ampoteket.no", "custom_domain": true }]
 ```
 
+`SALES_OPEN` stays `"false"` (shop shown as opening soon) until the people who
+administer sales are ready; set it to `"true"` and redeploy to open buying.
 `SUPABASE_SECRET_KEY` is never a `vars` entry or build argument. A rehearsal
 Worker uses its own name, domain, Supabase project and origin, with no
 production credentials.

@@ -173,7 +173,7 @@ Keep `app` out of the Data API's exposed schemas; `public` holds only the explic
 
 ### Public volunteer directory
 
-`help_contacts` is deliberately public and grants no access. Never put buyer contact data in it. Publishing requires at least one valid email, phone or HTTPS URL (DNS hostname; no credentials, whitespace, control characters or backslashes). Render fields as text and validate links in the frontend too. `amp_help_directory` exposes only published rows. Staff edit through `amp_help_contacts` with an `edit_revision` guard ([protocol](api-contract.md#public-volunteer-directory)). Entries are unpublished, never deleted, and every change is audited.
+`help_contacts` is deliberately public and grants no access. Never put buyer contact data in it. Publishing requires at least one valid Discord username, email, phone or HTTPS URL (DNS hostname; no credentials, whitespace, control characters or backslashes). Render fields as text and validate links in the frontend too. `amp_help_directory` exposes only published rows. Staff edit through `amp_help_contacts` with an `edit_revision` guard ([protocol](api-contract.md#public-volunteer-directory)). Entries are unpublished, never deleted, and every change is audited.
 
 ### Staff provisioning
 
@@ -319,7 +319,11 @@ CREATE TABLE app.help_contacts (
   edit_revision bigint NOT NULL DEFAULT 1 CHECK (edit_revision > 0),
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  CHECK (NOT is_published OR num_nonnulls(email,phone,contact_url) > 0)
+  responsibility text CHECK (responsibility IS NULL OR (length(btrim(responsibility)) BETWEEN 1 AND 80
+    AND responsibility !~ '[[:cntrl:]]')),
+  -- Current Discord usernames: 2–32 of a-z, 0-9, '_' and '.', never two periods in a row.
+  discord text CHECK (discord IS NULL OR (discord ~ '^[a-z0-9_.]{2,32}$' AND discord !~ '\.\.')),
+  CHECK (NOT is_published OR num_nonnulls(email,phone,contact_url,discord) > 0)
 );
 ```
 

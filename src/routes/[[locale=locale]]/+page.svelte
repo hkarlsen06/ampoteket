@@ -6,6 +6,7 @@
 	import MapTrifoldIcon from 'phosphor-svelte/lib/MapTrifoldIcon';
 	import QrCodeIcon from 'phosphor-svelte/lib/QrCodeIcon';
 	import CpuIcon from 'phosphor-svelte/lib/CpuIcon';
+	import ClockIcon from 'phosphor-svelte/lib/ClockIcon';
 	import DiscordLogo from '$lib/DiscordLogo.svelte';
 	import * as Alert from '$lib/components/ui/alert';
 	import StateBadge from '$lib/StateBadge.svelte';
@@ -348,8 +349,13 @@
 				<h1 id="hero-title" class="w-full min-w-0 max-w-[16ch] text-[clamp(2.25rem,12.5cqi,5.25rem)] text-night-foreground [@media(max-height:40rem)]:text-[clamp(1.75rem,10cqi,3rem)]">{m.hero.title}</h1>
 				<p class="w-full min-w-0 max-w-[var(--measure-lede)] text-[clamp(1.125rem,1rem+0.6vw,1.375rem)] text-night-muted">{m.hero.lede}</p>
 				<div class={[formActions, 'min-w-0 max-w-full phone:items-stretch walk-motion:walk-hide']}>
+					{#if !data.salesOpen}
+					<!-- Holds the scan dock's place so the hero's fit test still runs. -->
+					<Badge bind:ref={scanDock} variant="outline" class="min-h-11 h-auto gap-2 border-transparent px-0 text-base text-night-foreground"><Icon icon={ClockIcon} />{m.hero.soon}</Badge>
+					{:else}
 					<Button variant="night" class="min-w-42 px-6 whitespace-nowrap phone:min-w-0 phone:flex-[1_1_auto] phone:px-4 [-webkit-touch-callout:none]" href={i18n.href('/p')} onpointerdown={startHold} onpointerup={cancelHold} onpointerleave={cancelHold} onpointercancel={cancelHold} oncontextmenu={(event) => event.preventDefault()} onclick={(event) => { if (held) { event.preventDefault(); held = false; } }}><Icon icon={CpuIcon} />{m.hero.parts}</Button>
 					<Button variant="night" class="hidden grow px-4 no-js:hidden phone:inline-flex" aria-label={i18n.m.scanner.open} aria-haspopup="dialog" data-scanner-dock={scanDocked || undefined} bind:ref={scanDock} onclick={openScanner}><Icon icon={QrCodeIcon} />{i18n.m.scanner.action}</Button>
+					{/if}
 				</div>
 			</div>
 		</div>
@@ -528,6 +534,7 @@
 		<div class="mt-16 grid items-center gap-12 md:mt-24 md:grid-cols-2">
 			<div class="grid content-start justify-items-start gap-8">
 				<p class={leadText}>{m.shelf.body1}</p>
+				{#if data.salesOpen}
 				<Card.Root class="grid w-full max-w-sm min-w-0 gap-4 p-5 md:p-6">
 					<form class="code-form" action={i18n.href('/p')} method="get" onsubmit={openCode}>
 						<Field.Field>
@@ -578,6 +585,7 @@
 					</div>
 					<noscript><p class="text-sm text-muted-foreground">{i18n.m.shelfMap.noJavascript}</p></noscript>
 				</Card.Root>
+				{/if}
 			</div>
 			<!-- Viewfinder corners: the label is what the scanner reads. From 48rem it
 			     sits at the column's end so the pair spans the container edge to edge. -->

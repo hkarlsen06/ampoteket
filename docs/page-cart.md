@@ -1,6 +1,6 @@
 # Cart
 
-`/cart` and `/en/cart`, implemented in `src/routes/[[locale=locale]]/cart/+page.svelte`
+`/cart` and `/en/cart`, implemented in `src/routes/[[locale=locale]]/(sales)/cart/+page.svelte`
 and `src/lib/CartLine.svelte`; storage and locking in `src/lib/cart.ts`. The checkout
 protocol is owned by [checkout-recovery.md](checkout-recovery.md); the next page is
 [page-checkout.md](page-checkout.md).

@@ -29,6 +29,7 @@ Never commit secrets; `.env.example` holds placeholders.
 | `SUPABASE_SECRET_KEY` | Worker/server only | Bypasses RLS. Never in the browser bundle, repo, logs or URLs. |
 | `RESEND_API_KEY` | Worker/server only | Sends buyer receipts (§4.2); never in logs or the browser bundle. Missing: receipts are unavailable. |
 | `CHECKOUT_ALLOWED_ORIGIN` | Checkout and invitation Workers + Auth callbacks | Exact HTTPS origin. Never derive trust from the request Host header. |
+| `SALES_OPEN` | Worker/server only | Exactly `true` opens buying. Anything else, including unset, closes it: `/p`, `/cart` and `/checkout` (the `(sales)` route group) render a 503 "shop opens soon" page, `/api/checkouts/…` answers `503 CHECKOUT_UNAVAILABLE`, and the header, footer, scanner and homepage hide their buying entry points. Admin is unaffected. `bun run development` sets it to `true`. |
 
 The Worker also needs the native `CHECKOUT_SESSION_LIMIT` and
 `CHECKOUT_OPERATION_LIMIT` bindings from `wrangler.jsonc`: 20 initializations per

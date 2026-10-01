@@ -112,6 +112,9 @@ labels always use the Norwegian, unprefixed address.
 | `POST /api/admin/invitations` | Authenticated staff invitations ([api-contract.md](api-contract.md#staff-membership-and-invitations)) |
 | `GET /api/discord`, `/api/discord/avatar/…` | Online members of the Ampoteket Discord server and their avatars, proxied and edge-cached so browsers never contact Discord |
 
+Until `SALES_OPEN=true` is deployed, the buyer routes and the checkout API are closed
+behind a "shop opens soon" page ([website-guide.md](website-guide.md#11-environments-and-secrets)).
+
 One scanner dialog is shared by all shopping pages ([scanner.md](scanner.md)).
 **Scanning never registers a purchase by itself.**
 

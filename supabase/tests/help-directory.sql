@@ -22,7 +22,7 @@ SET LOCAL ROLE authenticated;
 INSERT INTO public.amp_help_contacts(id,display_name,email,is_published) VALUES
  ('76000000-0000-4000-8000-000000000001','Public volunteer','volunteer@example.invalid',true),
  ('76000000-0000-4000-8000-000000000002','Draft volunteer',null,false);
-SELECT pg_temp.assert_true((SELECT count(*)=2 FROM public.amp_help_contacts),'staff can maintain drafts and public contacts');
+SELECT pg_temp.assert_true((SELECT count(*)=2 FROM public.amp_help_contacts WHERE id::text LIKE '76000000-%'),'staff can maintain drafts and public contacts');
 SELECT pg_temp.expect_error($q$UPDATE public.amp_help_contacts SET is_published=true WHERE id='76000000-0000-4000-8000-000000000002'$q$,'violates check constraint');
 SELECT pg_temp.expect_error($q$UPDATE public.amp_help_contacts SET contact_url='javascript:alert(1)'$q$,'violates check constraint');
 SELECT pg_temp.expect_error($q$UPDATE public.amp_help_contacts SET contact_url='https://user:password@example.invalid/'$q$,'violates check constraint');
@@ -30,6 +30,9 @@ SELECT pg_temp.expect_error($q$UPDATE public.amp_help_contacts SET contact_url='
 SELECT pg_temp.expect_error($q$UPDATE public.amp_help_contacts SET contact_url=E'https://example.invalid/\nmalicious'$q$,'violates check constraint');
 SELECT pg_temp.expect_error($q$UPDATE public.amp_help_contacts SET email='bad@example.invalid?subject=forged'$q$,'violates check constraint');
 SELECT pg_temp.expect_error($q$UPDATE public.amp_help_contacts SET phone='https://example.invalid'$q$,'violates check constraint');
+SELECT pg_temp.expect_error($q$UPDATE public.amp_help_contacts SET discord='Bad Name'$q$,'violates check constraint');
+SELECT pg_temp.expect_error($q$UPDATE public.amp_help_contacts SET discord='two..periods'$q$,'violates check constraint');
+SELECT pg_temp.expect_error($q$UPDATE public.amp_help_contacts SET responsibility=E'Lodding\nforged'$q$,'violates check constraint');
 SELECT pg_temp.expect_error($q$UPDATE public.amp_help_contacts SET created_at=clock_timestamp()$q$,'permission denied');
 SELECT pg_temp.expect_error($q$DELETE FROM public.amp_help_contacts$q$,'permission denied');
 UPDATE public.amp_help_contacts SET phone='+47 12 34 56 78',contact_url='https://example.invalid/contact?lang=en',is_published=true,edit_revision=1
@@ -43,11 +46,15 @@ UPDATE public.amp_help_contacts SET is_published=false,edit_revision=2
  WHERE id='76000000-0000-4000-8000-000000000002' AND edit_revision=2;
 SELECT pg_temp.assert_true((SELECT count(*)=4 FROM public.amp_audit_log WHERE table_name='help_contacts'
  AND actor_id='72000000-0000-4000-8000-000000000001' AND database_role='authenticated'),'directory changes audited with actual staff actor');
+UPDATE public.amp_help_contacts SET email=null,discord='public.volunteer_1',responsibility='Lodding',edit_revision=1
+ WHERE id='76000000-0000-4000-8000-000000000001' AND edit_revision=1;
+SELECT pg_temp.assert_true((SELECT is_published AND discord='public.volunteer_1' FROM public.amp_help_contacts
+ WHERE id='76000000-0000-4000-8000-000000000001'),'a Discord username alone keeps a contact published');
 RESET ROLE;
 
 SET LOCAL ROLE anon;
-SELECT pg_temp.assert_true((SELECT count(*)=1 FROM public.amp_help_directory()),'anonymous read excludes drafts and unpublished contacts');
-SELECT pg_temp.assert_true((SELECT array_agg(key ORDER BY key)=ARRAY['contact_url','display_name','display_order','email','id','phone'] FROM jsonb_object_keys((SELECT to_jsonb(d) FROM public.amp_help_directory() d LIMIT 1)) key),'public projection has only reviewed fields');
+SELECT pg_temp.assert_true((SELECT count(*)=1 FROM public.amp_help_directory() WHERE id::text LIKE '76000000-%'),'anonymous read excludes drafts and unpublished contacts');
+SELECT pg_temp.assert_true((SELECT array_agg(key ORDER BY key)=ARRAY['contact_url','discord','display_name','display_order','email','id','phone','responsibility'] FROM jsonb_object_keys((SELECT to_jsonb(d) FROM public.amp_help_directory() d LIMIT 1)) key),'public projection has only reviewed fields');
 SELECT pg_temp.expect_error('SELECT * FROM public.amp_help_contacts','permission denied');
 SELECT pg_temp.expect_error($q$INSERT INTO public.amp_help_contacts(display_name) VALUES('Forbidden')$q$,'permission denied');
 SELECT pg_temp.expect_error('SELECT * FROM public.amp_help_directory(NULL,NULL,0)','INVALID_HELP_PAGE_SIZE');
@@ -60,6 +67,6 @@ SELECT pg_temp.assert_true(NOT EXISTS(SELECT FROM public.amp_help_contacts),'ord
 SELECT pg_temp.expect_error($q$INSERT INTO public.amp_help_contacts(display_name) VALUES('Forbidden')$q$,'row-level security');
 WITH changed AS (UPDATE public.amp_help_contacts SET display_name='Forbidden' RETURNING *)
  SELECT pg_temp.assert_true((SELECT count(*)=0 FROM changed),'ordinary login cannot alter directory');
-SELECT pg_temp.assert_true((SELECT count(*)=1 FROM public.amp_help_directory()),'ordinary login retains public directory access');
+SELECT pg_temp.assert_true((SELECT count(*)=1 FROM public.amp_help_directory() WHERE id::text LIKE '76000000-%'),'ordinary login retains public directory access');
 RESET ROLE;
 ROLLBACK;

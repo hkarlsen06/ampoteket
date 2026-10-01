@@ -23,10 +23,10 @@ BEGIN
   PERFORM pg_temp.restore_assert(EXISTS(SELECT 1 FROM app.checkout_contacts),'retained contact');
   PERFORM pg_temp.restore_assert((SELECT edit_revision=2 AND is_published AND phone='+47 12 34 56 78'
     FROM app.help_contacts WHERE id='79000000-0000-4000-8000-000000000010'), 'directory publication, contact and revision retained');
-  PERFORM pg_temp.restore_assert((SELECT count(*)=1 FROM public.amp_help_directory()), 'restored directory hides drafts');
+  PERFORM pg_temp.restore_assert((SELECT count(*)=1 FROM public.amp_help_directory() WHERE id::text LIKE '79000000-%'), 'restored directory hides drafts');
   UPDATE public.amp_help_contacts SET is_published=false,edit_revision=2
     WHERE id='79000000-0000-4000-8000-000000000010' AND edit_revision=2;
-  PERFORM pg_temp.restore_assert(NOT EXISTS(SELECT FROM public.amp_help_directory())
+  PERFORM pg_temp.restore_assert(NOT EXISTS(SELECT FROM public.amp_help_directory() WHERE id::text LIKE '79000000-%')
     AND EXISTS(SELECT FROM app.audit_log WHERE table_name='help_contacts'
       AND actor_id='72000000-0000-4000-8000-000000000002'
       AND (after_data->>'edit_revision')::bigint=3), 'restored directory edits advance revision with audit');

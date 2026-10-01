@@ -29,7 +29,7 @@ How clients read and write database values without losing precision or silently 
 
 ## Public volunteer directory
 
-`amp_help_directory(p_after_order, p_after_id, p_limit)` returns published contacts ordered by `(display_order, id)` with exactly `id`, `display_name`, `email`, `phone`, `contact_url` and `display_order`. `p_limit` is 1–1000 (default 100; otherwise `INVALID_HELP_PAGE_SIZE`). Send both cursor fields or neither (`INVALID_HELP_CURSOR`). Page until empty, reject duplicate IDs and non-advancing tuples, and keep "unavailable" distinct from "empty".
+`amp_help_directory(p_after_order, p_after_id, p_limit)` returns published contacts ordered by `(display_order, id)` with exactly `id`, `display_name`, `responsibility`, `email`, `phone`, `contact_url`, `discord` and `display_order`. `p_limit` is 1–1000 (default 100; otherwise `INVALID_HELP_PAGE_SIZE`). Send both cursor fields or neither (`INVALID_HELP_CURSOR`). Page until empty, reject duplicate IDs and non-advancing tuples, and keep "unavailable" distinct from "empty".
 
 Staff edit through `amp_help_contacts` with their own JWT:
 

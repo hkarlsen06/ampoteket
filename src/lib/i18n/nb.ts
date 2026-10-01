@@ -126,7 +126,7 @@ export const nb = {
 		payment: 'Har du allerede betalt, ikke betal på nytt. Prøv å registrere kjøpet igjen fra samme kasse, eller kontakt en frivillig.',
 		contacts: 'Kontakt en frivillig', unavailable: 'Kontaktlisten er utilgjengelig. Prøv igjen, eller spør en frivillig i verkstedet.',
 		empty: 'Ingen kontaktpersoner er lagt ut ennå. Spør en frivillig i verkstedet.',
-		retry: 'Prøv igjen', contactLink: (name: string) => `Kontaktlenke for ${name}`,
+		retry: 'Prøv igjen', contactLink: (name: string) => `Kontaktlenke for ${name}`, discordUser: 'Discord-brukernavn',
 		discord: 'Spør på Discord'
 	},
 	adminLabels: {
@@ -351,9 +351,9 @@ export const nb = {
 		directoryTitle: 'Frivilliges kontaktliste | Admin | Ampoteket', directoryHeading: 'Frivilliges kontaktliste',
 		directoryConsent: 'Publiser bare kontaktopplysninger personen har sagt ja til å vise på hjelpesiden. Tidligere versjoner blir liggende i historikken.',
 		newContact: 'Ny kontakt', viewPublic: 'Se hjelpesiden', noDirectoryContacts: 'Ingen kontakter er lagt inn.', published: 'Publisert', unpublished: 'Ikke publisert',
-		editContact: (name: string) => `Rediger ${name}`, editHeading: 'Rediger kontakt', contactName: 'Visningsnavn', contactEmail: 'E-post (valgfritt)', contactPhone: 'Telefon (valgfritt)', contactUrl: 'Kontaktlenke (valgfritt)',
-		displayOrder: 'Rekkefølge (lavest øverst)', publishContact: 'Vis kontakten på den offentlige hjelpesiden', atLeastOneContact: 'En publisert kontakt trenger e-post, telefon eller lenke.',
-		saveContact: 'Lagre kontakt', retrySave: 'Prøv å lagre igjen', contactSaved: 'Kontakten er lagret.', contactInvalid: 'Sjekk feltene. E-post, telefon og lenke må være gyldige, lenken må starte med https://, og rekkefølgen må være et helt tall.',
+		editContact: (name: string) => `Rediger ${name}`, editHeading: 'Rediger kontakt', contactName: 'Visningsnavn', contactEmail: 'E-post (valgfritt)', contactPhone: 'Telefon (valgfritt)', contactUrl: 'Kontaktlenke (valgfritt)', contactResponsibility: 'Ansvar (valgfritt)', contactDiscord: 'Discord-brukernavn (valgfritt)',
+		displayOrder: 'Rekkefølge (lavest øverst)', publishContact: 'Vis kontakten på den offentlige hjelpesiden', atLeastOneContact: 'En publisert kontakt trenger Discord-brukernavn, e-post, telefon eller lenke.',
+		saveContact: 'Lagre kontakt', retrySave: 'Prøv å lagre igjen', contactSaved: 'Kontakten er lagret.', contactInvalid: 'Sjekk feltene. E-post, telefon og lenke må være gyldige, Discord-brukernavnet har bare små bokstaver, tall, _ og ., lenken må starte med https://, og rekkefølgen må være et helt tall.',
 		reviewContact: 'Vis den nye versjonen', reviewedContact: 'Fortsett med mine endringer', contactStale: 'Noen andre endret kontakten mens du redigerte. Endringene dine står fortsatt i skjemaet. Se den nye versjonen før du lagrer.', contactUnknown: 'Vi vet ikke om kontakten ble lagret. Prøv å lagre igjen.'
 	},
 
@@ -587,6 +587,7 @@ export const nb = {
 			title: 'Lodd, bygg og hent delene selv',
 			lede: 'Loddeplasser, oscilloskop, to 3D‑printere og en hylle med deler, midt i Pilestredet 35.',
 			parts: 'Se delekatalogen',
+			soon: 'Nettbutikken åpner snart',
 			place: 'Pilestredet 35 · Oslo',
 			clock: 'Klokka i Oslo',
 			clockTime: (time: string) => `Klokka i Oslo: ${time}`,
@@ -706,7 +707,10 @@ export const nb = {
 		errorHeading: 'Siden kunne ikke lastes',
 		errorBody: 'Feilen ligger hos oss. Handlekurven din ligger lagret i denne nettleseren, så ingenting er tapt.',
 		retry: 'Prøv igjen',
-		help: 'Få hjelp'
+		help: 'Få hjelp',
+		soonTitle: 'Nettbutikken åpner snart | Ampoteket',
+		soonHeading: 'Nettbutikken åpner snart',
+		soonBody: 'Delekatalogen, handlekurven og betalingen er ikke åpnet ennå.'
 	},
 	/** Receipt email, rendered on the server. The one email carries both languages. */
 	receipt: {

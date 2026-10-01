@@ -1,7 +1,7 @@
 # Saved checkout
 
 `/checkout` resumes the active preparing attempt; `/checkout/[id]` retrieves a saved
-checkout. Implemented in `src/routes/[[locale=locale]]/checkout/` and
+checkout. Implemented in `src/routes/[[locale=locale]]/(sales)/checkout/` and
 `src/lib/CheckoutPage.svelte`. [checkout-recovery.md](checkout-recovery.md) owns
 persistence and retries; this page covers presentation and which actions are allowed.
 

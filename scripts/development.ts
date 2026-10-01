@@ -92,7 +92,8 @@ async function handleLine(line: string): Promise<void> {
 				...(process.env.PUBLIC_SUPABASE_URL ? {} : { SUPABASE_API_PROXY: supabaseUrl }),
 				PUBLIC_SUPABASE_PUBLISHABLE_KEY: publishableKey,
 				SUPABASE_SECRET_KEY: secretKey,
-				CHECKOUT_ALLOWED_ORIGIN: process.env.CHECKOUT_ALLOWED_ORIGIN ?? 'https://dev.ampoteket.no'
+				CHECKOUT_ALLOWED_ORIGIN: process.env.CHECKOUT_ALLOWED_ORIGIN ?? 'https://dev.ampoteket.no',
+				SALES_OPEN: process.env.SALES_OPEN ?? 'true'
 			}
 		});
 		clearTimeout(timeout);

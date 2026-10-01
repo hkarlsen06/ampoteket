@@ -12,7 +12,7 @@
 </script>
 
 <svelte:head>
-	<title>{status === 404 ? m.title : m.errorTitle}</title>
+	<title>{page.error?.message === 'SALES_CLOSED' ? m.soonTitle : status === 404 ? m.title : m.errorTitle}</title>
 	<meta name="robots" content="noindex" />
 </svelte:head>
 

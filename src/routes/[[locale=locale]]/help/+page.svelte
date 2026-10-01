@@ -29,7 +29,9 @@
 					<Item.Root variant="row" role="listitem" class="items-start">
 						<Item.Content class="min-w-0 gap-1">
 							<h3 class={itemTitle}>{contact.display_name}</h3>
-							<div class="flex flex-wrap gap-x-6">
+							{#if contact.responsibility}<p class="text-muted-foreground">{contact.responsibility}</p>{/if}
+							<div class="flex flex-wrap items-center gap-x-6">
+								{#if contact.discord}<span class="inline-flex min-w-0 items-center gap-2 wrap-anywhere"><DiscordLogo class="size-4 shrink-0" /><span class="sr-only">{m.discordUser}: </span>{contact.discord}</span>{/if}
 								{#if contact.email}<Button variant="link" class="justify-start text-left wrap-anywhere" href={`mailto:${encodeURIComponent(contact.email).replace('%40', '@')}`}>{contact.email}</Button>{/if}
 								{#if contact.phone}<Button variant="link" href={`tel:${contact.phone.replace(/[ ()-]/g, '')}`}>{contact.phone}</Button>{/if}
 								{#if contact.contact_url}<Button variant="link" class="justify-start text-left" href={contact.contact_url} target="_blank" rel="noreferrer">{m.contactLink(contact.display_name)}<span class="sr-only"> {i18n.m.newTab}</span></Button>{/if}
@@ -41,5 +43,5 @@
 		{/if}
 		<Button variant="outline" class="justify-self-start" href={DISCORD_INVITE} target="_blank" rel="external noopener"><DiscordLogo />{m.discord}<span class="sr-only"> {i18n.m.newTab}</span></Button>
 	</section>
-	<div class={section()}><Button variant="link" href={i18n.href('/cart')}><Icon icon={ArrowLeftIcon} />{i18n.m.checkout.backToCart}</Button></div>
+	{#if data.salesOpen}<div class={section()}><Button variant="link" href={i18n.href('/cart')}><Icon icon={ArrowLeftIcon} />{i18n.m.checkout.backToCart}</Button></div>{/if}
 </div>

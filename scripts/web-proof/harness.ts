@@ -87,7 +87,7 @@ export async function proofEnvironment() {
 			compatibility_date: '2026-09-18', compatibility_flags: ['nodejs_als'], workers_dev: false,
 			assets: { directory: `${directory}/site/cloudflare`, binding: 'ASSETS' },
 			vars: { PUBLIC_SUPABASE_URL: api.origin, PUBLIC_SUPABASE_PUBLISHABLE_KEY: publicKey,
-				SUPABASE_SECRET_KEY: gatewayKey, CHECKOUT_ALLOWED_ORIGIN: origin },
+				SUPABASE_SECRET_KEY: gatewayKey, CHECKOUT_ALLOWED_ORIGIN: origin, SALES_OPEN: 'true' },
 			ratelimits: [
 				{ name: 'CHECKOUT_SESSION_LIMIT', namespace_id: '4732201', simple: { limit: 20, period: 60 } },
 				{ name: 'CHECKOUT_OPERATION_LIMIT', namespace_id: '4732202', simple: { limit: 120, period: 60 } },

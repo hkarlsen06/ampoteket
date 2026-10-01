@@ -152,15 +152,16 @@ while (true) {
 	assert(page.length <= 37);
 	if (page.length === 0) break;
 	for (const contact of page) {
-		assert.deepEqual(Object.keys(contact).sort(), ['contact_url', 'display_name', 'display_order', 'email', 'id', 'phone']);
+		assert.deepEqual(Object.keys(contact).sort(), ['contact_url', 'discord', 'display_name', 'display_order', 'email', 'id', 'phone', 'responsibility']);
 		assert(!contactIds.has(contact.id as string));
 		contactIds.add(contact.id as string);
 	}
 	const last = page.at(-1)!;
 	contactCursor = { p_after_order: last.display_order as string, p_after_id: last.id as string };
-	assert(contactIds.size <= 83);
+	assert(contactIds.size <= 95);
 }
-assert.equal(contactIds.size, 83);
+// 83 fixtures plus the 12 volunteers the migration publishes.
+assert.equal(contactIds.size, 95);
 assert.deepEqual(await read('amp_help_contacts', nonstaff), []);
 assert.deepEqual(await read('amp_help_contacts', disabled), []);
 const contactBody = { id: randomUUID(), display_name: 'HTTP volunteer', email: 'http@example.invalid', is_published: false };

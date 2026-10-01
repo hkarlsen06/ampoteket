@@ -129,6 +129,6 @@ export async function recoverStaffCheckout(session: StaffSession, command: Recov
 	return identifier(result.event_id);
 }
 export async function readAdminHelp(session: StaffSession, fetcher: Fetcher = fetch): Promise<EditableHelpContact[]> {
-	return (await allRows(session, 'amp_help_contacts', 'id,display_name,email,phone,contact_url,display_order,is_published,edit_revision', 'id', {}, fetcher)).map(parseEditableHelpContact)
+	return (await allRows(session, 'amp_help_contacts', 'id,display_name,responsibility,email,phone,contact_url,discord,display_order,is_published,edit_revision', 'id', {}, fetcher)).map(parseEditableHelpContact)
 		.sort((a, b) => a.display_order - b.display_order || a.id.localeCompare(b.id));
 }

@@ -61,7 +61,7 @@
 	const privatePage = $derived(isPrivateRoute(page.route.id, page.url.pathname));
 	// Discord stays off the cart and checkout, where a leaving link costs a purchase in progress.
 	const showDiscord = $derived(!isCurrent('/cart') && !isCurrent('/checkout'));
-	const buyerScanPage = $derived(bare === '/' || bare === '/p' || bare.startsWith('/p/') || bare === '/cart');
+	const buyerScanPage = $derived(data.salesOpen && (bare === '/' || bare === '/p' || bare.startsWith('/p/') || bare === '/cart'));
 
 	/** Always the production URL, never a preview origin; see PROD_ORIGIN. */
 	const canonical = $derived(PROD_ORIGIN + localizeHref(bare, data.locale));
@@ -77,15 +77,17 @@
 		document.documentElement.lang = htmlLang[localeFromPathname(page.url.pathname)];
 	});
 
-	const nav = $derived([
+	// Closed sales (SALES_OPEN) hide every way into the catalog, cart and scanner.
+	const nav = $derived(data.salesOpen ? [
 		{ href: '/p', label: m.header.parts, icon: CpuIcon },
 		{ href: '/cart', label: m.header.cart, icon: ShoppingCartIcon }
-	]);
+	] : []);
 	const adminLink = $derived({ href: '/admin', label: m.header.admin, icon: WrenchIcon });
 	// Admin comes last in the phone menu and first in the desktop header row, so a
 	// session check never moves the catalog link.
-	const menuLinks = $derived(admin.status === 'ready' ? [nav[0], adminLink] : [nav[0]]);
-	const headerLinks = $derived(admin.status === 'ready' ? [adminLink, nav[0]] : [nav[0]]);
+	const catalogLink = $derived(nav.slice(0, 1));
+	const menuLinks = $derived(admin.status === 'ready' ? [...catalogLink, adminLink] : catalogLink);
+	const headerLinks = $derived(admin.status === 'ready' ? [adminLink, ...catalogLink] : catalogLink);
 
 	function isCurrent(href: string) {
 		return bare === href || bare.startsWith(href + '/');
@@ -201,6 +203,7 @@
 					<Tooltip.Content side="bottom" class="md:hidden">{item.label}</Tooltip.Content>
 				</Tooltip.Root>
 			{/each}
+			{#if !data.salesOpen}{@render discordLink()}{:else}
 			<Tooltip.Root>
 				<Tooltip.Trigger>
 					{#snippet child({ props })}
@@ -221,6 +224,7 @@
 				</Tooltip.Trigger>
 				<Tooltip.Content side="bottom" class="md:hidden">{m.header.cart}</Tooltip.Content>
 			</Tooltip.Root>
+			{/if}
 		</Tooltip.Provider>
 		{#if buyerScanPage}<Scanner bind:this={scanner} config={data.adminConfig} />{/if}
 		<!-- Desktop: a floating panel hanging from the header under the button. Phone: a full-width panel under the header bar. -->
@@ -235,6 +239,7 @@
 			<Collapsible.Content forceMount id="site-menu" class="menu absolute top-[calc(50%+var(--header-h)/2+1px)] right-0 z-10 hidden w-64 rounded-lg border bg-card p-2 shadow-card data-[state=open]:block phone:inset-x-0 phone:top-full phone:w-auto phone:rounded-none phone:border-0 phone:px-[calc(var(--gutter)-0.75rem)] phone:pt-2 phone:pb-3 phone:shadow-none no-js:relative no-js:inset-auto no-js:block no-js:w-full no-js:rounded-none no-js:border-0 no-js:px-0 no-js:pt-2 no-js:pb-3 no-js:shadow-none">
 			<Separator class="absolute inset-x-0 top-0 hidden no-js:block" />
 			<!-- Desktop has these links in the header row. -->
+			{#if menuLinks.length}
 			<nav class="site-nav hidden phone:block" aria-label={m.header.menu}>
 				<ul class="m-0 flex list-none flex-col p-0">
 					{#each menuLinks as item (item.href)}
@@ -249,14 +254,15 @@
 					{/each}
 				</ul>
 			</nav>
+			{/if}
 			{#if buyerScanPage}
 				<Button variant="ghost" class="w-full justify-start px-3 phone:hidden no-js:hidden" aria-haspopup="dialog" onclick={openScanner}>
 					<Icon icon={QrCodeIcon} class="size-5" aria-hidden="true" />{m.scanner.open}
 				</Button>
 			{/if}
 			<!-- Divided from whatever is visible above it: the phone links, or the desktop scanner row. -->
-			<nav class={['relative flex items-center', buyerScanPage ? 'mt-2 pt-2 no-js:not-phone:mt-0 no-js:not-phone:pt-0' : 'phone:mt-2 phone:pt-2']} aria-label={m.header.language}>
-				<Separator class={['absolute inset-x-0 top-0', buyerScanPage ? 'no-js:not-phone:hidden' : 'hidden phone:block']} />
+			<nav class={['relative flex items-center', buyerScanPage ? 'mt-2 pt-2 no-js:not-phone:mt-0 no-js:not-phone:pt-0' : menuLinks.length ? 'phone:mt-2 phone:pt-2' : '']} aria-label={m.header.language}>
+				<Separator class={['absolute inset-x-0 top-0', buyerScanPage ? 'no-js:not-phone:hidden' : menuLinks.length ? 'hidden phone:block' : 'hidden']} />
 				<Icon icon={TranslateIcon} class="mx-3 size-5" />
 				<ul class="m-0 flex list-none items-center gap-1 p-0">
 					{#each locales as loc (loc)}

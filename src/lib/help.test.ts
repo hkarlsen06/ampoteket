@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { parseEditableHelpContact, parseHelpContact, readHelpDirectory } from './help';
 const config = { url: 'https://fixture.invalid', publishableKey: 'sb_publishable_fixture' };
-const contact = { id: '11111111-1111-4111-8111-111111111111', display_name: 'Volunteer', email: 'helper@example.invalid', phone: null, contact_url: null, display_order: '0' };
+const contact = { id: '11111111-1111-4111-8111-111111111111', display_name: 'Volunteer', responsibility: null, email: 'helper@example.invalid', phone: null, contact_url: null, discord: null, display_order: '0' };
 
 test('help traversal reads through capped pages and an empty terminal page', async () => {
 	let requests = 0;
@@ -28,4 +28,6 @@ test('directory parses exact revisions, rejects unsafe links and missing publica
 	expect(parseEditableHelpContact({ ...contact, is_published: true, edit_revision: '9007199254740993' }).edit_revision).toBe('9007199254740993');
 	expect(() => parseEditableHelpContact({ ...contact, email: null, is_published: true, edit_revision: '1' })).toThrow();
 	expect(() => parseHelpContact({ ...contact, phone: '---' })).toThrow();
+	expect(parseEditableHelpContact({ ...contact, email: null, discord: '.pizza_lover', is_published: true, edit_revision: '1' }).discord).toBe('.pizza_lover');
+	for (const discord of ['Upper', 'a', 'two..dots', 'with space']) expect(() => parseHelpContact({ ...contact, discord })).toThrow();
 });

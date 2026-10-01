@@ -1,6 +1,6 @@
 # `/p/[code]`: product
 
-Implemented in `src/routes/[[locale=locale]]/p/[code]/+page.{server.ts,svelte}`, with
+Implemented in `src/routes/[[locale=locale]]/(sales)/p/[code]/+page.{server.ts,svelte}`, with
 the purchase form in `src/lib/ProductPurchase.svelte`. Also at `/en/p/[code]`; printed
 labels target the unprefixed route. Basket locking follows
 [checkout-recovery.md](checkout-recovery.md).

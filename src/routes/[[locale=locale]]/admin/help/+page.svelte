@@ -15,7 +15,7 @@
 	import { getAdminContext } from '$lib/admin-context.svelte';
 	import { readAdminHelp, staffRequest } from '$lib/admin-api';
 	import { identifier, object } from '$lib/api';
-	import { parseEditableHelpContact, parseHelpContact, type EditableHelpContact } from '$lib/help';
+	import { parseEditableHelpContact, parseHelpContact, reachable, type EditableHelpContact } from '$lib/help';
 	const fieldId = $props.id();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.admin);
 	let failed = $state(false); let contacts = $state<EditableHelpContact[] | null>(null); let busy = $state(false);
@@ -24,19 +24,20 @@
 	let reviewId = $state<string | null>(null);
 	// Where the editor opens: under the New contact action, or directly under the row being edited.
 	let editTarget = $state<string>('new');
-	let name = $state(''); let email = $state(''); let phone = $state(''); let url = $state(''); let order = $state('0'); let published = $state(false);
+	let name = $state(''); let responsibility = $state(''); let discord = $state(''); let email = $state(''); let phone = $state(''); let url = $state(''); let order = $state('0'); let published = $state(false);
 	let outcome = $state<'idle' | 'failed' | 'saved' | 'stale' | 'invalid' | 'unknown'>('idle');
 	let storageReady = $state(false); let wrongIdentity = $state(false);
-	type ContactWrite = { id: string; display_name: string; email: string | null; phone: string | null; contact_url: string | null; display_order: number; is_published: boolean };
+	type ContactWrite = { id: string; display_name: string; responsibility: string | null; email: string | null; phone: string | null; contact_url: string | null; discord: string | null; display_order: number; is_published: boolean };
 	type Pending = { userId: string; payload: ContactWrite; revision: string | null };
 	let pending = $state<Pending | null>(null); const key = 'ampoteket:admin-help-edit:v1';
 	function restore(raw: string): Pending {
 		const command = object(JSON.parse(raw)); const row = object(command.payload);
-		const parsed = parseHelpContact({ ...row, display_order: String(row.display_order) });
+		// Drafts saved before the Discord migration carry neither field.
+		const parsed = parseHelpContact({ responsibility: null, discord: null, ...row, display_order: String(row.display_order) });
 		if (typeof row.is_published !== 'boolean' || (command.revision !== null && (typeof command.revision !== 'string' || !/^[1-9]\d*$/.test(command.revision)))) throw new Error();
 		return { userId: identifier(command.userId), payload: { ...parsed, is_published: row.is_published }, revision: command.revision as string | null };
 	}
-	function fields(row: ContactWrite) { name = row.display_name; email = row.email ?? ''; phone = row.phone ?? ''; url = row.contact_url ?? ''; order = String(row.display_order); published = row.is_published; }
+	function fields(row: ContactWrite) { name = row.display_name; responsibility = row.responsibility ?? ''; discord = row.discord ?? ''; email = row.email ?? ''; phone = row.phone ?? ''; url = row.contact_url ?? ''; order = String(row.display_order); published = row.is_published; }
 	onMount(() => {
 		try {
 			const raw = sessionStorage.getItem(key); if (raw) pending = restore(raw);
@@ -65,7 +66,7 @@
 	function edit(row: EditableHelpContact | null) {
 		if (failed || busy || pending) return; selected = row; editing = true; editTarget = row?.id ?? 'new'; outcome = 'idle';
 		current = null; reviewFailed = false;
-		fields(row ?? { id: '', display_name: '', email: null, phone: null, contact_url: null, display_order: 0, is_published: false });
+		fields(row ?? { id: '', display_name: '', responsibility: null, email: null, phone: null, contact_url: null, discord: null, display_order: 0, is_published: false });
 	}
 	async function review() {
 		if (busy || !reviewId || admin.status !== 'ready') return;
@@ -84,7 +85,7 @@
 	}
 	const rowEditor = $derived(editing && !wrongIdentity && contacts?.some(contact => contact.id === editTarget) ? editTarget : null);
 	function sameFields(row: EditableHelpContact, payload: ContactWrite) {
-		return row.id === payload.id && row.display_name === payload.display_name && row.email === payload.email && row.phone === payload.phone
+		return row.id === payload.id && row.display_name === payload.display_name && row.responsibility === payload.responsibility && row.discord === payload.discord && row.email === payload.email && row.phone === payload.phone
 			&& row.contact_url === payload.contact_url && row.display_order === payload.display_order && row.is_published === payload.is_published;
 	}
 	async function save(event: SubmitEvent) {
@@ -95,8 +96,8 @@
 			if (!pending) {
 				let payload: ContactWrite;
 				try {
-					const contact = parseHelpContact({ id: selected?.id ?? crypto.randomUUID(), display_name: name.trim(), email: email.trim() || null, phone: phone.trim() || null, contact_url: url.trim() || null, display_order: order });
-					if (published && !contact.email && !contact.phone && !contact.contact_url) throw new Error();
+					const contact = parseHelpContact({ id: selected?.id ?? crypto.randomUUID(), display_name: name.trim(), responsibility: responsibility.trim() || null, discord: discord.trim() || null, email: email.trim() || null, phone: phone.trim() || null, contact_url: url.trim() || null, display_order: order });
+					if (published && !reachable(contact)) throw new Error();
 					payload = { ...contact, is_published: published };
 				} catch { outcome = 'invalid'; return; }
 				const command: Pending = { userId: session.userId, payload, revision: selected?.edit_revision ?? null };
@@ -106,7 +107,7 @@
 			const saved = restore(sessionStorage.getItem(key) ?? '');
 			if (saved.userId !== session.userId || saved.payload.id !== pending.payload.id) throw new Error();
 			// Resolve a lost acknowledgement before repeating an insert or guarded edit.
-			const found = await staffRequest(session, 'amp_help_contacts', { select: 'id,display_name,email,phone,contact_url,display_order,is_published,edit_revision', id: `eq.${saved.payload.id}`, limit: '2' });
+			const found = await staffRequest(session, 'amp_help_contacts', { select: 'id,display_name,responsibility,email,phone,contact_url,discord,display_order,is_published,edit_revision', id: `eq.${saved.payload.id}`, limit: '2' });
 			if (!Array.isArray(found) || found.length > 1) throw new Error();
 			let acknowledged: EditableHelpContact | null = found.length ? parseEditableHelpContact(found[0]) : null;
 			if (!acknowledged || !sameFields(acknowledged, saved.payload)) {
@@ -115,7 +116,7 @@
 					return;
 				}
 				const result = await staffRequest(session, 'amp_help_contacts', saved.revision ? { id: `eq.${saved.payload.id}`, edit_revision: `eq.${saved.revision}` } : {},
-					saved.revision ? { display_name: saved.payload.display_name, email: saved.payload.email, phone: saved.payload.phone, contact_url: saved.payload.contact_url, display_order: saved.payload.display_order, is_published: saved.payload.is_published, edit_revision: saved.revision } : saved.payload,
+					saved.revision ? { display_name: saved.payload.display_name, responsibility: saved.payload.responsibility, discord: saved.payload.discord, email: saved.payload.email, phone: saved.payload.phone, contact_url: saved.payload.contact_url, display_order: saved.payload.display_order, is_published: saved.payload.is_published, edit_revision: saved.revision } : saved.payload,
 					saved.revision ? 'PATCH' : 'POST');
 				if (!Array.isArray(result) || result.length > 1) throw new Error();
 				if (!result.length) {
@@ -157,6 +158,8 @@
 			{#if current}
 				<dl class="grid gap-3 md:grid-cols-2 [&_dt]:text-sm [&_dt]:text-muted-foreground [&_dd]:wrap-anywhere">
 					<div><dt>{m.contactName}</dt><dd>{current.display_name}</dd></div>
+					<div><dt>{m.contactResponsibility}</dt><dd>{current.responsibility ?? '–'}</dd></div>
+					<div><dt>{m.contactDiscord}</dt><dd>{current.discord ?? '–'}</dd></div>
 					<div><dt>{m.contactEmail}</dt><dd>{current.email ?? '–'}</dd></div>
 					<div><dt>{m.contactPhone}</dt><dd>{current.phone ?? '–'}</dd></div>
 					<div><dt>{m.contactUrl}</dt><dd>{current.contact_url ?? '–'}</dd></div>
@@ -170,6 +173,10 @@
 			<Field.Group layout="row">
 				<Field.Field width="grow"><Field.Label for={`${fieldId}-1`}>{m.contactName}</Field.Label><Input id={`${fieldId}-1`} autocapitalize="words" required maxlength={120} bind:value={name} disabled={busy || Boolean(pending)} /></Field.Field>
 				<Field.Field width="short"><Field.Label for={`${fieldId}-2`}>{m.displayOrder}</Field.Label><Input id={`${fieldId}-2`} type="text" inputmode="numeric" pattern="[0-9]+" required bind:value={order} disabled={busy || Boolean(pending)} /></Field.Field>
+			</Field.Group>
+			<Field.Group layout="row">
+				<Field.Field width="grow"><Field.Label for={`${fieldId}-6`}>{m.contactResponsibility}</Field.Label><Input id={`${fieldId}-6`} maxlength={80} bind:value={responsibility} disabled={busy || Boolean(pending)} /></Field.Field>
+				<Field.Field width="medium"><Field.Label for={`${fieldId}-7`}>{m.contactDiscord}</Field.Label><Input id={`${fieldId}-7`} autocapitalize="none" autocomplete="off" spellcheck="false" maxlength={32} bind:value={discord} disabled={busy || Boolean(pending)} /></Field.Field>
 			</Field.Group>
 			<Field.Group layout="row">
 				<Field.Field width="grow"><Field.Label for={`${fieldId}-3`}>{m.contactEmail}</Field.Label><Input id={`${fieldId}-3`} type="email" maxlength={254} bind:value={email} disabled={busy || Boolean(pending)} /></Field.Field>
