@@ -86,13 +86,14 @@ the selected products. It is a regression check, not a hosted latency guarantee.
   locales, switched 2026-10-01 13:06 UTC), the repo email templates, and Data API
   schema `public` only. The Worker serves `ampoteket.no` and `www.ampoteket.no` (308
   to the apex, Google Trust Services certificate) as version
-  `2499119e-7eee-423b-be6d-fb24a69f28c9` (commit `551798a`, `--env production`,
-  deployed 2026-10-01 13:05 UTC, previous `172d6e70-68f1-4593-ac66-818650a7f5ff` on
-  workers.dev, now off) with `SALES_OPEN=false`: `/`, `/en`, `/help`, `/privacy` and
+  `fe231e66-a89b-4457-b68f-63ac7ce4d490` (commit `634513d`, `--env production`, built
+  from a clean worktree, deployed 2026-10-01 13:24 UTC, previous
+  `2499119e-7eee-423b-be6d-fb24a69f28c9` from `551798a`; the workers.dev rehearsal
+  address is off) with `SALES_OPEN=false`: `/`, `/en`, `/help`, `/privacy` and
   `/admin` answer 200, `/p`, `/cart`, `/checkout` and `/p/<code>` answer 503 "shop
   opens soon", and `POST /api/checkouts/session|prepare` answers
-  `503 CHECKOUT_UNAVAILABLE`. `/api/discord` failed 2 of 5 tries (Discord throttling
-  Cloudflare egress), shown as unavailable with a retry. The first admin (`hjalmar@hkarlsen06.dev`, Hjalmar Karlsen) was
+  `503 CHECKOUT_UNAVAILABLE`. `/api/discord` answered 30 of 30 calls over a minute after
+  `634513d` (before it, 2 of 5 failed while Discord throttled Cloudflare egress). The first admin (`hjalmar@hkarlsen06.dev`, Hjalmar Karlsen) was
   granted with `app.grant_staff_access` by Claude Code at the owner's request. A test
   admin, "Hjalmar 2", whose Auth account had already been deleted and which no
   record referenced, was deleted by Claude Code at the owner's request on 2026-10-01,
