@@ -74,6 +74,10 @@ Rules for schema work:
 - After amending the migration, re-run `./scripts/test-database.sh` and update the
   SHA-256 and counts in `VALIDATION.md`.
 
+Deploy production only with `bun run deploy:production`, which verifies the live
+vars and `/help` and rolls back on failure; never a bare `wrangler deploy` or
+`wrangler versions upload` to the `ampoteket` Worker ([runbook](docs/runbook-deploy.md#publish)).
+
 Web frontend: SvelteKit 2 / Svelte 5 (runes) / TypeScript, Bun,
 `adapter-cloudflare`, shadcn-svelte (Nova) and Tailwind CSS 4. Import primitives
 from `$lib/components/ui/<component>`; use `src/app.css` tokens and `$lib/ui`

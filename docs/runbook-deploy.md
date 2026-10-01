@@ -205,21 +205,35 @@ staff archive gets no copies.
 
 ### Publish
 
+Deploy only with:
+
 ```sh
-bun run build
-bunx --no-install wrangler deploy --env production --dry-run
-bunx --no-install wrangler secret put SUPABASE_SECRET_KEY --env production
-bunx --no-install wrangler deployments list --env production
-bunx --no-install wrangler deploy --env production
-bunx --no-install wrangler deployments list --env production
+bun run deploy:production
 ```
 
-Review the dry run's bindings and assets. Enter the secret at the prompt, never
-as an argument; if Wrangler offers to create the Worker, confirm account and name. Record the previous deployment ID before publishing and the new
-one after. Every deploy must carry the full vars, routes and rate-limit
-bindings from `env.production`; do not rely on dashboard-only or command-line values. The custom domain needs the
-zone in the same Cloudflare account and no conflicting DNS record; confirm the
-certificate before opening. `workers_dev` is off.
+It refuses a dirty tree, records the live version, builds, runs
+`wrangler deploy --env production` with the commit as message, then checks that
+the new version carries every `env.production` var with its reviewed value, the
+rate limits and the `SUPABASE_SECRET_KEY`/`RESEND_API_KEY` secrets, and that
+`/help` reads the contact list. Any failure rolls back to the recorded version
+and exits non-zero. Never deploy or `wrangler versions upload` to `ampoteket` by
+hand or from another config: on 2026-10-01 a version uploaded without the
+production vars made the help page and staff login unavailable while every page
+still loaded. The top-level `keep_vars` only softens a mistaken `wrangler deploy`.
+
+First deploy or secret rotation: enter secrets at the prompt, never as an
+argument, then deploy:
+
+```sh
+bunx --no-install wrangler secret put SUPABASE_SECRET_KEY --env production
+bunx --no-install wrangler deploy --env production --dry-run
+```
+
+Review the dry run's bindings and assets. If Wrangler offers to create the
+Worker, confirm account and name. Do not rely on dashboard-only or command-line
+values. The custom domain needs the zone in the same Cloudflare account and no
+conflicting DNS record; confirm the certificate before opening. `workers_dev` is
+off.
 
 ## 7. Release verification and recovery
 

@@ -8,6 +8,7 @@
 		"development": "bun scripts/development.ts",
 		"build": "vite build",
 		"preview": "bun run build && wrangler dev --port 5174 --ip 0.0.0.0",
+		"deploy:production": "bun scripts/deploy-production.ts",
 		"prepare": "svelte-kit sync && wrangler types",
 		"i18n": "bun run scripts/i18n-editor.ts",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",

@@ -11,6 +11,10 @@
 		"directory": ".svelte-kit/cloudflare"
 	},
 	"workers_dev": false,
+	// A deploy that names the live Worker without --env production keeps its vars
+	// instead of wiping them. `wrangler versions upload` ignores this; see
+	// docs/runbook-deploy.md §6 for the only supported deploy command.
+	"keep_vars": true,
 	"preview_urls": true,
 	"ratelimits": [
 		{ "name": "CHECKOUT_SESSION_LIMIT", "namespace_id": "4732201", "simple": { "limit": 20, "period": 60 } },
