@@ -28,12 +28,9 @@ value; a saved product's **Statistics** tab shows its own figures (tab changes k
 editor's unsaved input). Rules, with aggregation in
 [`amp_admin_statistics`](api-contract.md#staff-statistics):
 
-- The period is today plus the 29 previous dates in `Europe/Oslo`.
-- Counts are **registered purchases**, never verified payments. Prepared-only checkouts
-  and later corrections are excluded; value uses the original checkout's prices;
-  inactive products are included. Public pages show no sales history.
-- Never sum quantities across unlike units. Money and quantities stay strings; only
-  plot coordinates are JS numbers.
+- Period, counting and valuation follow the linked contract; the figures are
+  registered purchases. Public pages show no sales history.
+- Only plot coordinates are JS numbers; quantities and money stay strings.
 - Graphs include zero days and a keyboard-accessible data table, with no animation.
 
 ## Products

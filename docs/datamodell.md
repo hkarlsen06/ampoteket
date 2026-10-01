@@ -1,13 +1,13 @@
 # Ampoteket database design
 
-The database contract: model, invariants, precision, concurrency, permissions and RPCs. The migrations in `supabase/migrations/` define exact names, types, constraints and function bodies; where this document disagrees with them, the migration wins. Appendix A is checked against the applied schema by `scripts/check-schema-docs.py`.
+The database contract: model, invariants, precision, concurrency, permissions and RPCs. The migrations in `supabase/migrations/` are the final word on names, types, constraints and function bodies: where any document disagrees with them, the migration wins and the document has a bug. Appendix A is checked against the applied schema by `scripts/check-schema-docs.py`.
 
 ## 1. Domain decisions
 
 - A product is a set of interchangeable components, not a supplier item. Staff curate product identity; equal names or values are not a safe uniqueness rule. Supplier SKU and purchase URL belong to the purchase line.
 - A product has at most one current bin; a bin can hold many products. A bin is a drawer inside a cabinet; a cabinet stands at one position on the wall. A product without a bin can still be sold and may carry a public `location_note`.
 - One operational staff role, individual Supabase Auth identities. Customers have no account and may give one optional, unverified contact string.
-- Payment is trust-based. There are no payment-verification, reconciliation, refund or return entities.
+- There are no payment-verification, reconciliation, refund or return entities: payment is trust-based ([website-guide.md](website-guide.md#4-guest-checkout)).
 - Prices and costs are historical NOK. A purchase unit cost uses the product's sale unit. Order-level extra costs are stored separately, never folded into unit cost.
 - Purchase orders record orders already placed elsewhere; they reserve nothing and add no stock. Receipts can be partial or unplanned (donations are unplanned receipts). Outstanding quantity can be cancelled with a reason. A surplus delivery is a normal adjustment with a note.
 - Negative recorded stock is allowed.
@@ -76,7 +76,7 @@ checkout total = sum(line totals)
 
 Round each line once (ties away from zero), then add. A checkout has one line per product. Unit prices may be below one øre.
 
-The database computes every amount. Send quantities and money as decimal strings, keep them and bigint IDs and revisions as strings in clients, and decode every response with `requestApiJson` ([api-contract.md](api-contract.md)).
+The database computes every amount. Clients carry quantities, money, bigint IDs and revisions as strings ([api-contract.md](api-contract.md#exact-json-values)).
 
 ## 5. Stock, revisions and immutable history
 
@@ -256,7 +256,7 @@ The views `amp_help_contacts`, `amp_products`, `amp_bins`, `amp_cabinets`, `amp_
 
 `app.inventory` (quantity, revision, last count), `app.purchase_line_progress`, `app.latest_purchase` and `app.checkout_totals` derive the stored-nowhere values from §2. Staff see matching `public.amp_*` views. Token digests and command requests are never exposed. The public catalogue never shows the ledger or incoming orders.
 
-Never add quantities across units. Staff statistics are registered-sale figures by Oslo date of registration, never verified payment. Add indexes or caching only after measuring query plans.
+Never add quantities across units. Staff statistics are defined in [api-contract.md](api-contract.md#staff-statistics). Add indexes or caching only after measuring query plans.
 
 ## 12. Testing
 

@@ -41,13 +41,15 @@
 	import ProductAttributes from '$lib/ProductAttributes.svelte';
 	import LabelPrintButton from '$lib/LabelPrintButton.svelte';
 	import ProductSpecificationRecovery from '$lib/ProductSpecificationRecovery.svelte';
-	import { ProductSpecificationsError, type ProductAttributeDraft } from '$lib/admin-products';
+	import { parseAttribute, ProductSpecificationsError, type ProductAttributeDraft } from '$lib/admin-products';
 	import ShelfPlacementPicker from '$lib/ShelfPlacementPicker.svelte';
+	import { draftFields, readDraft, writeDraft } from '$lib/drafts';
 	import { clearProductCommand, definitiveProductFailure, executeProductCommand, sameProduct, generateCategoryProductCode, generateProductCode, isProductCodeCollision, parseProductWrite, persistProductCommand, ProductFieldError, productCategoryOptions, readProduct, readProductCommand, readProductReferences, readProductStock, StaleProductError, type AdminProduct, type ProductCommand, type ProductFamily, type ProductReferences, type ProductStock, type ProductWrite } from '$lib/admin-products';
 	let { id }: { id: string } = $props();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.adminProducts);
 	let product = $state<AdminProduct | null>(null); let references = $state<ProductReferences | null>(null); let stock = $state<ProductStock | null>(null);
-	let draft = $state<ProductWrite>({ id: '', code: '', name_nb: '', name_en: '', description: null, category_id: null, bin_id: null, location_note: null, unit_code: 'pcs', stock_step: '1', sale_step: '1', sale_unit_price_nok: '0', minimum_stock: '0', datasheet_url: null, purchase_url: null, is_active: false });
+	const blank: ProductWrite = { id: '', code: '', name_nb: '', name_en: '', description: null, category_id: null, bin_id: null, location_note: null, unit_code: 'pcs', stock_step: '1', sale_step: '1', sale_unit_price_nok: '0', minimum_stock: '0', datasheet_url: null, purchase_url: null, is_active: false };
+	let draft = $state<ProductWrite>({ ...blank });
 	let staged = $state<ProductAttributeDraft[]>([]);
 	let attributesEditor = $state<{ prepare: () => boolean; commit: () => Promise<boolean>; suggest: (code: string, value: string) => void }>();
 	let pending = $state<ProductCommand | null>(null); let storageReady = $state(false);
@@ -153,12 +155,35 @@
 			if (!alive || session.userId !== admin.session?.user.id) return;
 			references = refs; product = item;
 			if (pending && ownPending && !wrongIdentity) { draft = { ...pending.payload }; staged = pending.attributes ?? []; }
-			else if (item) draft = { ...item };
+			else {
+				if (item) draft = { ...item };
+				// Unsaved input returns only onto the revision it was typed against.
+				const saved = readDraft(session.userId, `product:${id}`) as { revision?: unknown; fields?: unknown; staged?: unknown } | null;
+				if (saved && saved.revision === (item?.metadata_revision ?? null)) {
+					draft = { ...draft, ...draftFields(blank, saved.fields) };
+					if (!item && Array.isArray(saved.staged)) try {
+						staged = saved.staged.map(row => { const { product_id, ...value } = parseAttribute({ ...row, product_id: blankId }); return value; });
+					} catch { /* A malformed row leaves the specifications unrestored. */ }
+				}
+			}
+			draftLoaded = true;
 			detailsOpen = Boolean(draft.description || draft.datasheet_url || draft.purchase_url);
 			if (product) void refreshStock();
 		} catch (error) { if (alive) loadFailed = true; await admin.permissionFailure(error); }
 		finally { if (alive) loading = false; }
 	}
+	// Unsaved input outlives a reload, Back or sign-in round trip (drafts.ts); a
+	// pending command owns the form until it resolves, and a draft is left alone meanwhile.
+	let draftLoaded = $state(false);
+	const blankId = '00000000-0000-4000-8000-000000000000';
+	const writeKeys = Object.keys(blank) as (keyof ProductWrite)[];
+	const writeFields = (value: ProductWrite) => JSON.stringify(writeKeys.map(key => value[key]));
+	$effect(() => {
+		if (!draftLoaded || pending) return;
+		const dirty = (writeFields(draft) !== writeFields(product ?? blank) || (!product && staged.length > 0));
+		writeDraft(admin.session?.user.id, `product:${product?.id ?? id}`, dirty
+			? { revision: product?.metadata_revision ?? null, fields: $state.snapshot(draft), ...(product ? {} : { staged: $state.snapshot(staged) }) } : null);
+	});
 	async function review() {
 		if (busy || !product) return; busy = true; reviewFailed = false;
 		try { current = await readProduct(admin.credentials(), product.id); if (!current) outcome = 'missing'; }
@@ -237,6 +262,7 @@
 		}
 		if (!result || !pending) throw new Error('Missing product acknowledgement');
 		clearProductCommand(sessionStorage, pending);
+		if (pending.revision === null) for (const name of ['product:new', 'product:new:specifications']) writeDraft(session.userId, name, null);
 		if (!alive || session.userId !== admin.session?.user.id) return;
 		pending = null; product = result; draft = { ...result }; staged = [];
 	}
@@ -394,7 +420,7 @@
 						<ProductSpecificationRecovery command={pending} bind:definitions={references.definitions} family={family} disabled={busy}
 							onreviewed={(command) => { pending = command; draft = { ...command.payload }; staged = command.attributes ?? []; void save(); }} />
 					{:else}
-						{#key attributeProductId}<ProductAttributes bind:this={attributesEditor} productId={attributeProductId} bind:staged bind:definitions={references.definitions} family={family} disabled={blocked} />{/key}
+						{#key attributeProductId}<ProductAttributes bind:this={attributesEditor} productId={attributeProductId} drafts={!(ownPending && pending?.revision === null)} bind:staged bind:definitions={references.definitions} family={family} disabled={blocked} />{/key}
 					{/if}
 					<section class={section({ spacing: 'divided' })} aria-labelledby="product-placement-section-title">
 						<Separator />

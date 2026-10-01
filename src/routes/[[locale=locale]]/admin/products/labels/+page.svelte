@@ -17,6 +17,7 @@
 	import { proportionalLabelSettings } from '$lib/labels/settings';
 	import type { PreparedLabels } from '$lib/labels/render';
 	import type { Fetcher } from '$lib/api';
+	import { readDraft, writeDraft } from '$lib/drafts';
 	const fieldId = $props.id();
 	const i18n = getI18n(), admin = getAdminContext();
 	const m = $derived(i18n.m.adminLabels);
@@ -29,6 +30,13 @@
 			const value = normalizeDecimal(widthText, i18n.locale), number = Number(value);
 			return /^\d+(?:\.\d)?$/.test(value) && number >= 32 && number <= 81 ? number : undefined;
 		} catch { return undefined; }
+	});
+	// The chosen drawers and width outlive a reload in this tab; nothing saves them,
+	// so they never outlive it. load() drops drawers removed since.
+	let selectionLoaded = $state(false);
+	$effect(() => {
+		if (!selectionLoaded) return;
+		writeDraft(admin.session?.user.id, 'labels', selected.length || includeUnplaced || widthText !== '45' ? { selected: $state.snapshot(selected), includeUnplaced, widthText } : null, 'session');
 	});
 	const dimensions = $derived(proportionalLabelSettings(width ?? NaN));
 	let prepared = $state<PreparedLabels | null>(null), downloadUrl = $state('');
@@ -46,7 +54,13 @@
 		if (downloadUrl) URL.revokeObjectURL(downloadUrl);
 		downloadUrl = ''; prepared = null; previewLines = {};
 	}
-	onMount(() => { void load(); return () => { alive = false; controller?.abort(); clearPreview(); }; });
+	onMount(() => {
+		const saved = readDraft(admin.session?.user.id, 'labels', 'session') as Record<string, unknown> | null;
+		if (Array.isArray(saved?.selected) && saved.selected.every(id => typeof id === 'string') && typeof saved.includeUnplaced === 'boolean' && typeof saved.widthText === 'string') {
+			selected = saved.selected; includeUnplaced = saved.includeUnplaced; widthText = saved.widthText;
+		}
+		selectionLoaded = true;
+		void load(); return () => { alive = false; controller?.abort(); clearPreview(); }; });
 	let revalidateQueued = $state(false);
 	function refresh() { revalidateQueued = document.visibilityState === 'visible'; }
 	$effect(() => {

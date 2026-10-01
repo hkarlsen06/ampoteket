@@ -8,6 +8,7 @@
 	import { formatDecimal, unitLabel } from '$lib/format';
 	import { clearOrderCommand, orderCommandPath, orderRejection, orderStorageEvent, readOrderCommand, readOrderDetail, runOrderCommand, saveOrderCommand, updateOrderStorage, type OrderCommand, type OrderDetail, type OrderLine } from '$lib/admin-orders';
 	import { productCodeFromQr } from '$lib/scanner/payload';
+	import { readDraft, writeDraft } from '$lib/drafts';
 	import type { CameraSession, CameraState } from '$lib/scanner/session';
 	import Icon from '$lib/Icon.svelte';
 	import XIcon from 'phosphor-svelte/lib/XIcon';
@@ -85,6 +86,14 @@
 	onMount(() => {
 		mounted = true;
 		syncPending();
+		// Ticks and amounts outlive closing the sheet, a reload or a sign-in round
+		// trip (drafts.ts); lines received in full meanwhile are dropped on load.
+		const saved = pendingHere ? null : readDraft(admin.session?.user.id, `receipt:${orderId}`) as { quantities?: unknown; manual?: unknown } | null;
+		const texts = (value: unknown) => Array.isArray(value) && value.every(item => typeof item === 'string');
+		if (saved?.quantities && typeof saved.quantities === 'object' && texts(Object.values(saved.quantities)) && texts(saved.manual)) {
+			quantities = saved.quantities as Record<string, string>; manual = new Set(saved.manual as string[]); restoredDraft = true;
+		}
+		draftLoaded = true;
 		void updateOrderStorage((storage) => {
 			readOrderCommand(storage);
 			const key = 'ampoteket:order-storage-check';
@@ -113,12 +122,24 @@
 			const result = await readOrderDetail(session, orderId);
 			if (mounted && version === generation && admin.session?.user.id === session.userId) {
 				detail = result;
+				if (restoredDraft) {
+					restoredDraft = false;
+					const open = new Set(result.lines.filter(line => compareDecimals(line.outstandingQuantity, '0') > 0).map(line => line.id));
+					quantities = Object.fromEntries(Object.entries(quantities).filter(([line]) => open.has(line)));
+				}
 				// Keep a selected amount visible when another receipt changes what remains.
 				manual = new Set([...manual, ...result.lines.filter(line => quantities[line.id]?.trim() && quantities[line.id] !== line.outstandingQuantity).map(line => line.id)]);
 			}
 		} catch (error) { if (mounted && version === generation) failed = true; await admin.permissionFailure(error); }
 		finally { if (mounted && version === generation) loading = false; }
 	}
+	let draftLoaded = $state(false), restoredDraft = false;
+	$effect(() => {
+		// Another pending command leaves this draft alone; this sheet is inert meanwhile.
+		if (!draftLoaded || command) return;
+		const dirty = Object.values(quantities).some(value => value.trim());
+		writeDraft(admin.session?.user.id, `receipt:${orderId}`, dirty ? { quantities: $state.snapshot(quantities), manual: [...manual] } : null);
+	});
 	let revalidateQueued = $state(false);
 	function revalidate() { revalidateQueued = document.visibilityState === 'visible'; }
 	$effect(() => {
@@ -177,7 +198,8 @@
 			await admin.permissionFailure(error);
 		} finally { if (mounted) { busy = false; syncPending(); } }
 		if (recorded && mounted && admin.session?.user.id === candidate.userId) {
-			command = null;
+			// onclose() destroys this sheet before an effect could drop the draft.
+			command = null; quantities = {}; writeDraft(candidate.userId, `receipt:${orderId}`, null);
 			onclose();
 			try { await onrecorded(); } catch (error) { await admin.permissionFailure(error); }
 		}

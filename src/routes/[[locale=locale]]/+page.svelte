@@ -125,7 +125,7 @@
 	// Oslo wall time for the hero's status strip; a placeholder of the same width until mounted.
 	let clock = $state('--:--:--');
 	// OsloMet's Pilestredet building hours (student.oslomet.no/apningstider): Mon–Fri
-	// 06–22, weekends 08–22, card and PIN after 16. ponytail: public holidays follow the
+	// 06–22, weekends 08–22, card and PIN after 16. Known limit: public holidays follow the
 	// weekend hours and are not modelled, so a weekday holiday reads open from 06 not 08.
 	let open = $state<boolean>();
 
@@ -334,8 +334,6 @@
 	     trigger takes over when this mark, placed where the fade ends, passes the header. -->
 	<div bind:this={walkMark} class="pointer-events-none absolute top-[calc(27svh+var(--header-h))] hidden size-px walk-motion:block" aria-hidden="true"></div>
 	<div class="relative grid overflow-hidden walk-motion:sticky walk-motion:top-[var(--header-h)] walk-motion:h-[calc(100svh-var(--header-h))]">
-		<!-- Film grain on the night surface only; the photograph above keeps clean blacks. -->
-		<div class="pointer-events-none absolute inset-0 bg-[url(/textures/grain.svg)] opacity-[.07]" aria-hidden="true"></div>
 		<!-- Phones: the window above the copy, fading into the night. From 64rem: the
 		     photograph fills the right of the stage, feathered on three sides, and is
 		     lowered 12% so the lit window is centred on the copy rather than riding high.
@@ -353,7 +351,7 @@
 			     or lede into the photograph; smaller on short screens, where the pinned
 			     stage cannot grow and the copy would reach the status strip. -->
 			<div bind:this={heroCopy} class="@container grid min-w-0 grid-cols-[minmax(0,1fr)] justify-items-start gap-5 md:gap-6">
-				<h1 id="hero-title" class="w-full min-w-0 max-w-[16ch] text-[clamp(2.25rem,12.5cqi,5.25rem)] text-night-foreground [@media(max-height:40rem)]:text-[clamp(1.75rem,10cqi,3rem)] [text-shadow:0_0_2rem_var(--night)]">{m.hero.title}</h1>
+				<h1 id="hero-title" class="w-full min-w-0 max-w-[16ch] text-[clamp(2.25rem,12.5cqi,5.25rem)] text-night-foreground [@media(max-height:40rem)]:text-[clamp(1.75rem,10cqi,3rem)]">{m.hero.title}</h1>
 				<p class="w-full min-w-0 max-w-[var(--measure-lede)] text-[clamp(1.125rem,1rem+0.6vw,1.375rem)] text-night-muted">{m.hero.lede}</p>
 				<div class={[formActions, 'min-w-0 max-w-full phone:items-stretch walk-motion:walk-hide']}>
 					<Button variant="night" class="min-w-42 px-6 phone:min-w-0 phone:flex-[1_1_10rem] phone:px-4 [-webkit-touch-callout:none]" href={i18n.href('/p')} onpointerdown={startHold} onpointerup={cancelHold} onpointerleave={cancelHold} onpointercancel={cancelHold} oncontextmenu={(event) => event.preventDefault()} onclick={(event) => { if (held) { event.preventDefault(); held = false; } }}><Icon icon={CpuIcon} />{m.hero.parts}</Button>
@@ -381,8 +379,8 @@
 		     hours it is coloured by. -->
 		<div class="absolute inset-x-0 top-0 z-30">
 			<div class={pageContainer({ class: 'flex flex-wrap items-center justify-between gap-x-4 gap-y-1 pt-4 text-sm text-night-muted md:pt-8' })}>
-				<span class="inline-flex min-w-0 items-center gap-2.5" aria-hidden="true"><span class="size-1.5 rounded-full bg-night-accent shadow-[0_0_0.5rem_var(--night-accent)]"></span>{m.hero.place}</span>
-				<a href={m.hero.hoursSource} target="_blank" rel="external noopener" class="inline-flex min-h-11 shrink-0 items-center gap-2.5 rounded-sm text-night-muted no-underline hover:text-night-foreground"><span class="grid">{#each [m.hero.open, m.hero.closed] as status (status)}<span class="invisible col-start-1 row-start-1" aria-hidden="true">{status}</span>{/each}<span class="col-start-1 row-start-1">{open === undefined ? '' : open ? m.hero.open : m.hero.closed}</span></span><Led value={clock} label={m.hero.clockTime(clock)} red={!open} size="small" class="border-night-border text-sm whitespace-nowrap" /><span class="sr-only">{m.hero.hours} {m.about.newTab}</span></a>
+				<span class="inline-flex min-w-0 items-center gap-2.5" aria-hidden="true"><span class="size-1.5 rounded-full bg-night-accent"></span>{m.hero.place}</span>
+				<a href={m.hero.hoursSource} target="_blank" rel="external noopener" class="inline-flex min-h-11 shrink-0 items-center gap-2.5 rounded-sm text-night-muted no-underline hover:text-night-foreground"><span class="grid">{#each [m.hero.open, m.hero.closed] as status (status)}<span class="invisible col-start-1 row-start-1" aria-hidden="true">{status}</span>{/each}<span class="col-start-1 row-start-1">{open === undefined ? '' : open ? m.hero.open : m.hero.closed}</span></span><Led value={clock} label={m.hero.clockTime(clock)} red={!open} size="small" class="border-night-border text-sm whitespace-nowrap" /><span class="sr-only">{m.hero.hours} {i18n.m.newTab}</span></a>
 			</div>
 		</div>
 	</div>
@@ -398,7 +396,7 @@
 		<div class="grid items-start gap-12 md:mt-8 md:grid-cols-2">
 			<div class="grid justify-items-start gap-6">
 				<p class={leadText}>{m.about.body2}</p>
-				<a href={ARTICLE} rel="external">{m.about.sourceText}</a>
+				<a href={ARTICLE} target="_blank" rel="external noopener">{m.about.sourceText}<span class="sr-only"> {i18n.m.newTab}</span></a>
 			</div>
 			<!-- A short spec table: label and value on one line, so it scans at a glance. -->
 			<dl class="m-0 grid gap-y-5">
@@ -417,7 +415,7 @@
 									{#each fact.chips as chip (chip)}
 										<li>
 											{#if ASSOCIATION_SITES[chip]}
-											<Badge variant="outline" href={ASSOCIATION_SITES[chip]} target="_blank" rel="external noopener" class="min-h-11 h-auto px-2 py-1 font-normal text-foreground no-underline hover:bg-muted">{chip}<span class="sr-only"> {m.about.newTab}</span></Badge>
+											<Badge variant="outline" href={ASSOCIATION_SITES[chip]} target="_blank" rel="external noopener" class="min-h-11 h-auto px-2 py-1 font-normal text-foreground no-underline hover:bg-muted">{chip}<span class="sr-only"> {i18n.m.newTab}</span></Badge>
 											{:else}
 												<Badge variant="outline" class="min-h-11 h-auto px-2 py-1 font-normal text-foreground">{chip}</Badge>
 											{/if}
@@ -615,7 +613,7 @@
 						<p class="text-muted-foreground">{group.text}</p>
 					</div>
 				{/each}
-				<p class="max-w-[var(--measure)] text-muted-foreground">{m.who.hours} <a href={m.hero.hoursSource} rel="external">{m.hero.hours}</a>.</p>
+				<p class="max-w-[var(--measure)] text-muted-foreground">{m.who.hours} <a href={m.hero.hoursSource} target="_blank" rel="external noopener">{m.hero.hours}<span class="sr-only"> {i18n.m.newTab}</span></a>.</p>
 			</div>
 			<Card.Root bind:ref={discordCard} class="grid min-w-0 gap-4 p-5 md:p-6">
 				<div class="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -651,7 +649,7 @@
 						{/if}
 					</ul>
 				{/if}
-				<Button class="justify-self-start" href={DISCORD_INVITE}><DiscordLogo />{m.who.discord.join}</Button>
+				<Button class="justify-self-start" href={DISCORD_INVITE} target="_blank" rel="external noopener"><DiscordLogo />{m.who.discord.join}<span class="sr-only"> {i18n.m.newTab}</span></Button>
 			</Card.Root>
 		</div>
 	</div>

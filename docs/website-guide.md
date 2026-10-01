@@ -1,9 +1,8 @@
 # Ampoteket website guide
 
 The build contract for the SvelteKit site and its Worker endpoints: what you need
-to wire the site correctly without reading the migrations. The migration is the
-enforcement layer; where it disagrees with this guide, the migration wins and
-this guide has a bug. Project context is in [prosjektoversikt.md](prosjektoversikt.md).
+to wire the site correctly without reading the migrations. Project context is in
+[prosjektoversikt.md](prosjektoversikt.md).
 
 ## 1. Architecture
 
@@ -123,15 +122,9 @@ human pays. RPC shapes are in [datamodell.md](datamodell.md).
 - Product details and scanner confirmation share `ProductPurchase`; keep purchase
   logic there so both change together.
 
-The database computes money; the Worker never invents totals:
-
-```text
-line_total     = round(quantity × frozen unit_price, 2)   # per line, once
-checkout total = sum of rounded line totals               # ties round away from zero
-```
-
-Money and quantities travel as **strings** and never pass through JS floats.
-Bigint ids also need lossless handling.
+The database computes money; the Worker never invents totals. Rounding is in
+[datamodell.md](datamodell.md#4-units-quantities-and-rounding) and string transport in
+[api-contract.md](api-contract.md#exact-json-values).
 
 The contact is optional, unverified, 1–300 chars and not authentication. It is
 stored separately so staff can erase it (`amp_clear_checkout_contact`). Never copy
@@ -190,6 +183,17 @@ metadata and nested audit values. Screen behavior is in
 [page-admin-stock.md](page-admin-stock.md), [page-admin-orders.md](page-admin-orders.md)
 and [page-labels.md](page-labels.md). RPC signatures and item shapes are in
 [datamodell.md](datamodell.md).
+
+Unsaved staff input is a per-user draft in `localStorage` (`src/lib/drafts.ts`):
+the product editor and its specifications, a new order or unplanned receipt,
+receipt amounts per order, the shelf editor and the stock form. A reload, Back,
+closed sheet or sign-in round trip gives it back. A draft returns only onto the
+state it was typed against (product revision, stored specification values, shelf
+unit, stock revision and any review still owed); otherwise it is dropped. Discard
+or an acknowledged write removes it, and a pending command owns the form until it
+resolves. The product list (search, state, sort) and the label selection, which
+nothing saves, keep only for the tab. Signing out still leaves the page, so no
+other staff member sees it on a shared computer.
 
 ### 5.1 Master data and shelf layouts
 
@@ -277,7 +281,7 @@ problems with receipts, cancellations or corrections.
 
 `amp_recover_checkout` registers the **original** saved checkout with a
 non-sensitive reason; see [checkout recovery](checkout-recovery.md#staff-recovery-uses-the-original-checkout)
-and [operating procedures](operating-procedures.md). Never label it verified payment.
+and [operating procedures](operating-procedures.md).
 
 `amp_clear_checkout_contact` (staff only) removes a contact without rewriting
 history; the audit records only that a clearance happened.
@@ -324,7 +328,9 @@ A retry after a later deactivation never silently restores access.
 - **Derived values** (balances, outstanding, latest purchase, totals) come from the
   database; never compute local equivalents.
 - **Time:** show timestamps in `Europe/Oslo` regardless of device or language. Entry
-  resolves in that zone, rejects nonexistent DST times and asks about ambiguous ones.
+  resolves in that zone, rejects nonexistent DST times and asks about ambiguous ones
+  (an explicit offset). Exports include the offset or UTC. Sorting and staleness
+  checks use stable IDs and revisions, not timestamps alone.
 
 ## 7. QR codes and shelf map
 
@@ -409,11 +415,9 @@ These need real HTTP with real staff and non-staff JWTs; SQL alone cannot prove 
 | Price changes after payment basis saved | Ongoing purchase keeps shown amount |
 | Partial operation failure | Nothing posted (header + lines + movements roll back together) |
 | Stock moves during a count / batch closes mid-count | `STALE_STOCK_COUNT` / `COUNT_BATCH_FINISHED`; no silent overwrite |
-| Non-staff or anon attempts staff/checkout-direct operations | Rejected, including outside the UI |
-| Reading/confirming someone else's checkout | Rejected without the secret |
+| Anon, non-staff, wrong checkout secret, deactivated staff | Rejected, including outside the UI ([checks](concurrency-tests.md#7-real-http-and-supabase-auth-boundary)) |
 | Stock reconciled against history | Balances equal movement sums |
 | QR scanned on a physical phone with app-switching | Correct object opens; full buy flow survives |
-| Staff deactivated | Subsequent operations rejected |
 | Admin invited or reactivated | Caller is audited; new account can set its password through the localized email link; confirmed account keeps its password |
 | Invitation email fails or a response is lost | Membership remains, retry uses the same command, and later deactivation is never undone by a replay |
 | Self-deactivation / concurrent mutual deactivation | Rejected / one admin remains active |

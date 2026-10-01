@@ -22,7 +22,7 @@ DECLARE
   v_matches uuid[]; v_staff uuid; v_active boolean;
 BEGIN
   PERFORM app.require_read_committed();
-  -- ponytail: rare access changes share one table lock; use a dedicated lock row if membership churn becomes material.
+  -- Known limit: rare access changes share one table lock; use a dedicated lock row if membership churn becomes material.
   LOCK TABLE app.staff_members IN SHARE ROW EXCLUSIVE MODE;
   v_actor := app.require_staff();
   v_cached := app.begin_command(p_request_id,'grant_staff_access',v_actor,

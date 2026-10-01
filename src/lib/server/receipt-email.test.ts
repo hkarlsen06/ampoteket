@@ -30,6 +30,18 @@ test('receipt addresses, escaping, formatting and per-address idempotency', asyn
 	expect(html).toContain('https://shop.test/brand/wordmark-email.png');
 	expect(html).toContain('href="https://shop.test/p/RES-A1234"');
 	expect(html).toContain('href="https://shop.test/en/p/RES-A1234"');
+	expect(html).toContain('Hjelpereferanse: <span');
+	expect(html).toContain('Support reference: <span');
+	expect(html).toContain(`>${snapshot.checkout_id}</span>`);
+	expect(html).toContain('href="https://shop.test/help"');
+	expect(html).toContain('href="https://shop.test/en/help"');
+	expect(html).toContain('Ampoteket, Pilestredet 35, Oslo');
+	const body = JSON.parse(String(calls[0].body)) as { subject: string; text: string };
+	expect(body.subject).toBe('Kvittering fra Ampoteket / Receipt from Ampoteket');
+	expect(body.text).toContain('- <b>Motstand</b> (RES-A1234): 2 stk, ');
+	expect(body.text).toContain('Hjelpereferanse: 87654321-1234-4123-8123-123456789abc');
+	expect(body.text).toContain('Support reference: 87654321-1234-4123-8123-123456789abc');
+	expect(body.text).toContain('Help with your purchase: https://shop.test/en/help');
 	expect(await sendReceipt(snapshot, 'a@b.no', config, (async () => new Response('{}', { status: 422 })) as unknown as typeof fetch)).toBe(false);
 	expect(await sendReceipt(snapshot, 'a@b.no', config, (() => Promise.reject(new Error('down'))) as unknown as typeof fetch)).toBe(false);
 });

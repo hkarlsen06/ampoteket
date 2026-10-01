@@ -10,6 +10,7 @@
 	// `notFound` dictionaries, links go through `localizeHref`; never hard-code
 	// either here (docs/i18n.md §2).
 	import { localizeHref, messagesFor, type Locale } from '$lib/i18n';
+	import { page } from '$app/state';
 
 	let {
 		locale,
@@ -23,12 +24,16 @@
 	const code = $derived(String(status));
 	const homeHref = $derived(localizeHref('/', locale));
 	const catalogHref = $derived(localizeHref('/p', locale));
+	const helpHref = $derived(localizeHref('/help', locale));
 </script>
 
 {#if showBrand}
 	<div class={pageContainer({ class: "pt-4" })}>
 		<Button variant="ghost" class="min-h-11 p-0" href={homeHref} aria-label={header.home}>
-			<img class="h-8 w-auto brightness-50 saturate-[1.9] dark:brightness-100 dark:saturate-100" src="/brand/wordmark.svg" alt="Ampoteket" width="756" height="139" />
+			<picture>
+				<source media="(prefers-color-scheme: light)" srcset="/brand/wordmark-light.svg" />
+				<img class="h-8 w-auto" src="/brand/wordmark.svg" alt="Ampoteket" width="756" height="139" />
+			</picture>
 		</Button>
 	</div>
 {/if}
@@ -39,12 +44,18 @@
 			<h1 id="missing-title" class={pageHeading}>{is404 ? m.heading : m.errorHeading}</h1>
 			<Empty.Description class={lede}>{is404 ? m.body : m.errorBody}</Empty.Description>
 			<Empty.Content class={[formActions, "w-full max-w-none flex-row justify-start"]}>
-				<Button class="min-w-42" href={catalogHref}>{m.catalog}</Button>
+				{#if is404}
+					<Button class="min-w-42" href={catalogHref}>{m.catalog}</Button>
+				{:else}
+					<!-- A full reload, so a failed load function or chunk runs again. -->
+					<Button class="min-w-42" href={page.url.pathname + page.url.search} data-sveltekit-reload>{m.retry}</Button>
+					<Button variant="outline" class="min-w-42" href={helpHref}>{m.help}</Button>
+				{/if}
 				<Button variant="outline" class="min-w-42" href={homeHref}>{m.home}</Button>
 			</Empty.Content>
 		</Empty.Header>
 		<Empty.Media class="w-full" role="img" aria-label={code}>
-			<Card.Root aria-hidden="true" class="w-full items-center justify-center border bg-secondary bg-[image:var(--metal)] p-6 lg:p-12">
+			<Card.Root aria-hidden="true" class="w-full items-center justify-center border bg-secondary p-6 lg:p-12">
 				<Led value={code} label={code} red size="display" />
 			</Card.Root>
 		</Empty.Media>

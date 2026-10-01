@@ -73,6 +73,8 @@
 		formError: CatalogQueryIssue | null; invalidField: string | null;
 	} | null>(null);
 	let formError = $state<CatalogQueryIssue | null>(null);
+	// Search text typed but not yet submitted survives Back and reload.
+	export const snapshot = { capture: () => q, restore: (value: string) => { q = value; } };
 	let invalidField = $state<string | null>(null);
 	const configKey = $derived(data.config ? `${data.config.url}\n${data.config.publishableKey}` : '');
 	const submitted = $derived.by(() => {

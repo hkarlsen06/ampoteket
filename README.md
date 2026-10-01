@@ -29,22 +29,8 @@ Staff access to the shop itself is separate: an active admin invites you at
 
 ## Where to read
 
-Start with the [project overview](docs/prosjektoversikt.md). Then read only the
-document for the area you are changing:
-
-| Area | Document |
-| --- | --- |
-| Tables, RPCs, permissions, money and quantities | [datamodell.md](docs/datamodell.md) |
-| Website architecture, checkout, staff screens, error catalog | [website-guide.md](docs/website-guide.md) |
-| One page's behavior | `docs/page-*.md` |
-| JSON numbers, pagination, checkout retries, scanner | [api-contract.md](docs/api-contract.md), [checkout-recovery.md](docs/checkout-recovery.md), [scanner.md](docs/scanner.md) |
-| Look and feel, UI copy and languages | [design-system.md](docs/design-system.md), [i18n.md](docs/i18n.md) |
-| Races that must stay correct | [concurrency-tests.md](docs/concurrency-tests.md) |
-| Running the workshop day to day | [operating-procedures.md](docs/operating-procedures.md) |
-| Deploy, backup and restore | [runbook-deploy.md](docs/runbook-deploy.md), [runbook-backup-restore.md](docs/runbook-backup-restore.md) |
-
-The migrations in `supabase/migrations/` are the final word on database rules.
-If a document disagrees with them, fix the document.
+Start with the [project overview](docs/prosjektoversikt.md); it lists the document
+for each area.
 
 ## Setup
 
@@ -90,8 +76,9 @@ Open <https://localhost:8443>. Firefox may need
 `.local-https/pki/authorities/local/root.crt` imported as a trusted authority.
 Never commit `.local-https/`. If you get a 502, the frontend or database has not
 started yet. Make sure an old `.dev.vars` does not override these settings.
-Testing on a physical phone needs a trusted hostname on your network; the
-original developer used Tailscale with `dev.ampoteket.no`.
+Testing on a physical phone needs a trusted HTTPS origin the phone can reach, such
+as a tunnel or a private network name with a real certificate; see
+[scanner.md](docs/scanner.md#5-physical-acceptance-record).
 
 ## Commands
 
@@ -119,8 +106,8 @@ push.
 `./scripts/test-web.sh` builds the real Worker and drives Firefox against a
 throwaway Supabase stack with real Auth. Modes: none (boundary checks), `--shop`,
 `--checkout`, `--admin`, `--statistics`, `--scanner`, `--labels`, `--shelf`,
-`--orders`, `--admins`. It also needs OpenSSL, `certutil` (`libnss3-tools`) and
-`bunx --no-install playwright install --with-deps firefox`. `--scanner` also needs
+`--orders`, `--drafts`, `--admins`. It also needs OpenSSL, `certutil`
+(`libnss3-tools`) and `bunx --no-install playwright install --with-deps firefox`. `--scanner` also needs
 WebKit. `--labels` needs PyMuPDF 1.28.2 on `PATH`, for example from a venv
 (`python3 -m venv .venv-proof && .venv-proof/bin/pip install PyMuPDF==1.28.2`).
 Screenshots go to `test-results/`, which is ignored by git.

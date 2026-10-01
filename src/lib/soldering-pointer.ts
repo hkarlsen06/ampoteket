@@ -41,7 +41,7 @@ export function createSolderingPointer(viewer: ModelViewerElement) {
 				moved.copy(point).applyMatrix4(delta).sub(point).multiplyScalar(tail * tail * (3 - 2 * tail));
 				position.setXYZ(i, base[i * 3] + moved.x, base[i * 3 + 1] + moved.y, base[i * 3 + 2] + moved.z);
 			}
-			// ponytail: modest bends reuse the cable's morph normals; rebake for larger turns.
+			// Known limit: modest bends reuse the cable's morph normals; rebake for larger turns.
 			position.needsUpdate = true;
 		},
 		dispose() {

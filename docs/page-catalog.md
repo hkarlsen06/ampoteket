@@ -14,7 +14,7 @@ never changes a basket.
 At 360 px: heading; one search field with a submit button; reserved error feedback;
 product cards; «Vis flere» / "Show more". A query that is exactly one existing code
 opens that product (also without JavaScript). A «Filtre» button opens a shared
-`Dialog` (`preventScroll={false}`) with category, specification and location controls;
+`Dialog` with category, specification and location controls;
 dismissing it discards the draft and returns focus. No match-count or refresh toolbar;
 retry appears only on failure.
 
@@ -34,7 +34,8 @@ without JavaScript or a full-catalog read.
 The browser reads `amp_catalog_facets` for category choices and the selected category's
 recorded values. Only filter controls wait for facets; failures get a retry in the
 dialog, and late responses never replace a draft. Main search changes only `q` and keeps
-the submitted filters.
+the submitted filters. Search text typed but not submitted survives reload and Back
+(a SvelteKit `snapshot`).
 
 Opening the dialog reads `amp_shelf_map`. Location uses `LabelShelfSelection`, shared
 with [label printing](page-labels.md). Locations combine with OR; none means no
@@ -119,6 +120,5 @@ zero. Buyers see no low-stock state; the minimum is staff-only.
 ## 5. Acceptance
 
 `./scripts/test-web.sh --shop` covers catalog, product and cart in a browser
-(1,000 products under a 37-row cap, filters, paging failures, no JavaScript). Executed
-results are in [VALIDATION.md](../VALIDATION.md). Open: camera on real phones
-([scanner.md](scanner.md)).
+(1,000 products under a 37-row cap, filters, paging failures, no JavaScript). Results
+and open checks are in [VALIDATION.md](../VALIDATION.md).

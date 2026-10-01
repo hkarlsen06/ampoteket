@@ -32,7 +32,7 @@ action. Use muted inline (`playsinline`) video and handle rejected playback.
 ## 2. Boundaries and dependency delivery
 
 camera/session → decoder adapter → shared scanner UI → strict code parser → public
-catalog lookup → existing basket operation. The decoder only turns an image into
+catalog lookup → basket operation. The decoder only turns an image into
 text and geometry:
 
 ```ts
@@ -108,12 +108,11 @@ Placement:
   slides under the header). None on checkout, help or admin pages, and no page-level
   triggers. Without JavaScript the trigger is hidden. Only deliberate activation
   opens it; `?scan=1` does nothing. Placement details: [design system](design-system.md#4-layout).
-- The dialog is a shared `Dialog` with `preventScroll={false}`. Its body is a named,
-  keyboard-accessible scroll region with contained overscroll for long content and
-  short viewports. The title, close control and Add/Scan actions stay outside that body.
-  Close, Escape or backdrop release the camera like
-  navigation; only an Add in flight blocks closing. Focus returns to the trigger.
-  The product name links to its localized details page.
+- The dialog is the shared `Dialog` ([mechanics](../src/lib/components/ui/README.md)),
+  with the title, close control and Add/Scan actions outside its scrolling body.
+  Close, Escape or backdrop release the camera like navigation; only an Add in flight
+  blocks closing. Focus returns to the trigger. The product name links to its
+  localized details page.
 - `AdminProductScanner` (admin product list and stock corrections page) uses the same
   session and parser, matches loaded staff products (including inactive ones), and
   opens or selects the product without any stock change. Admin order receiving has
@@ -122,8 +121,8 @@ Placement:
 
 ## 4. QR input is an identifier
 
-New labels encode **`ampoteket.no/p/CODE`** (one path parameter, e.g.
-`ampoteket.no/p/AMP-00123`). Older `https://ampoteket.no/p/CODE` labels still work.
+Labels encode **`ampoteket.no/p/CODE`** (one path parameter, e.g.
+`ampoteket.no/p/AMP-00123`); the `https://ampoteket.no/p/CODE` form is accepted too.
 Never add a query, locale, price, name, placement or stock. Codes are never reused.
 
 Camera payloads:
@@ -150,31 +149,33 @@ modules on every side, clear of text, cut marks, tape and drawer edges.
 
 ## 5. Physical acceptance record
 
-The owner used the scanner successfully on an iPhone (2026-09-20), but model,
-versions and individual cases were not recorded. Every case below is **not run**.
-Android and older/slower phones have no coverage. Do not describe phone acceptance
-as complete from desktop automation or one iPhone; narrowing supported devices is a
-separate, recorded decision.
+Phone acceptance means every case below passing on real devices, including Android
+and older or slower phones. Desktop automation or a single phone does not stand in
+for it; narrowing supported devices is a separate, recorded decision. Record PASS,
+FAIL or NOT RUN per case in [VALIDATION.md](../VALIDATION.md).
 
 Setup:
 
 - Use a trusted HTTPS origin the phone can reach, on disposable stock. Never use
-  production credentials. Record the origin and build.
-- `bun run development` injects a loopback API URL the phone cannot reach. Instead
-  run `./scripts/seed-test.sh --count 30 --api-port 54329`, then start Vite with
-  `PUBLIC_SUPABASE_URL=https://dev.ampoteket.no` and the seed's public key, and open
-  `https://dev.ampoteket.no/en/p` over the tailnet (Caddy proxies the API). Payment
-  rehearsals also need the seed's server-only checkout key and an exact HTTPS
-  `CHECKOUT_ALLOWED_ORIGIN`; see [README](../README.md).
+  production credentials. Record the origin and build. Any origin with a valid
+  certificate works: a tunnel, or a private network name with a real certificate,
+  behind a reverse proxy to the dev server. The original developer used a tailnet
+  name behind Caddy as one example.
+- Without `PUBLIC_SUPABASE_URL`, `bun run development` serves the disposable API
+  through the dev server's own origin, so the phone needs only that one HTTPS
+  origin. Set `CHECKOUT_ALLOWED_ORIGIN` to it for payment rehearsals
+  ([README](../README.md#https-checkout-and-camera)). The launcher and
+  `vite.config.ts` default to the original developer's host name
+  (`dev.ampoteket.no`); replace it with yours.
 - `./scripts/test-web.sh --scanner` leaves synthetic labels in
   `test-results/scanner/` (40 mm is not the agreed size). Printed trials use real
   Admin → Product labels exports at 100%.
 - Prepare two known products, an unknown code, a free and a priced item, plus a
   malformed product URL and an unrelated HTTPS site. Test Safari, then iOS Chrome if
-  used (it does not replace Android). Record PASS, FAIL or NOT RUN per case and
+  used (it does not replace Android). Record each case per
   browser, with label size, printer, lighting and distance.
 
-Open cases (each must hold on the phone):
+Cases (each must hold on the phone):
 
 - **P01** Every page with a trigger shows the same confirmation; camera starts only after opening.
 - **P02** Ten alternating scan → Add cycles change the basket once each and resume scanning.
@@ -198,4 +199,4 @@ Open cases (each must hold on the phone):
 
 Network/storage fault injection may need a developer alongside the phone tester.
 Automated checkout tests support these cases but cannot prove camera, lock screen,
-real labels or Vipps app switching. Status lives in [VALIDATION.md](../VALIDATION.md).
+real labels or Vipps app switching.

@@ -16,7 +16,7 @@ webshop template. Three principles decide most questions:
    quiet.
 2. **Fast and honest on bad wifi.** No webfonts except one 5 KB seven-segment face,
    no hero video, no carousels. Every number shown is a recorded balance and is
-   labelled as such. Payment is trust-based and is never shown as confirmed.
+   labelled as such. Payment is never shown as verified ([rule](website-guide.md#4-guest-checkout)).
 3. **One thing per screen.** The landing page's job is to get a phone to the catalog
    or the scanner within one tap. Explanations come after the buttons.
 
@@ -61,7 +61,7 @@ Rules:
   yellow, «Tomt» red, «Ukjent» grey (fetch error). Never render a fetch error as 0.
 - **LED tokens only on black cells.** Status text uses `text-destructive` /
   `text-success`, which are tuned for page contrast.
-- **Primary actions use brand red.** Green never implies that Vipps payment was verified.
+- **Primary actions use brand red.**
 - **Yellow is a signal, not a brand colour.** Focus uses link blue.
 
 ## 3. Typography
@@ -161,19 +161,10 @@ or suppresses it.
 - **Interior scroll regions are rare, named exceptions.** Each has
   `overscroll-behavior: contain`, visible edges (scrollbar or fade), a keyboard tab
   stop with an accessible name, and keeps titles, close and primary/save actions
-  outside it. The current ones:
-  - `ShelfDiagram`'s viewport (arrow/Home/End pan it to reveal the focused cell;
-    the document stays still);
-  - `LabelShelfSelection`'s wall viewport, which preserves cabinet target and
-    coordinate widths on dense walls and reveals keyboard focus locally;
-  - the homepage shelf sheet's `shelf-picker-body` and the admin placement sheet's
-    `shelf-editor-body`;
-  - dialog bodies `count-body`, `placement-sheet-body`, `order-entry-body` and the
-    planned receipt review, plus the new specification form, staff scanner and
-    drawer rename bodies;
-  - `AlertDialog.Description`, named by its confirmation title;
-  - the catalog filter picker, and the scanner's last-resort overflow fallback;
-  - the admin `Sidebar.Content` menu and the product combobox result list.
+  outside it. Find them with `rg "overscroll-contain|overscroll-behavior" src`;
+  `bun run check:ink` lists every clipping declaration for review. Add a new one
+  only when a widget cannot reflow (a dense shelf viewport, a dialog body, a long
+  result list) and give it a name a screen reader can announce.
 - **The header never hides.** `position: sticky; top: 0`, constant height
   (`--header-h`), never auto-hides, shrinks or transforms on scroll.
 - **Scroll-linked motion is homepage-only**, driven by native document scroll,
@@ -213,8 +204,8 @@ or suppresses it.
   mutations still confirm explicitly.
 - **`scrollbar-gutter: stable`** on `html` so short and long pages do not shift sideways.
 - **No scroll locking.** The phone header menu uses `Collapsible`; filters, scanner,
-  sheets and the mobile admin sidebar use the shared `Dialog` with
-  `preventScroll={false}`. Never change body overflow.
+  sheets and the mobile admin sidebar use the shared `Dialog`, which never locks
+  scrolling. Never change body overflow.
 - **No horizontal page scroll at any width ≥ 320 px.** Fix overflow at its source
   (wrap, reflow, `overflow-wrap`), never with a global `overflow-x: hidden`.
 
@@ -286,13 +277,16 @@ fields fold into a `Collapsible` that starts open when one has a value.
 
 **Buttons:** `default` is the primary, `outline` secondary, `ghost` quiet, `link`
 inline navigation in link blue (never brand red). `href` renders an anchor.
-Default height 48px; compact sizes keep 44px targets; labels wrap. The primary is a
+Sizes are in [`ui/README.md`](../src/lib/components/ui/README.md); labels wrap. The primary is a
 square **wireframe**: opaque 10% primary tint, primary hairline, `--primary-ink`
 sentence-case label and corner marks (also on `AlertDialog.Action`). `outline` is
 square without marks. Labels are never mono or capitalized. `variant="night"` is the primary on the `--night` hero.
 One primary per region: submits and page-level create are `default`, row actions
 `size="sm"` `outline`, cancel and disclosure `ghost`. Buyer back links are `link`
 buttons with a leading arrow icon; admin detail pages rely on the breadcrumb.
+Links leaving the site (Discord, datasheets, contact pages, sources) open in a new
+tab with `target="_blank"` and an `sr-only` `m.newTab` suffix; the Vipps payment
+link stays in the same tab because checkout opens it after an async check.
 Never use disabled opacity as the state cue.
 
 **Fields:** compose `Field.Field`, `Field.Label`, `Field.Description`, `Field.Error`
@@ -327,14 +321,11 @@ finished first is an inline `Alert.Message` followed by a `link` resume button.
 
 **Disclosure and dialogs:** `Collapsible` with `DisclosureTrigger` for content that
 grows below its trigger, including inline confirmations and row edits (no native
-`<details>` or ad-hoc toggles). `Dialog` uses `preventScroll={false}` and a localized
-title and close control; it has no default close button. Centered content is bounded
-by the dynamic viewport height. Use header/body/footer rows with a named `sheetBody`
-scroll region when its content can exceed that height, keeping actions reachable in
-landscape. Portaled text wraps within the surface and close controls never shrink.
-Product comboboxes fit the popover's available height, retaining the search field
-above a shrinking result list. Keep Escape, outside
-interaction, return focus and in-flight guards. Destructive or irreversible actions
+`<details>` or ad-hoc toggles). `Dialog` mechanics (no scroll locking, localized
+close, bounded height, named `sheetBody`) are in
+[`ui/README.md`](../src/lib/components/ui/README.md). Product comboboxes fit the
+popover's available height, retaining the search field above a shrinking result
+list. Keep Escape, outside interaction, return focus and in-flight guards. Destructive or irreversible actions
 (archiving, cancelling an order, finishing a count, clearing contacts) confirm with
 `AlertDialog`. An acknowledged shelf swap shows a localized `Sonner` toast;
 cancelled or uncertain requests do not.
@@ -388,7 +379,7 @@ confirm each focus ring is whole.
 
 | Use | File (`static/brand/`) |
 |---|---|
-| Header wordmark | `wordmark.svg`: lit segments only, up to 11rem wide (9rem on phones). Light mode darkens it with a CSS filter |
+| Header wordmark | `wordmark.svg`: lit segments only, up to 11rem wide (9rem on phones). `wordmark-light.svg` (same paths, light-theme fills) replaces it under `prefers-color-scheme: light` through `<picture>` |
 | Mark | `mark-square-{180,64}.png`: touch icon, favicon and footer/admin mark |
 
 The designer SVGs in `assets/brand/` are Inkscape sources, not served; see

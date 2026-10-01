@@ -59,6 +59,8 @@
 	/** Current path with the locale prefix removed, so the picker can swap it. */
 	const bare = $derived(stripLocale(page.url.pathname));
 	const privatePage = $derived(isPrivateRoute(page.route.id, page.url.pathname));
+	// Discord stays off the cart and checkout, where a leaving link costs a purchase in progress.
+	const showDiscord = $derived(!isCurrent('/cart') && !isCurrent('/checkout'));
 	const buyerScanPage = $derived(bare === '/' || bare === '/p' || bare.startsWith('/p/') || bare === '/cart');
 
 	/** Always the production URL, never a preview origin; see PROD_ORIGIN. */
@@ -89,8 +91,8 @@
 		return bare === href || bare.startsWith(href + '/');
 	}
 
-	// Above 40rem the header row holds the wordmark, catalog/admin/cart icons and the
-	// menu button; the menu holds the scanner and the language picker. On phones the
+	// Above 40rem the header row holds the wordmark, catalog/admin/cart icons (with text
+	// labels from 48rem) and the menu button; the menu holds the scanner and the language picker. On phones the
 	// destinations move into the menu and the scanner floats (Scanner.svelte).
 	// Pure enhancement: `html.no-js` (src/app.html) hides the button and leaves
 	// the menu open, so the links are reachable without JavaScript.
@@ -163,13 +165,13 @@
 
 <a class="absolute -top-25 left-[var(--gutter)] z-100 rounded-md bg-warning px-4 py-3 font-bold text-on-warning no-underline focus:top-3" href="#main">{m.header.skip}</a>
 
-<!-- Discord sits left of the catalog at every width (the catalog icon is phone:hidden);
-     Admin, once confirmed, enters at the far left so nothing else moves. -->
+<!-- Discord sits left of the catalog at every width (the catalog link is phone:hidden),
+     except on cart and checkout; Admin, once confirmed, enters at the far left so nothing else moves. -->
 {#snippet discordLink()}
 	<Tooltip.Root>
 		<Tooltip.Trigger>
 			{#snippet child({ props })}
-				<Button {...props} href={DISCORD_INVITE} variant="ghost" size="icon-sm" class="shrink-0" aria-label={m.header.discord}><DiscordLogo class="size-5" /></Button>
+				<Button {...props} href={DISCORD_INVITE} target="_blank" rel="external noopener" variant="ghost" size="icon-sm" class="shrink-0" aria-label={`${m.header.discord} ${m.newTab}`}><DiscordLogo class="size-5" /></Button>
 			{/snippet}
 		</Tooltip.Trigger>
 		<Tooltip.Content side="bottom">{m.header.discord}</Tooltip.Content>
@@ -179,41 +181,45 @@
 <header class="site-header sticky top-0 z-40 bg-card" bind:this={headerEl}>
 	<div class={pageContainer({ class: "max-w-none px-5 flex min-h-[var(--header-h)] items-center gap-4 py-2 phone:gap-3 phone:py-1 no-js:flex-wrap" })}>
 		<a class="mr-auto inline-flex min-h-11 min-w-0 items-center rounded-md font-extrabold text-foreground no-underline" href={i18n.href('/')} aria-label={m.header.home}>
-			<img class="h-auto w-44 brightness-50 saturate-[1.9] dark:brightness-100 dark:saturate-100 phone:w-36" src="/brand/wordmark.svg" alt="Ampoteket" width="756" height="139" />
+			<picture>
+				<source media="(prefers-color-scheme: light)" srcset="/brand/wordmark-light.svg" />
+				<img class="h-auto w-44 phone:w-36" src="/brand/wordmark.svg" alt="Ampoteket" width="756" height="139" />
+			</picture>
 		</a>
 		<Tooltip.Provider>
 			{#each headerLinks as item (item.href)}
-				{#if item.href === '/p'}{@render discordLink()}{/if}
+				{#if item.href === '/p' && showDiscord}{@render discordLink()}{/if}
 				<Tooltip.Root>
 					<Tooltip.Trigger>
 						{#snippet child({ props })}
 							<Button {...props} href={i18n.href(item.href)} variant={isCurrent(item.href) ? 'secondary' : 'ghost'} size="icon-sm"
-								class="shrink-0 aria-[current=page]:border-current phone:hidden"
+								class="shrink-0 aria-[current=page]:border-current phone:hidden md:w-auto md:gap-2 md:px-3"
 								aria-label={item.label}
-								aria-current={isCurrent(item.href) ? 'page' : undefined}><Icon icon={item.icon} class="size-5" aria-hidden="true" /></Button>
+								aria-current={isCurrent(item.href) ? 'page' : undefined}><Icon icon={item.icon} class="size-5" aria-hidden="true" /><span class="hidden md:inline" aria-hidden="true">{item.label}</span></Button>
 						{/snippet}
 					</Tooltip.Trigger>
-					<Tooltip.Content side="bottom">{item.label}</Tooltip.Content>
+					<Tooltip.Content side="bottom" class="md:hidden">{item.label}</Tooltip.Content>
 				</Tooltip.Root>
 			{/each}
 			<Tooltip.Root>
 				<Tooltip.Trigger>
 					{#snippet child({ props })}
 						<Button {...props} href={i18n.href('/cart')} variant={isCurrent('/cart') ? 'secondary' : 'ghost'} size="icon-sm"
-							class="header-cart shrink-0 aria-[current=page]:border-current"
+							class="header-cart shrink-0 aria-[current=page]:border-current md:w-auto md:gap-2 md:px-3"
 							aria-current={isCurrent('/cart') ? 'page' : undefined}>
 							<span class="relative inline-flex" aria-hidden="true">
 								<Icon icon={ShoppingCartIcon} class="size-5" />
 								<!-- A neutral count, only when there is something to count; red means error or empty stock. -->
 								{#if $cart.status !== 'initializing' && cartCount !== 0}<Badge class="absolute -top-2.5 -right-3.5 h-6 min-w-6 border-2 border-card bg-foreground px-1 font-mono text-background">{cartCount ?? '?'}</Badge>{/if}
 							</span>
+							<span class="hidden md:ms-2 md:inline" aria-hidden="true">{m.header.cart}</span>
 							<span class="sr-only">{m.header.cart}{cartCount !== null
 								? m.header.cartLines(cartCount)
 								: $cart.status === 'initializing' ? m.header.cartLoading : m.header.cartUnavailable}</span>
 						</Button>
 					{/snippet}
 				</Tooltip.Trigger>
-				<Tooltip.Content side="bottom">{m.header.cart}</Tooltip.Content>
+				<Tooltip.Content side="bottom" class="md:hidden">{m.header.cart}</Tooltip.Content>
 			</Tooltip.Root>
 		</Tooltip.Provider>
 		{#if buyerScanPage}<Scanner bind:this={scanner} config={data.adminConfig} />{/if}
@@ -289,11 +295,15 @@
 			<img class="rounded-sm" src="/brand/mark-square-64.png" alt="" width="28" height="28" />
 			<span>Ampoteket</span>
 		</div>
-		<nav aria-label={m.footer.links}>
+		<p class="m-0 min-w-0">{m.footer.about}</p>
+		<nav class="md:ml-auto" aria-label={m.footer.links}>
 			<ul class="m-0 flex list-none flex-wrap gap-x-5 p-0 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:items-center [&_a]:text-foreground">
 				{#each nav as item (item.href)}
 					<li><a href={i18n.href(item.href)}>{item.label}</a></li>
 				{/each}
+				<li><a href={i18n.href('/help')}>{m.footer.help}</a></li>
+				<li><a href={i18n.href('/privacy')}>{m.footer.privacy}</a></li>
+				<li><a href={DISCORD_INVITE} target="_blank" rel="external noopener">{m.footer.discord}<span class="sr-only"> {m.newTab}</span></a></li>
 				<li><a href={i18n.href('/admin')}>{m.header.admin}</a></li>
 			</ul>
 		</nav>

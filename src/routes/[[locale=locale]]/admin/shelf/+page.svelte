@@ -31,6 +31,7 @@
 	import { cabinetInner } from '$lib/shelf-map';
 	import { readAdminShelf, shelfInteger, shelfColumn, readShelfCommand, saveShelfCommand, clearShelfCommand,
 		executeShelfCommand, shelfFailure, type AdminShelf, type AdminCabinet, type AdminBin, type ShelfCommand } from '$lib/admin-shelf';
+	import { readDraft, writeDraft } from '$lib/drafts';
 	const fieldId = $props.id();
 	const shelfSection = section({ spacing: 'divided', class: 'shelf-section [&_h3]:mt-8' });
 
@@ -173,6 +174,7 @@
 		layoutSize = { rows: current.inner_rows, cols: current.inner_cols };
 		beforeBins = shelf!.bins.filter((item) => item.cabinet_id === current.id && !item.is_archived).map((item) => ({ ...item }));
 		layoutBins = beforeBins.map((item) => ({ ...item }));
+		draftStart = JSON.stringify(draftFields());
 	}
 	// The app owns freshness (design-system.md §4.2): re-read the map when the
 	// tab becomes relevant again, never through a standing refresh button. An
@@ -221,7 +223,34 @@
 			rows = String(b?.row_span ?? 1); cols = String(b?.col_span ?? 1);
 			parentId = b?.cabinet_id ?? cabinetId ?? cabinets[0]?.id ?? '';
 		}
+		draftStart = JSON.stringify(draftFields()); draftStored = false;
+		const saved = readDraft(admin.session?.user.id, 'shelf') as { editor?: unknown; before?: unknown; beforeBins?: unknown; fields?: Record<string, unknown> } | null;
+		const fields = saved?.fields, size = fields?.layoutSize as Record<string, unknown> | undefined;
+		if (saved?.editor === kind && JSON.stringify(saved.before) === JSON.stringify(before) && JSON.stringify(saved.beforeBins) === JSON.stringify(kind === 'cabinet' ? beforeBins : [])
+			&& ['description', 'row', 'column', 'rows', 'cols', 'parentId', 'layoutId'].every(name => typeof fields?.[name] === 'string')
+			&& Number.isInteger(size?.rows) && Number.isInteger(size?.cols) && Array.isArray(fields?.layoutBins)
+			&& new Set(fields.layoutBins.map(bin => bin?.id)).size === fields.layoutBins.length
+			&& fields.layoutBins.every(bin => bin && typeof bin === 'object' && typeof bin.id === 'string' && Number.isInteger(bin.inner_row) && Number.isInteger(bin.inner_col) && Number.isInteger(bin.row_span) && Number.isInteger(bin.col_span))) {
+			({ description, row, column, rows, cols, parentId, layoutId, layoutSize, layoutBins } = fields as ReturnType<typeof draftFields>);
+			layoutVersion++; draftStored = true;
+		}
 	}
+	// Unsaved editor input outlives closing the sheet, a reload or a sign-in round
+	// trip (drafts.ts). It returns only to the same unit, unchanged since the draft
+	// began; Discard and an acknowledged save drop it.
+	let draftStart = '', draftStored = false;
+	function draftFields() { return { description, row, column, rows, cols, parentId, layoutId, layoutSize: $state.snapshot(layoutSize), layoutBins: $state.snapshot(layoutBins) }; }
+	function discardDraft() { writeDraft(admin.session?.user.id, 'shelf', null); draftStored = false; }
+	$effect(() => {
+		if (!editor || editorMode !== 'edit' || busy || pending) return;
+		const fields = draftFields();
+		untrack(() => {
+			// Only this unit's own draft is removed when its edits are undone by hand.
+			if (JSON.stringify(fields) === draftStart) { if (draftStored) discardDraft(); return; }
+			writeDraft(admin.session?.user.id, 'shelf', { editor, before: $state.snapshot(before), beforeBins: editor === 'cabinet' ? $state.snapshot(beforeBins) : [], fields });
+			draftStored = true;
+		});
+	});
 	function restoreDraft(command: ShelfCommand) {
 		// A failed restored request must keep its entered values just like a live form.
 		if (editor && !(editor === 'cabinet' && (command.kind === 'swap-bins' || command.kind === 'bin'))) return;
@@ -284,6 +313,8 @@
 			if (!alive || session.userId !== admin.session?.user.id) return;
 			clearShelfCommand(sessionStorage, saved); pending = null;
 			outcome = result;
+			// The acknowledged fields are the new baseline, even if the display refresh fails.
+			if (result !== 'stale') { discardDraft(); draftStart = JSON.stringify(draftFields()); }
 			if (result !== 'stale') swapSource = null;
 			if (result === 'stale') {
 				if (saved.kind !== 'archive-cabinet') { restoreDraft(saved); reviewCommand = saved; }
@@ -489,7 +520,7 @@
 			<div class={formStatus} aria-live="polite" aria-atomic="true">{@render storageStatus()}</div>
 			<div class={formActions}>
 				<Button form="shelf-editor-form" type="submit" disabled={locked || sizeUnreviewed || !draftChanged}><ButtonLabel pending={busy} pendingLabel={m.saving} label={m.save} /></Button>
-				{#if draftChanged}<Button type="button" variant="outline" disabled={locked} onclick={() => edit('cabinet', shelf!.cabinets.find((item) => item.id === before!.id)!)}>{m.discardChanges}</Button>{/if}
+				{#if draftChanged}<Button type="button" variant="outline" disabled={locked} onclick={() => { discardDraft(); edit('cabinet', shelf!.cabinets.find((item) => item.id === before!.id)!); }}>{m.discardChanges}</Button>{/if}
 			</div>
 		{/if}
 		</AdminAccessGate>

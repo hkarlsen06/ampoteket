@@ -38,7 +38,7 @@ Expected: whichever gets the batch lock first wins; a late count fails with `COU
 
 Automated by `./scripts/test-api.sh` (isolated PostgreSQL and PostgREST, signed synthetic JWTs): exact decimal and bigint transport, stale-edit rejection, complete pagination under a small row cap, role access for anon, staff, non-staff, disabled staff and service role, bad or expired signatures, hidden `app` schema, invalid checkout secrets and duplicate guest confirmation.
 
-Not automated: Supabase Auth signup, login, refresh and account deletion, the managed gateway, the Worker and a browser. Before launch, check these on a disposable full stack with real Auth sessions, through PostgREST rather than `SET ROLE`. Checks on production must be non-destructive; never create fixture purchases in real stock.
+Not automated: Supabase Auth signup, login, refresh and account deletion, the managed gateway, the Worker and a browser. Before launch, check these on a disposable full stack with real Auth sessions, through PostgREST rather than `SET ROLE`. Checks on production must be non-destructive; never create fixture purchases in real stock. Every check must also fail outside the UI (a direct HTTP request), and the remaining launch acceptance rows are in [website-guide.md](website-guide.md#9-acceptance-criteria-must-all-hold-in-production).
 
 - Anon can read `amp_catalog`, `amp_catalog_facets`, `amp_shelf_map` and `amp_help_directory`, and nothing else.
 - A logged-in non-staff user sees no staff rows and cannot change stock.

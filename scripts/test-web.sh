@@ -31,8 +31,11 @@ elif [[ ${1:-} == --labels && $# == 1 ]]; then
 elif [[ ${1:-} == --orders && $# == 1 ]]; then
   runner=scripts/orders-proof.ts
   row_cap=2
+elif [[ ${1:-} == --drafts && $# == 1 ]]; then
+  runner=scripts/draft-proof.ts
+  row_cap=2
 elif [[ $# != 0 ]]; then
-  echo 'Usage: ./scripts/test-web.sh [--shop|--checkout|--scanner|--admin|--admins|--statistics|--labels|--shelf|--orders]' >&2; exit 1
+  echo 'Usage: ./scripts/test-web.sh [--shop|--checkout|--scanner|--admin|--admins|--statistics|--labels|--shelf|--orders|--drafts]' >&2; exit 1
 fi
 for executable in docker psql supabase bun openssl certutil python3 flock; do
   command -v "$executable" >/dev/null || { echo "Missing tool: $executable" >&2; exit 1; }

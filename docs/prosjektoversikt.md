@@ -1,9 +1,9 @@
 # Ampoteket: project overview
 
 Start here. This page explains what the system does and how it is put together.
-Rules for one area live in the document listed for it in the
-[README](../README.md#where-to-read). What has been tested, and what is still
-open before launch, is in [VALIDATION.md](../VALIDATION.md).
+Rules for one area live in the document listed for it in
+[§11](#11-where-to-read). What has been tested, and what is still open before
+launch, is in [VALIDATION.md](../VALIDATION.md).
 
 ## 1. What Ampoteket is
 
@@ -29,8 +29,8 @@ extend the solution without depending on the original developer.**
 5. The cart clears only after the registration is confirmed. If the network fails
    after paying, the buyer retries the *registration*, never the payment.
 
-Payment is trust-based: the system only knows the buyer **says** they paid.
-Nothing is ever shown as confirmed by Vipps. A saved checkout can be resumed at
+Payment is trust-based, and the site never presents it as verified
+([rule](website-guide.md#4-guest-checkout)). A saved checkout can be resumed at
 its saved price indefinitely. If a buyer loses it, staff find and recover the
 original checkout with a recorded reason; they never create a replacement or ask
 for payment again ([checkout-recovery.md](checkout-recovery.md)).
@@ -65,8 +65,7 @@ after a change.
 
 ## 4. Domain model in brief
 
-The migration in `supabase/migrations/` is the authority; details are in
-[datamodell.md](datamodell.md).
+Details are in [datamodell.md](datamodell.md).
 
 - **Products, drawers (bins) and cabinets are separate.** A product has one
   current drawer; a drawer holds many products and sits at a position in one
@@ -83,16 +82,14 @@ The migration in `supabase/migrations/` is the authority; details are in
   while counting it ([operating-procedures.md](operating-procedures.md)).
 - **Corrections are new movements, never edits.** Withdrawals and adjustments need
   a reason. Stock may go negative; that is a visible discrepancy, not an error.
-- **Money and quantities are exact.** Amounts are NOK `numeric`, computed by the
-  database. They travel as strings, never JavaScript floats
-  ([api-contract.md](api-contract.md)).
+- **Money and quantities are exact.** The database computes NOK amounts
+  ([datamodell.md](datamodell.md#4-units-quantities-and-rounding)); clients carry
+  them as strings ([api-contract.md](api-contract.md#exact-json-values)).
 - **History is immutable.** Ledger rows cannot be updated or deleted, and metadata
   edits are audited. A buyer's optional contact string is stored separately so it
   can be erased.
-- **Times show in `Europe/Oslo`**, whatever the browser's time zone. Date inputs
-  are read as Oslo time; nonexistent daylight-saving times are rejected and
-  ambiguous ones need an explicit offset. Exports include the offset or UTC.
-  Sorting and staleness checks use stable IDs and revisions, not timestamps alone.
+- **Times show in `Europe/Oslo`**, whatever the browser's time zone
+  ([rules](website-guide.md#6-numbers-the-frontend-must-respect)).
 
 ## 5. Routes
 
@@ -107,6 +104,7 @@ labels always use the Norwegian, unprefixed address.
 | `/cart` | The cart ([page-cart.md](page-cart.md)) |
 | `/checkout/[id]` | Saved checkout, Vipps instructions, registration and retry ([page-checkout.md](page-checkout.md)) |
 | `/help` | Volunteer contacts, maintained at `/admin/help`, and the Discord invite |
+| `/privacy` | What buyers' data the shop stores, where, and how to have contact details deleted; linked from the footer |
 | `/admin` | Overview, statistics, products, shelf, counts, labels, stock corrections, audit ([page-admin-stock.md](page-admin-stock.md), [page-labels.md](page-labels.md)) |
 | `/admin/orders` | Orders and receipts ([page-admin-orders.md](page-admin-orders.md)) |
 | `/admin/admins` | Invite, list, reactivate and deactivate admins ([website-guide.md](website-guide.md#59-admin-access)) |
@@ -157,9 +155,6 @@ cabinets and 492 drawers.
 | Help when nobody is there | Buyer notes the amount and reference, then uses `/help` |
 | Retention | Unconfirmed checkouts' contact strings are cleared after 90 days; checkouts, sales and history are never purged ([runbook](runbook-contact-retention.md)) |
 
-Still open: named operators, backup targets (RPO/RTO) and the backup schedule,
-see [runbook-backup-restore.md](runbook-backup-restore.md).
-
 ## 9. Out of scope for v1
 
 Payment verification, refunds and returns, reservations, customer accounts, other
@@ -177,5 +172,21 @@ supabase/tests/                 SQL and Python database tests
 scripts/                        dev launcher, seeds, test runners, browser proofs
 static/                         served files (fonts, photos, models, brand)
 assets/                         sources for static/ (photos and models in Git LFS)
-docs/                           the documents listed in the README
+docs/                           the documents listed in §11
 ```
+
+## 11. Where to read
+
+Read the document for the area you are changing, not the whole set.
+
+| Area | Document |
+| --- | --- |
+| Tables, RPCs, permissions, concurrency rules, money and quantity precision | [datamodell.md](datamodell.md) |
+| Website architecture, checkout, staff screens, error catalog | [website-guide.md](website-guide.md), then the relevant `page-*.md` |
+| JSON numbers, pagination, checkout retries, scanner | [api-contract.md](api-contract.md), [checkout-recovery.md](checkout-recovery.md), [scanner.md](scanner.md) |
+| Palette, tokens, typography, logo, component conventions | [design-system.md](design-system.md), [assets/brand/README.md](../assets/brand/README.md), [ui/README.md](../src/lib/components/ui/README.md) |
+| UI copy, languages, locale routing, links between pages | [i18n.md](i18n.md) |
+| Races that must stay correct, real-API checks, test status | [concurrency-tests.md](concurrency-tests.md), [VALIDATION.md](../VALIDATION.md) |
+| Running the workshop day to day | [operating-procedures.md](operating-procedures.md), [runbook-contact-retention.md](runbook-contact-retention.md) |
+| Migrations, seeds, disposable validation | [README.md](../README.md), `scripts/test-database.sh` |
+| Deploy, backup and restore, opening stock | [runbook-deploy.md](runbook-deploy.md), [runbook-backup-restore.md](runbook-backup-restore.md) |

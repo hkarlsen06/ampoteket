@@ -4,6 +4,7 @@
 import type { Messages } from './nb';
 
 export const en: Messages = {
+	newTab: '(opens in a new tab)',
 	scanner: {
 		title: 'Scan or find a part', action: 'Scan', open: 'Scan QR code', close: 'Close scanner',
 		contents: 'Scanning and product details',
@@ -442,7 +443,11 @@ export const en: Messages = {
 		cartLines: (n: number) => (n === 1 ? ', 1 part' : `, ${n} parts`)
 	},
 	footer: {
-		links: 'Links'
+		links: 'Links',
+		about: 'Pilestredet 35, Oslo. Run by The Resistance and RoboMEK.',
+		help: 'Help',
+		privacy: 'Privacy',
+		discord: 'Discord'
 	},
 	product: {
 		title: (name: string) => `${name} | Ampoteket`,
@@ -570,10 +575,10 @@ export const en: Messages = {
 	home: {
 		title: 'Ampoteket | The student-run electronics workshop at OsloMet',
 		description:
-			'Ampoteket is the electronics workshop at Pilestredet 35, run by students. Soldering stations, oscilloscopes, a 3D printer and a parts shelf you buy from yourself.',
+			'Ampoteket is the electronics workshop at Pilestredet 35, run by students. Soldering stations, oscilloscopes, two 3D printers and a parts shelf you buy from yourself.',
 		hero: {
-			title: 'An electronics lab by students, for students',
-			lede: 'Soldering stations, oscilloscopes, a 3D printer and a stock of parts, right in Pilestredet 35. Easy to try out ideas, and fine to fail.',
+			title: 'Solder, build and get your own parts',
+			lede: 'Soldering stations, oscilloscopes, two 3D printers and a shelf of parts, right in Pilestredet 35.',
 			parts: 'Browse parts catalog',
 			place: 'Pilestredet 35 · Oslo',
 			clock: 'Time in Oslo',
@@ -598,12 +603,11 @@ export const en: Messages = {
 		about: {
 			title: 'What Ampoteket is',
 			body2:
-				'The room is both a technical and a social space: work on your own projects, take a soldering course, use equipment you do not have at home, or just hang out with people doing the same thing.',
+				'Work on your own projects, use equipment you do not have at home, and hang out with people building the same kind of thing.',
 			quote:
 				'Instead of waiting weeks for parts, you can often find what you need here and get going in minutes.',
 			quoteBy: 'Eirik Holm, former head of Ampoteket',
 			sourceText: 'Read the story at OsloMet (Norwegian)',
-			newTab: '(opens in a new tab)',
 			facts: [
 				{ term: 'Opened', value: '26 February 2026', led: '26.02.2026' },
 				{ term: 'Run by', value: 'The Resistance and RoboMEK', led: '', chips: ['The Resistance', 'RoboMEK'] },
@@ -616,18 +620,17 @@ export const en: Messages = {
 			gear: [
 				'Soldering stations, power supplies and oscilloscopes',
 				'Two Bambu Lab P2S 3D printers and prototyping equipment',
-				'Workstations, a shared work bench and PCs',
+				'Workstations, a shared workbench and PCs',
 				'Parts you can buy on the spot'
+			],
+			eventsTitle: 'Planned activities',
+			events: [
+				'Soldering and circuit board courses',
+				'Project evenings',
+				'Technical workshops'
 			],
 			printerAlt: '3D model of the Bambu Lab P2S printer, viewed from the front and side, without a logo',
 			solderingAlt: '3D model of a soldering station with an iron, holder and circuit board',
-			eventsTitle: "What's on",
-			events: [
-				'Soldering and circuit board courses',
-				'Project evenings and technical workshops',
-				'Prototypes supporting research and teaching',
-				'Collaboration with companies, alumni and faculty'
-			]
 		},
 		shelf: {
 			title: 'The parts shelf',
@@ -667,7 +670,7 @@ export const en: Messages = {
 			groups: [
 			{
 				title: 'Students',
-				text: 'If you study electro, this is the room for you. Join The Resistance or RoboMEK if you want to use it.'
+				text: 'If you study electrical engineering, this is the room for you. Join The Resistance or RoboMEK if you want to use it.'
 			},
 			{
 				title: 'Volunteers',
@@ -691,11 +694,72 @@ export const en: Messages = {
 	notFound: {
 		title: 'Page not found | Ampoteket',
 		heading: 'Page not found',
-		body: "This page doesn't exist. If you're looking for a part, check the code or search the parts catalog.",
+		body: "Looking for a part? Check that the code is right.",
 		catalog: 'Open the parts catalog',
 		home: 'Back to the front page',
-		errorTitle: 'Something went wrong | Ampoteket',
-		errorHeading: 'Something went wrong',
-		errorBody: 'Something failed on our side. Try loading the page again, or go back to the front page.'
+		errorTitle: 'The page could not be loaded | Ampoteket',
+		errorHeading: 'The page could not be loaded',
+		errorBody: 'The fault is on our side. Your cart is saved in this browser, so nothing is lost.',
+		retry: 'Try again',
+		help: 'Get help'
+	},
+	receipt: {
+		subject: 'Receipt from Ampoteket',
+		preheader: 'Receipt for your purchase.',
+		heading: 'Receipt from Ampoteket',
+		lead: (date: string) => `Your purchase was registered ${date}.`,
+		total: 'Total',
+		note: 'We do not check payments. This is a receipt for the registration, not for the payment.',
+		reference: 'Support reference',
+		referenceHelp: 'If you need help with the purchase, show the reference to a volunteer.',
+		help: 'Help with your purchase',
+		address: 'Ampoteket, Pilestredet 35, Oslo'
+	},
+	privacy: {
+		title: 'Privacy | Ampoteket',
+		description: 'What Ampoteket stores about you as a buyer, where it is kept, and how to have your contact details deleted.',
+		heading: 'Privacy',
+		lede: 'Ampoteket is run by The Resistance and RoboMEK. You need no account to buy, and we use no tracking, analytics or ads.',
+		sections: [
+			{
+				title: 'In your browser',
+				paragraphs: [
+					'The cart and a purchase you have started are saved in this browser, not in an account. Clearing site data removes them from here.',
+					'When you go to checkout, we set one cookie that ties the purchase to your browser. It lasts one year and is used only for the purchase.'
+				]
+			},
+			{
+				title: 'Contact details at checkout',
+				paragraphs: [
+					'A phone number or email is optional. We use it only to find your purchase if something goes wrong, and only signed-in volunteers can see it.',
+					'It is stored apart from the stock history. If you have not registered the purchase, it is deleted after 90 days. After registration it stays until you ask for it to be deleted.'
+				]
+			},
+			{
+				title: 'Receipt by email',
+				paragraphs: [
+					'If you ask for a receipt, we send it with the service Resend. The address is used for that one message and is not stored by us.'
+				]
+			},
+			{
+				title: 'Discord on the front page',
+				paragraphs: [
+					'Our server fetches the list of who is online, so your browser never contacts Discord. Nothing about you is sent there.'
+				]
+			},
+			{
+				title: 'Where the data is kept',
+				paragraphs: [
+					'The website runs on Cloudflare. Purchases and stock are kept in a Supabase database in Stockholm.'
+				]
+			},
+			{
+				title: 'Having your contact details deleted',
+				paragraphs: [
+					'Ask a volunteer to delete them. Bring the support reference from checkout so they can find the right purchase. The purchase and the stock history are kept, without the contact details.'
+				]
+			}
+		],
+		help: 'Contact a volunteer'
 	}
 };

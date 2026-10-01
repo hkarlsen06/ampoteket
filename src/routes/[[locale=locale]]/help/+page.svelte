@@ -32,14 +32,14 @@
 							<div class="flex flex-wrap gap-x-6">
 								{#if contact.email}<Button variant="link" class="justify-start text-left wrap-anywhere" href={`mailto:${encodeURIComponent(contact.email).replace('%40', '@')}`}>{contact.email}</Button>{/if}
 								{#if contact.phone}<Button variant="link" href={`tel:${contact.phone.replace(/[ ()-]/g, '')}`}>{contact.phone}</Button>{/if}
-								{#if contact.contact_url}<Button variant="link" class="justify-start text-left" href={contact.contact_url} rel="noreferrer">{m.contactLink(contact.display_name)}</Button>{/if}
+								{#if contact.contact_url}<Button variant="link" class="justify-start text-left" href={contact.contact_url} target="_blank" rel="noreferrer">{m.contactLink(contact.display_name)}<span class="sr-only"> {i18n.m.newTab}</span></Button>{/if}
 							</div>
 						</Item.Content>
 					</Item.Root>
 				{/each}
 			</Item.Group>
 		{/if}
-		<Button variant="outline" class="justify-self-start" href={DISCORD_INVITE}><DiscordLogo />{m.discord}</Button>
+		<Button variant="outline" class="justify-self-start" href={DISCORD_INVITE} target="_blank" rel="external noopener"><DiscordLogo />{m.discord}<span class="sr-only"> {i18n.m.newTab}</span></Button>
 	</section>
 	<div class={section()}><Button variant="link" href={i18n.href('/cart')}><Icon icon={ArrowLeftIcon} />{i18n.m.checkout.backToCart}</Button></div>
 </div>

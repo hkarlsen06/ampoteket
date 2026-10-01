@@ -57,16 +57,15 @@ Keep these when comparing with or updating from upstream:
 - **`Toggle`** sets `aria-pressed` and `aria-checked` with fill and underline.
   `Slider` fills with `--foreground` and exposes `thumbProps(index)` for localized
   names and `aria-valuetext`. `Checkbox` is a plain check on the control surface.
-  `Field.Field orientation="horizontal"` keeps a 44px row.
-- **`Dialog`:** `Content` defaults to `preventScroll={false}` and no automatic close
-  button; supply a localized close, or both `showCloseButton` and `closeLabel`.
-  Centered content is bounded to `100dvh - 2rem`; long text wraps, and bar-header
-  close controls do not shrink. Use `auto minmax(0,1fr) auto` rows and a named
-  `sheetBody` between header and footer when content can overflow.
-  `Dialog.Title` is `text-xl`; `Content`/`Footer` take `variant="sheet"`;
+  `Field.Field orientation="horizontal"` keeps a compact-size row.
+- **`Dialog`:** `Content` defaults to `preventScroll={false}` (the site never locks
+  scrolling) and no automatic close button; supply a localized close, or both
+  `showCloseButton` and `closeLabel`. Centered content is bounded to `100dvh - 2rem`;
+  portaled text wraps and bar-header close controls do not shrink. When content can
+  overflow, use `auto minmax(0,1fr) auto` rows with a named, focusable `sheetBody`
+  scroll region between header and footer, so title and actions stay reachable in
+  landscape. `Dialog.Title` is `text-xl`; `Content`/`Footer` take `variant="sheet"`;
   `Dialog.Header` has `layout="bar"` and `density="compact"` (the scanner at 360×640).
-  Centered content is limited to the viewport minus 2rem. Put long content in a
-  named, focusable `sheetBody` scroll region, with title and actions outside it.
 - **`AlertDialog`:** no close icon, `preventScroll={false}`, initial focus on the
   enabled `Cancel`. `Cancel` closes; `Action` leaves closing to the caller after
   success. Content fits the dynamic viewport; Description wraps its warning in a
@@ -80,7 +79,7 @@ Keep these when comparing with or updating from upstream:
   control surface, with a nonshrinking input row; the combobox caps content to the
   popover's available height and lets the contained result list shrink. Its virtual
   anchor clips the trigger to the visual viewport when a keyboard covers it. Selected items keep
-  a visible check. `CommandDialog` and `CommandLinkItem` were removed.
+  a visible check. This project has no `CommandDialog` or `CommandLinkItem`.
 - **`Menubar`:** no interior scroll region; callers keep action lists short.
 - **`Sonner`:** `theme="system"`, semantic popover colours, localized container and
   close labels, dismiss icon on the right.

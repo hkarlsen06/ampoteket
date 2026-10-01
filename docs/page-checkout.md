@@ -26,7 +26,7 @@ amount, the [verified QR/link](../assets/payments/README.md) (freeform amount, t
 the buyer) and an explicit "I have paid" action. Visiting Vipps changes nothing. Never
 send a buyer to Vipps before the ID is saved and read back and a snapshot read has
 succeeded. When `payment_required=false`, omit Vipps and offer direct registration.
-Success means items are registered, never that payment was verified.
+Success means items are registered; the [payment rule](website-guide.md#4-guest-checkout) applies.
 
 `payment_required` stays true after registration, so check registration and local
 attempt state first: registered checkouts are read-only, and an attempted confirmation
@@ -35,8 +35,8 @@ never shows another payment action.
 Reconcile the original saved checkout on tab return, reconnect and local attempt
 changes. Keep its lines and references mounted while reading, and gate payment until
 the read succeeds. Before opening Vipps, check the same checkout again; a registration
-by another tab or a volunteer applies the existing completion and cleanup path.
-Revalidation never creates a replacement checkout or implies verified payment.
+by another tab or a volunteer runs the normal completion and cleanup path.
+Revalidation never creates a replacement checkout.
 
 ## States
 
@@ -75,6 +75,6 @@ guessed match or upload. Saved checkouts never expire.
 
 ## Acceptance
 
-`./scripts/test-web.sh --checkout`; executed results in
-[VALIDATION.md](../VALIDATION.md). Open: Vipps app switching on real phones and
-scanning the attached paper QR.
+`./scripts/test-web.sh --checkout`, plus Vipps app switching on real phones and
+scanning the attached paper QR. Results and open checks:
+[VALIDATION.md](../VALIDATION.md).

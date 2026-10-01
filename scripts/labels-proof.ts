@@ -338,6 +338,8 @@ try {
 
   const geometry = await context.newPage();
   geometry.setDefaultTimeout(30000);
+  // Each layout starts from no selection; the tab otherwise restores the last one.
+  await geometry.addInitScript(() => { for (const key of Object.keys(sessionStorage)) if (key.startsWith('ampoteket:draft:')) sessionStorage.removeItem(key); });
   for (const [prefix, messages] of [['', nb], ['/en', en]] as const) for (const colorScheme of ['light', 'dark'] as const) for (const width of [360, 1280]) {
     await geometry.setViewportSize({ width, height: 900 });
     await geometry.emulateMedia({ colorScheme });

@@ -36,11 +36,11 @@ const HOST = process.env.HOST ?? '127.0.0.1';
  * Accepted `Host` headers, the same protection Vite's `allowedHosts` gives the
  * dev server: without it any web page could resolve a name it owns to this
  * address and POST edits into the source files from the visitor's browser.
- * `i18n.ampoteket.no` is the Caddy site that fronts this on the tailnet.
- * Override for a one-off name with `ALLOWED_HOSTS=a.example,b.example`.
+ * To reach the editor by another name (a tunnel or tailnet host), list it with
+ * `ALLOWED_HOSTS=a.example,b.example`; that adds to `localhost`, `127.0.0.1` and `[::1]`.
  */
 const ALLOWED_HOSTS = new Set(
-	(process.env.ALLOWED_HOSTS ?? 'localhost,127.0.0.1,[::1],i18n.ampoteket.no,100.106.184.0')
+	('localhost,127.0.0.1,[::1],' + (process.env.ALLOWED_HOSTS ?? ''))
 		.split(',')
 		.map((h) => h.trim().toLowerCase())
 		.filter(Boolean)

@@ -3,6 +3,8 @@
 // See docs/i18n.md.
 
 export const nb = {
+	/** Screen-reader suffix for links that open in a new tab. */
+	newTab: '(åpnes i ny fane)',
 	scanner: {
 		title: 'Skann eller finn en del', action: 'Skann', open: 'Skann QR-kode', close: 'Lukk skanneren',
 		contents: 'Skanning og produktdetaljer',
@@ -286,7 +288,7 @@ export const nb = {
 		empty: 'Ingen endringer er registrert.', more: 'Vis eldre endringer', retry: 'Prøv igjen',
 		entryId: (id: string) => `Loggpost ${id}`, actor: 'Utført av', details: 'Vis endrede data',
 		recordKey: 'ID', before: 'Før', after: 'Etter',
-		tables: { staff_members: 'Adminkonto', help_contacts: 'Kontakt på hjelpesiden', units: 'Enhet', categories: 'Kategori', cabinets: 'Skap', bins: 'Skuff', products: 'Produkt', attribute_definitions: 'Spesifikasjonstype', product_attributes: 'Produktspesifikasjon', purchase_orders: 'Bestilling', purchase_order_lines: 'Bestillingslinje', count_batches: 'Tellerunde', checkout_contacts: 'Kjøperens kontaktopplysning' },
+		tables: { staff_members: 'Adminkonto', help_contacts: 'Kontakt på hjelpesiden', units: 'Enhet', categories: 'Kategori', cabinets: 'Kabinett', bins: 'Skuff', products: 'Produkt', attribute_definitions: 'Spesifikasjonstype', product_attributes: 'Produktspesifikasjon', purchase_orders: 'Bestilling', purchase_order_lines: 'Bestillingslinje', count_batches: 'Tellerunde', checkout_contacts: 'Kjøperens kontaktopplysning' },
 		actions: { INSERT: 'Opprettet', UPDATE: 'Endret', DELETE: 'Slettet', CONTACT_CLEARED: 'Kontaktopplysning slettet' }
 	},
 	adminMembers: {
@@ -448,7 +450,11 @@ export const nb = {
 		cartLines: (n: number) => (n === 1 ? ', 1 del' : `, ${n} deler`)
 	},
 	footer: {
-		links: 'Lenker'
+		links: 'Lenker',
+		about: 'Pilestredet 35, Oslo. Drives av The Resistance og RoboMEK.',
+		help: 'Hjelp',
+		privacy: 'Personvern',
+		discord: 'Discord'
 	},
 	product: {
 		title: (name: string) => `${name} | Ampoteket`,
@@ -576,10 +582,10 @@ export const nb = {
 	home: {
 		title: 'Ampoteket | Studentenes elektronikkverksted på OsloMet',
 		description:
-			'Ampoteket er elektronikkverkstedet i Pilestredet 35, drevet av studenter. Loddeplasser, oscilloskop, 3D-printer og en delehylle du handler fra selv.',
+			'Ampoteket er elektronikkverkstedet i Pilestredet 35, drevet av studenter. Loddeplasser, oscilloskop, to 3D-printere og en delehylle du handler fra selv.',
 		hero: {
-			title: 'Elektronikklab av studenter, for studenter',
-			lede: 'Loddeplasser, oscilloskop, 3D-printer og et delelager, midt i Pilestredet 35. Lav terskel for å teste idéer, og helt greit å feile.',
+			title: 'Lodd, bygg og hent delene selv',
+			lede: 'Loddeplasser, oscilloskop, to 3D‑printere og en hylle med deler, midt i Pilestredet 35.',
 			parts: 'Se delekatalogen',
 			place: 'Pilestredet 35 · Oslo',
 			clock: 'Klokka i Oslo',
@@ -604,12 +610,11 @@ export const nb = {
 		about: {
 			title: 'Dette er Ampoteket',
 			body2:
-				'Rommet er en faglig og sosial arena: jobb med egne prosjekter, ta et loddekurs, bruk utstyr du ikke har hjemme, eller heng med folk som holder på med det samme.',
+				'Jobb med egne prosjekter, bruk utstyr du ikke har hjemme, og heng med folk som holder på med det samme.',
 			quote:
 				'I stedet for å vente i ukevis på deler, kan du ofte finne det du trenger her og komme i gang på minutter.',
 			quoteBy: 'Eirik Holm, tidligere leder for Ampoteket',
 			sourceText: 'Les saken hos OsloMet',
-			newTab: '(åpnes i ny fane)',
 			facts: [
 				{ term: 'Åpnet', value: '26. februar 2026', led: '26.02.2026' },
 				{ term: 'Drives av', value: 'The Resistance og RoboMEK', led: '', chips: ['The Resistance', 'RoboMEK'] },
@@ -621,19 +626,18 @@ export const nb = {
 			gearTitle: 'Utstyr',
 			gear: [
 				'Loddeplasser, strømforsyninger og oscilloskop',
-				'2 stk Bambu Lab P2S 3D-printer og utstyr for prototyping',
+				'To Bambu Lab P2S 3D-printere og utstyr for prototyping',
 				'Arbeidsstasjoner, felles arbeidsbord og PC-er',
 				'Deler du kan kjøpe på stedet'
 			],
-			printerAlt: '3D-modell av Bambu Lab P2S-printeren, sett skrått forfra, uten logo',
-			solderingAlt: '3D-modell av en loddestasjon med loddebolt, holder og kretskort',
-			eventsTitle: 'Det skjer',
+			eventsTitle: 'Planlagte aktiviteter',
 			events: [
 				'Kurs i lodding og kretskort',
-				'Prosjektkvelder og faglige verksteder',
-				'Prototyper som støtter forskning og undervisning',
-				'Samarbeid med bedrifter, alumner og ansatte'
-			]
+				'Prosjektkvelder',
+				'Faglige verksteder'
+			],
+			printerAlt: '3D-modell av Bambu Lab P2S-printeren, sett skrått forfra, uten logo',
+			solderingAlt: '3D-modell av en loddestasjon med loddebolt, holder og kretskort',
 		},
 		shelf: {
 			title: 'Delehylla',
@@ -697,12 +701,74 @@ export const nb = {
 	notFound: {
 		title: 'Finner ikke siden | Ampoteket',
 		heading: 'Finner ikke siden',
-		body: 'Siden finnes ikke. Leter du etter en del, sjekk koden eller søk i delekatalogen.',
+		body: 'Leter du etter en del? Sjekk at koden er riktig.',
 		catalog: 'Åpne delekatalogen',
 		home: 'Til forsiden',
-		errorTitle: 'Noe gikk galt | Ampoteket',
-		errorHeading: 'Noe gikk galt',
-		errorBody: 'Noe feilet hos oss. Prøv å laste siden på nytt, eller gå til forsiden.'
+		errorTitle: 'Siden kunne ikke lastes | Ampoteket',
+		errorHeading: 'Siden kunne ikke lastes',
+		errorBody: 'Feilen ligger hos oss. Handlekurven din ligger lagret i denne nettleseren, så ingenting er tapt.',
+		retry: 'Prøv igjen',
+		help: 'Få hjelp'
+	},
+	/** Receipt email, rendered on the server. The one email carries both languages. */
+	receipt: {
+		subject: 'Kvittering fra Ampoteket',
+		preheader: 'Kvittering for kjøpet ditt.',
+		heading: 'Kvittering fra Ampoteket',
+		lead: (date: string) => `Kjøpet ditt er registrert ${date}.`,
+		total: 'Totalt',
+		note: 'Betalingen sjekkes ikke av oss. Dette er en kvittering på registreringen, ikke på betalingen.',
+		reference: 'Hjelpereferanse',
+		referenceHelp: 'Trenger du hjelp med kjøpet, vis referansen til en frivillig.',
+		help: 'Hjelp med kjøpet',
+		address: 'Ampoteket, Pilestredet 35, Oslo'
+	},
+	privacy: {
+		title: 'Personvern | Ampoteket',
+		description: 'Hva Ampoteket lagrer om deg som kjøper, hvor det ligger, og hvordan du får kontaktopplysningen din slettet.',
+		heading: 'Personvern',
+		lede: 'Ampoteket drives av The Resistance og RoboMEK. Du trenger ingen konto for å handle, og vi bruker ingen sporing, analyse eller reklame.',
+		sections: [
+			{
+				title: 'I nettleseren din',
+				paragraphs: [
+					'Handlekurven og et kjøp du har startet lagres i denne nettleseren, ikke på en konto. Tømmer du nettstedsdata, forsvinner de derfra.',
+					'Når du går til kassen, setter vi én informasjonskapsel som kobler kjøpet til nettleseren din. Den holder i ett år og brukes bare til kjøpet.'
+				]
+			},
+			{
+				title: 'Kontaktopplysning i kassen',
+				paragraphs: [
+					'Telefon eller e-post er valgfritt. Vi bruker den bare til å finne kjøpet ditt hvis noe går galt, og bare frivillige med innlogging kan se den.',
+					'Den lagres skilt fra lagerhistorikken. Har du ikke registrert kjøpet, slettes den etter 90 dager. Etter registrering blir den liggende til du ber om at den slettes.'
+				]
+			},
+			{
+				title: 'Kvittering på e-post',
+				paragraphs: [
+					'Ber du om kvittering, sender vi den med tjenesten Resend. Adressen brukes til den ene utsendingen og lagres ikke hos oss.'
+				]
+			},
+			{
+				title: 'Discord på forsiden',
+				paragraphs: [
+					'Oversikten over hvem som er pålogget hentes av serveren vår, så nettleseren din kontakter aldri Discord. Ingenting om deg sendes dit.'
+				]
+			},
+			{
+				title: 'Hvor dataene ligger',
+				paragraphs: [
+					'Nettsiden kjøres på Cloudflare. Kjøp og lager ligger i en Supabase-database i Stockholm.'
+				]
+			},
+			{
+				title: 'Få kontaktopplysningen slettet',
+				paragraphs: [
+					'Be en frivillig om å slette den. Ta med hjelpereferansen fra kassen, så finner de riktig kjøp. Kjøpet og lagerhistorikken beholdes, uten kontaktopplysningen.'
+				]
+			}
+		],
+		help: 'Kontakt en frivillig'
 	}
 };
 

@@ -13,13 +13,14 @@
 	import { getI18n, specificationLabel } from '$lib/i18n';
 	import { standardSpecificationDefinitions, productSpecificationFields } from '$lib/product-specifications';
 	import { getAdminContext } from '$lib/admin-context.svelte';
+	import { readDraft, writeDraft } from '$lib/drafts';
 	import { engineeringUnits, formatMeasurement, measurementInput, parseMeasurement } from '$lib/format';
 	import { definitiveProductFailure, detailCommandKey, executeDetailCommand, parseAttribute, parseDetailCommand, readProductAttributes, StaleProductError, type AttributeDefinition, type AttributeValue, type DetailCommand, type ProductFamily, type ProductAttributeDraft } from '$lib/admin-products';
 	// Every field is edited in place and written by the product's Save button:
 	// prepare() validates (and stages values for a new product) before the
 	// product write; commit() then saves each changed value of a saved product
 	// as its own persisted, individually acknowledged command.
-	let { productId, definitions = $bindable(), family, staged = $bindable([]), disabled = false }: { productId: string | null; definitions: AttributeDefinition[]; family: ProductFamily | null; staged?: ProductAttributeDraft[]; disabled?: boolean } = $props();
+	let { productId, definitions = $bindable(), family, staged = $bindable([]), disabled = false, drafts = false }: { productId: string | null; definitions: AttributeDefinition[]; family: ProductFamily | null; staged?: ProductAttributeDraft[]; disabled?: boolean; drafts?: boolean } = $props();
 	const draftProductId = '00000000-0000-4000-8000-000000000000';
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.adminProducts); const uid = $props.id();
 	let savedValues = $state.raw<AttributeValue[] | null>(null);
@@ -53,6 +54,7 @@
 			sessionStorage.removeItem(probe);
 			storageReady = true;
 		} catch { storageReady = false; }
+		if (!productId) restoreDraft();
 		void load();
 		return () => { alive = false; };
 	});
@@ -62,12 +64,38 @@
 		const session = admin.credentials();
 		try {
 			const rows = await readProductAttributes(session, productId);
-			if (alive && session.userId === admin.session?.user.id) savedValues = rows;
+			if (alive && session.userId === admin.session?.user.id) { savedValues = rows; if (!draftRestored) restoreDraft(); }
 		} catch (error) {
 			if (alive) loadFailed = true;
 			await admin.permissionFailure(error);
 		} finally { if (alive) loading = false; }
 	}
+	// With `drafts`, unsaved values outlive a reload or sign-in round trip
+	// (drafts.ts); command recovery leaves it off. A saved product's edits return
+	// only while its stored values are unchanged, with any stale warning still owed,
+	// so a restored edit never replaces someone else's newer value unseen.
+	const draftName = $derived(`product:${productId ?? 'new'}:specifications`);
+	const valuesKey = $derived(JSON.stringify([...(savedValues ?? [])].sort((a, b) => a.attribute_id.localeCompare(b.attribute_id))));
+	let draftRestored = $state(false);
+	function restoreDraft() {
+		draftRestored = true;
+		if (!drafts) return;
+		const saved = readDraft(admin.session?.user.id, draftName) as { values?: unknown; edits?: unknown; added?: unknown; stale?: unknown } | null;
+		const texts = (value: unknown) => Array.isArray(value) && value.every(item => typeof item === 'string');
+		if (saved && (!productId || saved.values === valuesKey) && saved.edits && typeof saved.edits === 'object'
+			&& texts(Object.values(saved.edits)) && texts(saved.added) && texts(saved.stale)) {
+			edits = saved.edits as Record<string, string>; added = saved.added as string[];
+			errors = Object.fromEntries((saved.stale as string[]).map(id => [id, 'stale' as const]));
+		}
+	}
+	$effect(() => {
+		if (!drafts || !draftRestored) return;
+		const dirty = Object.entries(edits).some(([id, text]) => {
+			const definition = definitions.find(item => item.id === id);
+			return !definition || text !== asText(saved(id), unitOf(definition));
+		});
+		writeDraft(admin.session?.user.id, draftName, dirty ? { values: valuesKey, edits: $state.snapshot(edits), added: $state.snapshot(added), stale: Object.keys(errors).filter(id => errors[id] === 'stale') } : null);
+	});
 	function asText(value: Omit<AttributeValue, 'product_id'> | null | undefined, unit: string | null): string {
 		return !value ? '' : value.number_value !== null ? measurementInput(value.number_value, unit, i18n.locale) : value.text_value ?? (value.boolean_value === null ? '' : String(value.boolean_value));
 	}

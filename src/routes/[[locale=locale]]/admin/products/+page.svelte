@@ -21,6 +21,7 @@
 	import AdminProductScanner from '$lib/AdminProductScanner.svelte';
 	import { compareAttention, readAdminProducts, readInventory, readProductCommand, readProductReferences, type AdminProduct, type ProductCommand, type ProductStock, type ProductReferences } from '$lib/admin-products';
 	import ProductReferencesEditor from '$lib/ProductReferences.svelte';
+	import { readDraft, writeDraft } from '$lib/drafts';
 	const fieldId = $props.id();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.adminProducts);
 	let products = $state<AdminProduct[] | null>(null); let references = $state<ProductReferences | null>(null); let stock = $state<Map<string, ProductStock> | null>(null); let stockFailed = $state(false); let busy = $state(false); let failed = $state(false); let query = $state(''); let activity = $state('all'); let sort = $state<keyof typeof sorters>('attention'); let sortOpen = $state(false); let pending = $state<ProductCommand | null>(null); let alive = true;
@@ -33,9 +34,21 @@
 		code: () => 0,
 		name: (a: AdminProduct, b: AdminProduct) => productName(a, i18n.locale).localeCompare(productName(b, i18n.locale), i18n.locale),
 	};
+	// Search, state and sort survive Back and reload in this tab. Admin pages mount
+	// after Auth, too late for a SvelteKit snapshot to restore on reload.
+	let viewLoaded = $state(false);
+	$effect(() => {
+		if (!viewLoaded) return;
+		writeDraft(admin.session?.user.id, 'products-view', query || activity !== 'all' || sort !== 'attention' ? { query, activity, sort } : null, 'session');
+	});
 	const filtered = $derived((products ?? []).filter(p => (activity === 'all' || p.is_active === (activity === 'active')) && productSearchText(p).toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).sort(sorters[sort]));
 	onMount(() => {
 		try { pending = readProductCommand(sessionStorage); } catch { /* The editor reports blocked persistence before any write. */ }
+		const view = readDraft(admin.session?.user.id, 'products-view', 'session') as Record<string, unknown> | null;
+		if (typeof view?.query === 'string' && ['all', 'active', 'inactive'].includes(view.activity as string) && typeof view.sort === 'string' && Object.hasOwn(sorters, view.sort)) {
+			query = view.query; activity = view.activity as string; sort = view.sort as keyof typeof sorters;
+		}
+		viewLoaded = true;
 		void load();
 		return () => { alive = false; };
 	});

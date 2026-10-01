@@ -27,6 +27,7 @@
 	import { Separator } from '$lib/components/ui/separator';
 	import OrderProductCombobox from '$lib/OrderProductCombobox.svelte';
 	import AdminOrderReceipt from '$lib/AdminOrderReceipt.svelte';
+	import { readDraft, writeDraft } from '$lib/drafts';
 
 	type DraftLine = { key: string; productId: string; quantity: string; unitCost: string; purchaseUrl: string; supplierSku: string };
 	const blankLine = (): DraftLine => ({ key: crypto.randomUUID(), productId: '', quantity: '', unitCost: '', purchaseUrl: '', supplierSku: '' });
@@ -48,7 +49,7 @@
 	// Product IDs chosen from the overview's "Needs attention" sheet; each becomes a line once products load.
 	let prefill: string[] | null = page.url.searchParams.get('new')?.split(',').filter(Boolean) ?? null;
 	// An untouched placement time follows the clock until saving, since the admin shops before recording.
-	let placedEdited = false;
+	let placedEdited = $state(false);
 	const wrongIdentity = $derived(Boolean(command && command.userId !== admin.session?.user.id));
 	const otherCommand = $derived(Boolean(command && (command.kind !== 'create' && (command.kind !== 'receipt' || command.orderId !== null))));
 	const frozen = $derived(Boolean(command));
@@ -131,9 +132,32 @@
 	}
 	onMount(() => {
 		mounted = true; placedLocal = osloLocal(new Date()); lines = [blankLine()]; syncPending();
+		if (!command || otherCommand) restoreDraft();
+		draftRestored = true;
 		void updateOrderStorage((storage) => { readOrderCommand(storage); const key = 'ampoteket:order-storage-check'; storage.setItem(key, '1'); if (storage.getItem(key) !== '1') throw new Error(); storage.removeItem(key); }).then(() => { if (mounted) storageReady = true; }).catch(() => { if (mounted) storageReady = false; });
 		window.addEventListener('storage', syncPending); window.addEventListener(orderStorageEvent, syncPending); void load();
 		return () => { mounted = false; generation++; window.removeEventListener('storage', syncPending); window.removeEventListener(orderStorageEvent, syncPending); };
+	});
+	// Unsaved input outlives a reload, Back or sign-in round trip (drafts.ts) and
+	// returns when the form is opened again. A pending command owns the form, and
+	// the draft is left alone meanwhile.
+	let draftRestored = $state(false), created = $state(false);
+	const draftText = ['supplier', 'reference', 'placedLocal', 'offset', 'additionalCost', 'note', 'sourceNote'] as const;
+	const lineText = ['productId', 'quantity', 'unitCost', 'purchaseUrl', 'supplierSku'] as const;
+	function restoreDraft() {
+		const saved = readDraft(admin.session?.user.id, 'order') as Record<string, unknown> | null;
+		const text = (value: unknown, names: readonly string[]) => Boolean(value && typeof value === 'object' && names.every(name => typeof (value as Record<string, unknown>)[name] === 'string'));
+		if (!saved || !text(saved, draftText) || !Array.isArray(saved.lines) || !saved.lines.length || !saved.lines.every(line => text(line, lineText))) return;
+		({ supplier, reference, offset, additionalCost, note, sourceNote } = saved as Record<typeof draftText[number], string>);
+		if (saved.placedLocal) { placedLocal = saved.placedLocal as string; placedEdited = true; }
+		lines = (saved.lines as Omit<DraftLine, 'key'>[]).map(line => ({ ...blankLine(), ...Object.fromEntries(lineText.map(name => [name, line[name]])) }));
+	}
+	$effect(() => {
+		if (!draftRestored || command) return;
+		const fields = { supplier, reference, placedLocal: placedEdited ? placedLocal : '', offset, additionalCost, note, sourceNote, lines: lines.map(({ key, ...line }) => line) };
+		const dirty = !created && Boolean(supplier || reference || note || sourceNote || additionalCost !== '0' || fields.placedLocal
+			|| fields.lines.some(line => lineText.some(name => line[name])));
+		writeDraft(admin.session?.user.id, 'order', dirty ? fields : null);
 	});
 	async function load() {
 		if (admin.status !== 'ready') return;
@@ -188,7 +212,7 @@
 			await updateOrderStorage((storage) => clearOrderCommand(storage, saved!));
 			if (!mounted || session.userId !== admin.session?.user.id) return;
 			command = null; outcome = 'recorded';
-			if (result.kind === 'create') await goto(i18n.href(`/admin/orders/${result.orderId}`));
+			if (result.kind === 'create') { created = true; await goto(i18n.href(`/admin/orders/${result.orderId}`)); }
 			else { sourceNote = ''; lines = [blankLine()]; mode = 'closed'; await load(); }
 		} catch (error) {
 			const rejected = saved ? orderRejection(error) : null;

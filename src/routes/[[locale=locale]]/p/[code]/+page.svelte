@@ -122,7 +122,7 @@ JavaScript, always show the content with a plain heading. -->
 					{/snippet}
 					{@render disclosure('specifications-title', m.specifications, specifications)}
 				{/if}
-				{#if product.datasheet_url}<Button variant="outline" class="justify-self-start" href={product.datasheet_url} rel="noreferrer">{m.datasheet}<Icon icon={ArrowUpRightIcon} /></Button>{/if}
+				{#if product.datasheet_url}<Button variant="outline" class="justify-self-start" href={product.datasheet_url} target="_blank" rel="noreferrer">{m.datasheet}<Icon icon={ArrowUpRightIcon} /><span class="sr-only"> {i18n.m.newTab}</span></Button>{/if}
 			</div>
 		</div>
 	{:else}

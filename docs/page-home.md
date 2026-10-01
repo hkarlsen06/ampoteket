@@ -8,8 +8,8 @@ under `home` (picker copy under `shelfMap`). Design rules:
 ## 1. Job of the page
 
 `ampoteket.no` is the whole place, not just the shop. The page first **says what
-Ampoteket is**: a student-run electronics workshop at Pilestredet 35 with equipment,
-courses and people. It then **gets a phone to the parts shelf in one tap**: someone
+Ampoteket is**: a student-run electronics workshop at Pilestredet 35 with equipment
+and people. It then **gets a phone to the parts shelf in one tap**: someone
 at the shelf must reach the scanner or `/p` without reading anything. The shelf comes
 after the workshop.
 
@@ -44,13 +44,16 @@ eyebrows or section numbers.
 The header holds the wordmark, Discord's official symbol (`DiscordLogo.svelte`, foreground
 colour only, per Discord's brand rules, left of the catalog icon) linking the permanent invite
 (`DISCORD_INVITE` in `src/lib/i18n/index.ts`), the cart icon (badge from
-`localStorage["ampoteket:cart"]`) and a menu button. Above 40rem, catalog and Admin
-are header icon links; the menu holds scanning and the language picker. At phone
+`localStorage["ampoteket:cart"]`) and a menu button. Discord is left out of the header on
+`/cart` and `/checkout`. Above 40rem, catalog, Admin and cart are header links (icon only
+until 48rem, then icon and text label); the menu holds scanning and the language picker. At phone
 widths, catalog and Admin move into the menu and scanning follows the placement below.
 The same DOM adapts through CSS, and opening the menu does not move the header.
 Without JavaScript the button is hidden and the panel is the
 header's second row (`html.no-js`, set in `src/app.html`). The Admin link appears only
-after active staff membership is confirmed; the footer login link is always there. On
+after active staff membership is confirmed; the footer login link is always there. The
+footer also states the address and operators (`footer.about`) and links help, `/privacy` and
+Discord. On
 phones (≤ 40rem) the scanner is a Scan button in the hero, then a floating button once
 that scrolls under the header. The layout emits site-wide link-preview metadata; this
 page adds `og:title` and `og:description`.
@@ -88,7 +91,12 @@ visible Open/Closed label at every width and includes its time in its accessible
 It is green while OsloMet's Pilestredet buildings are open and red when closed, per
 [student.oslomet.no/apningstider](https://student.oslomet.no/apningstider) (Mon–Fri
 06–22, weekends 08–22; holidays not modelled). These are building hours, not
-Ampoteket's staffed hours. Each photograph's credit runs along its right edge.
+Ampoteket's staffed hours. Each photograph's credit runs along its right edge. The night stage is flat: no
+film-grain overlay and no glow on the headline or the place dot. The headline stays
+legible through the feathered photograph and the `--night` surface alone, and the LED
+glow belongs to `Led.svelte` only. Copy is specific to the place (the shelf you take
+parts from yourself, the printers and instruments actually there) and counts the
+printers: there are two Bambu Lab P2S, never «a 3D printer».
 
 ### 2.3 «Dette er Ampoteket»
 
@@ -107,8 +115,12 @@ photograph is always shown, never cropped. With scroll motion it switches on lik
 so no filter, overlay or scrim may change its tones. The figure must not get `overflow: hidden`: that makes
 it the image's scroll container and stops the timeline.
 
-Below it, two panels (equipment; courses, project evenings, prototypes and
-collaboration), each with a 3D model. WebP posters are the loading state and remain
+Below it, two panels, each a list beside a 3D model: equipment (`gear`) and planned
+activities (`events`). The events list holds only what the OsloMet story describes as
+planned (soldering and circuit board courses, project evenings, technical workshops);
+do not present them as running, add schedules, or claim research, teaching or company
+collaboration. Update the list when the courses actually run. WebP posters are the
+loading state and remain
 without JavaScript, without WebGL (the viewer is never mounted), with reduced motion,
 with Data Saver and if the GLB fails. Viewers have fixed dimensions and localized alternative text. The
 models must stay browser-rendered 3D meshes, never image sequences or video. Touch

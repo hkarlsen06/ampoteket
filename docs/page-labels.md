@@ -68,6 +68,6 @@ in `render.ts` draws the label.
 ## Acceptance
 
 `./scripts/test-web.sh --labels` exports a PDF from the real app and decodes its QR
-codes (needs Python PyMuPDF). Executed results: [VALIDATION.md](../VALIDATION.md).
-Open: measure drawer label areas, print an A4 sheet, check size and cut margins, attach
-it to real drawers and scan it in the workshop's light.
+codes (needs Python PyMuPDF). Physical acceptance: measure drawer label areas, print
+an A4 sheet, check size and cut margins, attach it to real drawers and scan it in the
+workshop's light. Results and open checks: [VALIDATION.md](../VALIDATION.md).

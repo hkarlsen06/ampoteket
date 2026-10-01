@@ -23,6 +23,7 @@
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Separator } from '$lib/components/ui/separator';
+	import { readDraft, writeDraft } from '$lib/drafts';
 
 	const fieldId = $props.id();
 	const i18n = getI18n(), admin = getAdminContext();
@@ -53,6 +54,8 @@
 	}
 	onMount(() => {
 		mounted = true; selected = page.url.searchParams.get('product') ?? ''; syncPending();
+		if (!command) restoreDraft();
+		draftLoaded = true;
 		void updateStockStorage(storage => { readStockCommand(storage); const key = 'ampoteket:stock-storage-check'; storage.setItem(key, '1'); if (storage.getItem(key) !== '1') throw new Error(); storage.removeItem(key); }).then(() => { if (mounted) storageReady = true; }).catch(() => { if (mounted) storageReady = false; });
 		window.addEventListener('storage', syncPending); window.addEventListener(stockStorageEvent, syncPending); void load();
 		return () => { mounted = false; generation++; window.removeEventListener('storage', syncPending); window.removeEventListener(stockStorageEvent, syncPending); };
@@ -67,13 +70,33 @@
 			if (selected && result.some(item => item.id === selected)) {
 				const next = await readStockDetail(session, selected);
 				if (!mounted || version !== generation || admin.session?.user.id !== session.userId) return;
-				if (!command && detail && kind === 'correct' && movementId && (quantity || reason) && detail.stock.revision !== next.stock.revision) { reviewNeeded = true; outcome = 'stale'; }
+				const base = detail?.stock.revision ?? draftRevision; draftRevision = null;
+				if (!command && base && kind === 'correct' && movementId && (quantity || reason) && base !== next.stock.revision) { reviewNeeded = true; outcome = 'stale'; }
 				detail = next;
 			}
 			else { selected = ''; detail = null; }
 		} catch (error) { if (mounted && version === generation) failed = true; await admin.permissionFailure(error); }
 		finally { if (mounted && version === generation) loading = false; }
 	}
+	// Unsaved input outlives a reload, Back or sign-in round trip (drafts.ts). A
+	// restored correction keeps the stock revision it was typed against and any
+	// review still owed.
+	let draftLoaded = $state(false), draftRevision: string | null = null;
+	function restoreDraft() {
+		const saved = readDraft(admin.session?.user.id, 'stock') as Record<string, unknown> | null;
+		if (!saved || (selected && saved.selected !== selected) || !['withdraw', 'adjust', 'correct'].includes(saved.kind as string)
+			|| !['selected', 'movementId', 'quantity', 'counted', 'reason'].every(name => typeof saved[name] === 'string') || typeof saved.paused !== 'boolean') return;
+		({ selected, movementId, quantity, counted, reason, paused } = saved as { selected: string; movementId: string; quantity: string; counted: string; reason: string; paused: boolean });
+		kind = saved.kind as typeof kind; draftRevision = typeof saved.revision === 'string' ? saved.revision : null;
+		// A correction whose baseline is unknown is reviewed before it can be saved.
+		if (saved.reviewNeeded === true || (kind === 'correct' && movementId && !draftRevision)) { reviewNeeded = true; paused = false; outcome = 'stale'; }
+	}
+	$effect(() => {
+		// A pending command owns the form; a draft is left alone meanwhile.
+		if (!draftLoaded || command) return;
+		const dirty = Boolean(quantity || counted || reason);
+		writeDraft(admin.session?.user.id, 'stock', dirty ? { selected, kind, movementId, quantity, counted, reason, paused, reviewNeeded, revision: detail?.stock.revision ?? draftRevision } : null);
+	});
 	async function choose(productId: string) {
 		if (command || busy || admin.status !== 'ready') return;
 		selected = productId; detail = null; movementId = ''; paused = false; outcome = 'idle'; reviewNeeded = false;

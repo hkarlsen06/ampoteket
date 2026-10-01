@@ -16,9 +16,8 @@ the solution without depending on the original developer.**
 ## Read relevant guidance first
 
 Read the relevant documents below before changing their area. They describe current
-contracts; they are not a checklist for unrelated work. The migration is the
-enforcement layer. Where docs disagree with it, the migration wins; file a bug
-against the doc. Historical implementations are context, not permanent requirements.
+contracts; they are not a checklist for unrelated work. The migration wins over any
+doc that disagrees ([datamodell.md](docs/datamodell.md)). Historical implementations are context, not permanent requirements.
 When behavior changes, update its owning contract and remove conflicting guidance
 elsewhere. Keep current requirements separate from historical execution records;
 link to the owner instead of copying status or implementation inventories.
@@ -104,6 +103,10 @@ Prefer rebasing over merge commits when integrating branches. Rebase the topic b
 current target branch, then use a fast-forward merge so history stays linear. Do not create a
 merge commit unless the user explicitly requests one or rebasing would rewrite shared history.
 
+Commit messages use `type(scope): summary`, for example `fix(checkout): keep the cart until
+registration is confirmed`. The subject names the behaviour that changed, not the activity
+("refine", "fix audit findings"). Add a body only for why, when it is not obvious from the diff.
+
 ### Undo your own hunks, never the file
 
 **Do not run `git checkout -- <file>` (or `git restore <file>`) unless you have just checked that
@@ -138,14 +141,10 @@ Keep these boundaries in every UI change:
 - Mobile first: design every screen at 360 px and derive the desktop layout from it
   (one DOM, CSS-only adaptation, breakpoints 48/64rem). No horizontal page scroll at
   any width; wide data reflows into stacked rows instead of a scrolling table.
-- The document is the only scroll container (interior scroll regions are rare named
-  exceptions with `overscroll-behavior: contain`). The sticky header never hides or
-  resizes on scroll. Scroll-linked motion lives on the homepage only (hero storefront
-  walk-in, bench power-on, P2S rotation, soldering-iron movement, header scroll meter;
-  listed in `docs/design-system.md` §4.2), always with a static reduced-motion fallback.
-  No scroll locking, no programmatic
-  scrolling beyond skip link / post-navigation focus / first invalid field. Nothing
-  above the fold shifts while loading. See `docs/design-system.md` §4.1–4.2.
+- The document is the only scroll container. The sticky header never hides or resizes,
+  nothing above the fold shifts while loading, and scroll-linked motion is
+  homepage-only. Scroll regions, scroll locking, programmatic scrolling and the motion
+  list are owned by `docs/design-system.md` §4.1–4.2.
 - Keep controls and reading positions stable through interaction; progressive disclosure grows
   below its trigger. Verify geometry at desktop and phone widths with long text.
 - The app owns routine data freshness and state reconciliation; do not ask users to manage
@@ -160,10 +159,9 @@ Keep these boundaries in every UI change:
   `--muted` is a surface; secondary text uses `--muted-foreground`. Legacy colour
   aliases remain for specialized shelf/brand CSS. Use shared Button variants and
   Field/InputGroup/Checkbox/Switch controls; status badges pair colour with labels/icons.
-- Dialogs use the shared `Dialog` with `preventScroll={false}` and localized close
-  controls. Inline disclosure uses `Collapsible`; preserve the header's force-mounted
+- Dialogs use the shared `Dialog` ([rules](src/lib/components/ui/README.md)). Inline disclosure uses `Collapsible`; preserve the header's force-mounted
   content and CSS-only desktop/phone/no-JavaScript presentation.
-- Payment is trust-based: never render payment as confirmed/verified. Fetch errors render as
+- Never render payment as verified ([rule](docs/website-guide.md#4-guest-checkout)). Fetch errors render as
   "Unavailable", never as "0 in stock". Scanning a QR must never register a purchase by itself.
 
 ## Testing

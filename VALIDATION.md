@@ -3,49 +3,37 @@
 What has been executed, and what must still happen before launch. All runs used
 local, disposable services; no hosted project or deployment has been changed.
 Past runs live in git history, not here. Replace a row when you rerun it; do not
-append a diary.
+append a diary. CI runs the database chain and the `boundary`, `shop`, `checkout`,
+`admin`, `admins`, `scanner`, `labels` and `statistics` browser modes; the results
+below are local runs, not CI claims.
 
-## Current checks
+## Executed checks
 
-Admin management: database chain, type/lint checks and `--admins` acceptance
-rerun on 2026-09-27. The other nine web modes (`boundary`, `shop`, `checkout`,
-`admin`, `statistics`, `scanner`, `labels`, `shelf`, `orders`) were last run on
-2026-09-26 and were not rerun for this change.
+| Check | Last run | Result | Covers |
+| --- | --- | --- | --- |
+| `bun run check`, `bun run check:scripts`, `bun run lint` | 2026-09-30 | PASS, 0 errors/warnings | Types, scripts, lint |
+| `bun test` | 2026-09-30 | PASS, 223 tests | Unit tests |
+| `bun audit` | 2026-09-30 | PASS, no vulnerabilities after the dependency update | Resolved dependency tree |
+| `python3 scripts/test-check-clipped-ink.py`, `bun run check:ink` | 2026-09-30 | PASS | Checker regressions, static SVG checks |
+| `./scripts/test-database.sh` | 2026-09-30 | PASS | Rollback/retry, ACLs/RLS, acceptance, filters, statistics, malformed input, 10 stored-data corruption cases (including duplicate sale movements), concurrency (including mutual admin deactivation, stale invitations), restore, schema/docs comparison, signed-JWT HTTP |
+| `./scripts/test-web.sh` | 2026-09-30 | PASS | Real local Auth, public/staff/Worker boundaries, exact decimal transport |
+| `./scripts/test-web.sh --shop` | 2026-09-30 | PASS | Lifecycle freshness, retained drafts, invalid saved quantities, removal focus, mobile drawer addresses |
+| `./scripts/test-web.sh --checkout` | 2026-09-30 | PASS | Remote staff recovery, pre-payment recheck and navigation during it, framing protection, Auth invitation/recovery emails in Mailpit |
+| `./scripts/test-web.sh --admin` | 2026-09-26 | PASS | Access recovery, retained cached content, partial-inventory retry, stock field validation, audit freshness with older pages retained, drawer resizing, specification error focus |
+| `./scripts/test-web.sh --admins` | 2026-09-27 | PASS | Real Auth/Worker/Mailpit invitations in both locales, password setup/login, permissions and audit, replay/stale-resend safeguards, 360/1280 px in both locales/themes, retained drafts/focus on read failure, deactivation/reactivation |
+| `./scripts/test-web.sh --statistics` | 2026-09-26 | PASS | Localized responsive charts, retained data and focus after a failed background read |
+| `./scripts/test-web.sh --scanner` | 2026-09-26 | PASS | Firefox and WebKit with synthetic camera; named long-content scrolling keeps Add/Scan visible |
+| `./scripts/test-web.sh --labels` | 2026-09-26 | PASS | Decoded PDF QR payloads, geometry |
+| `./scripts/test-web.sh --shelf` | 2026-09-26 | PASS | Shelf UI |
+| `./scripts/test-web.sh --orders` | 2026-09-26 | PASS | Field errors and first-invalid focus, receipt freshness with selection retained, access recovery inside a pending sheet, identical uncertain-write retry, exact stock changes |
+| Browser geometry, automated | not recorded | PASS | 320×256, 667×375 and 844×390 viewports, both locales, reduced motion, 100-character category, 120-character supplier token, full accessible warning description on confirmations |
+| Browser geometry, manual | not recorded | PASS | Homepage in both locales/themes at 320/360/768/1280 px; specification and admin scanner dialogs at 360×320; short dialogs, product pickers, long text, dense shelf targets, enlarged hero text; `ShelfCabinetFace` viewBox reviewed (fill-only drawers, no clipped strokes) |
+| iOS 27 Simulator (Safari) | not recorded | PASS | 440×956 and 956×440: rotation, keyboard, native shelf panning |
 
-| Check | Result |
-| --- | --- |
-| `bun run check`, `bun run check:scripts`, `bun run lint` | PASS, 0 errors/warnings |
-| `bun test` | PASS, 221 tests |
-| `python3 scripts/test-check-clipped-ink.py`, `bun run check:ink` | PASS: checker regressions and static SVG checks; dynamic shelf geometry explicitly reported for manual review |
-| `bun audit` | PASS, no reported vulnerabilities |
-| `./scripts/test-database.sh` | PASS: rollback/retry, ACLs/RLS, acceptance, filters, statistics, malformed input, 10 stored-data corruption cases including duplicate sale movements, concurrency including mutual admin deactivation and stale invitations, restore, schema/docs comparison, signed-JWT HTTP |
-| `./scripts/test-web.sh` | PASS: real local Auth, public/staff/Worker boundaries, exact decimal transport |
-| `./scripts/test-web.sh --shop` | PASS: lifecycle freshness, retained drafts, invalid saved quantities, removal focus and visible mobile drawer addresses |
-| `./scripts/test-web.sh --checkout` | PASS: remote staff recovery, pre-payment recheck and navigation during that read; framing protection and Auth invitation/recovery emails in Mailpit |
-| `./scripts/test-web.sh --admin` | PASS: access recovery, retained cached content and partial-inventory retry, stock field validation, audit freshness with older pages retained; drawer resizing and specification error focus |
-| `./scripts/test-web.sh --admins` | PASS: real Auth/Worker/Mailpit invitations in both locales, password setup/login, permissions and audit, replay/stale-resend safeguards; 360/1280 px in both locales/themes, retained drafts/focus on read failure, deactivation/reactivation |
-| `./scripts/test-web.sh --statistics` | PASS: localized responsive charts, retained data and focus after a failed background read |
-| `./scripts/test-web.sh --scanner` | PASS: Firefox and WebKit with synthetic camera; named long-content scrolling keeps Add/Scan visible |
-| `./scripts/test-web.sh --labels` | PASS: decoded PDF QR payloads, geometry |
-| `./scripts/test-web.sh --shelf` | PASS |
-| `./scripts/test-web.sh --orders` | PASS: field errors and first-invalid focus, receipt freshness with selection retained, access recovery inside a pending sheet, identical uncertain-write retry and exact stock changes |
-| Collaborative browser geometry | PASS: homepage in both locales/themes at 320/360/768/1280 px; specification and admin scanner dialogs at 360×320 retain reachable title, close and actions |
-| Responsiveness | PASS: short dialogs and product pickers, long text, dense shelf targets and enlarged hero text; iOS Simulator rotation, keyboard and native shelf panning |
-
-The dynamic `ShelfCabinetFace` viewBox was manually reviewed: its drawer shapes
-are fill-only, with no clipped strokes. The static checker does not validate
-dynamic geometry. Short-viewport checks do not prove physical phone keyboard behavior.
-
-CI runs the database chain and the `boundary`, `shop`, `checkout`, `admin`,
-`admins`, `scanner`, `labels` and `statistics` browser modes. These results are local runs,
-not CI claims.
-
-Responsive browser regressions include 320×256, 667×375 and 844×390 viewports,
-both locales, reduced motion, a 100-character category and a 120-character supplier
-token. The confirmation checks preserve the full accessible warning description.
-Native Safari checks used iOS 27 Simulator at 440×956 and 956×440; they do not
-establish physical-device coverage. Android emulation was unavailable because its
-SDK was missing. The phone launch checks below remain open.
+Limits of this evidence: the static ink checker only lists dynamic geometry for manual review,
+short-viewport checks do not prove physical phone keyboard behaviour, and the
+simulator is not physical-device coverage. Android emulation was unavailable
+(missing SDK).
 
 ## Migrations and schema surface
 
@@ -55,9 +43,8 @@ Update this section whenever a migration changes (`sha256sum supabase/migrations
   `0eda5217b038887d44b1960983f7df650f6ba44458bb1f05f5f5808b5e99c69b`
 - `20260924000100_archive_empty_cabinet.sql`: SHA-256
   `503d75885d3774a967f4cad7a3b891b94b4f62020a393d5620220a997be6b7d6`
-
 - `20260927000100_staff_management.sql`: SHA-256
-  `34b57a63292f58cc92304d0846f2c621ce7a971d11d6550498682003ab2875d4`
+  `a894879c2707f3d11542aed1131f4245e8445e433122ed1ef0416a4157edfde8`
 
 24 app tables, four exact numeric domains, 29 public RPCs, 29 staff views and five
 internal derived views. All views are security invoker; only `public` is exposed.
@@ -66,20 +53,22 @@ Initial data: 12 cabinets, 492 drawers and reference units; no products or stock
 A 5,002-product / 250,000-movement workload checks that catalog reads touch only
 the selected products. It is a regression check, not a hosted latency guarantee.
 
-## Still required before launch
+## Open checks before launch
 
-- **Stock withdrawals/corrections:** complete real staff/non-staff browser write
-  acceptance at 360 and 1280 px, including uncertain writes and a recount after
-  an intervening count. Stock validation, retained drafts after read failure and
-  audit freshness have passed; direct non-staff audit-page coverage remains open.
-- **Phones:** camera scanning, keyboard/safe areas and the Vipps app switch on
-  real devices ([checklist](docs/scanner.md)). Only the owner's iPhone has been
-  used; Android and older devices are untested. System-camera handling of
-  scheme-less `ampoteket.no/p/...` QR text is unverified. Homepage photographs
-  have not been checked on physical phones.
-- **Labels:** measure printed A4 labels on real drawers. For the P-touch printer,
-  a WebUSB print from the admin editor and scanning the printed tape QR with a
-  phone are unverified.
+- **Stock withdrawals/corrections:** real staff/non-staff browser write acceptance
+  at 360 and 1280 px, including uncertain writes and a recount after an intervening
+  count. Direct non-staff audit-page coverage.
+- **Phones:** camera scanning, keyboard/safe areas and the Vipps app switch on real
+  devices, plus scanning the attached paper QR ([checklist P01–P19](docs/scanner.md)).
+  All P01–P19 cases are NOT RUN. The owner used the scanner on an iPhone on
+  2026-09-20, but model, versions and cases were not recorded; Android and
+  older/slower phones are untested. System-camera handling of scheme-less
+  `ampoteket.no/p/...` QR text and homepage photographs on physical phones are
+  unchecked.
+- **Labels:** measure drawer label areas, print an A4 sheet, check size and cut
+  margins, attach it to real drawers and scan it in the workshop's light. For the
+  P-touch printer, a WebUSB print from the admin editor and scanning the printed
+  tape QR with a phone.
 - **Hosted setup** (needs the explicit deploy decision): Supabase/Cloudflare
   configuration, Auth mail delivery (custom SMTP), the Data API cutover barrier
   and a full hosted restore drill ([deploy](docs/runbook-deploy.md),

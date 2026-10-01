@@ -447,7 +447,7 @@ try {
 	await page.evaluate(() => window.cameraProof.denyBasket(false));
 	await action(page, 'Scan').click();
 	// A failed read-back could follow a successful write. Never blindly retry an
-	// addition: review the persisted basket before a new intentional scan.
+	// add: review the persisted basket before a new intentional scan.
 	await action(page, 'Close scanner').click(); await camera(page, 'closed');
 	assert.equal((await stats(page)).live, 0, 'Closing stops all camera tracks');
 	await expect(page.locator('.cart-line input[inputmode=decimal]').first()).toHaveValue('2');

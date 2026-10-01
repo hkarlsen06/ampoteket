@@ -639,7 +639,7 @@ try {
   expect(layoutCreated.commands[1]).toBe(layoutCreated.commands[0]); await layoutCreated.stop();
   expect(await liveBinIds(cabinetId)).toEqual(initialBins);
   expect(await sql(`SELECT count(*) FROM app.bins WHERE cabinet_id='${cabinetId}' AND row_span=1 AND col_span=1`)).toBe('16');
-  // The new privileged RPC is tested over HTTP with real Auth credentials, not SQL alone.
+  // Privileged RPCs are tested over HTTP with real Auth credentials, not SQL alone.
   const authResponse = await fetch(`${api.origin}/auth/v1/token?grant_type=password`, {
     method: 'POST', headers: { apikey: publicKey, 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: nonstaffEmail, password })
@@ -782,7 +782,7 @@ try {
   await previewSize('1', '5');
   await expect(page.locator('[data-sonner-toast]').getByText(sh.notEmpty, { exact: true })).toBeVisible();
   expect(await liveBinIds(cabinetId)).toEqual(grown);
-  // Incremental resizing already removed empty draft rows before the occupied row blocked it.
+  // Incremental resizing drops empty draft rows before the occupied row blocks it.
   // Discard that draft before checking drawer identities in the saved layout.
   await page.getByRole('button', { name: sh.discardChanges, exact: true }).click();
   await expect(page.locator('[data-cabinet-editor]')).toBeVisible();

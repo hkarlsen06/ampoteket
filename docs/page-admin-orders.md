@@ -8,8 +8,7 @@ and RPCs in [datamodell.md](datamodell.md).
 
 ## Orders
 
-- Placement times show in `Europe/Oslo`. Entered times reject nonexistent
-  daylight-saving times and make the admin choose the occurrence of an ambiguous one.
+- Placement times follow the [time rules](website-guide.md#6-numbers-the-frontend-must-respect).
 - Unit cost is per sale unit; freight and other costs go on the order header.
 - The product picker includes inactive products, since past purchases must stay
   recordable. A line without a product links to the New product editor in a new tab.
@@ -19,7 +18,7 @@ and RPCs in [datamodell.md](datamodell.md).
   screens, dismissing the native keyboard exposes the full result list.
 - `?new=<product ids>` prefills lines with saved purchase links; quantity and cost stay
   blank.
-- Quantities follow the stock step; quantities and costs stay strings.
+- Quantities follow the stock step.
 - Invalid values show an associated field error and move focus to the first invalid
   field. A generic form failure does not replace quantity, cost or product guidance.
 - Recording an order changes no stock.
