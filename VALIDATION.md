@@ -78,7 +78,9 @@ the selected products. It is a regression check, not a hosted latency guarantee.
   password return URLs for `https://ampoteket.hkarlsen06.workers.dev`, the repo
   email templates, and Data API schema `public` only. The Worker runs there as
   rehearsal version `cb393b25-3936-485b-9572-e6249f3b1af4`, not on
-  `ampoteket.no`. Still open: no staff member exists yet; custom SMTP
+  `ampoteket.no`. The first admin (`hjalmar@hkarlsen06.dev`, Hjalmar Karlsen) was
+  granted with `app.grant_staff_access` by Claude Code at the owner's request. Still
+  open: custom SMTP
   invitation/reset delivery (the owner reports Resend connected as
   `Ampoteket <noreply@notify.ampoteket.no>`) and the receipt email are unverified; the Data API
   cutover barrier, a full hosted restore drill and the production domain cutover
