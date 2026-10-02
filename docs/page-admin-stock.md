@@ -187,7 +187,8 @@ may close an abandoned batch only if its owner is inactive or has no Auth identi
 with a required reason.
 
 - A batch can limit the product choice to one drawer picked on the shelf graphic;
-  search and Scan product remain for unplaced products.
+  the drawer's products are then listed for one-tap choice, marked **Counted** once
+  counted in this batch. Search and Scan product remain for unplaced products.
 - Pause taking and shelving at the drawer before observing. Keep the revision from the
   displayed balance with the observation.
 - Zero is a valid count; a matching count still records a proof of check. Ask for a

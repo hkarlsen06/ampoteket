@@ -11,6 +11,7 @@
 	import StateBadge from '$lib/StateBadge.svelte';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import * as Field from '$lib/components/ui/field';
+	import * as RadioGroup from '$lib/components/ui/radio-group';
 	import { onMount, untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { getI18n } from '$lib/i18n';
@@ -39,6 +40,8 @@
 	const pendingHere = $derived(Boolean(command && command.kind !== 'start' && command.batchId === page.params.id));
 	const pendingCount = $derived(pendingHere && command?.kind === 'count');
 	const selectedProduct = $derived(productById.get(selected));
+	// Products already counted in this stocktake, so a drawer shows what is left.
+	const counted = $derived(new Set(observations.map((observation) => observation.productId)));
 	const matches = $derived(drawerFilter === null ? products : products.filter((product) => product.bin_id === drawerFilter));
 	const batchTone = { owner: 'success', other: 'neutral', abandoned: 'warning', finished: 'neutral' } as const;
 	// A scanned label picks its product directly; a drawer filter that excludes it is lifted.
@@ -169,6 +172,21 @@
 						<Field.Legend>{m.drawerFilter}</Field.Legend>
 						<p class="flex min-h-9 flex-wrap items-center gap-x-4 gap-y-1" aria-live="polite">{#if drawerFilter}<strong>{drawerName(drawerFilter)}</strong><Button variant="ghost" type="button" disabled={loading || Boolean(command)} onclick={() => { drawerFilter = null; }}>{m.allProducts}</Button>{/if}</p>
 						<ShelfPlacementPicker {topology} selected={drawerFilter} disabled={loading || Boolean(command)} onselect={(id) => { drawerFilter = id; }} />
+					</Field.Set>
+				{/if}
+				{#if drawerFilter !== null && matches.length}
+					<Field.Set class="gap-3">
+						<Field.Legend id={`${fieldId}-drawer-products`} variant="label">{m.drawerProducts}</Field.Legend>
+						<RadioGroup.Root value={selected} onValueChange={(value) => { selected = value; }} aria-labelledby={`${fieldId}-drawer-products`} disabled={loading || Boolean(command)}>
+							{#each matches as product (product.id)}
+								<Field.Field orientation="horizontal" class="min-w-0 *:data-[slot=field-label]:flex-initial">
+									<RadioGroup.Item id={`${fieldId}-drawer-${product.id}`} value={product.id} />
+									<Field.Label for={`${fieldId}-drawer-${product.id}`} class={['font-normal', nameWrap]}><span class={codeText}>{product.code}</span>: {productName(product, i18n.locale)}</Field.Label>
+									{#if !product.is_active}<StateBadge class="shrink-0">{i18n.m.adminProducts.inactive}</StateBadge>{/if}
+									{#if counted.has(product.id)}<StateBadge tone="success" class="shrink-0">{m.countedHere}</StateBadge>{/if}
+								</Field.Field>
+							{/each}
+						</RadioGroup.Root>
 					</Field.Set>
 				{/if}
 				<Field.Group layout="row">
