@@ -14,6 +14,9 @@
 	import XIcon from 'phosphor-svelte/lib/XIcon';
 	import QrCodeIcon from 'phosphor-svelte/lib/QrCodeIcon';
 	import CameraFrame from '$lib/CameraFrame.svelte';
+	import LocationChips from '$lib/LocationChips.svelte';
+	import { readAdminProducts, type AdminProduct } from '$lib/admin-products';
+	import { readShelfTopology, type ShelfTopology } from '$lib/shelf-map';
 	import { codeText, nameWrap, sheetBody } from '$lib/ui';
 	import * as Alert from '$lib/components/ui/alert';
 	import * as Collapsible from '$lib/components/ui/collapsible';
@@ -37,6 +40,8 @@
 	const m = $derived(i18n.m.adminOrders);
 	const id = $props.id();
 	let detail = $state<OrderDetail | null>(null);
+	// Where each product goes, so a delivery can be shelved from this sheet. Optional: a failed read just omits it.
+	let placement = $state<{ products: Map<string, AdminProduct>; shelf: ShelfTopology } | null>(null);
 	let loading = $state(true);
 	let failed = $state(false);
 	let busy = $state(false);
@@ -122,6 +127,10 @@
 			const result = await readOrderDetail(session, orderId);
 			if (mounted && version === generation && admin.session?.user.id === session.userId) {
 				detail = result;
+				const ids = result.products.map((product) => product.id);
+				if (ids.length) void Promise.all([readAdminProducts(session, fetch, ids), readShelfTopology(session.config)]).then(([rows, shelf]) => {
+					if (mounted && version === generation) placement = { products: new Map(rows.map((row) => [row.id, row])), shelf };
+				}).catch(() => {});
 				if (restoredDraft) {
 					restoredDraft = false;
 					const open = new Set(result.lines.filter(line => compareDecimals(line.outstandingQuantity, '0') > 0).map(line => line.id));
@@ -235,6 +244,15 @@
 	}
 </script>
 
+{#snippet location(productId: string)}
+	{@const item = placement?.products.get(productId)}
+	{@const bin = item && placement?.shelf.bins.find((value) => value.id === item.bin_id)}
+	{@const cabinet = bin && placement?.shelf.cabinets.find((value) => value.id === bin.cabinet_id)}
+	{#if bin && cabinet}<div class="mt-1"><LocationChips outerRow={cabinet.outer_row} outerCol={cabinet.outer_col} innerRow={bin.inner_row} innerCol={bin.inner_col} rowSpan={bin.row_span} colSpan={bin.col_span} plain /></div>
+	{:else if item?.location_note}<div class="mt-1"><LocationChips note={item.location_note} plain /></div>
+	{:else if item}<p class="mt-1 text-sm text-muted-foreground">{i18n.m.adminProducts.unplaced}</p>{/if}
+{/snippet}
+
 <svelte:window onfocus={revalidate} ononline={revalidate} />
 <svelte:document onvisibilitychange={revalidate} />
 <Dialog.Root open={true} onOpenChange={(open) => { if (!open && !busy) onclose(); }}>
@@ -284,7 +302,7 @@
 								<div class="flex flex-wrap items-center justify-between gap-2">
 									<Field.Field orientation="horizontal" class="min-w-0 flex-1 gap-3">
 										<Checkbox id={`${id}-full-${line.id}`} checked={full(line)} onCheckedChange={(checked) => chooseFull(line, checked === true)} disabled={busy || Boolean(command)} />
-										<div class="min-w-0"><Field.Label for={`${id}-full-${line.id}`} class={['cursor-pointer', nameWrap]}>{#if product}<span class={codeText}>{product.code}</span>: {productName(product, i18n.locale)}{:else}{line.productId}{/if}</Field.Label><Field.Description>{m.lineNumber(line.lineNumber)} · {m.outstanding} <span class="font-mono">{formatDecimal(line.outstandingQuantity, i18n.locale)} {unitLabel(product?.unit_code, i18n.locale, line.outstandingQuantity)}</span></Field.Description></div>
+										<div class="min-w-0"><Field.Label for={`${id}-full-${line.id}`} class={['cursor-pointer', nameWrap]}>{#if product}<span class={codeText}>{product.code}</span>: {productName(product, i18n.locale)}{:else}{line.productId}{/if}</Field.Label><Field.Description>{m.lineNumber(line.lineNumber)} · {m.outstanding} <span class="font-mono">{formatDecimal(line.outstandingQuantity, i18n.locale)} {unitLabel(product?.unit_code, i18n.locale, line.outstandingQuantity)}</span></Field.Description>{@render location(line.productId)}</div>
 									</Field.Field>
 									{#if !manual.has(line.id)}<Button type="button" variant="ghost" size="sm" onclick={() => override(line)} disabled={busy || Boolean(command)}>{m.differentQuantity}</Button>{/if}
 								</div>
