@@ -15,7 +15,6 @@
 	import * as Item from '$lib/components/ui/item';
 	import SalesChart from '$lib/SalesChart.svelte';
 	import AdminProductCard from '$lib/AdminProductCard.svelte';
-	import AttentionOrderSheet from '$lib/AttentionOrderSheet.svelte';
 	import { readAdminProducts, readProductReferences, type AdminProduct, type ProductReferences } from '$lib/admin-products';
 
 	let { overview = false, productId = null, unit = '' }: { overview?: boolean; productId?: string | null; unit?: string } = $props();
@@ -86,7 +85,7 @@
 			<section class={section()} aria-labelledby="stock-attention-title">
 				<h2 id="stock-attention-title" class={sectionHeading}>{m.attention}</h2>
 				<div class={formActions}>
-					{#if overviewData.attention.length}<AttentionOrderSheet disabled={loading || failed} />{/if}
+					{#if overviewData.attention.length}<Button href={i18n.href('/admin/orders?new')}>{m.openOrder}</Button>{/if}
 					<Button variant="outline" href={i18n.href('/admin/products')}>{m.allProducts}</Button>
 				</div>
 				{#if !overviewData.attention.length}<Empty.Root><Empty.Description>{m.noAttention}</Empty.Description></Empty.Root>

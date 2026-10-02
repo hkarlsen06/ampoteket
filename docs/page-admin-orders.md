@@ -18,8 +18,18 @@ and RPCs in [datamodell.md](datamodell.md).
   popover height, including short landscape viewports. If the keyboard covers the
   trigger, the picker anchors at the visual viewport edge. On extremely short
   screens, dismissing the native keyboard exposes the full result list.
-- `?new=<product ids>` prefills lines with saved purchase links; quantity and cost stay
-  blank.
+- New order shows **Må bestilles** as toggle chips right above the first line, for
+  active products that are sold out or below their minimum, most urgent first. Each
+  chip has a stock state icon, its stock and any quantity already on order. Pressing a
+  chip adds its line with the saved purchase link (replacing an untouched blank line);
+  releasing it removes that line. Nothing starts pressed, and quantity and cost stay
+  blank. The chips are absent when nothing needs ordering and in unplanned receipts.
+- Chips show the eight most urgent products plus every product with a line; a chip
+  used in the form stays until reload, so releasing it never moves the row. With more
+  than eight, «Alle N» opens a `Dialog` listing all of them as checkbox rows with code,
+  stock and quantity on order. Choices there change the lines at once; Escape or
+  «Ferdig» closes only the dialog.
+- `?new` opens the New order form.
 - Quantities follow the stock step.
 - Invalid values show an associated field error and move focus to the first invalid
   field. A generic form failure does not replace quantity, cost or product guidance.

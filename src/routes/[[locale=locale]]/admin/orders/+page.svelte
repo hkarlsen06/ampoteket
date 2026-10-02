@@ -6,10 +6,19 @@
 	import { untrack, onMount, tick } from 'svelte';
 	import { getI18n } from '$lib/i18n';
 	import { getAdminContext } from '$lib/admin-context.svelte';
-	import { normalizeDecimal, validQuantity } from '$lib/decimal';
+	import { compareDecimals, normalizeDecimal, validQuantity } from '$lib/decimal';
 	import { osloInstant, osloLocal, possibleOsloOffsets } from '$lib/oslo-time';
 	import { formatCountedAt, formatDecimal, unitLabel } from '$lib/format';
-	import { clearOrderCommand, orderCommandPath, orderRejection, orderStorageEvent, readOrderCommand, readOrderProducts, readOrders, readUnplannedReceipts, runOrderCommand, saveOrderCommand, updateOrderStorage, type Order, type OrderCommand, type OrderProduct, type OrderReceipt } from '$lib/admin-orders';
+	import { clearOrderCommand, orderCommandPath, orderRejection, orderStorageEvent, readOrderCommand, readOrderProducts, readOrders, readOutstandingByProduct, readUnplannedReceipts, runOrderCommand, saveOrderCommand, updateOrderStorage, type Order, type OrderCommand, type OrderProduct, type OrderReceipt } from '$lib/admin-orders';
+	import { compareAttention, readInventory, stockRank } from '$lib/admin-products';
+	import { Toggle, toggleVariants } from '$lib/components/ui/toggle';
+	import ListBulletsIcon from 'phosphor-svelte/lib/ListBulletsIcon';
+	import StockBadge from '$lib/StockBadge.svelte';
+	import { Badge } from '$lib/components/ui/badge';
+	import { Checkbox } from '$lib/components/ui/checkbox';
+	import TruckIcon from 'phosphor-svelte/lib/TruckIcon';
+	import WarningIcon from 'phosphor-svelte/lib/WarningIcon';
+	import XCircleIcon from 'phosphor-svelte/lib/XCircleIcon';
 	import { codeText, formActions, formLayout, formStatus, itemTitle, nameWrap, pageHeader, pageHeading, section, sectionHeading, sheetBody } from '$lib/ui';
 	import * as Alert from '$lib/components/ui/alert';
 	import * as Empty from '$lib/components/ui/empty';
@@ -46,8 +55,8 @@
 	let selectedOrderId = $state<string | null>(null);
 	let orderReceiptTrigger = $state<HTMLElement | null>(null);
 	let plannedRecorded = $state(false);
-	// Product IDs chosen from the overview's "Needs attention" sheet; each becomes a line once products load.
-	let prefill: string[] | null = page.url.searchParams.get('new')?.split(',').filter(Boolean) ?? null;
+	// Recorded stock and quantity still on order, per product, for the New order checklist.
+	let stock = $state(new Map<string, string>()); let outstanding = $state(new Map<string, string>());
 	// An untouched placement time follows the clock until saving, since the admin shops before recording.
 	let placedEdited = $state(false);
 	const wrongIdentity = $derived(Boolean(command && command.userId !== admin.session?.user.id));
@@ -55,6 +64,18 @@
 	const frozen = $derived(Boolean(command));
 	const offsets = $derived(possibleOsloOffsets(placedLocal));
 	// A pending command elsewhere: a planned receipt reopens its sheet here, anything else links to its page.
+	// Active parts that are sold out or below their minimum, most urgent first. Ticking one adds its line.
+	const needed = $derived(products.filter((item) => stockRank(item, stock.get(item.id)) < 2)
+		.sort((a, b) => compareAttention(a, stock.get(a.id), b, stock.get(b.id)) || a.code.localeCompare(b.code)));
+	const chosen = $derived(new Set(lines.map((line) => line.productId)));
+	// Chips show the most urgent few plus every chosen product; the dialog behind "All" lists them all.
+	// A chip used here stays until the page reloads, so releasing it never pulls it from under the pointer.
+	const chipLimit = 8;
+	let kept = $state(new Set<string>());
+	const shownNeeded = $derived(needed.filter((item, index) => index < chipLimit || chosen.has(item.id) || kept.has(item.id)));
+	const allNeeded = $derived(needed.every((item) => chosen.has(item.id)));
+	// Lines left after ticking, since an untouched blank line gives way to the chosen products.
+	const room = $derived(200 - lines.filter((line) => lineFilled(line)).length);
 	const pendingNotice = $derived(!storageReady || wrongIdentity || selectedOrderId ? null : command?.kind === 'receipt' && command.orderId ? 'planned' : otherCommand ? 'other' : null);
 
 	function placedInstant(): string {
@@ -111,6 +132,12 @@
 		return { kind: 'receipt', userId: session.userId, requestId: crypto.randomUUID(), orderId: null, note: sourceNote.trim(), occurredAt: null,
 			items: items.map(({ productId, quantity, orderLineId }) => ({ productId, quantity, orderLineId })) };
 	}
+	function choose(ids: string[], add: boolean) {
+		if (!add) { const drop = new Set(ids); lines = lines.filter((line) => !drop.has(line.productId)); if (!lines.length) lines = [blankLine()]; return; }
+		const added = ids.filter((id) => !chosen.has(id)).map((id) => ({ ...blankLine(), productId: id, purchaseUrl: products.find((item) => item.id === id)?.purchase_url ?? '' }));
+		if (added.length > room) return;
+		lines = [...lines.filter(lineFilled), ...added];
+	}
 	function syncPending() {
 		if (busy) return;
 		try {
@@ -136,6 +163,7 @@
 		mounted = true; placedLocal = osloLocal(new Date()); lines = [blankLine()]; syncPending();
 		if (!command || otherCommand) restoreDraft();
 		draftRestored = true;
+		if (page.url.searchParams.has('new')) show('create');
 		void updateOrderStorage((storage) => { readOrderCommand(storage); const key = 'ampoteket:order-storage-check'; storage.setItem(key, '1'); if (storage.getItem(key) !== '1') throw new Error(); storage.removeItem(key); }).then(() => { if (mounted) storageReady = true; }).catch(() => { if (mounted) storageReady = false; });
 		window.addEventListener('storage', syncPending); window.addEventListener(orderStorageEvent, syncPending); void load();
 		return () => { mounted = false; generation++; window.removeEventListener('storage', syncPending); window.removeEventListener(orderStorageEvent, syncPending); };
@@ -167,14 +195,10 @@
 		const version = ++generation; loading = true; failed = false;
 		try {
 			const session = admin.credentials();
-			const [orderRows, productRows, receiptRows] = await Promise.all([readOrders(session), readOrderProducts(session), readUnplannedReceipts(session)]);
+			const [orderRows, productRows, receiptRows, inventory, onOrder] = await Promise.all([readOrders(session), readOrderProducts(session), readUnplannedReceipts(session), readInventory(session), readOutstandingByProduct(session)]);
 			if (mounted && version === generation && session.userId === admin.session?.user.id) {
 				orders = orderRows; products = productRows; unplanned = receiptRows; loaded = true;
-				if (prefill && !command) {
-					const chosen = prefill.flatMap((id) => productRows.filter((item) => item.id === id));
-					if (chosen.length) { lines = chosen.map((item) => ({ ...blankLine(), productId: item.id, purchaseUrl: item.purchase_url ?? '' })); show('create'); }
-				}
-				prefill = null;
+				stock = new Map(inventory.map((item) => [item.product_id, item.quantity])); outstanding = onOrder;
 			}
 		} catch (error) { if (mounted && version === generation) failed = true; await admin.permissionFailure(error); }
 		finally { if (mounted && version === generation) loading = false; }
@@ -291,6 +315,64 @@
 				<Field.Field><Field.Label for={`${fieldId}-note`}>{m.note}</Field.Label><Textarea id={`${fieldId}-note`} rows={2} maxlength={2000} bind:value={note} disabled={frozen || busy} /></Field.Field>
 			{:else}
 				<Field.Field><Field.Label for={`${fieldId}-source`}>{m.sourceNote}</Field.Label><Textarea id={`${fieldId}-source`} aria-invalid={invalidInput === `${fieldId}-source`} aria-describedby={invalidInput === `${fieldId}-source` ? `${fieldId}-source`.concat('-error') : undefined} rows={2} required maxlength={2000} bind:value={sourceNote} disabled={frozen || busy} />{@render fieldError(`${fieldId}-source`)}</Field.Field>
+			{/if}
+			{#if mode === 'create' && loading && !loaded}<div class="flex flex-wrap gap-2" aria-hidden="true"><Skeleton class="h-11 w-40" /><Skeleton class="h-11 w-56" /><Skeleton class="h-11 w-48" /></div>
+			{:else if mode === 'create' && needed.length}
+				<!-- Parts needing ordering, as chips right above the lines they add. -->
+				<Field.Set class="gap-2">
+					<Field.Legend variant="label">{m.needsOrdering}</Field.Legend>
+					<div class="flex flex-wrap gap-2">
+						<Toggle variant="outline" size="sm" pressed={allNeeded} disabled={frozen || busy || (!allNeeded && needed.filter((item) => !chosen.has(item.id)).length > room)} onPressedChange={(pressed) => choose(needed.map((item) => item.id), pressed)}>{m.selectAll}</Toggle>
+						{#each shownNeeded as item (item.id)}
+							{@const quantity = stock.get(item.id)!}
+							{@const onOrder = outstanding.get(item.id)}
+							{@const soldOut = compareDecimals(quantity, '0') <= 0}
+							<Toggle variant="outline" size="sm" class="max-w-full justify-start gap-2 text-left" pressed={chosen.has(item.id)} disabled={frozen || busy || (!chosen.has(item.id) && room < 1)} onPressedChange={(pressed) => { kept = new Set([...kept, item.id]); choose([item.id], pressed); }}>
+								{#if soldOut}<Icon icon={XCircleIcon} class="text-destructive" />{:else}<span class="rounded-sm bg-warning p-0.5 text-on-warning"><Icon icon={WarningIcon} class="size-3.5" /></span>{/if}
+								<span class="sr-only">{!soldOut ? i18n.m.shop.stockLow : compareDecimals(quantity, '0') < 0 ? i18n.m.shop.stockNegative : i18n.m.shop.stockZero}:</span>
+								<span class={nameWrap}>{productName(item, i18n.locale)}</span>
+								<span class="font-mono tabular-nums">{i18n.m.shop.quantity(formatDecimal(quantity, i18n.locale), unitLabel(item.unit_code, i18n.locale, quantity))}</span>
+								{#if onOrder}<span class="inline-flex items-center gap-1 font-mono tabular-nums text-muted-foreground"><Icon icon={TruckIcon} /><span aria-hidden="true">{formatDecimal(onOrder, i18n.locale)}</span><span class="sr-only">{m.onOrder(`${formatDecimal(onOrder, i18n.locale)} ${unitLabel(item.unit_code, i18n.locale, onOrder)}`)}</span></span>{/if}
+							</Toggle>
+						{/each}
+						{#if needed.length > chipLimit}
+							<Dialog.Root>
+								<Dialog.Trigger class={toggleVariants({ variant: 'outline', size: 'sm' })} disabled={frozen || busy}><Icon icon={ListBulletsIcon} />{m.allNeeded(needed.length)}</Dialog.Trigger>
+								<Dialog.Content preventScroll={false} aria-describedby={undefined} class="grid-rows-[auto_minmax(0,1fr)_auto] gap-0 p-0">
+									<Dialog.Header layout="bar">
+										<Dialog.Title id={`${fieldId}-needed-title`}>{m.needsOrdering}</Dialog.Title>
+										<Dialog.Close>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm"><Icon icon={XIcon} /><span class="sr-only">{m.closeNeeded}</span></Button>{/snippet}</Dialog.Close>
+									</Dialog.Header>
+									<!-- svelte-ignore a11y_no_noninteractive_tabindex (Named dialog body supports native keyboard scrolling.) -->
+									<div class={sheetBody} role="region" aria-labelledby={`${fieldId}-needed-title`} tabindex="0">
+										<Field.Field orientation="horizontal" class="gap-3 pb-4">
+											<Checkbox id={`${fieldId}-needed-all`} checked={allNeeded} indeterminate={!allNeeded && needed.some((item) => chosen.has(item.id))} disabled={frozen || busy || (!allNeeded && needed.filter((item) => !chosen.has(item.id)).length > room)} onCheckedChange={(checked) => choose(needed.map((item) => item.id), checked === true)} />
+											<Field.Label for={`${fieldId}-needed-all`} class="cursor-pointer">{m.selectAll}</Field.Label>
+										</Field.Field>
+										{#each needed as item (item.id)}
+											{@const onOrder = outstanding.get(item.id)}
+											<Separator />
+											<Field.Field orientation="horizontal" class="min-w-0 gap-3 py-4">
+												<Checkbox id={`${fieldId}-needed-${item.id}`} checked={chosen.has(item.id)} disabled={frozen || busy || (!chosen.has(item.id) && room < 1)} onCheckedChange={(checked) => choose([item.id], checked === true)} />
+												<div class="min-w-0">
+													<Field.Label for={`${fieldId}-needed-${item.id}`} class={['cursor-pointer', nameWrap]}>{productName(item, i18n.locale)}</Field.Label>
+													<Field.Description class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+														<span class={codeText}>{item.code}</span>
+														<StockBadge quantity={stock.get(item.id)!} unit={unitLabel(item.unit_code, i18n.locale)} minimum={item.minimum_stock} compact />
+														{#if onOrder}<Badge variant="outline">{m.onOrder(`${formatDecimal(onOrder, i18n.locale)} ${unitLabel(item.unit_code, i18n.locale, onOrder)}`)}</Badge>{/if}
+													</Field.Description>
+												</div>
+											</Field.Field>
+										{/each}
+									</div>
+									<Dialog.Footer variant="sheet">
+										<Dialog.Close>{#snippet child({ props })}<Button {...props}>{m.doneNeeded}</Button>{/snippet}</Dialog.Close>
+									</Dialog.Footer>
+								</Dialog.Content>
+							</Dialog.Root>
+						{/if}
+					</div>
+				</Field.Set>
 			{/if}
 			<div class="space-y-6">
 				{#each lines as line, index (line.key)}

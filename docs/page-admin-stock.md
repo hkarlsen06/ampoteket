@@ -19,9 +19,8 @@ recorded stock, or below the product's own minimum; never invent a global thresh
 Open stocktakes always precede products needing attention, including when none are
 open; background refresh never swaps the sections. The preview shows eight products (sold out, negative before
 zero, then lowest share of the minimum) and the five oldest open stocktakes.
-«Start en bestilling» opens a sheet of every product needing attention with quantities
-already on order; rows start checked unless already on order, and the button opens
-`/admin/orders?new=<ids>`. The sheet itself changes nothing.
+«Start en bestilling» opens the New order form at `/admin/orders?new`, which lists
+every product needing attention ([orders](page-admin-orders.md#orders)).
 
 `/admin/statistics` graphs 30 days of purchases and ranks up to ten products by sales
 value; a saved product's **Statistics** tab shows its own figures (tab changes keep the

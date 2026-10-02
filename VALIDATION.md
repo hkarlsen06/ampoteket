@@ -32,7 +32,7 @@ below are local runs, not CI claims.
 | `./scripts/test-web.sh --labels` | 2026-10-01 | PASS | Decoded PDF QR payloads, geometry |
 | `./scripts/test-web.sh --shelf` | 2026-10-01 | PASS | Shelf UI |
 | `./scripts/test-web.sh --drafts` | 2026-10-01 | PASS | Unsaved admin drafts survive reload, Back and sign-in round trips |
-| `./scripts/test-web.sh --orders` | 2026-10-01 | PASS | Field errors and first-invalid focus, receipt freshness with selection retained, access recovery inside a pending sheet, identical uncertain-write retry, exact stock changes |
+| `./scripts/test-web.sh --orders` | 2026-10-02 | PASS | Field errors and first-invalid focus, receipt freshness with selection retained, access recovery inside a pending sheet, identical uncertain-write retry, exact stock changes, New order checklist of parts needing ordering adds and removes lines |
 | Browser geometry, automated | not recorded | PASS | 320×256, 667×375 and 844×390 viewports, both locales, reduced motion, 100-character category, 120-character supplier token, full accessible warning description on confirmations |
 | Browser geometry, manual | not recorded | PASS | Homepage in both locales/themes at 320/360/768/1280 px; specification and admin scanner dialogs at 360×320; short dialogs, product pickers, long text, dense shelf targets, enlarged hero text; `ShelfCabinetFace` viewBox reviewed (fill-only drawers, no clipped strokes) |
 | iOS 27 Simulator (Safari) | not recorded | PASS | 440×956 and 956×440: rotation, keyboard, native shelf panning |
