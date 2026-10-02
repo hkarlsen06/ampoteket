@@ -3,7 +3,7 @@
  * Only camera hardware is substituted: generated label pixels enter through
  * canvas.captureStream(). This proves application behavior, never phone cameras.
  */
-import { firefox, webkit, expect, type BrowserContext, type Page, type Route } from '@playwright/test';
+import { firefox, webkit, expect, type Browser, type BrowserContext, type Page, type Route } from '@playwright/test';
 import { strict as assert } from 'node:assert';
 import { resolve } from 'node:path';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -184,6 +184,17 @@ function sameGeometry(before: { x: number; y: number; width: number; height: num
 }
 async function noInternalScroll(page: Page) {
 	assert.ok(await scannerDialog(page).locator('.dialog-body').evaluate((body) => body.scrollHeight <= body.clientHeight + 1), 'Scanner dialog needs no internal scrolling');
+}
+// WebKit's close() sometimes never returns (in CI and locally), and Playwright waits without a
+// timeout. Its context and camera are released before this; kill only our own WebKit.
+async function closeWebKit(browser: Browser) {
+	if (await Promise.race([browser.close().then(() => true), Bun.sleep(15000).then(() => false)])) return;
+	const table = String(Bun.spawnSync(['ps', '-eo', 'pid=,ppid=,args=']).stdout).trim().split('\n')
+		.map((line) => line.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/)!).map(([, pid, ppid, args]) => ({ pid: Number(pid), ppid: Number(ppid), args }));
+	const ours = new Set([process.pid]);
+	for (let grew = true; grew;) { grew = false; for (const row of table) if (ours.has(row.ppid) && !ours.has(row.pid)) { ours.add(row.pid); grew = true; } }
+	for (const row of table) if (ours.has(row.pid) && row.args.includes('webkit')) try { process.kill(row.pid, 'SIGKILL'); } catch { /* Already gone. */ }
+	console.log('WebKit did not exit within 15 s of close(); killed its processes.');
 }
 async function product(page: Page, code = seedProductCode(0)) {
 	await state(page, 'product');
@@ -662,7 +673,7 @@ try {
 		assert.deepEqual(webkitErrors, []);
 		webkitStep = 'closing the WebKit context';
 		await context.close(); context = undefined;
-	} finally { webkitStep = 'closing WebKit'; await webkitBrowser.close(); void webkitTransport.stop(true); }
+	} finally { webkitStep = 'closing WebKit'; void webkitTransport.stop(true); await closeWebKit(webkitBrowser); }
 	clearTimeout(watchdog);
 	console.log('PASS: desktop WebKit real WASM scan/add/repeat/rescan/cleanup with synthetic media through a test-only localhost HTTP transport');
 	console.log('EVIDENCE LIMIT: no physical iPhone/Android camera, permission prompt, lock/unlock, printed-label optics or Vipps app behavior is proven by this suite.');
@@ -677,3 +688,5 @@ try {
 	console.error('Browser diagnostics:', browserDiagnostics);
 	throw error;
 } finally { await close(); }
+// Everything is closed and checked; a killed WebKit can still leave a handle that keeps Bun alive.
+process.exit(0);
