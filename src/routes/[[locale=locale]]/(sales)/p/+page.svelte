@@ -13,7 +13,7 @@
 	import * as Alert from '#lib/components/ui/alert/index.js';
 	import * as Empty from '#lib/components/ui/empty/index.js';
 	import { cardLink, pageContainer, pageHeader, pageHeading, formActions, formStatus, sheetBody } from '#lib/ui.js';
-	import { goto, refreshAll } from '$app/navigation';
+	import { goto, refreshAll, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import { untrack } from 'svelte';
 	import { readCatalogPage, readCatalogFacets, type CatalogProduct } from '#lib/catalog.js';
@@ -172,7 +172,7 @@
 			expandedProducts = [...previous, ...following.products];
 			complete = following.complete;
 			// Restore visible rows before SvelteKit restores the reading position on Back.
-			void goto(page.url.href, { shallow: true, replace: true, state: { ...page.state, catalog: { queryString: data.queryString, products: $state.snapshot(expandedProducts) } } });
+			saveState({ ...page.state, catalog: { queryString: data.queryString, products: $state.snapshot(expandedProducts) } });
 		} catch (error) {
 			if (!own.signal.aborted) {
 				failed = true;
@@ -183,7 +183,13 @@
 
 	function resetExpanded() {
 		expandedProducts = null;
-		void goto(page.url.href, { shallow: true, replace: true, state: { ...page.state, catalog: undefined } });
+		saveState({ ...page.state, catalog: undefined });
+	}
+
+	// Deprecated replaceState, not goto({ shallow }): a shallow goto is a navigation and
+	// cancels a link the visitor clicked while more rows were loading. Revisit for SvelteKit 4.
+	function saveState(state: App.PageState) {
+		void replaceState(page.url.href, state);
 	}
 
 	$effect(() => {
