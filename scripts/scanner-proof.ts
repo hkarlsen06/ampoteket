@@ -624,8 +624,10 @@ try {
 	const webkitTransport = Bun.serve({ hostname: '127.0.0.1', port: 0, async fetch(request) {
 		const incoming = new URL(request.url);
 		const headers = new Headers(request.headers); headers.delete('host');
+		// A request WebKit abandons (it closes mid-load) must abort upstream too, or its
+		// handler never settles and stop() below waits for it forever.
 		const response = await fetch(origin + incoming.pathname + incoming.search, {
-			method: request.method, headers, tls: { ca }, redirect: 'manual',
+			method: request.method, headers, tls: { ca }, redirect: 'manual', signal: request.signal,
 			body: ['GET', 'HEAD'].includes(request.method) ? undefined : await request.arrayBuffer()
 		});
 		return new Response(response.body, { status: response.status, headers: response.headers });
@@ -645,7 +647,7 @@ try {
 		assert.equal((await stats(webkitPage)).live, 0); await fits(webkitPage);
 		assert.deepEqual(webkitErrors, []);
 		await context.close(); context = undefined;
-	} finally { await webkitBrowser.close(); await webkitTransport.stop(true); }
+	} finally { await webkitBrowser.close(); void webkitTransport.stop(true); }
 	console.log('PASS: desktop WebKit real WASM scan/add/repeat/rescan/cleanup with synthetic media through a test-only localhost HTTP transport');
 	console.log('EVIDENCE LIMIT: no physical iPhone/Android camera, permission prompt, lock/unlock, printed-label optics or Vipps app behavior is proven by this suite.');
 } catch (error) {
