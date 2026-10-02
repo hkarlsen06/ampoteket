@@ -104,9 +104,11 @@ the selected products. It is a regression check, not a hosted latency guarantee.
   were made during the audit fixes.
 - **Repository and monitoring controls:** local CI gating, deployment rollback,
   HTTPS and error-log changes await release. The reviewed native main-protection
-  policy is `.github/main-protection.json`; GitHub protection, secret scanning,
-  push protection and security updates remain disabled until the owner approves
-  the [provider changes](docs/runbook-deploy.md#repository-protection-and-monitoring).
+  policy is `.github/main-protection.json`. On 2026-10-02 the owner approved and
+  the provider APIs confirmed all nine required GitHub Actions checks, admin
+  enforcement, linear history, blocked force pushes/deletion, vulnerability
+  alerts, automated security fixes, secret scanning and push protection. See
+  [provider controls](docs/runbook-deploy.md#repository-protection-and-monitoring).
   Verify an actual error/uptime notification path before launch.
 - **Owners and targets:** Hjalmar Karlsen (`hkarlsen06`) is the primary operator
   for service access, backups and contact retention, assigned on 2026-10-02.
