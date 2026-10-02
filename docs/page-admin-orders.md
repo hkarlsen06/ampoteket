@@ -31,6 +31,8 @@ An **unplanned receipt** (including donations) needs products, positive quantiti
 a source note. A **planned receipt** belongs to one order: checking a line takes its
 current outstanding quantity (never the original), and never more. A scan only
 highlights the matching line; it never selects a quantity or changes stock.
+Each line shows its product's drawer (or location note) so the delivery can be
+shelved from the sheet; a failed placement read only omits it.
 The full supplier name wraps in the scrolling receipt body; the short title, Close
 and confirmation action remain outside it, including in short landscape viewports.
 
