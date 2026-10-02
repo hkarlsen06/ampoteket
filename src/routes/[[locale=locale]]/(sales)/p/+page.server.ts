@@ -1,11 +1,11 @@
 import { redirect } from '@sveltejs/kit';
-import { lookupCatalogProduct, readCatalogPage, type CatalogPage } from '$lib/catalog';
-import { CatalogQueryError, hasCatalogFilters, normalizeProductCode, parseCatalogQuery, sanitizeCatalogQuery, type CatalogQuery } from '$lib/catalog-search';
-import { localeFromPathname, localizeHref } from '$lib/i18n';
-import { getCatalogConfig } from '$lib/server/catalog-config';
+import { lookupCatalogProduct, readCatalogPage, type CatalogPage } from '#lib/catalog.js';
+import { CatalogQueryError, hasCatalogFilters, normalizeProductCode, parseCatalogQuery, sanitizeCatalogQuery, type CatalogQuery } from '#lib/catalog-search.js';
+import { localeFromPathname, localizeHref } from '#lib/i18n/index.js';
+import { getCatalogConfig } from '#lib/server/catalog-config.js';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ url, platform, request, fetch, setHeaders }) => {
+export const load: PageServerLoad = async ({ url, request, fetch, setHeaders }) => {
 	setHeaders({ 'cache-control': 'no-store' });
 	// Legacy direct-lookup links: ?code= still redirects on a valid code.
 	let codeError = false;
@@ -23,7 +23,7 @@ export const load: PageServerLoad = async ({ url, platform, request, fetch, setH
 	let parsed: CatalogQuery | null = null;
 	try { parsed = parseCatalogQuery(new URLSearchParams(queryString)); }
 	catch (error) { queryError = error instanceof CatalogQueryError ? error.issue : 'invalidQuery'; }
-	const config = getCatalogConfig(platform, request);
+	const config = getCatalogConfig(request);
 	// Unified search: a query that is exactly one existing part code opens that
 	// part directly, the label fast path, working without JavaScript and before
 	// other catalog data has loaded. A code-shaped query for a part that does

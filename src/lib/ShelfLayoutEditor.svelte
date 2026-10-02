@@ -1,17 +1,17 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { formActions } from '$lib/ui';
+	import { formActions } from '#lib/ui.js';
 	import { toast } from 'svelte-sonner';
-	import { Button } from '$lib/components/ui/button';
-	import * as Field from '$lib/components/ui/field';
-	import DisclosureTrigger from '$lib/DisclosureTrigger.svelte';
-	import ShelfGrip from '$lib/ShelfGrip.svelte';
-	import * as Collapsible from '$lib/components/ui/collapsible';
-	import { getI18n } from '$lib/i18n';
-	import { gridRange } from '$lib/format';
-	import type { AdminBin } from '$lib/admin-shelf';
-	import { LayoutError, maxLayoutCells, resizeDrawer, resizeLayout, splitLayout, type LayoutSize } from '$lib/shelf-layout';
-	import ShelfDiagram from '$lib/ShelfDiagram.svelte';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import * as Field from '#lib/components/ui/field/index.js';
+	import DisclosureTrigger from '#lib/DisclosureTrigger.svelte';
+	import ShelfGrip from '#lib/ShelfGrip.svelte';
+	import * as Collapsible from '#lib/components/ui/collapsible/index.js';
+	import { getI18n } from '#lib/i18n/index.js';
+	import { gridRange } from '#lib/format.js';
+	import type { AdminBin } from '#lib/admin-shelf.js';
+	import { LayoutError, maxLayoutCells, resizeDrawer, resizeLayout, splitLayout, type LayoutSize } from '#lib/shelf-layout.js';
+	import ShelfDiagram from '#lib/ShelfDiagram.svelte';
 
 	// eslint-disable-next-line no-useless-assignment -- $bindable() declares a two-way prop, not a value.
 	let { cabinetId, bins = $bindable(), size = $bindable(), rowsText = $bindable(), colsText = $bindable(), original,

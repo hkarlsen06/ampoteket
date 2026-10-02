@@ -1,7 +1,7 @@
 <script lang="ts">
-	import type { CatalogProduct } from '$lib/catalog';
-	import { formatDecimal, unitLabel } from '$lib/format';
-	import { getI18n } from '$lib/i18n';
+	import type { CatalogProduct } from '#lib/catalog.js';
+	import { formatDecimal, unitLabel } from '#lib/format.js';
+	import { getI18n } from '#lib/i18n/index.js';
 
 	let { product, prominent = false, compact = false }: { product: CatalogProduct; prominent?: boolean; compact?: boolean } = $props();
 	const i18n = getI18n();

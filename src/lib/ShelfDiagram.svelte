@@ -1,16 +1,16 @@
 <script lang="ts">
-	import Icon from '$lib/Icon.svelte';
+	import Icon from '#lib/Icon.svelte';
 	import type { Snippet } from 'svelte';
-	import ShelfGrip from '$lib/ShelfGrip.svelte';
+	import ShelfGrip from '#lib/ShelfGrip.svelte';
 	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
 	import MinusIcon from 'phosphor-svelte/lib/MinusIcon';
 	import { Portal, Slider, Toggle } from 'bits-ui';
-	import { AspectRatio } from '$lib/components/ui/aspect-ratio';
-	import { Button } from '$lib/components/ui/button';
-	import { cn } from '$lib/utils';
-	import ShelfCabinetFace from '$lib/ShelfCabinetFace.svelte';
-	import { diagramRect, raaco, type CabinetInner } from '$lib/shelf-map';
-	import { revealShelfFocus } from '$lib/shelf-focus';
+	import { AspectRatio } from '#lib/components/ui/aspect-ratio/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { cn } from '#lib/utils.js';
+	import ShelfCabinetFace from '#lib/ShelfCabinetFace.svelte';
+	import { diagramRect, raaco, type CabinetInner } from '#lib/shelf-map.js';
+	import { revealShelfFocus } from '#lib/shelf-focus.js';
 
 	// `inner` draws a wall cabinet's drawer layout on its face.
 	type Item = { id: string; row: number; col: number; rowSpan?: number; colSpan?: number; label: string; empty?: boolean; inner?: CabinetInner };

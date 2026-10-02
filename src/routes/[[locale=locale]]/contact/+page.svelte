@@ -1,15 +1,15 @@
 <script lang="ts">
-	import Icon from '$lib/Icon.svelte';
+	import Icon from '#lib/Icon.svelte';
 	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
 	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
 	import CopyIcon from 'phosphor-svelte/lib/CopyIcon';
-	import DiscordLogo from '$lib/DiscordLogo.svelte';
-	import { Button } from '$lib/components/ui/button';
-	import * as Alert from '$lib/components/ui/alert';
-	import * as Item from '$lib/components/ui/item';
-	import * as Empty from '$lib/components/ui/empty';
-	import { itemTitle, pageContainer, pageHeader, pageHeading, section, sectionHeading } from '$lib/ui';
-	import { DISCORD_INVITE, getI18n } from '$lib/i18n';
+	import DiscordLogo from '#lib/DiscordLogo.svelte';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import * as Alert from '#lib/components/ui/alert/index.js';
+	import * as Item from '#lib/components/ui/item/index.js';
+	import * as Empty from '#lib/components/ui/empty/index.js';
+	import { itemTitle, pageContainer, pageHeader, pageHeading, section, sectionHeading } from '#lib/ui.js';
+	import { DISCORD_INVITE, getI18n } from '#lib/i18n/index.js';
 	import type { PageProps } from './$types';
 	let { data }: PageProps = $props(); const i18n = getI18n(); const m = $derived(i18n.m.help);
 	let copied = $state<string | null>(null); let copiedTimer: ReturnType<typeof setTimeout> | undefined;

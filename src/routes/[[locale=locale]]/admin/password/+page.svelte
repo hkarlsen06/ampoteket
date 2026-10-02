@@ -1,13 +1,13 @@
 <script lang="ts">
-	import { formLayout, formStatus, pageHeader, pageHeading } from '$lib/ui';
-	import * as Alert from '$lib/components/ui/alert';
-	import { Button, ButtonLabel } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
-	import * as Field from '$lib/components/ui/field';
+	import { formLayout, formStatus, pageHeader, pageHeading } from '#lib/ui.js';
+	import * as Alert from '#lib/components/ui/alert/index.js';
+	import { Button, ButtonLabel } from '#lib/components/ui/button/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import * as Field from '#lib/components/ui/field/index.js';
 	import { onMount } from 'svelte';
-	import { getI18n } from '$lib/i18n';
-	import { getAdminContext, adminReturnPath } from '$lib/admin-context.svelte';
-	import { updateAdminPassword } from '$lib/admin-auth';
+	import { getI18n } from '#lib/i18n/index.js';
+	import { getAdminContext, adminReturnPath } from '#lib/admin-context.svelte.js';
+	import { updateAdminPassword } from '#lib/admin-auth.js';
 	const fieldId = $props.id();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.admin);
 	let email = $state(''); let password = $state(''); let repeat = $state(''); let busy = $state(false);

@@ -4,9 +4,9 @@
 		buttonVariants,
 		type ButtonVariant,
 		type ButtonSize,
-	} from "$lib/components/ui/button/index.js";
-	import { cn } from "$lib/utils.js";
-	import Brackets from "$lib/Brackets.svelte";
+	} from "#lib/components/ui/button/index.js";
+	import { cn } from "#lib/utils.js";
+	import Brackets from "#lib/Brackets.svelte";
 
 	let {
 		ref = $bindable(null),

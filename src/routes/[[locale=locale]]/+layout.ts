@@ -1,4 +1,4 @@
-import { defaultLocale, isLocale, type Locale } from '$lib/i18n';
+import { defaultLocale, isLocale, type Locale } from '#lib/i18n/index.js';
 import type { LayoutLoad } from './$types';
 
 // `locale` is undefined on the unprefixed (Norwegian) routes.

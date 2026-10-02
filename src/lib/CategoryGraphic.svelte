@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { AspectRatio } from '$lib/components/ui/aspect-ratio';
+	import { AspectRatio } from '#lib/components/ui/aspect-ratio/index.js';
 	let { category }: { category: string | null } = $props();
 	const kind = $derived(category?.trim().toLowerCase());
 	const names = new Set(['resistors', 'capacitors', 'diodes', 'leds', 'transistors', 'controllers', 'sensors', 'motors', 'connectors', 'prototyping', 'cable']);

@@ -1,9 +1,9 @@
 <script lang="ts">
-	import Icon from '$lib/Icon.svelte';
+	import Icon from '#lib/Icon.svelte';
 	import MinusIcon from 'phosphor-svelte/lib/MinusIcon';
 	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
-	import * as InputGroup from '$lib/components/ui/input-group';
-	import { Separator } from '$lib/components/ui/separator';
+	import * as InputGroup from '#lib/components/ui/input-group/index.js';
+	import { Separator } from '#lib/components/ui/separator/index.js';
 	// Joined −/value/+ control for exact-string quantities. Presentation only:
 	// the owner supplies the exact step arithmetic through `onstep`, so no
 	// float or rounding can sneak in here.

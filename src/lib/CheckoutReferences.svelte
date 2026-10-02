@@ -1,8 +1,8 @@
 <script lang="ts">
 	import type { ClassValue } from 'svelte/elements';
-	import { Badge } from '$lib/components/ui/badge';
-	import { codeText } from '$lib/ui';
-	import { getI18n } from '$lib/i18n';
+	import { Badge } from '#lib/components/ui/badge/index.js';
+	import { codeText } from '#lib/ui.js';
+	import { getI18n } from '#lib/i18n/index.js';
 
 	// One reference to give a volunteer; the request ID stays available for a
 	// lost prepare response and for staff lookup.

@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { gridCell, gridRange, unitLabel } from '$lib/format';
-	import { getI18n } from '$lib/i18n';
-	import type { CatalogProduct } from '$lib/catalog';
-	import StockBadge from '$lib/StockBadge.svelte';
-	import LocationChips from '$lib/LocationChips.svelte';
-	import * as Popover from '$lib/components/ui/popover';
+	import { gridCell, gridRange, unitLabel } from '#lib/format.js';
+	import { getI18n } from '#lib/i18n/index.js';
+	import type { CatalogProduct } from '#lib/catalog.js';
+	import StockBadge from '#lib/StockBadge.svelte';
+	import LocationChips from '#lib/LocationChips.svelte';
+	import * as Popover from '#lib/components/ui/popover/index.js';
 
 	let { product, showLocation = true, plain = false, inline = false }: {
 		product: CatalogProduct;

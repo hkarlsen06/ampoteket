@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { Badge } from '$lib/components/ui/badge';
-	import { getI18n } from '$lib/i18n';
-	import { gridCell, gridRange } from '$lib/format';
+	import { Badge } from '#lib/components/ui/badge/index.js';
+	import { getI18n } from '#lib/i18n/index.js';
+	import { gridCell, gridRange } from '#lib/format.js';
 
 	// The two coordinates a buyer walks along on the one shelf wall:
 	// cabinet → drawer. Rendered as labelled chips with spreadsheet-style

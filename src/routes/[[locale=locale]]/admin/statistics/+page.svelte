@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { pageHeader, pageHeading } from '$lib/ui';
-	import { getI18n } from '$lib/i18n';
-	import AdminStatistics from '$lib/AdminStatistics.svelte';
+	import { pageHeader, pageHeading } from '#lib/ui.js';
+	import { getI18n } from '#lib/i18n/index.js';
+	import AdminStatistics from '#lib/AdminStatistics.svelte';
 	const i18n = getI18n();
 </script>
 <svelte:head><title>{i18n.m.adminStatistics.title}</title></svelte:head>

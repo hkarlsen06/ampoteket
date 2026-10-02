@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { Badge } from '$lib/components/ui/badge';
-	import { cn } from '$lib/utils';
+	import { Badge } from '#lib/components/ui/badge/index.js';
+	import { cn } from '#lib/utils.js';
 
 	// A brand variation of Badge. Only the visual digits use the LED font; the complete
 	// localized meaning remains ordinary text in the accessibility tree.

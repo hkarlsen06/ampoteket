@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { Menubar as MenubarPrimitive } from "bits-ui";
-	import Icon from "$lib/Icon.svelte";
+	import Icon from "#lib/Icon.svelte";
 	import MinusIcon from 'phosphor-svelte/lib/MinusIcon';
 	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
-	import { cn, type WithoutChildrenOrChild } from "$lib/utils.js";
+	import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
 	import type { Snippet } from "svelte";
 
 	let {

@@ -5,8 +5,8 @@
 	// brand row. The locale comes from the URL prefix, exactly like
 	// hooks.server.ts does for `<html lang>`.
 	import { page } from '$app/state';
-	import { localeFromPathname, messagesFor } from '$lib/i18n';
-	import NotFound from '$lib/NotFound.svelte';
+	import { localeFromPathname, messagesFor } from '#lib/i18n/index.js';
+	import NotFound from '#lib/NotFound.svelte';
 
 	const locale = $derived(localeFromPathname(page.url.pathname));
 	const m = $derived(messagesFor(locale).notFound);

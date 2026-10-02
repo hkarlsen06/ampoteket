@@ -1,18 +1,18 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import * as Dialog from '$lib/components/ui/dialog';
-	import * as Field from '$lib/components/ui/field';
-	import * as ToggleGroup from '$lib/components/ui/toggle-group';
-	import Icon from '$lib/Icon.svelte';
+	import * as Dialog from '#lib/components/ui/dialog/index.js';
+	import * as Field from '#lib/components/ui/field/index.js';
+	import * as ToggleGroup from '#lib/components/ui/toggle-group/index.js';
+	import Icon from '#lib/Icon.svelte';
 	import XIcon from 'phosphor-svelte/lib/XIcon';
-	import * as Alert from '$lib/components/ui/alert';
-	import { Input } from '$lib/components/ui/input';
-	import { Button, ButtonLabel } from '$lib/components/ui/button';
-	import { formLayout, formStatus, sheetBody } from '$lib/ui';
-	import AdminAccessGate from '$lib/AdminAccessGate.svelte';
-	import { getI18n } from '$lib/i18n';
-	import { getAdminContext } from '$lib/admin-context.svelte';
-	import { definitiveProductFailure, detailCommandKey, executeDetailCommand, parseDefinition, parseDetailCommand, StaleProductError, type AttributeDefinition, type DetailCommand } from '$lib/admin-products';
+	import * as Alert from '#lib/components/ui/alert/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import { Button, ButtonLabel } from '#lib/components/ui/button/index.js';
+	import { formLayout, formStatus, sheetBody } from '#lib/ui.js';
+	import AdminAccessGate from '#lib/AdminAccessGate.svelte';
+	import { getI18n } from '#lib/i18n/index.js';
+	import { getAdminContext } from '#lib/admin-context.svelte.js';
+	import { definitiveProductFailure, detailCommandKey, executeDetailCommand, parseDefinition, parseDetailCommand, StaleProductError, type AttributeDefinition, type DetailCommand } from '#lib/admin-products.js';
 
 	let { disabled = false, class: className, oncreated }: { disabled?: boolean; class?: string; oncreated: (definition: AttributeDefinition) => void } = $props();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.adminProducts); const uid = $props.id();

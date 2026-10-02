@@ -1,14 +1,14 @@
 <script lang="ts">
-	import { formStatus, lede, pageHeading } from '$lib/ui';
-	import * as Alert from '$lib/components/ui/alert';
-	import * as Card from '$lib/components/ui/card';
-	import { Button, ButtonLabel } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
-	import * as Field from '$lib/components/ui/field';
+	import { formStatus, lede, pageHeading } from '#lib/ui.js';
+	import * as Alert from '#lib/components/ui/alert/index.js';
+	import * as Card from '#lib/components/ui/card/index.js';
+	import { Button, ButtonLabel } from '#lib/components/ui/button/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import * as Field from '#lib/components/ui/field/index.js';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
-	import { getI18n } from '$lib/i18n';
-	import { getAdminContext, adminReturnPath } from '$lib/admin-context.svelte';
+	import { getI18n } from '#lib/i18n/index.js';
+	import { getAdminContext, adminReturnPath } from '#lib/admin-context.svelte.js';
 	const fieldId = $props.id();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.admin);
 	let email = $state(''); let password = $state(''); let busy = $state(false); let failed = $state(false);

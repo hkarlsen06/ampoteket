@@ -1,18 +1,18 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import { getI18n } from '$lib/i18n';
-	import { getAdminContext } from '$lib/admin-context.svelte';
-	import AdminAccessGate from '$lib/AdminAccessGate.svelte';
-	import { sheetBody } from '$lib/ui';
-	import Icon from '$lib/Icon.svelte';
+	import { getI18n } from '#lib/i18n/index.js';
+	import { getAdminContext } from '#lib/admin-context.svelte.js';
+	import AdminAccessGate from '#lib/AdminAccessGate.svelte';
+	import { sheetBody } from '#lib/ui.js';
+	import Icon from '#lib/Icon.svelte';
 	import QrCodeIcon from 'phosphor-svelte/lib/QrCodeIcon';
 	import XIcon from 'phosphor-svelte/lib/XIcon';
-	import * as Alert from '$lib/components/ui/alert';
-	import { Button } from '$lib/components/ui/button';
-	import * as Dialog from '$lib/components/ui/dialog';
-	import CameraFrame from '$lib/CameraFrame.svelte';
-	import { productCodeFromQr } from '$lib/scanner/payload';
-	import type { CameraSession, CameraState } from '$lib/scanner/session';
+	import * as Alert from '#lib/components/ui/alert/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import * as Dialog from '#lib/components/ui/dialog/index.js';
+	import CameraFrame from '#lib/CameraFrame.svelte';
+	import { productCodeFromQr } from '#lib/scanner/payload.js';
+	import type { CameraSession, CameraState } from '#lib/scanner/session.js';
 
 	// Finds a scanned label among the loaded staff products and hands its id to the page.
 	let { products, disabled = false, onproduct }: {
@@ -45,7 +45,7 @@
 		const current = ++cameraOperation;
 		await tick();
 		try {
-			const { CameraSession } = await import('$lib/scanner/session');
+			const { CameraSession } = await import('#lib/scanner/session.js');
 			if (!alive || !scanOpen || current !== cameraOperation || admin.status !== 'ready' || !video || !canvas) return;
 			cameraSession = new CameraSession(video, canvas, {
 				state: (next) => { if (current === cameraOperation) cameraState = next; },

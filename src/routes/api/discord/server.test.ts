@@ -1,5 +1,7 @@
-import { afterEach, expect, spyOn, test } from 'bun:test';
-import { GET } from './+server';
+import { afterEach, expect, mock, spyOn, test } from 'bun:test';
+
+mock.module('cloudflare:workers', () => ({ waitUntil: () => {} }));
+const { GET } = await import('./+server');
 import { GET as avatar } from './avatar/[...path]/+server';
 
 const realFetch = globalThis.fetch;
@@ -7,7 +9,7 @@ const realNow = Date.now;
 const realTimeout = AbortSignal.timeout;
 afterEach(() => { globalThis.fetch = realFetch; Date.now = realNow; AbortSignal.timeout = realTimeout; });
 
-// Cache API stand-in with expiry; waitUntil runs the put immediately.
+// Cache API stand-in with expiry; the put starts immediately.
 function platform() {
 	const store = new Map<string, { response: Response; expires: number }>();
 	const cache = {
@@ -19,10 +21,12 @@ function platform() {
 			store.set(key, { response, expires: Date.now() + Number(response.headers.get('Cache-Control')?.match(/max-age=(\d+)/)?.[1]) * 1000 });
 		}
 	};
-	return { caches: { default: cache }, ctx: { waitUntil: (promise: Promise<unknown>) => promise } };
+	return { default: cache };
 }
-const call = (p: ReturnType<typeof platform>) =>
-	(GET as (event: unknown) => Promise<Response>)({ platform: p, url: new URL('https://ampoteket.no/api/discord') });
+const call = (p: ReturnType<typeof platform>) => {
+	Object.assign(globalThis, { caches: p });
+	return (GET as (event: unknown) => Promise<Response>)({ url: new URL('https://ampoteket.no/api/discord') });
+};
 const read = async (response: Response) => (await response.json()) as Record<string, unknown>;
 // Each call answers with the next status; a number is a good widget with that many online.
 const discord = (...answers: (number | 429 | 503)[]) => {

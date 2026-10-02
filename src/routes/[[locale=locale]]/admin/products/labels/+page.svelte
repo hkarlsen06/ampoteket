@@ -1,23 +1,23 @@
 <script lang="ts">
-	import { codeText, formActions, formLayout, formStatus, pageHeader, pageHeading, section, sectionHeading } from '$lib/ui';
-	import * as Alert from '$lib/components/ui/alert';
-	import * as AspectRatio from '$lib/components/ui/aspect-ratio';
-	import { Skeleton } from '$lib/components/ui/skeleton';
-	import * as InputGroup from '$lib/components/ui/input-group';
-	import { Button, ButtonLabel } from '$lib/components/ui/button';
-	import { Checkbox } from '$lib/components/ui/checkbox';
-	import * as Field from '$lib/components/ui/field';
+	import { codeText, formActions, formLayout, formStatus, pageHeader, pageHeading, section, sectionHeading } from '#lib/ui.js';
+	import * as Alert from '#lib/components/ui/alert/index.js';
+	import * as AspectRatio from '#lib/components/ui/aspect-ratio/index.js';
+	import { Skeleton } from '#lib/components/ui/skeleton/index.js';
+	import * as InputGroup from '#lib/components/ui/input-group/index.js';
+	import { Button, ButtonLabel } from '#lib/components/ui/button/index.js';
+	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
+	import * as Field from '#lib/components/ui/field/index.js';
 	import { onMount, tick, untrack } from 'svelte';
-	import { normalizeDecimal } from '$lib/decimal';
-	import { getI18n } from '$lib/i18n';
-	import { getAdminContext } from '$lib/admin-context.svelte';
-	import { productName } from '$lib/catalog';
-	import LabelShelfSelection from '$lib/LabelShelfSelection.svelte';
-	import { readLabelData, selectedLabelProducts, labelSpecificationLines, type LabelData } from '$lib/labels/data';
-	import { proportionalLabelSettings } from '$lib/labels/settings';
-	import type { PreparedLabels } from '$lib/labels/render';
-	import type { Fetcher } from '$lib/api';
-	import { readDraft, writeDraft } from '$lib/drafts';
+	import { normalizeDecimal } from '#lib/decimal.js';
+	import { getI18n } from '#lib/i18n/index.js';
+	import { getAdminContext } from '#lib/admin-context.svelte.js';
+	import { productName } from '#lib/catalog.js';
+	import LabelShelfSelection from '#lib/LabelShelfSelection.svelte';
+	import { readLabelData, selectedLabelProducts, labelSpecificationLines, type LabelData } from '#lib/labels/data.js';
+	import { proportionalLabelSettings } from '#lib/labels/settings.js';
+	import type { PreparedLabels } from '#lib/labels/render.js';
+	import type { Fetcher } from '#lib/api.js';
+	import { readDraft, writeDraft } from '#lib/drafts.js';
 	const fieldId = $props.id();
 	const i18n = getI18n(), admin = getAdminContext();
 	const m = $derived(i18n.m.adminLabels);
@@ -128,7 +128,7 @@
 			if (!chosen.length) { error = m.empty; return; }
 			const labels = chosen.map(product => ({ id: product.id, code: product.code,
 				lines: labelSpecificationLines(next, product, i18n.locale, null) }));
-			const { prepareLabels } = await import('$lib/labels/render');
+			const { prepareLabels } = await import('#lib/labels/render.js');
 			const result = await prepareLabels(labels, { ...dimensions, copies: 1, cutGuides: true }, operation.signal);
 			operation.signal.throwIfAborted();
 			if (!alive || snapshot !== configuration) return;

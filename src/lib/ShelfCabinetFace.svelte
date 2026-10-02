@@ -2,7 +2,7 @@
 	// A wall cabinet's front: its real drawer layout in miniature under the address
 	// on a small tag. Decorative; the containing control is the steel face and
 	// carries the accessible name.
-	import { drawerFront, raaco, type CabinetInner } from '$lib/shelf-map';
+	import { drawerFront, raaco, type CabinetInner } from '#lib/shelf-map.js';
 
 	let { label, inner }: { label: string; inner?: CabinetInner } = $props();
 </script>

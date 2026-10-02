@@ -1,9 +1,9 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { getAdminContext } from '$lib/admin-context.svelte';
-	import { getI18n } from '$lib/i18n';
-	import * as Alert from '$lib/components/ui/alert';
-	import { Button, ButtonLabel } from '$lib/components/ui/button';
+	import { getAdminContext } from '#lib/admin-context.svelte.js';
+	import { getI18n } from '#lib/i18n/index.js';
+	import * as Alert from '#lib/components/ui/alert/index.js';
+	import { Button, ButtonLabel } from '#lib/components/ui/button/index.js';
 	let { children, active = true }: { children: Snippet; active?: boolean } = $props();
 	const admin = getAdminContext();
 	const i18n = getI18n();

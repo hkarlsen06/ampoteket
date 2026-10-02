@@ -1,9 +1,9 @@
 <script lang="ts">
-	import * as Alert from '$lib/components/ui/alert';
-	import { Button } from '$lib/components/ui/button';
-	import CheckoutReferences from '$lib/CheckoutReferences.svelte';
-	import { getI18n } from '$lib/i18n';
-	import { getCartContext, type CartState } from '$lib/cart';
+	import * as Alert from '#lib/components/ui/alert/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import CheckoutReferences from '#lib/CheckoutReferences.svelte';
+	import { getI18n } from '#lib/i18n/index.js';
+	import { getCartContext, type CartState } from '#lib/cart.js';
 	let { state }: { state: CartState } = $props();
 	const i18n = getI18n();
 	const m = $derived(i18n.m.cart);

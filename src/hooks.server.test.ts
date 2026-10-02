@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import type { RequestEvent } from '@sveltejs/kit';
 
-mock.module('$env/dynamic/private', () => ({ env: {} }));
+mock.module('$app/env/private', () => ({ SUPABASE_API_PROXY: undefined }));
 const { handle } = await import('./hooks.server');
 
 test('production redirects HTTP and www before resolving, retaining path and query', async () => {

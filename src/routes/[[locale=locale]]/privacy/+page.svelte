@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { Button } from '$lib/components/ui/button';
-	import { lede, pageContainer, pageHeader, pageHeading, section, sectionHeading } from '$lib/ui';
-	import { getI18n } from '$lib/i18n';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { lede, pageContainer, pageHeader, pageHeading, section, sectionHeading } from '#lib/ui.js';
+	import { getI18n } from '#lib/i18n/index.js';
 	const i18n = getI18n(); const m = $derived(i18n.m.privacy);
 </script>
 <svelte:head><title>{m.title}</title><meta name="description" content={m.description} /><meta property="og:title" content={m.title} /><meta property="og:description" content={m.description} /></svelte:head>

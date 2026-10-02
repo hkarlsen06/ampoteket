@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { controlSurface } from "$lib/components/ui/control";
-	import { cn, type WithElementRef } from "$lib/utils.js";
+	import { controlSurface } from "#lib/components/ui/control.js";
+	import { cn, type WithElementRef } from "#lib/utils.js";
 	import type { HTMLAttributes } from "svelte/elements";
 
 	let {

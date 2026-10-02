@@ -1,8 +1,8 @@
 <script lang="ts">
-	import Icon from '$lib/Icon.svelte';
+	import Icon from '#lib/Icon.svelte';
 	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
-	import { controlStyles } from "$lib/components/ui/control";
-	import { cn } from "$lib/utils.js";
+	import { controlStyles } from "#lib/components/ui/control.js";
+	import { cn } from "#lib/utils.js";
 	import type { HTMLSelectAttributes } from "svelte/elements";
 
 	type NativeSelectProps = Omit<HTMLSelectAttributes, "size"> & {

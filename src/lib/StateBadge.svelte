@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import Icon from '$lib/Icon.svelte';
-	import { Badge } from '$lib/components/ui/badge';
+	import Icon from '#lib/Icon.svelte';
+	import { Badge } from '#lib/components/ui/badge/index.js';
 	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
 	import MinusCircleIcon from 'phosphor-svelte/lib/MinusCircleIcon';
 	import WarningIcon from 'phosphor-svelte/lib/WarningIcon';

@@ -7,15 +7,15 @@
 </script>
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Button, ButtonLabel } from '$lib/components/ui/button';
-	import * as Alert from '$lib/components/ui/alert';
-	import Icon from '$lib/Icon.svelte';
+	import { Button, ButtonLabel } from '#lib/components/ui/button/index.js';
+	import * as Alert from '#lib/components/ui/alert/index.js';
+	import Icon from '#lib/Icon.svelte';
 	import QrCodeIcon from 'phosphor-svelte/lib/QrCodeIcon';
-	import { getI18n } from '$lib/i18n';
-	import { getAdminContext } from '$lib/admin-context.svelte';
-	import { readProductAttributes, type AdminProduct, type ProductReferences } from '$lib/admin-products';
-	import { labelSpecificationLines } from '$lib/labels/data';
-	import { printTapeLabel, PtouchError } from '$lib/labels/ptouch';
+	import { getI18n } from '#lib/i18n/index.js';
+	import { getAdminContext } from '#lib/admin-context.svelte.js';
+	import { readProductAttributes, type AdminProduct, type ProductReferences } from '#lib/admin-products.js';
+	import { labelSpecificationLines } from '#lib/labels/data.js';
+	import { printTapeLabel, PtouchError } from '#lib/labels/ptouch.js';
 	let { product, references }: { product: AdminProduct; references: ProductReferences } = $props();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.adminProducts);
 	type Outcome = 'idle' | 'printed' | keyof typeof m.labelPrinter;
@@ -28,7 +28,7 @@
 		const session = admin.credentials(); const locale = i18n.locale;
 		try {
 			await printTapeLabel(async pins => {
-				const [{ prepareTapeLabel }, attributes] = await Promise.all([import('$lib/labels/render'), readProductAttributes(session, product.id)]);
+				const [{ prepareTapeLabel }, attributes] = await Promise.all([import('#lib/labels/render.js'), readProductAttributes(session, product.id)]);
 				const lines = labelSpecificationLines({ products: [product], references, attributes }, product, locale, null);
 				return prepareTapeLabel({ id: product.id, code: product.code, lines }, pins);
 			});

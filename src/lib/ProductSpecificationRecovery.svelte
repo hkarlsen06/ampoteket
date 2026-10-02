@@ -1,15 +1,15 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import ProductAttributes from '$lib/ProductAttributes.svelte';
-	import { Button, ButtonLabel } from '$lib/components/ui/button';
-	import * as Alert from '$lib/components/ui/alert';
-	import * as Empty from '$lib/components/ui/empty';
-	import { getI18n, specificationLabel } from '$lib/i18n';
-	import { getAdminContext } from '$lib/admin-context.svelte';
-	import { formatDecimal } from '$lib/format';
-	import { standardSpecificationDefinitions } from '$lib/product-specifications';
-	import { readProductSpecificationReview, replaceReviewedProductCommand, type AttributeDefinition, type AttributeValue, type ProductAttributeDraft, type ProductCommand, type ProductFamily, type ProductSpecificationReview } from '$lib/admin-products';
-	import { formActions, formStatus, sectionHeading } from '$lib/ui';
+	import ProductAttributes from '#lib/ProductAttributes.svelte';
+	import { Button, ButtonLabel } from '#lib/components/ui/button/index.js';
+	import * as Alert from '#lib/components/ui/alert/index.js';
+	import * as Empty from '#lib/components/ui/empty/index.js';
+	import { getI18n, specificationLabel } from '#lib/i18n/index.js';
+	import { getAdminContext } from '#lib/admin-context.svelte.js';
+	import { formatDecimal } from '#lib/format.js';
+	import { standardSpecificationDefinitions } from '#lib/product-specifications.js';
+	import { readProductSpecificationReview, replaceReviewedProductCommand, type AttributeDefinition, type AttributeValue, type ProductAttributeDraft, type ProductCommand, type ProductFamily, type ProductSpecificationReview } from '#lib/admin-products.js';
+	import { formActions, formStatus, sectionHeading } from '#lib/ui.js';
 
 	let { command, definitions = $bindable(), family, disabled = false, onreviewed }: { command: ProductCommand; definitions: AttributeDefinition[]; family: ProductFamily | null; disabled?: boolean; onreviewed: (command: ProductCommand) => void } = $props();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.adminProducts);

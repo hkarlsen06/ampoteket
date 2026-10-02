@@ -1,33 +1,33 @@
 <script lang="ts">
-	import AdminAccessGate from '$lib/AdminAccessGate.svelte';
-	import { productName } from '$lib/catalog';
+	import AdminAccessGate from '#lib/AdminAccessGate.svelte';
+	import { productName } from '#lib/catalog.js';
 	import { onMount, tick, untrack } from 'svelte';
-	import { getI18n } from '$lib/i18n';
-	import { getAdminContext } from '$lib/admin-context.svelte';
-	import { compareDecimals, validQuantity } from '$lib/decimal';
-	import { formatDecimal, unitLabel } from '$lib/format';
-	import { clearOrderCommand, orderCommandPath, orderRejection, orderStorageEvent, readOrderCommand, readOrderDetail, runOrderCommand, saveOrderCommand, updateOrderStorage, type OrderCommand, type OrderDetail, type OrderLine } from '$lib/admin-orders';
-	import { productCodeFromQr } from '$lib/scanner/payload';
-	import { readDraft, writeDraft } from '$lib/drafts';
-	import type { CameraSession, CameraState } from '$lib/scanner/session';
-	import Icon from '$lib/Icon.svelte';
+	import { getI18n } from '#lib/i18n/index.js';
+	import { getAdminContext } from '#lib/admin-context.svelte.js';
+	import { compareDecimals, validQuantity } from '#lib/decimal.js';
+	import { formatDecimal, unitLabel } from '#lib/format.js';
+	import { clearOrderCommand, orderCommandPath, orderRejection, orderStorageEvent, readOrderCommand, readOrderDetail, runOrderCommand, saveOrderCommand, updateOrderStorage, type OrderCommand, type OrderDetail, type OrderLine } from '#lib/admin-orders.js';
+	import { productCodeFromQr } from '#lib/scanner/payload.js';
+	import { readDraft, writeDraft } from '#lib/drafts.js';
+	import type { CameraSession, CameraState } from '#lib/scanner/session.js';
+	import Icon from '#lib/Icon.svelte';
 	import XIcon from 'phosphor-svelte/lib/XIcon';
 	import QrCodeIcon from 'phosphor-svelte/lib/QrCodeIcon';
-	import CameraFrame from '$lib/CameraFrame.svelte';
-	import LocationChips from '$lib/LocationChips.svelte';
-	import { readAdminProducts, type AdminProduct } from '$lib/admin-products';
-	import { readShelfTopology, type ShelfTopology } from '$lib/shelf-map';
-	import { codeText, nameWrap, sheetBody } from '$lib/ui';
-	import * as Alert from '$lib/components/ui/alert';
-	import * as Collapsible from '$lib/components/ui/collapsible';
-	import * as Dialog from '$lib/components/ui/dialog';
-	import * as Empty from '$lib/components/ui/empty';
-	import * as Field from '$lib/components/ui/field';
-	import { Button, ButtonLabel } from '$lib/components/ui/button';
-	import { Checkbox } from '$lib/components/ui/checkbox';
-	import * as InputGroup from '$lib/components/ui/input-group';
-	import { Separator } from '$lib/components/ui/separator';
-	import { Skeleton } from '$lib/components/ui/skeleton';
+	import CameraFrame from '#lib/CameraFrame.svelte';
+	import LocationChips from '#lib/LocationChips.svelte';
+	import { readAdminProducts, type AdminProduct } from '#lib/admin-products.js';
+	import { readShelfTopology, type ShelfTopology } from '#lib/shelf-map.js';
+	import { codeText, nameWrap, sheetBody } from '#lib/ui.js';
+	import * as Alert from '#lib/components/ui/alert/index.js';
+	import * as Collapsible from '#lib/components/ui/collapsible/index.js';
+	import * as Dialog from '#lib/components/ui/dialog/index.js';
+	import * as Empty from '#lib/components/ui/empty/index.js';
+	import * as Field from '#lib/components/ui/field/index.js';
+	import { Button, ButtonLabel } from '#lib/components/ui/button/index.js';
+	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
+	import * as InputGroup from '#lib/components/ui/input-group/index.js';
+	import { Separator } from '#lib/components/ui/separator/index.js';
+	import { Skeleton } from '#lib/components/ui/skeleton/index.js';
 
 	let { orderId, returnFocus, onclose, onrecorded }: {
 		orderId: string;
@@ -221,7 +221,7 @@
 		const current = ++cameraOperation;
 		await tick();
 		try {
-			const { CameraSession } = await import('$lib/scanner/session');
+			const { CameraSession } = await import('#lib/scanner/session.js');
 			if (!mounted || !scanOpen || current !== cameraOperation || !video || !canvas) return;
 			cameraSession = new CameraSession(video, canvas, {
 				state: (next) => { if (current === cameraOperation) cameraState = next; },
