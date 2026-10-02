@@ -1,7 +1,7 @@
 <script lang="ts">
 	import AdminAccessGate from '#lib/AdminAccessGate.svelte';
 	import { productName } from '#lib/catalog.js';
-	import { goto } from '$app/navigation';
+	import { goto, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import { untrack, onMount, tick } from 'svelte';
 	import { getI18n } from '#lib/i18n/index.js';
@@ -223,7 +223,7 @@
 		if (busy) return;
 		if (mode !== 'closed') returnMode = mode;
 		mode = 'closed';
-		if (page.url.searchParams.has('new')) void goto(i18n.href('/admin/orders'), { shallow: true, replace: true });
+		if (page.url.searchParams.has('new')) void replaceState(i18n.href('/admin/orders'), {}); // Not goto({ shallow }), which would cancel an early click.
 	}
 	function resumePlanned() {
 		if (command?.kind === 'receipt' && command.orderId) selectedOrderId = command.orderId;
