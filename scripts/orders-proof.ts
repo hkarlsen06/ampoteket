@@ -8,7 +8,7 @@ import { fieldLabel, signIn, fits, proofEnvironment } from './web-proof/harness'
 import { generateSeedSql, seedProductCode, seedProductId } from './seed-test-data';
 import { en } from '../src/lib/i18n/en';
 import { nb } from '../src/lib/i18n/nb';
-import { unitLabel } from '../src/lib/format';
+import { formatMeasurementText, unitLabel } from '../src/lib/format';
 
 const { directory, origin, api, password, sql, createUser, startWorker } = await proofEnvironment();
 const staffEmail = 'orders-staff@example.test';
@@ -501,43 +501,68 @@ try {
 	console.log('PASS: unplanned receipt adds exact stock; long order text fits both locales and receipt controls remain reachable down to 320x256px');
 	console.log('PASS: failed background list refresh preserves rows and blocks writes until contextual retry');
 
-	// Needs-attention sheet: pick parts, prefill New order with purchase links, then skip what is already on order.
-	const s = en.adminStatistics, wanted = [3, 4].map(seedProductId), purchaseLink = 'https://supplier.example.test/item/3';
-	await sql(`UPDATE app.products SET is_active=true, minimum_stock=999999 WHERE id IN (${wanted.map(literal).join(',')});
+	// New order shows the most urgent parts as chips and all of them in a dialog: choosing adds lines with purchase links, and quantity already on order shows.
+	const s = en.adminStatistics, wanted = [3, 4].map(seedProductId), extra = Array.from({ length: 12 }, (_, index) => seedProductId(index + 5)), purchaseLink = 'https://supplier.example.test/item/3';
+	await sql(`UPDATE app.products SET is_active=true, minimum_stock=stock_step*ceil(999999/stock_step) WHERE id IN (${[...wanted, ...extra].map(literal).join(',')});
 		UPDATE app.products SET purchase_url=${literal(purchaseLink)} WHERE id=${literal(wanted[0])};`);
-	const rows = (await value(`SELECT string_agg(p.code||'~'||u.symbol, '|' ORDER BY p.code) FROM app.products p JOIN app.units u ON u.code=p.unit_code WHERE p.id IN (${wanted.map(literal).join(',')})`)).split('|').map((row) => row.split('~'));
+	const rows = (await value(`SELECT string_agg(p.name_en||'~'||u.symbol, '|' ORDER BY p.code) FROM app.products p JOIN app.units u ON u.code=p.unit_code WHERE p.id IN (${wanted.map(literal).join(',')})`)).split('|').map((row) => row.split('~')).map(([name, unit]) => [formatMeasurementText(name, 'en'), unit]);
 	await page.setViewportSize({ width: 360, height: 900 });
 	await page.goto(`${origin}/en/admin`);
-	await page.getByRole('button', { name: s.openOrder, exact: true }).click();
-	const pickSheet = page.getByRole('dialog', { name: s.orderHeading, exact: true });
-	const selectAll = pickSheet.getByRole('checkbox', { name: s.selectAll, exact: true });
-	const pick = (code: string) => pickSheet.locator('[data-slot="field"]').filter({ hasText: code }).getByRole('checkbox');
-	await expect(selectAll).toBeVisible();
-	await fits(page);
-	await page.screenshot({ path: `${artifacts}/attention-order-en-360.png` });
-	if (await selectAll.isChecked()) await selectAll.click(); else { await selectAll.click(); await selectAll.click(); }
-	for (const [code] of rows) await pick(code).click();
-	await pickSheet.getByRole('button', { name: s.startOrder(2), exact: true }).click();
-	await expect(page).toHaveURL(/\/en\/admin\/orders\?new=/);
+	await page.getByRole('link', { name: s.openOrder, exact: true }).click();
+	await expect(page).toHaveURL(/\/en\/admin\/orders\?new$/);
 	const prefilled = page.getByRole('dialog', { name: m.newOrder, exact: true });
+	const needed = prefilled.getByRole('group', { name: m.needsOrdering, exact: true });
+	const pick = (name: string) => needed.getByRole('button').filter({ hasText: name });
+	const showAll = needed.getByRole('button', { name: /^All \d+$/ }), all = page.getByRole('dialog', { name: m.needsOrdering, exact: true });
+	await expect(needed.getByRole('button', { name: m.selectAll, exact: true })).toHaveAttribute('aria-pressed', 'false');
+	// Select all, the eight most urgent parts, then the dialog trigger.
+	await expect(needed.getByRole('button')).toHaveCount(10);
+	await fits(page);
+	await needed.scrollIntoViewIfNeeded(); await page.mouse.move(0, 0);
+	await page.screenshot({ path: `${artifacts}/new-order-needed-en-360.png`, animations: 'disabled' });
+	await showAll.click();
+	await expect(all.getByRole('checkbox')).toHaveCount(1 + Number((await showAll.textContent())!.replace(/\D/g, '')));
+	await fits(page);
+	await page.screenshot({ path: `${artifacts}/new-order-all-en-360.png`, animations: 'disabled' });
+	for (const [name] of rows) await all.getByRole('checkbox', { name, exact: true }).click();
+	await all.getByRole('button', { name: m.doneNeeded, exact: true }).click();
+	await expect(all).toHaveCount(0);
+	await expect(prefilled).toBeVisible();
+	await expect(showAll).toBeFocused();
+	for (const [name] of rows) await expect(pick(name)).toHaveAttribute('aria-pressed', 'true');
 	await expect(prefilled.getByRole('combobox', { name: m.product, exact: true })).toHaveCount(3);
 	await expect(prefilled.getByLabel(fieldLabel(m.purchaseUrl)).first()).toHaveValue(purchaseLink);
 	await expect(prefilled.getByRole('link', { name: m.openPurchaseUrl, exact: true })).toHaveAttribute('href', purchaseLink);
+	await pick(rows[1][0]).click();
+	await expect(prefilled.getByRole('combobox', { name: m.product, exact: true })).toHaveCount(2);
+	await expect(pick(rows[1][0])).toHaveAttribute('aria-pressed', 'false');
+	await pick(rows[1][0]).click();
+	await expect(prefilled.getByRole('combobox', { name: m.product, exact: true })).toHaveCount(3);
 	await fits(page);
+	await page.setViewportSize({ width: 1280, height: 1600 });
+	await fits(page);
+	await page.screenshot({ path: `${artifacts}/new-order-ticked-en-1280.png`, animations: 'disabled' });
+	await page.setViewportSize({ width: 360, height: 900 });
 	await prefilled.getByLabel(fieldLabel(m.supplier)).fill('Attention supplier');
 	for (const index of [0, 1]) { await prefilled.getByLabel(m.quantity, { exact: false }).nth(index).fill('5'); await prefilled.getByLabel(fieldLabel(`${m.unitCost} (NOK)`)).nth(index).fill('1'); }
 	await prefilled.getByRole('button', { name: m.recordOrder, exact: true }).click();
 	await expect(page).toHaveURL(/\/en\/admin\/orders\/[0-9a-f-]{36}$/);
 	// An untouched placement time is taken when saving, not when the form opened.
 	expect(await value(`SELECT placed_at > now() - interval '2 minutes' FROM app.purchase_orders WHERE supplier_name='Attention supplier'`)).toBe('t');
-	await page.goto(`${origin}/en/admin`);
-	await page.getByRole('button', { name: s.openOrder, exact: true }).click();
-	for (const [code] of rows) await expect(pick(code)).not.toBeChecked();
+	await page.goto(`${origin}/en/admin/orders`);
+	await page.getByRole('button', { name: m.newOrder, exact: true }).click();
+	await showAll.click();
+	for (const [name] of rows) await expect(all.getByRole('checkbox', { name, exact: true })).not.toBeChecked();
+	for (const [, unit] of rows) await expect(all.getByText(m.onOrder(`5 ${unitLabel(unit, 'en', '5')}`), { exact: true }).first()).toBeVisible();
 	await page.emulateMedia({ colorScheme: 'dark' });
-	await page.screenshot({ path: `${artifacts}/attention-order-on-order-en-dark-360.png` });
+	await page.mouse.move(0, 0);
+	await page.screenshot({ path: `${artifacts}/new-order-all-on-order-en-dark-360.png`, animations: 'disabled' });
 	await page.emulateMedia({ colorScheme: 'light' });
-	for (const [, unit] of rows) await expect(pickSheet.getByText(s.onOrder(`5 ${unitLabel(unit, 'en', '5')}`), { exact: true }).first()).toBeVisible();
-	console.log('PASS: needs-attention sheet lists every attention part, prefills New order with purchase links, and leaves parts already on order unchecked');
+	// Escape closes only the dialog, not the New order sheet under it.
+	await page.keyboard.press('Escape');
+	await expect(all).toHaveCount(0);
+	await expect(prefilled).toBeVisible();
+	console.log('PASS: New order shows the most urgent parts as chips and all of them in a dialog; choosing adds and removes lines with purchase links, and quantity already on order shows');
 	assert.deepEqual(diagnostics, []);
 } finally {
 	await close();

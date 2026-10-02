@@ -21,7 +21,7 @@
 	// `oncreated` adds a plus button, while no product is chosen, that creates a product in a
 	// sheet; the caller adds it to `products`, and the picker then selects it.
 	let { id, products, value = $bindable(''), disabled = false, oncreated, onselect, error }: {
-		id: string; products: Omit<OrderProduct, 'purchase_url'>[]; value: string; disabled?: boolean; error?: string; onselect?: (productId: string) => void; oncreated?: (product: OrderProduct) => void;
+		id: string; products: Omit<OrderProduct, 'purchase_url' | 'minimum_stock'>[]; value: string; disabled?: boolean; error?: string; onselect?: (productId: string) => void; oncreated?: (product: OrderProduct) => void;
 	} = $props();
 	const i18n = getI18n();
 	const m = $derived(i18n.m.adminOrders);

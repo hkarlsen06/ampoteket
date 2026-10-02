@@ -154,13 +154,13 @@ export async function readProductStock(session: StaffSession, id: string, fetche
 }
 // Matches the admin overview: active sold out, active below minimum, other active, then
 // inactive. Unknown stock is never sold out.
-export function stockRank(product: AdminProduct, quantity: string | undefined): 0 | 1 | 2 | 3 {
+export function stockRank(product: Pick<AdminProduct, 'is_active' | 'minimum_stock'>, quantity: string | undefined): 0 | 1 | 2 | 3 {
 	if (!product.is_active) return 3;
 	if (quantity === undefined) return 2;
 	return compareDecimals(quantity, '0') <= 0 ? 0 : compareDecimals(quantity, product.minimum_stock) < 0 ? 1 : 2;
 }
 // Below-minimum products sort by lowest share of their minimum; units never compare directly.
-export function compareAttention(a: AdminProduct, aQuantity: string | undefined, b: AdminProduct, bQuantity: string | undefined): number {
+export function compareAttention(a: Pick<AdminProduct, 'is_active' | 'minimum_stock'>, aQuantity: string | undefined, b: Pick<AdminProduct, 'is_active' | 'minimum_stock'>, bQuantity: string | undefined): number {
 	const rank = stockRank(a, aQuantity);
 	return rank - stockRank(b, bQuantity)
 		|| (rank === 1 ? compareDecimals(multiplyDecimals(aQuantity!, b.minimum_stock), multiplyDecimals(bQuantity!, a.minimum_stock)) : 0);

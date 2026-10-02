@@ -51,7 +51,7 @@ test('order detail follows allocation history and preserves exact quantities', a
 		if (cursor) return Response.json([]);
 		if (view === 'amp_purchase_orders') return Response.json([{ id: orderId, request_id: requestId, supplier_name: 'Supplier', supplier_reference: null, placed_at: '2026-09-20T10:00:00Z', additional_cost_nok: '0.01', note: null, created_by: userId, recorded_at: '2026-09-20T11:00:00Z' }]);
 		if (view === 'amp_purchase_line_progress') return Response.json([{ id: lineId, order_id: orderId, line_number: 1, product_id: productId, ordered_quantity: '999999999999', unit_cost_nok: '0.000001', purchase_url: null, supplier_sku: null, received_quantity: '0.000001', cancelled_quantity: '0', outstanding_quantity: '999999999998.999999' }]);
-		if (view === 'amp_products') return Response.json([{ id: productId, code: 'CAB-0001E', name_nb: 'Kabel', name_en: 'Cable', unit_code: 'm', stock_step: '0.000001', is_active: true, purchase_url: null }]);
+		if (view === 'amp_products') return Response.json([{ id: productId, code: 'CAB-0001E', name_nb: 'Kabel', name_en: 'Cable', unit_code: 'm', stock_step: '0.000001', minimum_stock: '0', is_active: true, purchase_url: null }]);
 		if (view === 'amp_purchase_order_cancellations') return Response.json([]);
 		if (view === 'amp_inventory_events') return Response.json([{ id: eventId, request_id: requestId, kind: 'receipt', actor_id: userId, purchase_order_id: orderId, note: null, occurred_at: '2026-09-20T12:00:00Z', recorded_at: '2026-09-20T12:00:00Z' }]);
 		if (view === 'amp_staff_members') return Response.json([{ id: userId, display_name: 'Operator' }]);

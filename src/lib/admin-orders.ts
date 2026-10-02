@@ -2,7 +2,7 @@ import { ApiError, identifier, object, text, type Fetcher } from './api';
 import { allStaffRows, staffRequest, type StaffSession } from './admin-api';
 import { addDecimals, compareDecimals, normalizeDecimal } from './decimal';
 
-export type OrderProduct = { id: string; code: string; name_nb: string; name_en: string; unit_code: string; stock_step: string; is_active: boolean; purchase_url: string | null };
+export type OrderProduct = { id: string; code: string; name_nb: string; name_en: string; unit_code: string; stock_step: string; minimum_stock: string; is_active: boolean; purchase_url: string | null };
 export type Order = { id: string; requestId: string; supplierName: string; supplierReference: string | null; placedAt: string; additionalCostNok: string; note: string | null; createdBy: string; recordedAt: string; lineCount: number; openLineCount: number };
 export type OrderLine = { id: string; orderId: string; lineNumber: number; productId: string; orderedQuantity: string; unitCostNok: string; purchaseUrl: string | null; supplierSku: string | null; receivedQuantity: string; cancelledQuantity: string; outstandingQuantity: string };
 export type OrderCancellation = { id: string; requestId: string; orderLineId: string; quantity: string; reversesId: string | null; reason: string; createdBy: string; recordedAt: string };
@@ -21,7 +21,7 @@ export type OrderCommandResult = { kind: 'create'; orderId: string } | { kind: '
 
 const orderFields = 'id,request_id,supplier_name,supplier_reference,placed_at,additional_cost_nok,note,created_by,recorded_at';
 const lineFields = 'id,order_id,line_number,product_id,ordered_quantity,unit_cost_nok,purchase_url,supplier_sku,received_quantity,cancelled_quantity,outstanding_quantity';
-const productFields = 'id,code,name_nb,name_en,unit_code,stock_step,is_active,purchase_url';
+const productFields = 'id,code,name_nb,name_en,unit_code,stock_step,minimum_stock,is_active,purchase_url';
 const cancellationFields = 'id,request_id,order_line_id,quantity,reverses_id,reason,created_by,recorded_at';
 const eventFields = 'id,request_id,kind,actor_id,purchase_order_id,note,occurred_at,recorded_at';
 
@@ -55,7 +55,7 @@ function parseLine(value: unknown): OrderLine {
 function parseProduct(value: unknown): OrderProduct {
 	const r = object(value), code = text(r.code, 40), unit = text(r.unit_code, 24), step = decimal(r.stock_step);
 	if (!/^[A-Z0-9][A-Z0-9-]{0,39}$/.test(code) || !/^[a-z][a-z0-9_]{0,23}$/.test(unit) || compareDecimals(step, '0') <= 0 || typeof r.is_active !== 'boolean') throw new Error('Invalid order product');
-	return { id: identifier(r.id), code, name_nb: text(r.name_nb, 200), name_en: text(r.name_en, 200), unit_code: unit, stock_step: step, is_active: r.is_active, purchase_url: optionalString(r.purchase_url) };
+	return { id: identifier(r.id), code, name_nb: text(r.name_nb, 200), name_en: text(r.name_en, 200), unit_code: unit, stock_step: step, minimum_stock: decimal(r.minimum_stock, 6, false, true), is_active: r.is_active, purchase_url: optionalString(r.purchase_url) };
 }
 function parseCancellation(value: unknown): OrderCancellation {
 	const r = object(value);
