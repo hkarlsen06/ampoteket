@@ -18,6 +18,11 @@ export async function signIn(page: Page, origin: string, email: string, password
 	await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 }
 
+/** SvelteKit may hydrate after the load event; wait before firing events or reading client-side URL changes. */
+export async function waitForHydration(page: Page) {
+	await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+}
+
 export async function fits(page: Page) {
 	expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 }

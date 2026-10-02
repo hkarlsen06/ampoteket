@@ -3,7 +3,7 @@ import { firefox, expect, type BrowserContext, type Page, type Locator } from '@
 import { strict as assert } from 'node:assert';
 import { resolve } from 'node:path';
 import { mkdir } from 'node:fs/promises';
-import { fieldLabel, captureFailure, proofEnvironment } from './web-proof/harness';
+import { fieldLabel, captureFailure, proofEnvironment, waitForHydration } from './web-proof/harness';
 import { generateSeedSql, seedProductId, seedProductCode, seedBinId } from './seed-test-data';
 import { en } from '../src/lib/i18n/en';
 import { nb } from '../src/lib/i18n/nb';
@@ -616,8 +616,7 @@ try {
 		});
 		try {
 			await delayedPage.goto(`${origin}/en/p/${seedProductCode(0)}`);
-			// Hydration can finish after the load event; the quantity input is enabled once it has.
-			await expect(delayedPage.locator('#quantity-to-add')).toBeEnabled();
+			await waitForHydration(delayedPage);
 			await delayedPage.evaluate(() => window.dispatchEvent(new Event('online')));
 			await expect.poll(() => intercepted).toBe(true);
 			await expect(delayedPage.getByRole('button', { name: 'Add to cart', exact: true })).toBeEnabled();
@@ -762,7 +761,7 @@ try {
 	});
 	await recoveryPage.goto(`${origin}/en/p/${seedProductCode(0)}`);
 	const recoveryMap = recoveryPage.locator('.shelf-map');
-	await expect(recoveryPage.locator('#quantity-to-add')).toBeEnabled();
+	await waitForHydration(recoveryPage);
 	await recoveryPage.evaluate(() => window.dispatchEvent(new Event('online')));
 	await expect(recoveryMap.getByText(mapMessages.previousRead, { exact: true })).toBeVisible();
 	await expect(recoveryPage.getByRole('button', { name: 'Add to cart', exact: true })).toBeEnabled();
@@ -787,7 +786,7 @@ try {
 	});
 	try {
 		await navigationPage.goto(`${origin}/en/p/${seedProductCode(0)}`);
-		await expect(navigationPage.locator('#quantity-to-add')).toBeEnabled();
+		await waitForHydration(navigationPage);
 		await navigationPage.evaluate(() => window.dispatchEvent(new Event('online')));
 		await expect.poll(() => held).toBe(true);
 		await navigationPage.getByRole('link', { name: en.product.back }).click();
