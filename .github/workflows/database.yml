@@ -1,6 +1,9 @@
 name: Validation
 on:
+  # Pull requests run as pull_request; main's push run gates the deploy. Branch
+  # pushes would only repeat the PR run and queue behind it.
   push:
+    branches: [main]
   pull_request:
 
 permissions:
