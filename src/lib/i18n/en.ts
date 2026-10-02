@@ -261,7 +261,7 @@ export const en: Messages = {
 		ownerOnly: 'Only the owner can add counts to or finish this stocktake.', ownerChanged: "The owner's access has changed. Check the stocktake again.",
 		recount: 'Recount', countAgain: 'Count again', retryRead: 'Try again',
 		chooseProduct: 'Choose a product to count', noProducts: 'No products match the search.',
-		drawerFilter: 'Limit to a drawer', allProducts: 'Show all products',
+		drawerFilter: 'Limit to a drawer', allProducts: 'Show all products', drawerProducts: 'Products in the drawer', countedHere: 'Counted',
 		finish: 'Finish stocktake', closeAbandoned: 'Close abandoned stocktake', finishExplanation: "Finishing doesn't change stock.",
 		abandonedExplanation: "The owner no longer has access. Closing doesn't change stock or the counts already made. To keep counting, start your own stocktake.",
 		closureReason: 'Reason for closing', finishConfirmed: "I've checked this stocktake and want to finish it.", retryFinish: 'Try again',

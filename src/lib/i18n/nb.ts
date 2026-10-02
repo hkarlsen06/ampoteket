@@ -261,7 +261,7 @@ export const nb = {
 		ownerOnly: 'Bare den ansvarlige kan telle i eller avslutte denne tellerunden.', ownerChanged: 'Den ansvarliges tilgang er endret. Se over tellerunden på nytt.',
 		recount: 'Tell på nytt', countAgain: 'Tell igjen', retryRead: 'Prøv igjen',
 		chooseProduct: 'Velg et produkt å telle', noProducts: 'Ingen produkter passer til søket.',
-		drawerFilter: 'Avgrens til skuff', allProducts: 'Vis alle produkter',
+		drawerFilter: 'Avgrens til skuff', allProducts: 'Vis alle produkter', drawerProducts: 'Produkter i skuffen', countedHere: 'Telt',
 		finish: 'Avslutt tellerunden', closeAbandoned: 'Avslutt forlatt tellerunde', finishExplanation: 'Avslutning endrer ikke beholdningen.',
 		abandonedExplanation: 'Den ansvarlige har ikke lenger tilgang. Avslutning endrer ikke beholdningen eller tellingene som er gjort. Vil du telle videre, start din egen tellerunde.',
 		closureReason: 'Begrunnelse for avslutning', finishConfirmed: 'Jeg har sett over tellerunden og vil avslutte den.', retryFinish: 'Prøv igjen',
