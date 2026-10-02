@@ -21,7 +21,9 @@
 </script>
 <svelte:head><title>{m.title}</title><meta name="description" content={m.description} /><meta property="og:title" content={m.title} /><meta property="og:description" content={m.description} /></svelte:head>
 <div class={pageContainer({ width: 'reading', padding: 'page' })}>
-	<header class={pageHeader}><h1 class={pageHeading}>{m.heading}</h1></header>
+	<header class={pageHeader}><h1 class={pageHeading}>{m.heading}</h1>
+		<Button variant="outline" href={DISCORD_INVITE} target="_blank" rel="external noopener"><DiscordLogo />{m.discord}<span class="sr-only"> {i18n.m.newTab}</span></Button>
+	</header>
 	<div class="grid gap-3"><p>{m.references}</p><p>{m.payment}</p></div>
 	<section class={section()} aria-labelledby="contacts-title">
 		<h2 id="contacts-title" class={sectionHeading}>{m.contacts}</h2>
@@ -49,7 +51,6 @@
 				{/each}
 			</Item.Group>
 		{/if}
-		<Button variant="outline" class="justify-self-start" href={DISCORD_INVITE} target="_blank" rel="external noopener"><DiscordLogo />{m.discord}<span class="sr-only"> {i18n.m.newTab}</span></Button>
 		<p class="sr-only" role="status">{#if copied}{m.discordCopied}{/if}</p>
 	</section>
 	{#if data.salesOpen}<div class={section()}><Button variant="link" href={i18n.href('/cart')}><Icon icon={ArrowLeftIcon} />{i18n.m.checkout.backToCart}</Button></div>{/if}

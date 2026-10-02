@@ -104,7 +104,7 @@ labels always use the Norwegian, unprefixed address.
 | `/p/[code]` | Product page and QR target, e.g. `/p/RES-A3F09` ([page-product.md](page-product.md)) |
 | `/cart` | The cart ([page-cart.md](page-cart.md)) |
 | `/checkout/[id]` | Saved checkout, Vipps instructions, registration and retry ([page-checkout.md](page-checkout.md)) |
-| `/contact` | Contact us: volunteer contacts, maintained at `/admin/help`, and the Discord invite. Linked from the header menu and footer; `/help` redirects here (posters and sent receipts) |
+| `/contact` | Contact us: the Discord invite, then volunteer contacts maintained at `/admin/help`. Linked from the header menu and footer; `/help` redirects here (posters and sent receipts) |
 | `/privacy` | What buyers' data the shop stores, where, and how to have contact details deleted; linked from the footer |
 | `/admin` | Overview, statistics, products, shelf, counts, labels, stock corrections, audit ([page-admin-stock.md](page-admin-stock.md), [page-labels.md](page-labels.md)) |
 | `/admin/orders` | Orders and receipts ([page-admin-orders.md](page-admin-orders.md)) |
