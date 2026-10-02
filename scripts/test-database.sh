@@ -58,6 +58,13 @@ supabase migration up --workdir "$test_dir/project" --db-url "$database_url" --y
 python3 scripts/check-schema-docs.py
 # Exact workshop layout and units; no invented products, counts or stock.
 psql -X -v ON_ERROR_STOP=1 -f supabase/tests/initial-layout.sql
+# The schema-surface counts recorded in VALIDATION.md.
+psql -X -At -v ON_ERROR_STOP=1 -c "SELECT format('Schema surface: %s app tables, %s numeric domains, %s public RPCs, %s staff views, %s internal views',
+  (SELECT count(*) FROM pg_tables WHERE schemaname='app'),
+  (SELECT count(*) FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace WHERE n.nspname='app' AND t.typtype='d'),
+  (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname LIKE 'amp\_%'),
+  (SELECT count(*) FROM pg_views WHERE schemaname='public' AND viewname LIKE 'amp\_%'),
+  (SELECT count(*) FROM pg_views WHERE schemaname='app'))"
 python3 scripts/database-manifest.py >"$test_dir/first-install.json"
 supabase migration up --workdir "$test_dir/project" --db-url "$database_url" --yes
 python3 scripts/database-manifest.py >"$test_dir/repeated-install.json"
