@@ -127,7 +127,7 @@ export async function exerciseAdminHelp(options: ProofOptions) {
 	const recoveryReason = 'Disposable browser proof: the buyer identified the original checkout from its reference, saved items, saved prices and time. '.repeat(8).trim();
 	await page.getByLabel(fieldLabel('Display name')).fill(initialName);
 	await page.getByLabel(fieldLabel('Email (optional)')).fill('checkout-proof@example.invalid');
-	await page.getByLabel(fieldLabel('Show this contact on the public help page')).check();
+	await page.getByLabel(fieldLabel('Show this contact on the public contact page')).check();
 	await page.getByRole('button', { name: 'Save contact', exact: true }).click();
 	await expect(page.getByText('Contact saved.', { exact: true })).toBeVisible();
 	await helpVisible(initialName, true);
@@ -136,7 +136,7 @@ export async function exerciseAdminHelp(options: ProofOptions) {
 	await page.getByRole('button', { name: 'Save contact', exact: true }).click();
 	await expect(page.getByText('Contact saved.', { exact: true })).toBeVisible();
 	await helpVisible(`${initialName} updated`, true);
-	await page.getByLabel(fieldLabel('Show this contact on the public help page')).uncheck();
+	await page.getByLabel(fieldLabel('Show this contact on the public contact page')).uncheck();
 	await page.getByRole('button', { name: 'Save contact', exact: true }).click();
 	await expect(page.getByText('Contact saved.', { exact: true })).toBeVisible();
 	await helpVisible(`${initialName} updated`, false);

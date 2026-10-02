@@ -453,7 +453,7 @@
 		{ head: 'Klarsignal', text: 'Ja til å publisere på ampoteket.no' },
 		{ head: 'Startlager', text: 'Jeg lærer opp lageransvarlige, og vi teller skuffene inn sammen' },
 		{ head: 'Etiketter på skuffene', text: 'Testark, mål og skanning i verkstedlyset' },
-		{ head: 'Kontaktpersoner', text: 'Navn og kontaktmåte til hjelpesiden' }
+		{ head: 'Kontaktpersoner', text: 'Navn og kontaktmåte til kontaktsiden' }
 	] as card, index (card.head)}
 		<div class="absolute flex h-[230px] w-[700px] items-center gap-8 rounded-3xl border border-border bg-background/60 px-10 backdrop-blur"
 			style:left="{80 + (index % 2) * 740}px" style:top="{260 + Math.floor(index / 2) * 270}px">
