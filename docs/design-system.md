@@ -339,7 +339,8 @@ use a generic IC. Callers reserve its dimensions; no animation, no bordered surf
 
 **Header and menu:** one DOM with CSS-only presentation (`Collapsible.Content
 forceMount`). The row holds the wordmark, the desktop Admin and catalog icon buttons,
-the cart icon and a 48 px menu button. The menu floats over the page (a 16rem panel
+the cart icon and a 48 px menu button. The menu holds Contact at every width; at
+≤ 40rem the catalog, Instagram and Admin links join it above Contact. It floats over the page (a 16rem panel
 on desktop, full width at ≤ 40rem) and closes on Escape, outside tap or navigation;
 with `html.no-js` it is the header's second row, so links work without JavaScript.
 Icon buttons have an accessible name and a matching `Tooltip`. The current link has

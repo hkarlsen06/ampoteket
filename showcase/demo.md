@@ -79,7 +79,7 @@ Points to make:
 | Opening stock | Volunteers to count the drawers into the system, one at a time, with a second person spot-checking |
 | Labels on the drawers | Measure label areas, print a test sheet, check scanning in the workshop light |
 | Real phones | Test camera scanning and the Vipps app switch on a few iPhones and Androids |
-| Volunteer contacts | Names and contact methods for the help page (`/help`), agreed with each person |
+| Volunteer contacts | Names and contact methods for the contact page (`/contact`), agreed with each person |
 | Owners | Who owns the accounts (GitHub, Supabase, Cloudflare, domain), staff onboarding, backups and incidents |
 | Backups | Agree how much data loss and downtime is acceptable (proposal: 24 hours each, daily off-site backup, a restore drill each semester) |
 | Vipps | Confirm number 47322 is the right recipient |

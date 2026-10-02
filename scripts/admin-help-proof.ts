@@ -25,7 +25,7 @@ export async function exerciseAdminHelp(options: ProofOptions) {
 	const open = (path: string) => page.goto(`${origin}/en${path}`);
 	const signIn = (email: string, currentPassword = password) => signInAs(page, origin, email, currentPassword);
 	async function helpVisible(name: string, visible: boolean) {
-		await visitor.goto(`${origin}/en/help`);
+		await visitor.goto(`${origin}/en/contact`);
 		const entry = visitor.getByRole('heading', { name, exact: true });
 		if (visible) await expect(entry).toBeVisible(); else await expect(entry).toHaveCount(0);
 	}
@@ -85,7 +85,7 @@ export async function exerciseAdminHelp(options: ProofOptions) {
 			const prefix = locale === 'nb' ? '' : '/en';
 			const suffix = `${locale}-${colorScheme}-${width}`;
 			await geometry.emulateMedia({ colorScheme }); await geometry.setViewportSize({ width, height: 900 });
-			await geometry.goto(`${origin}${prefix}/help`);
+			await geometry.goto(`${origin}${prefix}/contact`);
 			await expect(geometry.getByRole('heading', { name: contactName, exact: true })).toBeVisible();
 			await inspectGeometry(geometry, `admin-public-help-${suffix}`, 'main a[href^="mailto:"]');
 			await geometry.goto(`${origin}${prefix}/admin/help`);

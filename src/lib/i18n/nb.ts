@@ -120,8 +120,8 @@ export const nb = {
 		retryProducts: 'Prøv delelisten igjen'
 	},
 	help: {
-		title: 'Hjelp | Ampoteket', description: 'Kontakt en frivillig hvis du trenger hjelp med et kjøp hos Ampoteket.',
-		heading: 'Hjelp med kjøpet',
+		title: 'Kontakt oss | Ampoteket', description: 'Kontakt en frivillig hos Ampoteket, for eksempel om et kjøp.',
+		heading: 'Kontakt oss',
 		references: 'Ta et skjermbilde av kassen, eller noter beløpet, delene og referansen. Med referansen finner vi kjøpet ditt, også uten beløpet.',
 		payment: 'Har du allerede betalt, ikke betal på nytt. Prøv å registrere kjøpet igjen fra samme kasse, eller kontakt en frivillig.',
 		contacts: 'Kontakt en frivillig', unavailable: 'Kontaktlisten er utilgjengelig. Prøv igjen, eller spør en frivillig i verkstedet.',
@@ -288,7 +288,7 @@ export const nb = {
 		empty: 'Ingen endringer er registrert.', more: 'Vis eldre endringer', retry: 'Prøv igjen',
 		entryId: (id: string) => `Loggpost ${id}`, actor: 'Utført av', details: 'Vis endrede data',
 		recordKey: 'ID', before: 'Før', after: 'Etter',
-		tables: { staff_members: 'Adminkonto', help_contacts: 'Kontakt på hjelpesiden', units: 'Enhet', categories: 'Kategori', cabinets: 'Kabinett', bins: 'Skuff', products: 'Produkt', attribute_definitions: 'Spesifikasjonstype', product_attributes: 'Produktspesifikasjon', purchase_orders: 'Bestilling', purchase_order_lines: 'Bestillingslinje', count_batches: 'Tellerunde', checkout_contacts: 'Kjøperens kontaktopplysning' },
+		tables: { staff_members: 'Adminkonto', help_contacts: 'Kontakt på kontaktsiden', units: 'Enhet', categories: 'Kategori', cabinets: 'Kabinett', bins: 'Skuff', products: 'Produkt', attribute_definitions: 'Spesifikasjonstype', product_attributes: 'Produktspesifikasjon', purchase_orders: 'Bestilling', purchase_order_lines: 'Bestillingslinje', count_batches: 'Tellerunde', checkout_contacts: 'Kjøperens kontaktopplysning' },
 		actions: { INSERT: 'Opprettet', UPDATE: 'Endret', DELETE: 'Slettet', CONTACT_CLEARED: 'Kontaktopplysning slettet' }
 	},
 	adminMembers: {
@@ -349,10 +349,10 @@ export const nb = {
 		buyerContact: 'Kjøperens kontaktopplysning', contactWarning: 'Vis bare når du trenger det. Kjøperen har skrevet dette selv, så det beviser ikke betaling eller hvem kjøpet tilhører.',
 		showContact: 'Vis kontaktopplysning', noContact: 'Ingen kontaktopplysning er lagret.', confirmClear: 'Kontaktopplysningen slettes for godt. Kjøpet beholdes.', clearContact: 'Slett kontaktopplysning',
 		directoryTitle: 'Frivilliges kontaktliste | Admin | Ampoteket', directoryHeading: 'Frivilliges kontaktliste',
-		directoryConsent: 'Publiser bare kontaktopplysninger personen har sagt ja til å vise på hjelpesiden. Tidligere versjoner blir liggende i historikken.',
-		newContact: 'Ny kontakt', viewPublic: 'Se hjelpesiden', noDirectoryContacts: 'Ingen kontakter er lagt inn.', published: 'Publisert', unpublished: 'Ikke publisert',
+		directoryConsent: 'Publiser bare kontaktopplysninger personen har sagt ja til å vise på kontaktsiden. Tidligere versjoner blir liggende i historikken.',
+		newContact: 'Ny kontakt', viewPublic: 'Se kontaktsiden', noDirectoryContacts: 'Ingen kontakter er lagt inn.', published: 'Publisert', unpublished: 'Ikke publisert',
 		editContact: (name: string) => `Rediger ${name}`, editHeading: 'Rediger kontakt', contactName: 'Visningsnavn', contactEmail: 'E-post (valgfritt)', contactPhone: 'Telefon (valgfritt)', contactUrl: 'Kontaktlenke (valgfritt)', contactResponsibility: 'Ansvar (valgfritt)', contactDiscord: 'Discord-brukernavn (valgfritt)',
-		publishContact: 'Vis kontakten på den offentlige hjelpesiden', atLeastOneContact: 'En publisert kontakt trenger Discord-brukernavn, e-post, telefon eller lenke.',
+		publishContact: 'Vis kontakten på den offentlige kontaktsiden', atLeastOneContact: 'En publisert kontakt trenger Discord-brukernavn, e-post, telefon eller lenke.',
 		saveContact: 'Lagre kontakt', retrySave: 'Prøv å lagre igjen', contactSaved: 'Kontakten er lagret.', contactInvalid: 'Sjekk feltene. E-post, telefon og lenke må være gyldige, Discord-brukernavnet har bare små bokstaver, tall, _ og ., lenken må starte med https://, og rekkefølgen må være et helt tall.',
 		reviewContact: 'Vis den nye versjonen', reviewedContact: 'Fortsett med mine endringer', contactStale: 'Noen andre endret kontakten mens du redigerte. Endringene dine står fortsatt i skjemaet. Se den nye versjonen før du lagrer.', contactUnknown: 'Vi vet ikke om kontakten ble lagret. Prøv å lagre igjen.',
 		moveContactUp: (name: string) => `Flytt ${name} opp`, moveContactDown: (name: string) => `Flytt ${name} ned`,
@@ -449,6 +449,7 @@ export const nb = {
 		cartLoading: ', laster',
 		cartUnavailable: ', må sjekkes',
 		admin: 'Admin',
+		contact: 'Kontakt oss',
 		discord: 'Ampoteket på Discord',
 		instagram: 'Ampoteket på Instagram',
 		cartLines: (n: number) => (n === 1 ? ', 1 del' : `, ${n} deler`)
@@ -456,7 +457,7 @@ export const nb = {
 	footer: {
 		links: 'Lenker',
 		about: 'Drives av The Resistance og RoboMEK. Foto og utvikler: Hjalmar Karlsen.',
-		help: 'Hjelp',
+		help: 'Kontakt oss',
 		privacy: 'Personvern',
 		discord: 'Discord'
 	},

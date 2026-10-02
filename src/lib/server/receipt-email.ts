@@ -36,7 +36,7 @@ function section(snapshot: CheckoutSnapshot, locale: Locale, origin: string) {
   </table>
   <p class="muted" style="margin:24px 0 0;font-size:14px;line-height:1.55;color:#4b586a;">${m.note}</p>
   <p class="muted" style="margin:16px 0 0;font-size:14px;line-height:1.55;color:#4b586a;">${m.referenceHelp}<br>${m.reference}: <span class="text" style="font-family:${monospace};font-size:13px;word-break:break-all;color:#0f141b;">${escape(snapshot.checkout_id)}</span></p>
-  <p style="margin:16px 0 0;font-size:14px;line-height:1.55;"><a class="text" href="${origin}${localizeHref('/help', locale)}" style="color:#0f141b;text-decoration:underline;">${m.help}</a></p>`;
+  <p style="margin:16px 0 0;font-size:14px;line-height:1.55;"><a class="text" href="${origin}${localizeHref('/contact', locale)}" style="color:#0f141b;text-decoration:underline;">${m.help}</a></p>`;
 }
 
 export function receiptHtml(snapshot: CheckoutSnapshot, origin: string): string {
@@ -90,7 +90,7 @@ export function receiptText(snapshot: CheckoutSnapshot, origin: string): string 
 		const m = messagesFor(locale).receipt;
 		const lines = snapshot.items.map((item) => `- ${locale === 'nb' ? item.name_nb : item.name_en} (${item.code}): ${formatDecimal(item.quantity, locale)} ${unitLabel(item.unit, locale, item.quantity)}, ${formatMoney(item.line_total_nok, locale)}`);
 		return [m.heading, m.lead(receiptDate(snapshot, locale)), '', ...lines, `${m.total}: ${formatMoney(snapshot.total_nok, locale)}`, '', m.note, '',
-			m.referenceHelp, `${m.reference}: ${snapshot.checkout_id}`, `${m.help}: ${origin}${localizeHref('/help', locale)}`].join('\n');
+			m.referenceHelp, `${m.reference}: ${snapshot.checkout_id}`, `${m.help}: ${origin}${localizeHref('/contact', locale)}`].join('\n');
 	});
 	return `${parts.join('\n\n----\n\n')}\n\n${messagesFor('nb').receipt.address}\n`;
 }

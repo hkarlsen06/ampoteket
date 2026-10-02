@@ -171,7 +171,7 @@
 <header class={pageHeader}>
 	<h1 class={pageHeading}>{m.directoryHeading}</h1>
 	<p class={lede}>{m.directoryConsent}</p>
-	<div class={formActions}><Button type="button" disabled={failed || busy || Boolean(pending)} onclick={() => edit(null)}>{m.newContact}</Button><Button variant="link" href={i18n.href('/help')}>{m.viewPublic}</Button></div>
+	<div class={formActions}><Button type="button" disabled={failed || busy || Boolean(pending)} onclick={() => edit(null)}>{m.newContact}</Button><Button variant="link" href={i18n.href('/contact')}>{m.viewPublic}</Button></div>
 </header>
 <div class={formStatus} aria-live="polite">
 	{#if moveFailure}<Alert.Message appearance="inline" variant="destructive" role="status">{moveFailure === 'stale' ? m.orderStale : m.operationFailed}</Alert.Message>{/if}

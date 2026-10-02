@@ -16,5 +16,5 @@
 			{#each item.paragraphs as text (text)}<p>{text}</p>{/each}
 		</section>
 	{/each}
-	<div class={section()}><Button variant="outline" href={i18n.href('/help')}>{m.help}</Button></div>
+	<div class={section()}><Button variant="outline" href={i18n.href('/contact')}>{m.help}</Button></div>
 </div>

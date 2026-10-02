@@ -21,12 +21,12 @@ test('production redirects HTTP and www before resolving, retaining path and que
 
 test('HTTPS gains HSTS without broadening private headers or redirecting development', async () => {
 	for (const [base, path, privatePage] of [
-		['https://ampoteket.no', '/help', false],
+		['https://ampoteket.no', '/contact', false],
 		['https://ampoteket.no', '/en/admin/login', true],
-		['http://localhost:5174', '/help', false]
+		['http://localhost:5174', '/contact', false]
 	] as const) {
 		const response = await handle({
-			event: { url: new URL(base + path), route: { id: privatePage ? '/[[locale=locale]]/admin/login' : '/[[locale=locale]]/help' } } as RequestEvent,
+			event: { url: new URL(base + path), route: { id: privatePage ? '/[[locale=locale]]/admin/login' : '/[[locale=locale]]/contact' } } as RequestEvent,
 			resolve: async () => new Response('page', { headers: { 'Cache-Control': 'public, max-age=60' } })
 		});
 		expect(response.status).toBe(200);

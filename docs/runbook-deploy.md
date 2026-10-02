@@ -245,7 +245,7 @@ It builds, records the live version immediately before publishing, runs
 `wrangler deploy --env production` with the commit as message, then checks that
 the new version carries every `env.production` var with its reviewed value, the
 rate-limit values and the `SUPABASE_SECRET_KEY`/`RESEND_API_KEY` secret names,
-that `/help` reads the contact list with HSTS, and that HTTP login redirects to
+that `/contact` reads the contact list with HSTS, and that HTTP login redirects to
 HTTPS. Network and metadata exceptions join HTTP/config failures in the rollback
 path; health requests have a 15-second deadline. Rollback failure reports both
 errors and the prior version for manual recovery. The command exits non-zero on

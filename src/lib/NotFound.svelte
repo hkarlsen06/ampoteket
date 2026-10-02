@@ -26,7 +26,7 @@
 	const code = $derived(String(status));
 	const homeHref = $derived(localizeHref('/', locale));
 	const catalogHref = $derived(localizeHref('/p', locale));
-	const helpHref = $derived(localizeHref('/help', locale));
+	const helpHref = $derived(localizeHref('/contact', locale));
 </script>
 
 {#if showBrand}

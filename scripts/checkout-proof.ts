@@ -301,7 +301,7 @@ try {
 	await expect(page.getByRole('link', { name: 'Contact a volunteer', exact: true })).toBeVisible();
 	await expect(page.getByRole('link', { name: 'Open Vipps', exact: true })).toHaveCount(0);
 	assert.ok(!(await context.cookies()).some((cookie) => cookie.name === '__Host-amp_checkout'));
-	await page.goto(`${origin}/en/help`);
+	await page.goto(`${origin}/en/contact`);
 	await expect(page.getByText('Proof volunteer 5', { exact: true })).toBeVisible();
 	await expect(page.getByText('Private directory draft', { exact: true })).toHaveCount(0);
 	console.log('PASS: missing cookie offers original-reference assistance; public directory traverses capped pages without drafts');
@@ -401,7 +401,7 @@ try {
 		const result = await fetch(`${origin}/api/checkouts/prepare`, { ...test, tls: { ca } });
 		assert.equal(result.status, test.expected); assert.equal(result.headers.get('cache-control'), 'no-store');
 	}
-	await page.goto(`${origin}/en/help`); await probe(page); await probe(other);
+	await page.goto(`${origin}/en/contact`); await probe(page); await probe(other);
 	// Both tabs begin with no cookie. Delay the second response until the first
 	// tab has claimed its attempt, reproducing a late Set-Cookie replacement.
 	await basket(page, freeProduct);

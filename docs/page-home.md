@@ -47,7 +47,7 @@ colour only, per Discord's brand rules, left of the catalog icon) linking the pe
 `localStorage["ampoteket:cart"]`) and a menu button. An Instagram icon (`INSTAGRAM`) follows
 Discord above 40rem and becomes a menu row after the catalog on phones. Discord and Instagram
 are left out of the header and menu on `/cart` and `/checkout`. Above 40rem, catalog, Admin and cart are header links (icon only
-until 48rem, then icon and text label); the menu holds scanning and the language picker. At phone
+until 48rem, then icon and text label); the menu holds Contact, scanning and the language picker. At phone
 widths, catalog and Admin move into the menu and scanning follows the placement below.
 The same DOM adapts through CSS, and opening the menu does not move the header.
 Without JavaScript the button is hidden and the panel is the
