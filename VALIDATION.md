@@ -18,6 +18,7 @@ below are local runs, not CI claims.
 | `bun audit` | 2026-10-02 | PASS, no reported vulnerabilities | Resolved dependency tree |
 | `python3 scripts/test-check-clipped-ink.py`, `bun run check:ink` | 2026-10-02 | PASS | Checker regressions, static SVG checks |
 | `./scripts/test-database.sh` | 2026-10-02 | PASS | Seven migrations, rollback/retry, ACLs/RLS, acceptance, 12 stored-data corruption cases including drawer bounds/overlap, 42 concurrency scenarios including competing help-order writes, restore, schema/docs comparison, signed-JWT HTTP |
+| Actual-snapshot migration rehearsal | 2026-10-02 | PASS | Private hosted checkpoint restored locally with owners/ACLs; all 51 app/Auth table hashes and three sequences unchanged by the CLI migration; prior six history rows unchanged, one new row; permissions, protections and invariants passed. Owned container removed. This is not the full hosted recovery drill |
 | Audit fix browser acceptance | 2026-10-02 | PASS | Real disposable Auth/PostgREST: active unplaced product in shelf/count picker; invitation password save and independent sign-in; cross-tab account switch removes password form and preserves both passwords; help reorder/focus, stale rejection and retry. No overflow at 360 px (password/help) or 1280 px (shelf/count). Owned seed and dev server removed after verification |
 | `./scripts/test-web.sh` | 2026-10-01 | PASS | Real local Auth, public/staff/Worker boundaries, exact decimal transport |
 | `./scripts/test-web.sh --shop` | 2026-10-01 | PASS | Lifecycle freshness, retained drafts, invalid saved quantities, removal focus, mobile drawer addresses |
@@ -93,15 +94,20 @@ the selected products. It is a regression check, not a hosted latency guarantee.
   headers and DMARC enforcement remain unverified. The Data API cutover barrier,
   recovery checkpoint and full hosted restore drill remain open
   ([deploy](docs/runbook-deploy.md), [backup](docs/runbook-backup-restore.md)).
-- **Hosted migration and release:** the 2026-10-02 CLI dry-run lists only
-  `20261002000100_guard_help_contact_order.sql` as pending; it applied nothing.
-  The six earlier migrations are recorded as applied. Internal row counts,
-  grants/RLS and migration hashes retain prior Supabase connector evidence;
-  the connector was unavailable for this audit. Apply the new migration before
-  its frontend: the old one-argument reorder RPC is removed, so cached old
-  clients fail closed until refreshed. Hosted staff help editing/reordering and
-  the audit fixes must still be verified after release. No production changes
-  were made during the audit fixes.
+- **Hosted migration and release:** with the owner's approval, CLI 2.116.0 applied
+  only `20261002000100_guard_help_contact_order.sql` at 03:48 UTC on 2026-10-02.
+  Linked history matches all seven local versions. The actual checkpoint was
+  taken at 03:45:41–49 UTC; its SHA-256 is
+  `665ebcceba4f78d440f8f2e153765a02e0882a5ee5c852bcb7dfe862b47b268f`.
+  The isolated rehearsal above passed before applying it. Public catalog and
+  directory response hashes are unchanged; the old one-argument signature now
+  returns `404 PGRST202`, and anonymous use of the guarded signature returns
+  `401 42501`. No test stock or accounts were created in production. This
+  function-only rollout did not require or exercise the global cutover barrier;
+  the hosted recovery drill remains open. The checkpoint contains one product,
+  two active admins and zero checkouts. Internal production SQL checks were not
+  rerun because the Supabase connector was unavailable. The frontend and its
+  hosted staff acceptance still await release.
 - **Repository and monitoring controls:** local CI gating, deployment rollback,
   HTTPS and error-log changes await release. The reviewed native main-protection
   policy is `.github/main-protection.json`. On 2026-10-02 the owner approved and

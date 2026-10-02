@@ -46,6 +46,16 @@ For a populated project, first rehearse the migration on an isolated restored
 snapshot with before/after row comparisons. An incompatible cutover must stop
 all writes, including from open or offline clients, using this barrier.
 
+The `20261002000100` release replaces only the help-order function and its
+execution grants, atomically with migration history. It changes no stored rows,
+table layouts, policies or sequences, so it does not require a global data
+cutover. Rehearse it on an actual restored snapshot, require identical app/Auth
+rows and sequence state, then apply it before its frontend. Old clients cannot
+call the removed signature and fail without changing order. If verification
+fails, keep that action unavailable and forward-fix; do not restore unrelated
+production data or reintroduce the unguarded function. This narrow release does
+not exercise the global barrier or close the full hosted restore-drill gate.
+
 ### Enforced cutover barrier
 
 1. Announce the outage. Pause operator SQL and Auth administration. Record

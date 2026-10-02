@@ -23,15 +23,14 @@ gate), update the row and the date in the same turn and commit. If you notice it
 wrong, verify and fix it. Replace rows; history belongs in git, evidence in
 `VALIDATION.md`.
 
-Last verified: **2026-10-02**, against the live site, provider configuration and
-hosted migration dry-run. Internal database counts below retain the prior
-Supabase connector verification.
+Last verified: **2026-10-02**, against the live site, provider configuration,
+hosted migration history and an isolated restore of the actual database checkpoint.
 
 | Area | State |
 | --- | --- |
 | Site | **Live** at `https://ampoteket.no` (`www` redirects to the apex), Worker `ampoteket`, version `f80b44b0-cacb-49f3-be8f-ad2aacfd36b2`, commit `8fdbcf6`. **Every push to `main` on GitHub deploys production automatically** (Cloudflare Workers Builds, configured in the Cloudflare dashboard, not in this repo). Pushing is deploying. The build runs `bun run deploy:production` on Bun 1.3.14. The audit fixes, including HTTPS enforcement, CI gating, exception rollback and error logging, are locally validated but **not deployed**. |
 | Sales | **Closed.** `SALES_OPEN` is `"false"` in `wrangler.jsonc` `env.production`. `/`, `/en`, `/help`, `/privacy` and `/admin` answer 200; `/p`, `/cart`, `/checkout` and `/p/<code>` answer 503 "shop opens soon"; `/api/checkouts/…` answers `503 CHECKOUT_UNAVAILABLE`. Buyer-facing changes are invisible in production until sales open. Opening is the owner's decision: set `"true"` and push. |
-| Hosted database | Supabase project `mqzcbdorjuefefzvuefa` (Stockholm, PostgreSQL 17) is **production with real data**: 1 product, 2 active admins, 0 checkouts. The first six migrations are applied. The dry-run lists only `20261002000100_guard_help_contact_order.sql` as pending; apply it before deploying its frontend. Read-only checks go through the Supabase connector; writes, migrations and deletions only at the owner's explicit request. |
+| Hosted database | Supabase project `mqzcbdorjuefefzvuefa` (Stockholm, PostgreSQL 17) is **production with real data**: 1 product, 2 active admins, 0 checkouts. All seven migrations are applied, including `20261002000100_guard_help_contact_order.sql` at 03:48 UTC. The catalog and directory are unchanged; the guarded RPC rejects anonymous callers and the old signature is absent. Its frontend release is still pending. Read-only checks go through the Supabase connector; writes, migrations and deletions only at the owner's explicit request. |
 | Email | Hosted Auth, checked through the Management API: custom SMTP `smtp.resend.com:465` as `Ampoteket <noreply@notify.ampoteket.no>`, domain verified in Resend, Site URL `https://ampoteket.no`, only the two `/admin/password` return URLs, signup off, Data API schema `public` only, invite/recovery templates and subjects identical to `supabase/templates/`. No real invitation, reset or buyer receipt has been delivered and checked yet. |
 | Stock and labels | Opening stock not entered; no labels printed or attached. |
 | Operations | Hjalmar Karlsen (`hkarlsen06`) is the primary operator for account access, backups and contact retention. An independent backup operator, accepted recovery targets, storage and schedules remain open. Main protection requires all nine GitHub Actions checks, including for admins; force pushes/deletion are blocked. Vulnerability alerts, automated security fixes, secret scanning and push protection are enabled. |
