@@ -50,7 +50,10 @@
 	import { readOutstandingByProduct } from '$lib/admin-orders';
 	import { draftFields, readDraft, writeDraft } from '$lib/drafts';
 	import { clearProductCommand, definitiveProductFailure, executeProductCommand, sameProduct, generateCategoryProductCode, generateProductCode, isProductCodeCollision, parseProductWrite, persistProductCommand, ProductFieldError, productCategoryOptions, readProduct, readProductCommand, readProductReferences, readProductStock, StaleProductError, type AdminProduct, type ProductCommand, type ProductFamily, type ProductReferences, type ProductStock, type ProductWrite } from '$lib/admin-products';
-	let { id }: { id: string } = $props();
+	// `oncreated` embeds a new-product editor in another page's sheet: no page heading, title,
+	// label printing or opening stock (an order's receipt brings the stock), and the created
+	// product goes to the caller instead of opening its own route. `busy` lets that sheet stay open while saving.
+	let { id, oncreated, busy = $bindable(false) }: { id: string; oncreated?: (product: AdminProduct) => void; busy?: boolean } = $props();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.adminProducts);
 	let product = $state<AdminProduct | null>(null); let references = $state<ProductReferences | null>(null); let stock = $state<ProductStock | null>(null);
 	// Quantity still expected from open supplier orders; null when none or unreadable.
@@ -60,7 +63,7 @@
 	let staged = $state<ProductAttributeDraft[]>([]);
 	let attributesEditor = $state<{ prepare: () => boolean; commit: () => Promise<boolean>; suggest: (code: string, value: string) => void }>();
 	let pending = $state<ProductCommand | null>(null); let storageReady = $state(false);
-	let loading = $state(true); let busy = $state(false); let loadFailed = $state(false); let outcome = $state('idle'); let current = $state<AdminProduct | null>(null);
+	let loading = $state(true); let loadFailed = $state(false); let outcome = $state('idle'); let current = $state<AdminProduct | null>(null);
 	let invalidField = $state<keyof ProductWrite | null>(null); let reviewFailed = $state(false);
 	let moveOpen = $state(false);
 	let placementOpen = $state(false);
@@ -135,7 +138,7 @@
 		moveOpen = false;
 	}
 	onMount(() => {
-		canPrint = printerSupported();
+		canPrint = printerSupported() && !oncreated;
 		// Checked once the printer is granted, so Save never opens the picker unasked.
 		if (id === 'new') void printerGranted().then(known => { printAfterSave ||= known; });
 		try { pending = readProductCommand(sessionStorage); restoringCreation = Boolean(pending && pending.revision === null && pending.payload.id === id); const probe = 'ampoteket:product-probe'; sessionStorage.setItem(probe, '1'); if (sessionStorage.getItem(probe) !== '1') throw new Error(); sessionStorage.removeItem(probe); storageReady = true; }
@@ -247,7 +250,7 @@
 					return;
 				}
 				let opening: string | null = null;
-				if (!product) {
+				if (!product && !oncreated) {
 					try { opening = openingCount(payload.stock_step); }
 					catch { outcome = 'invalid'; openingInvalid = true; void tick().then(() => document.getElementById('product-opening-stock')?.focus()); return; }
 					if (opening !== null && readCountCommand(localStorage)) { outcome = 'countPending'; return; }
@@ -273,7 +276,8 @@
 				// Unstored, the count is lost: stay, so the count button is at hand.
 				if (!stored) { outcome = 'openingNotCounted'; void refreshStock(); return; }
 			}
-			if (id === 'new' && product) {
+			if (id === 'new' && product && oncreated) oncreated(product);
+			else if (id === 'new' && product) {
 				if (printLabel) queueLabelPrint({ productId: product.id, userId: session.userId });
 				void goto(i18n.href(`/admin/products/${product.id}`), { replaceState: true });
 			} else void refreshStock();
@@ -369,9 +373,10 @@
 		return [[m.nameNb, row.name_nb], [m.nameEn, row.name_en], [m.description, row.description ?? '–'], [m.category, categoryName(row.category_id)], [m.placement, binLabel(row.bin_id)], [m.locationNote, row.location_note ?? '–'], [m.saleStep, row.sale_step], [m.price, row.sale_unit_price_nok], [m.minimumStock, row.minimum_stock], [m.datasheet, row.datasheet_url ?? '–'], [m.purchaseUrl, row.purchase_url ?? '–'], [m.stateFilter, row.is_active ? m.active : m.inactive]];
 	}
 </script>
-<svelte:head><title>{productCode ? `${productCode} | ${m.title}` : m.title}</title></svelte:head>
+<svelte:head>{#if !oncreated}<title>{productCode ? `${productCode} | ${m.title}` : m.title}</title>{/if}</svelte:head>
 <svelte:window onfocus={revalidateStock} ononline={revalidateStock} />
 <svelte:document onvisibilitychange={revalidateStock} />
+{#if !oncreated}
 <div class={[pageHeader, 'product-editor-heading grid-cols-[minmax(0,1fr)_auto] items-center']}>
 	<div class="row-span-2 grid min-w-0 justify-items-start gap-1">
 		<h1 class={pageHeading}>{productCode ?? (id === 'new' ? m.newProduct : m.editProduct)}</h1>
@@ -381,6 +386,7 @@
 	<div class="w-16 justify-self-center lg:w-20"><CategoryGraphic category={productCategory} /></div>
 	{#if product && references}<LabelPrintButton {product} {references} />{/if}
 </div>
+{/if}
 {#if pending && (!ownPending || wrongIdentity)}
 	<div class="mb-6 grid justify-items-start gap-1">
 		<Alert.Message appearance="inline" variant={wrongIdentity ? 'destructive' : 'default'} role="status">{wrongIdentity ? m.wrongIdentity : m.pending}</Alert.Message>
@@ -538,8 +544,8 @@
 							<Field.Field><Field.Label for="product-price" required>{m.price} <span class="sr-only">(NOK)</span></Field.Label><InputGroup.Root><InputGroup.Input id="product-price" aria-invalid={invalidField === 'sale_unit_price_nok'} aria-describedby={invalidField === 'sale_unit_price_nok' ? 'product-price-error' : undefined} type="text" inputmode="decimal" required bind:value={draft.sale_unit_price_nok} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>NOK</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'sale_unit_price_nok'}<Field.Error id="product-price-error">{errorMessage('sale_unit_price_nok')}</Field.Error>{/if}</Field.Field>
 							<Field.Field><Field.Label for="product-minimum-stock" required>{m.minimumStock} <span class="sr-only">({unitLabel(draft.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id="product-minimum-stock" aria-invalid={invalidField === 'minimum_stock'} aria-describedby={invalidField === 'minimum_stock' ? 'product-minimum-stock-error product-minimum-stock-hint' : 'product-minimum-stock-hint'} type="text" inputmode="decimal" required bind:value={draft.minimum_stock} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(draft.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'minimum_stock'}<Field.Error id="product-minimum-stock-error">{errorMessage('minimum_stock')}</Field.Error>{/if}</Field.Field>
 							<Field.Description id="product-minimum-stock-hint" class="col-span-full">{m.minimumStockHint}</Field.Description>
-							{#if !product}
-								<Field.Description class="col-span-full">{m.immutable}</Field.Description>
+							{#if !product}<Field.Description class="col-span-full">{m.immutable}</Field.Description>{/if}
+							{#if !product && !oncreated}
 								<Field.Field><Field.Label for="product-opening-stock">{m.openingStock} <span class="sr-only">({unitLabel(draft.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id="product-opening-stock" aria-invalid={openingInvalid} aria-describedby={openingInvalid ? 'product-opening-stock-error product-opening-stock-hint' : 'product-opening-stock-hint'} type="text" inputmode="decimal" autocomplete="off" bind:value={openingStock} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(draft.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if openingInvalid}<Field.Error id="product-opening-stock-error">{i18n.m.adminCounts.invalidQuantity(draft.stock_step)}</Field.Error>{/if}</Field.Field>
 								<Field.Description id="product-opening-stock-hint" class="col-span-full">{m.openingStockHint}</Field.Description>
 							{/if}
