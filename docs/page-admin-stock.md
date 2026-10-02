@@ -68,7 +68,9 @@ remain outside the scrolling region.
 - `datasheet_url` is public; `purchase_url` is a staff-only reorder link, separate from
   the history-derived `purchase_order_lines.purchase_url`.
 - The editor counts through CountForm in a dialog and prints through **Print**
-  ([P-touch tape labels](page-labels.md#p-touch-tape-labels)).
+  ([P-touch tape labels](page-labels.md#p-touch-tape-labels)). Beside the balance it
+  shows any quantity still on open supplier orders and links to the product's
+  [stock history](#stock-withdrawals-and-corrections), which links back.
 - A new product takes its opening stock and a **Print label** choice in the same
   form. The quantity travels in the creation command and is posted once that command is
   acknowledged, as a single count against balance 0 at revision 0 (empty means never
