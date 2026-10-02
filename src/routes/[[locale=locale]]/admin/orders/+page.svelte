@@ -87,7 +87,9 @@
 		catch (error) { invalidInput = `${fieldId}-${suffix}`; invalidMessage = message; throw error; }
 	}
 	function draftCommand(): OrderCommand {
-		if (!lines.length || lines.length > 200) throw new Error('invalid');
+		// The form keeps an empty line last for the next product; empty lines are not part of the order.
+		const filled = lines.filter(lineFilled);
+		if (!lines.length || filled.length > 200) throw new Error('invalid');
 		const session = admin.credentials();
 		let placedAt = ''; let additionalCostNok = '';
 		if (mode === 'create') {
@@ -95,7 +97,7 @@
 			placedAt = checked('placed', offsets.length === 2 && !offset ? m.ambiguousDate : m.invalidDate, placedInstant);
 			additionalCostNok = checked('extra', m.invalidCost(2), () => cost(additionalCost, 2));
 		} else checked('source', m.invalid, () => { if (!sourceNote.trim()) throw new Error('invalid'); });
-		const items = lines.map((line) => {
+		const items = (filled.length ? filled : lines.slice(0, 1)).map((line) => {
 			const selected = checked(`product-${line.key}`, m.selectProduct, () => product(line.productId));
 			const quantity = checked(`qty-${line.key}`, m.invalidQuantity(formatDecimal(selected.stock_step, i18n.locale)), () => validQuantity(line.quantity, selected.stock_step, i18n.locale));
 			return { productId: selected.id, quantity, unitCostNok: mode === 'create' ? checked(`cost-${line.key}`, m.invalidCost(6), () => cost(line.unitCost, 6)) : '0',
@@ -144,6 +146,7 @@
 	let draftRestored = $state(false), created = $state(false);
 	const draftText = ['supplier', 'reference', 'placedLocal', 'offset', 'additionalCost', 'note', 'sourceNote'] as const;
 	const lineText = ['productId', 'quantity', 'unitCost', 'purchaseUrl', 'supplierSku'] as const;
+	const lineFilled = (line: DraftLine) => lineText.some((name) => line[name].trim());
 	function restoreDraft() {
 		const saved = readDraft(admin.session?.user.id, 'order') as Record<string, unknown> | null;
 		const text = (value: unknown, names: readonly string[]) => Boolean(value && typeof value === 'object' && names.every(name => typeof (value as Record<string, unknown>)[name] === 'string'));
@@ -183,6 +186,10 @@
 			revalidateQueued = false;
 			untrack(() => { void load(); });
 		}
+	});
+	// Choosing a product on the last line opens the next one, so there is no Add line step.
+	$effect(() => {
+		if (!frozen && lines.length < 200 && lines.at(-1)?.productId) lines.push(blankLine());
 	});
 	function show(next: 'create' | 'receipt') {
 		if (command) return; returnMode = next; mode = next; outcome = 'idle';
@@ -293,15 +300,14 @@
 						<Separator />
 						<Field.Group layout="row">
 							<OrderProductCombobox id={`${fieldId}-product-${line.key}`} error={invalidInput === `${fieldId}-product-${line.key}` ? invalidMessage : undefined} {products} bind:value={line.productId} oncreated={mode === 'create' ? (item) => { products = [...products.filter((value) => value.id !== item.id), item].sort((a, b) => a.code.localeCompare(b.code)); line.purchaseUrl ||= item.purchase_url ?? ''; } : undefined} disabled={frozen || busy || loading} />
-							<Field.Field width="short"><Field.Label for={`${fieldId}-qty-${line.key}`}>{m.quantity}{#if unit}<span class="sr-only">{` (${unit})`}</span>{/if}</Field.Label><InputGroup.Root><InputGroup.Input id={`${fieldId}-qty-${line.key}`} aria-invalid={invalidInput === `${fieldId}-qty-${line.key}`} aria-describedby={invalidInput === `${fieldId}-qty-${line.key}` ? `${fieldId}-qty-${line.key}`.concat('-error') : undefined} type="text" inputmode="decimal" required bind:value={line.quantity} disabled={frozen || busy} />{#if unit}<InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unit}</InputGroup.Text></InputGroup.Addon>{/if}</InputGroup.Root>{@render fieldError(`${fieldId}-qty-${line.key}`)}</Field.Field>
-							{#if mode === 'create'}<Field.Field width="medium"><Field.Label for={`${fieldId}-cost-${line.key}`}>{m.unitCost} <span class="sr-only">(NOK)</span></Field.Label><InputGroup.Root><InputGroup.Input id={`${fieldId}-cost-${line.key}`} aria-invalid={invalidInput === `${fieldId}-cost-${line.key}`} aria-describedby={invalidInput === `${fieldId}-cost-${line.key}` ? `${fieldId}-cost-${line.key}`.concat('-error') : undefined} type="text" inputmode="decimal" required bind:value={line.unitCost} disabled={frozen || busy} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>NOK</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{@render fieldError(`${fieldId}-cost-${line.key}`)}</Field.Field>{/if}
+							<Field.Field width="short"><Field.Label for={`${fieldId}-qty-${line.key}`}>{m.quantity}{#if unit}<span class="sr-only">{` (${unit})`}</span>{/if}</Field.Label><InputGroup.Root><InputGroup.Input id={`${fieldId}-qty-${line.key}`} aria-invalid={invalidInput === `${fieldId}-qty-${line.key}`} aria-describedby={invalidInput === `${fieldId}-qty-${line.key}` ? `${fieldId}-qty-${line.key}`.concat('-error') : undefined} type="text" inputmode="decimal" required={index === 0 || lineFilled(line)} bind:value={line.quantity} disabled={frozen || busy} />{#if unit}<InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unit}</InputGroup.Text></InputGroup.Addon>{/if}</InputGroup.Root>{@render fieldError(`${fieldId}-qty-${line.key}`)}</Field.Field>
+							{#if mode === 'create'}<Field.Field width="medium"><Field.Label for={`${fieldId}-cost-${line.key}`}>{m.unitCost} <span class="sr-only">(NOK)</span></Field.Label><InputGroup.Root><InputGroup.Input id={`${fieldId}-cost-${line.key}`} aria-invalid={invalidInput === `${fieldId}-cost-${line.key}`} aria-describedby={invalidInput === `${fieldId}-cost-${line.key}` ? `${fieldId}-cost-${line.key}`.concat('-error') : undefined} type="text" inputmode="decimal" required={index === 0 || lineFilled(line)} bind:value={line.unitCost} disabled={frozen || busy} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>NOK</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{@render fieldError(`${fieldId}-cost-${line.key}`)}</Field.Field>{/if}
 						</Field.Group>
 						{#if mode === 'create'}<Field.Group layout="row"><Field.Field width="grow"><Field.Label for={`${fieldId}-url-${line.key}`}>{m.purchaseUrl}</Field.Label><Input id={`${fieldId}-url-${line.key}`} aria-invalid={invalidInput === `${fieldId}-url-${line.key}`} aria-describedby={invalidInput === `${fieldId}-url-${line.key}` ? `${fieldId}-url-${line.key}`.concat('-error') : undefined} type="url" autocapitalize="none" enterkeyhint="go" maxlength={2000} bind:value={line.purchaseUrl} disabled={frozen || busy} />{#if openable(line.purchaseUrl)}<a class="w-fit text-sm" href={line.purchaseUrl.trim()} target="_blank" rel="noopener noreferrer" aria-describedby={`${fieldId}-line-${line.key}`}>{m.openPurchaseUrl}</a>{/if}{@render fieldError(`${fieldId}-url-${line.key}`)}</Field.Field><Field.Field width="medium"><Field.Label for={`${fieldId}-sku-${line.key}`}>{m.supplierSku}</Field.Label><Input id={`${fieldId}-sku-${line.key}`} maxlength={2000} bind:value={line.supplierSku} disabled={frozen || busy} /></Field.Field></Field.Group>{/if}
-						{#if lines.length > 1 && !frozen}<Button type="button" variant="ghost" onclick={() => lines = lines.filter((item) => item.key !== line.key)} disabled={busy}>{m.removeLine}</Button>{/if}
+						{#if !frozen && lines.length > 1 && (line.productId || index < lines.length - 1)}<Button type="button" variant="ghost" onclick={() => lines = lines.filter((item) => item.key !== line.key)} disabled={busy}>{m.removeLine}</Button>{/if}
 					</fieldset>
 				{/each}
 			</div>
-				<div><Button type="button" variant="outline" onclick={() => lines = [...lines, blankLine()]} disabled={frozen || busy || lines.length >= 200}>{m.addLine}</Button></div>
 			</form>
 			</AdminAccessGate>
 		</div>

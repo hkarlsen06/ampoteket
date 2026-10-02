@@ -108,17 +108,19 @@ try {
 	await chooseProduct(page, 0);
 	await page.getByLabel(fieldLabel(`${m.quantity} (pcs)`)).first().fill('10');
 	await page.getByLabel(fieldLabel(`${m.unitCost} (NOK)`)).first().fill('1.25');
-	await page.getByRole('button', { name: m.addLine, exact: true }).click();
+	// Choosing the first product opens line 2 without an Add line step.
 	await chooseProduct(page, 29, 1);
 	await page.getByLabel(fieldLabel(`${m.quantity} (m)`)).fill('1.25');
 	await page.getByLabel(fieldLabel(`${m.unitCost} (NOK)`)).nth(1).fill('2.50');
 	await fits(page);
 	const orderSheet = page.getByRole('dialog', { name: m.newOrder, exact: true });
 	await expect(orderSheet).toBeVisible();
-	const addLine = orderSheet.getByRole('button', { name: m.addLine, exact: true });
-	await addLine.scrollIntoViewIfNeeded();
-	const addBox = await addLine.boundingBox(), footerBox = await orderSheet.locator('[data-slot="dialog-footer"]').boundingBox();
-	assert.ok(addBox && footerBox && footerBox.y >= addBox.y + addBox.height + 8, 'Save stays below the Add line control');
+	const nextLine = orderSheet.getByRole('combobox', { name: m.product, exact: true });
+	await expect(nextLine).toHaveCount(3);
+	await expect(nextLine.last()).toHaveText(m.selectProduct);
+	await nextLine.last().scrollIntoViewIfNeeded();
+	const nextBox = await nextLine.last().boundingBox(), footerBox = await orderSheet.locator('[data-slot="dialog-footer"]').boundingBox();
+	assert.ok(nextBox && footerBox && footerBox.y >= nextBox.y + nextBox.height + 8, 'Save stays below the empty next line');
 	await page.screenshot({ path: `${artifacts}/create-en-360.png` });
 	const firstOrderQuantity = page.getByLabel(fieldLabel(`${m.quantity} (pcs)`)).first();
 	await firstOrderQuantity.fill('0.5');
@@ -437,17 +439,19 @@ try {
 	const newProductId = await value("SELECT id FROM app.products WHERE name_en='New item from order'");
 	const newProductCode = await value(`SELECT code FROM app.products WHERE id=${literal(newProductId)}`);
 	await expect(page).toHaveURL(`${origin}/en/admin/orders`);
-	const linePicker = page.getByRole('combobox', { name: m.product, exact: true });
+	const linePicker = page.getByRole('combobox', { name: m.product, exact: true }).first();
 	await expect(linePicker).toContainText(newProductCode);
 	await expect(linePicker).toBeFocused();
-	await expect(page.getByLabel(fieldLabel(m.purchaseUrl))).toHaveValue('https://example.test/new-item');
+	await expect(page.getByLabel(fieldLabel(m.purchaseUrl)).first()).toHaveValue('https://example.test/new-item');
+	// Only the new empty line offers the plus button; a line with a product does not.
+	await expect(page.getByRole('button', { name: m.newProductFromOrder, exact: true })).toHaveCount(1);
 	await expect(page.getByLabel(fieldLabel(m.supplier))).toHaveValue(activeSupplier);
 	await expect(page.getByLabel(fieldLabel(m.reference))).toHaveValue('PRODUCT-NEW-1');
 	await page.screenshot({ path: `${artifacts}/new-product-selected-en-1280.png` });
 	await page.setViewportSize({ width: 360, height: 900 });
 	await page.screenshot({ path: `${artifacts}/new-product-selected-en-360.png` });
 	await page.getByLabel(fieldLabel(`${m.quantity} (pcs)`)).fill('2');
-	await page.getByLabel(fieldLabel(`${m.unitCost} (NOK)`)).fill('0.5');
+	await page.getByLabel(fieldLabel(`${m.unitCost} (NOK)`)).first().fill('0.5');
 	await page.getByRole('button', { name: m.recordOrder, exact: true }).click();
 	await expect(page).toHaveURL(/\/en\/admin\/orders\/[0-9a-f-]{36}$/);
 	expect(await value(`SELECT count(*) FROM app.purchase_order_lines WHERE order_id=${literal(page.url().split('/').at(-1)!)} AND product_id=${literal(newProductId)}`)).toBe('1');
@@ -516,7 +520,7 @@ try {
 	await pickSheet.getByRole('button', { name: s.startOrder(2), exact: true }).click();
 	await expect(page).toHaveURL(/\/en\/admin\/orders\?new=/);
 	const prefilled = page.getByRole('dialog', { name: m.newOrder, exact: true });
-	await expect(prefilled.getByRole('combobox', { name: m.product, exact: true })).toHaveCount(2);
+	await expect(prefilled.getByRole('combobox', { name: m.product, exact: true })).toHaveCount(3);
 	await expect(prefilled.getByLabel(fieldLabel(m.purchaseUrl)).first()).toHaveValue(purchaseLink);
 	await expect(prefilled.getByRole('link', { name: m.openPurchaseUrl, exact: true })).toHaveAttribute('href', purchaseLink);
 	await fits(page);
