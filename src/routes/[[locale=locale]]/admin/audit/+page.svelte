@@ -1,20 +1,20 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
-	import { getI18n } from '$lib/i18n';
-	import { getAdminContext } from '$lib/admin-context.svelte';
-	import { readAuditPage, readAuditUpdates, type AuditEntry } from '$lib/admin-audit';
-	import { allStaffRows } from '$lib/admin-api';
-	import { identifier, text } from '$lib/api';
-	import { formatCountedAt } from '$lib/format';
-	import { codeText, formActions, formStatus, itemTitle, lede, pageHeader, pageHeading } from '$lib/ui';
-	import * as Alert from '$lib/components/ui/alert';
-	import * as Collapsible from '$lib/components/ui/collapsible';
-	import * as Empty from '$lib/components/ui/empty';
-	import DisclosureTrigger from '$lib/DisclosureTrigger.svelte';
-	import * as Item from '$lib/components/ui/item';
-	import { Button, ButtonLabel } from '$lib/components/ui/button';
-	import { Badge } from '$lib/components/ui/badge';
-	import { Skeleton } from '$lib/components/ui/skeleton';
+	import { getI18n } from '#lib/i18n/index.js';
+	import { getAdminContext } from '#lib/admin-context.svelte.js';
+	import { readAuditPage, readAuditUpdates, type AuditEntry } from '#lib/admin-audit.js';
+	import { allStaffRows } from '#lib/admin-api.js';
+	import { identifier, text } from '#lib/api.js';
+	import { formatCountedAt } from '#lib/format.js';
+	import { codeText, formActions, formStatus, itemTitle, lede, pageHeader, pageHeading } from '#lib/ui.js';
+	import * as Alert from '#lib/components/ui/alert/index.js';
+	import * as Collapsible from '#lib/components/ui/collapsible/index.js';
+	import * as Empty from '#lib/components/ui/empty/index.js';
+	import DisclosureTrigger from '#lib/DisclosureTrigger.svelte';
+	import * as Item from '#lib/components/ui/item/index.js';
+	import { Button, ButtonLabel } from '#lib/components/ui/button/index.js';
+	import { Badge } from '#lib/components/ui/badge/index.js';
+	import { Skeleton } from '#lib/components/ui/skeleton/index.js';
 
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.adminAudit);
 	let entries = $state<AuditEntry[]>([]);

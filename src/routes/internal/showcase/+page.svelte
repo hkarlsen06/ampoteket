@@ -9,19 +9,19 @@
 	import { Tween } from 'svelte/motion';
 	import { cubicOut } from 'svelte/easing';
 	import { fade, fly } from 'svelte/transition';
-	import Led from '$lib/Led.svelte';
-	import Icon from '$lib/Icon.svelte';
-	import ShelfDiagram from '$lib/ShelfDiagram.svelte';
-	import ProductIdentity from '$lib/ProductIdentity.svelte';
-	import StateBadge from '$lib/StateBadge.svelte';
-	import SalesChart from '$lib/SalesChart.svelte';
-	import { Badge } from '$lib/components/ui/badge';
-	import { Button } from '$lib/components/ui/button';
-	import { messagesFor, setI18n } from '$lib/i18n';
-	import { cabinetInner } from '$lib/shelf-map';
-	import { formatMoney, gridCell, gridRange } from '$lib/format';
-	import { proportionalLabelSettings } from '$lib/labels/settings';
-	import type { TapeBitmap } from '$lib/labels/render';
+	import Led from '#lib/Led.svelte';
+	import Icon from '#lib/Icon.svelte';
+	import ShelfDiagram from '#lib/ShelfDiagram.svelte';
+	import ProductIdentity from '#lib/ProductIdentity.svelte';
+	import StateBadge from '#lib/StateBadge.svelte';
+	import SalesChart from '#lib/SalesChart.svelte';
+	import { Badge } from '#lib/components/ui/badge/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { messagesFor, setI18n } from '#lib/i18n/index.js';
+	import { cabinetInner } from '#lib/shelf-map.js';
+	import { formatMoney, gridCell, gridRange } from '#lib/format.js';
+	import { proportionalLabelSettings } from '#lib/labels/settings.js';
+	import type { TapeBitmap } from '#lib/labels/render.js';
 	import CaretLeftIcon from 'phosphor-svelte/lib/CaretLeftIcon';
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
 	import CornersInIcon from 'phosphor-svelte/lib/CornersInIcon';
@@ -254,7 +254,7 @@
 		const n = Number(location.hash.slice(1));
 		if (Number.isInteger(n) && n >= 1 && n <= slides.length) i = n - 1;
 		const demo = { id: 'demo', code: data.resistor.code, lines: [data.resistor.name_nb] };
-		void import('$lib/labels/render').then(async ({ prepareLabels, prepareTapeLabel }) => {
+		void import('#lib/labels/render.js').then(async ({ prepareLabels, prepareTapeLabel }) => {
 			const settings = { ...proportionalLabelSettings(45), copies: 1 };
 			drawerLabel = (await prepareLabels([demo], settings)).labels[0].svgUrl;
 			sheetLabels = (await prepareLabels(data.sheet, settings)).labels.map((label) => label.svgUrl);

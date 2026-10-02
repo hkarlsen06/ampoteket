@@ -1,8 +1,8 @@
 // Sample data for the meeting showcase, shaped exactly like the API's so the real
 // components render it. Values follow the workshop seed (scripts/seed-workshop-data.ts).
-import type { CatalogProduct } from '$lib/catalog';
-import type { CartLine } from '$lib/cart';
-import type { ShelfBin, ShelfCabinet } from '$lib/shelf-map';
+import type { CatalogProduct } from '#lib/catalog.js';
+import type { CartLine } from '#lib/cart.js';
+import type { ShelfBin, ShelfCabinet } from '#lib/shelf-map.js';
 
 const placed = (cabinet_code: string, outer_row: number, outer_col: number, inner_row: number, inner_col: number) => ({
 	cabinet_code, outer_row, outer_col, inner_rows: 12, inner_cols: 4, bin_code: `${cabinet_code}-${inner_row}-${inner_col}`,

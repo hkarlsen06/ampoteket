@@ -1,21 +1,21 @@
 <script lang="ts">
 	import { untrack, onMount } from 'svelte';
-	import { getI18n } from '$lib/i18n';
-	import { getAdminContext } from '$lib/admin-context.svelte';
-	import { readAdminStatistics, type AdminStatistics } from '$lib/admin-statistics';
+	import { getI18n } from '#lib/i18n/index.js';
+	import { getAdminContext } from '#lib/admin-context.svelte.js';
+	import { readAdminStatistics, type AdminStatistics } from '#lib/admin-statistics.js';
 	type Overview = NonNullable<AdminStatistics['overview']>;
-	import { formatCountedAt, formatDecimal, formatMoney, unitLabel } from '$lib/format';
-	import { productName } from '$lib/catalog';
-	import { compareDecimals } from '$lib/decimal';
-	import { codeText, formActions, itemTitle, nameWrap, section, sectionHeading } from '$lib/ui';
-	import { Button } from '$lib/components/ui/button';
-	import { Skeleton } from '$lib/components/ui/skeleton';
-	import * as Alert from '$lib/components/ui/alert';
-	import * as Empty from '$lib/components/ui/empty';
-	import * as Item from '$lib/components/ui/item';
-	import SalesChart from '$lib/SalesChart.svelte';
-	import AdminProductCard from '$lib/AdminProductCard.svelte';
-	import { readAdminProducts, readProductReferences, type AdminProduct, type ProductReferences } from '$lib/admin-products';
+	import { formatCountedAt, formatDecimal, formatMoney, unitLabel } from '#lib/format.js';
+	import { productName } from '#lib/catalog.js';
+	import { compareDecimals } from '#lib/decimal.js';
+	import { codeText, formActions, itemTitle, nameWrap, section, sectionHeading } from '#lib/ui.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { Skeleton } from '#lib/components/ui/skeleton/index.js';
+	import * as Alert from '#lib/components/ui/alert/index.js';
+	import * as Empty from '#lib/components/ui/empty/index.js';
+	import * as Item from '#lib/components/ui/item/index.js';
+	import SalesChart from '#lib/SalesChart.svelte';
+	import AdminProductCard from '#lib/AdminProductCard.svelte';
+	import { readAdminProducts, readProductReferences, type AdminProduct, type ProductReferences } from '#lib/admin-products.js';
 
 	let { overview = false, productId = null, unit = '' }: { overview?: boolean; productId?: string | null; unit?: string } = $props();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.adminStatistics);

@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { controlStyles } from "$lib/components/ui/control";
-	import { cn, type WithElementRef, type WithoutChildren } from "$lib/utils.js";
+	import { controlStyles } from "#lib/components/ui/control.js";
+	import { cn, type WithElementRef, type WithoutChildren } from "#lib/utils.js";
 	import type { HTMLTextareaAttributes } from "svelte/elements";
 
 	let {

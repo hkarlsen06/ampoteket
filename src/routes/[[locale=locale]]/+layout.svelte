@@ -1,5 +1,5 @@
 <script lang="ts">
-	import Icon from '$lib/Icon.svelte';
+	import Icon from '#lib/Icon.svelte';
 	import ShoppingCartIcon from 'phosphor-svelte/lib/ShoppingCartIcon';
 	import ListIcon from 'phosphor-svelte/lib/ListIcon';
 	import CpuIcon from 'phosphor-svelte/lib/CpuIcon';
@@ -9,18 +9,18 @@
 	import QrCodeIcon from 'phosphor-svelte/lib/QrCodeIcon';
 	import InstagramLogoIcon from 'phosphor-svelte/lib/InstagramLogoIcon';
 	import ChatsIcon from 'phosphor-svelte/lib/ChatsIcon';
-	import DiscordLogo from '$lib/DiscordLogo.svelte';
+	import DiscordLogo from '#lib/DiscordLogo.svelte';
 	import { onMount, setContext, untrack } from 'svelte';
-	import { AdminContext, setAdminContext } from '$lib/admin-context.svelte';
-	import { Button } from '$lib/components/ui/button';
-	import { Badge } from '$lib/components/ui/badge';
-	import { Separator } from '$lib/components/ui/separator';
-	import { pageContainer } from '$lib/ui';
-	import * as Collapsible from '$lib/components/ui/collapsible';
-	import * as Tooltip from '$lib/components/ui/tooltip';
-	import { createCartStore, setCartContext } from '$lib/cart';
-	import Scanner from '$lib/Scanner.svelte';
-	import { isPrivateRoute } from '$lib/private-route';
+	import { AdminContext, setAdminContext } from '#lib/admin-context.svelte.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { Badge } from '#lib/components/ui/badge/index.js';
+	import { Separator } from '#lib/components/ui/separator/index.js';
+	import { pageContainer } from '#lib/ui.js';
+	import * as Collapsible from '#lib/components/ui/collapsible/index.js';
+	import * as Tooltip from '#lib/components/ui/tooltip/index.js';
+	import { createCartStore, setCartContext } from '#lib/cart.js';
+	import Scanner from '#lib/Scanner.svelte';
+	import { isPrivateRoute } from '#lib/private-route.js';
 	import { afterNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import {
@@ -38,7 +38,7 @@
 		setI18n,
 		stripLocale,
 		type I18n
-	} from '$lib/i18n';
+	} from '#lib/i18n/index.js';
 
 	let { data, children } = $props();
 
@@ -106,8 +106,8 @@
 	let menuButton = $state<HTMLButtonElement | null>(null);
 
 	// Following a link leaves the menu behind, including on client-side navigation.
-	afterNavigate(() => {
-		menuOpen = false;
+	afterNavigate(({ shallow }) => {
+		if (!shallow) menuOpen = false;
 	});
 
 	function onKeydown(event: KeyboardEvent) {

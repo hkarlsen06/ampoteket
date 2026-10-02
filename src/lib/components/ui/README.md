@@ -12,7 +12,7 @@ This file lists what differs from upstream, so updates do not undo it.
 
 ## Usage notes
 
-- Import directly: `import { Button } from '$lib/components/ui/button'`.
+- Import directly: `import { Button } from '#lib/components/ui/button'`.
 - The field module exports `Field.Field`, not `Root`. Use `NativeSelect.Root` for
   native selects and `InputGroup` for unit affixes.
 - Initialize `bind:ref` targets with `$state<HTMLButtonElement | null>(null)` (or the
@@ -23,7 +23,7 @@ This file lists what differs from upstream, so updates do not undo it.
   search, credentials and final fields. `Textarea` uses sentence capitalization
   and a newline key. `InputGroup.Input` inherits `Input` defaults.
 - Import Phosphor icons individually (`phosphor-svelte/lib/CheckIcon`) and render
-  them through `$lib/Icon.svelte`.
+  them through `#lib/Icon.svelte`.
 
 ## Local adaptations
 

@@ -1,31 +1,31 @@
 <script lang="ts">
 	import { getContext, onMount } from 'svelte';
-	import type { createSolderingPointer } from '$lib/soldering-pointer';
-	import Icon from '$lib/Icon.svelte';
+	import type { createSolderingPointer } from '#lib/soldering-pointer.js';
+	import Icon from '#lib/Icon.svelte';
 	import XIcon from 'phosphor-svelte/lib/XIcon';
 	import MapTrifoldIcon from 'phosphor-svelte/lib/MapTrifoldIcon';
 	import QrCodeIcon from 'phosphor-svelte/lib/QrCodeIcon';
 	import CpuIcon from 'phosphor-svelte/lib/CpuIcon';
 	import ClockIcon from 'phosphor-svelte/lib/ClockIcon';
-	import DiscordLogo from '$lib/DiscordLogo.svelte';
-	import * as Alert from '$lib/components/ui/alert';
-	import StateBadge from '$lib/StateBadge.svelte';
-	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
-	import { Separator } from '$lib/components/ui/separator';
-	import * as Card from '$lib/components/ui/card';
-	import * as Dialog from '$lib/components/ui/dialog';
-	import * as Field from '$lib/components/ui/field';
-	import * as Item from '$lib/components/ui/item';
-	import Led from '$lib/Led.svelte';
-	import { Badge } from '$lib/components/ui/badge';
-	import Brackets from '$lib/Brackets.svelte';
+	import DiscordLogo from '#lib/DiscordLogo.svelte';
+	import * as Alert from '#lib/components/ui/alert/index.js';
+	import StateBadge from '#lib/StateBadge.svelte';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import { Separator } from '#lib/components/ui/separator/index.js';
+	import * as Card from '#lib/components/ui/card/index.js';
+	import * as Dialog from '#lib/components/ui/dialog/index.js';
+	import * as Field from '#lib/components/ui/field/index.js';
+	import * as Item from '#lib/components/ui/item/index.js';
+	import Led from '#lib/Led.svelte';
+	import { Badge } from '#lib/components/ui/badge/index.js';
+	import Brackets from '#lib/Brackets.svelte';
 	import type { PageData } from './$types';
-	import { pageContainer, formActions, sheetBody } from '$lib/ui';
+	import { pageContainer, formActions, sheetBody } from '#lib/ui.js';
 	// The page renders without API reads, so nothing delays its first byte; the shelf
 	// picker loads live topology and drawer contents in the browser when opened.
 	import { goto } from '$app/navigation';
-	import { DISCORD_INVITE, THE_RESISTANCE, getI18n } from '$lib/i18n';
+	import { DISCORD_INVITE, THE_RESISTANCE, getI18n } from '#lib/i18n/index.js';
 
 	let { data }: { data: PageData } = $props();
 	const i18n = getI18n();
@@ -204,7 +204,7 @@
 		const loadSoldering = async () => {
 			const viewer = soldering?.querySelector('model-viewer');
 			if (!viewer?.loaded) return;
-			const { createSolderingPointer } = await import('$lib/soldering-pointer');
+			const { createSolderingPointer } = await import('#lib/soldering-pointer.js');
 			if (!mounted || !viewer.isConnected) return;
 			solderingPointer?.dispose();
 			solderingPointer = createSolderingPointer(viewer);
@@ -577,7 +577,7 @@
 									<!-- svelte-ignore a11y_no_noninteractive_tabindex (Named scroll region supports native keyboard scrolling.) -->
 									<div bind:this={shelfBody} class={["shelf-picker-body", sheetBody]} role="region" aria-labelledby="home-shelf-title" tabindex="0">
 										<!-- Loaded on first open: the picker is most of this page's own script. -->
-										{#await import('$lib/ShelfMap.svelte') then { default: ShelfMap }}<ShelfMap stacked config={data.adminConfig} labelledby="home-shelf-title" onreveal={shelfOpen ? revealShelfSection : undefined} />{/await}
+										{#await import('#lib/ShelfMap.svelte') then { default: ShelfMap }}<ShelfMap stacked config={data.adminConfig} labelledby="home-shelf-title" onreveal={shelfOpen ? revealShelfSection : undefined} />{/await}
 									</div>
 								</Dialog.Content>
 							{/if}

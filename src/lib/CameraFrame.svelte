@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getI18n } from '$lib/i18n';
+	import { getI18n } from '#lib/i18n/index.js';
 
 	// The staff scanners' viewfinder: live preview, hidden decode canvas and aiming
 	// frame. The caller owns the camera session and binds both elements.

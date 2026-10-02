@@ -1,7 +1,7 @@
-import { getCatalogConfig } from '$lib/server/catalog-config';
+import { getCatalogConfig } from '#lib/server/catalog-config.js';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = ({ platform, request, setHeaders }) => {
+export const load: PageServerLoad = ({ request, setHeaders }) => {
 	setHeaders({ 'Cache-Control': 'no-store' });
-	return { catalogConfig: getCatalogConfig(platform, request) };
+	return { catalogConfig: getCatalogConfig(request) };
 };

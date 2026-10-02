@@ -421,7 +421,7 @@ export const nb = {
 		perUnit: (unit: string) => `per ${unit}`,
 		/** Labels for the two location chips on the one shelf wall: cabinet →
 		    drawer. The values are spreadsheet-style cell references from
-		    $lib/format. */
+		    #lib/format. */
 		cabinet: 'Kabinett',
 		drawer: 'Skuff',
 		/** Parts stored outside the drawer wall show a staff note, or askStaff. */

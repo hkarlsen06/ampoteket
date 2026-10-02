@@ -1,10 +1,10 @@
 <script lang="ts">
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
-	import Icon from '$lib/Icon.svelte';
-	import { productName, type CatalogProduct } from '$lib/catalog';
-	import { categoryBesideName, getI18n } from '$lib/i18n';
-	import ProductAvailability from '$lib/ProductAvailability.svelte';
-	import { codeText, nameWrap, pageHeading } from '$lib/ui';
+	import Icon from '#lib/Icon.svelte';
+	import { productName, type CatalogProduct } from '#lib/catalog.js';
+	import { categoryBesideName, getI18n } from '#lib/i18n/index.js';
+	import ProductAvailability from '#lib/ProductAvailability.svelte';
+	import { codeText, nameWrap, pageHeading } from '#lib/ui.js';
 
 	let { product, headingLevel = 2, linked = true, showCategory = false, showStock = false, prominent = false, compact = false, stretchLink = false, showChevron = false }: {
 		product: CatalogProduct;

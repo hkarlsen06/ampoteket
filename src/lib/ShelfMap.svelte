@@ -1,22 +1,22 @@
 <script lang="ts">
-	import { Button } from '$lib/components/ui/button';
-	import { AspectRatio } from '$lib/components/ui/aspect-ratio';
-	import { Skeleton } from '$lib/components/ui/skeleton';
-	import Icon from '$lib/Icon.svelte';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { AspectRatio } from '#lib/components/ui/aspect-ratio/index.js';
+	import { Skeleton } from '#lib/components/ui/skeleton/index.js';
+	import Icon from '#lib/Icon.svelte';
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
-	import * as Alert from '$lib/components/ui/alert';
-	import * as Empty from '$lib/components/ui/empty';
-	import * as Collapsible from '$lib/components/ui/collapsible';
-	import DisclosureTrigger from '$lib/DisclosureTrigger.svelte';
-	import { codeText, itemTitle, nameWrap, sectionHeading } from '$lib/ui';
+	import * as Alert from '#lib/components/ui/alert/index.js';
+	import * as Empty from '#lib/components/ui/empty/index.js';
+	import * as Collapsible from '#lib/components/ui/collapsible/index.js';
+	import DisclosureTrigger from '#lib/DisclosureTrigger.svelte';
+	import { codeText, itemTitle, nameWrap, sectionHeading } from '#lib/ui.js';
 	import { onMount, onDestroy, untrack } from 'svelte';
-	import { getI18n } from '$lib/i18n';
-	import { productName, readCompleteCatalog, type CatalogConfig, type CatalogProduct } from '$lib/catalog';
-	import { gridCell, gridRange } from '$lib/format';
-	import { cabinetInner, locateProduct, raaco, readShelfTopology, type ShelfTopology } from '$lib/shelf-map';
-	import LocationChips from '$lib/LocationChips.svelte';
-	import ShelfDiagram from '$lib/ShelfDiagram.svelte';
-	import ShelfZoom from '$lib/ShelfZoom.svelte';
+	import { getI18n } from '#lib/i18n/index.js';
+	import { productName, readCompleteCatalog, type CatalogConfig, type CatalogProduct } from '#lib/catalog.js';
+	import { gridCell, gridRange } from '#lib/format.js';
+	import { cabinetInner, locateProduct, raaco, readShelfTopology, type ShelfTopology } from '#lib/shelf-map.js';
+	import LocationChips from '#lib/LocationChips.svelte';
+	import ShelfDiagram from '#lib/ShelfDiagram.svelte';
+	import ShelfZoom from '#lib/ShelfZoom.svelte';
 	// One stage shows the wall or, zoomed in, one cabinet's drawers; contents grow
 	// below it. `stacked` expands the diagrams instead of bounding them.
 	let { config, product, title, labelledby, onreveal, headingLevel = 2, initialTopology = null, stacked = false, collapsible = false }: {

@@ -1,16 +1,16 @@
 <script lang="ts">
-	import { sectionHeading } from '$lib/ui';
-	import { Button } from '$lib/components/ui/button';
-	import { Checkbox } from '$lib/components/ui/checkbox';
-	import * as Empty from '$lib/components/ui/empty';
-	import { getI18n } from '$lib/i18n';
-	import { gridCell, gridRange } from '$lib/format';
-	import ShelfDiagram from '$lib/ShelfDiagram.svelte';
-	import ShelfZoom from '$lib/ShelfZoom.svelte';
-	import ShelfCabinetFace from '$lib/ShelfCabinetFace.svelte';
-	import { cabinetInner, raaco, type ShelfTopology } from '$lib/shelf-map';
-	import { labelCabinets, labelDrawers, labelSelectionState, toggleLabelSelection } from '$lib/label-selection';
-	import { revealShelfFocus } from '$lib/shelf-focus';
+	import { sectionHeading } from '#lib/ui.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
+	import * as Empty from '#lib/components/ui/empty/index.js';
+	import { getI18n } from '#lib/i18n/index.js';
+	import { gridCell, gridRange } from '#lib/format.js';
+	import ShelfDiagram from '#lib/ShelfDiagram.svelte';
+	import ShelfZoom from '#lib/ShelfZoom.svelte';
+	import ShelfCabinetFace from '#lib/ShelfCabinetFace.svelte';
+	import { cabinetInner, raaco, type ShelfTopology } from '#lib/shelf-map.js';
+	import { labelCabinets, labelDrawers, labelSelectionState, toggleLabelSelection } from '#lib/label-selection.js';
+	import { revealShelfFocus } from '#lib/shelf-focus.js';
 
 	let { topology, selected, onselection, onselectall, onclear, heading, disabled = false }: {
 		topology: ShelfTopology; selected: string[]; onselection: (ids: string[]) => void; disabled?: boolean;

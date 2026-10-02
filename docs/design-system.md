@@ -69,10 +69,10 @@ Rules:
 | Role | Face | Sizes (mobile → desktop) |
 |---|---|---|
 | Display headline | System sans 800, tracking −0.02em, line-height 1.02 | 2.5rem → 4.5rem (`clamp`) |
-| Operational page / section heading | `pageHeading` / `sectionHeading` from `$lib/ui` | 1.875 → 2.25rem / 1.25 → 1.5rem |
+| Operational page / section heading | `pageHeading` / `sectionHeading` from `#lib/ui.js` | 1.875 → 2.25rem / 1.25 → 1.5rem |
 | Section heading (h2) / sub-heading (h3) | System sans 700 / 650 | 1.5 → 2rem / 1.125 → 1.25rem |
 | Body | System sans 400, line-height 1.55 | 1rem → 1.0625rem, max `--measure` |
-| Section introduction | `lede` from `$lib/ui`, `text-muted-foreground` | 1.0625 → 1.125rem, max `--measure-lede` |
+| Section introduction | `lede` from `#lib/ui.js`, `text-muted-foreground` | 1.0625 → 1.125rem, max `--measure-lede` |
 | Small | Same | 0.875rem, the minimum for content, including badges, chips and codes |
 | Code / quantity / money | `font-mono` (system mono stack) | Fits the surrounding readout |
 | LED figures | **Seven Segment** by Krafti Lab, the logo's font (`/fonts/SevenSegment-led.woff2`, 2 KB, preloaded; see [assets/brand/README.md](../assets/brand/README.md)) | Sized by the cell |
@@ -89,7 +89,7 @@ stays in the accessibility tree while the digit spans are `aria-hidden`. Never s
 words in it, and never use a cell for a number the reader must act on if the font
 fails to load.
 
-Icons are Phosphor SVGs via `$lib/Icon.svelte`. Decorative icons are hidden from
+Icons are Phosphor SVGs via `#lib/Icon.svelte`. Decorative icons are hidden from
 assistive technology; icon-only controls keep localized accessible names.
 
 ## 4. Layout
@@ -234,11 +234,11 @@ with Bits UI for behaviour and Tailwind CSS 4. The copied `.svelte` files are
 project-owned source; how to add or update them and the local adaptations to keep
 are in [`src/lib/components/ui/README.md`](../src/lib/components/ui/README.md).
 
-Import from `$lib/components/ui/<component>`; use Tailwind for layout. No local
+Import from `#lib/components/ui/<component>/index.js`; use Tailwind for layout. No local
 `<style>` blocks and no `@layer components`; do not recreate retired global recipes
 (`.btn`, `.input`, `.panel`, `.wrap`, `.section`, `.led`, …).
 
-**`$lib/ui` recipes** centralize repeated presentation: `pageContainer` (wide,
+**`#lib/ui.js` recipes** centralize repeated presentation: `pageContainer` (wide,
 admin and reading widths; `padding: 'page'`), `pageHeader`, `pageHeading`,
 `sectionHeading`, `lede`, `itemTitle`, `codeText`, `nameWrap`, `cardLink`,
 `formLayout`, `formGrid`, `formActions`, `formStatus`, `sheetBody` and `section`.

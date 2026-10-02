@@ -1,13 +1,13 @@
 <script lang="ts">
-	import { Separator } from '$lib/components/ui/separator';
-	import { codeText, formStatus, section, sectionHeading } from '$lib/ui';
-	import { Button, ButtonLabel } from '$lib/components/ui/button';
-	import * as Item from '$lib/components/ui/item';
-	import * as Alert from '$lib/components/ui/alert';
+	import { Separator } from '#lib/components/ui/separator/index.js';
+	import { codeText, formStatus, section, sectionHeading } from '#lib/ui.js';
+	import { Button, ButtonLabel } from '#lib/components/ui/button/index.js';
+	import * as Item from '#lib/components/ui/item/index.js';
+	import * as Alert from '#lib/components/ui/alert/index.js';
 	import { onMount } from 'svelte';
-	import { getI18n } from '$lib/i18n';
-	import { getAdminContext } from '$lib/admin-context.svelte';
-	import { definitiveProductFailure, detailCommandKey, executeDetailCommand, parseDetailCommand, readProductReferences, StaleProductError, type AttributeDefinition, type Category, type DetailCommand, type ProductReferences } from '$lib/admin-products';
+	import { getI18n } from '#lib/i18n/index.js';
+	import { getAdminContext } from '#lib/admin-context.svelte.js';
+	import { definitiveProductFailure, detailCommandKey, executeDetailCommand, parseDetailCommand, readProductReferences, StaleProductError, type AttributeDefinition, type Category, type DetailCommand, type ProductReferences } from '#lib/admin-products.js';
 
 	let { onrefresh }: { onrefresh: (value: ProductReferences) => void } = $props();
 	const i18n = getI18n();

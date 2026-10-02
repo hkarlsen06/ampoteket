@@ -53,7 +53,7 @@ export default defineConfig(
 		plugins: { shadcn },
 		settings: {
 			shadcn: {
-				ui: '$lib/components/ui',
+				ui: '#lib/components/ui',
 				mergeFunctions: ['cn'],
 				note: 'Use the shared UI primitives and semantic Tailwind tokens defined in src/app.css.'
 			}

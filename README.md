@@ -5,7 +5,7 @@ Web shop and stock system for the student-run electronics workshop at
 trust-based Vipps and register the purchase, which withdraws stock. Staff maintain
 products, placement, purchasing and counts with a full audit trail.
 
-SvelteKit 2 / Svelte 5 on Cloudflare Workers, Supabase (Postgres + Auth), Bun,
+SvelteKit 3 / Svelte 5 on Cloudflare Workers, Supabase (Postgres + Auth), Bun,
 shadcn-svelte and Tailwind CSS 4. Norwegian at `/`, English at `/en`.
 
 **Status:** live at `ampoteket.no` with sales closed. What is live right now is in
@@ -47,10 +47,6 @@ git lfs pull                  # original photos and Blender files (only needed t
 bun install --frozen-lockfile
 bun run development           # disposable database + test admin + dev server
 ```
-
-The `cookie` override keeps SvelteKit on a patched serializer while its dependency
-still requests `^0.6.0`. Remove it when SvelteKit requires a patched version;
-`bun audit` checks the resolved dependency tree.
 
 Open <http://localhost:5174> and sign in at `/admin/login` as **`test@test.no` /
 `test`**. Every start creates a fresh, empty database, and Ctrl-C removes it.

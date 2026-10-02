@@ -1,18 +1,18 @@
 <script lang="ts">
-	import { Separator } from '$lib/components/ui/separator';
-	import * as Alert from '$lib/components/ui/alert';
-	import * as Item from '$lib/components/ui/item';
-	import * as Collapsible from '$lib/components/ui/collapsible';
-	import { Skeleton } from '$lib/components/ui/skeleton';
-	import { Button, ButtonLabel } from '$lib/components/ui/button';
-	import * as Field from '$lib/components/ui/field';
-	import { Input } from '$lib/components/ui/input';
+	import { Separator } from '#lib/components/ui/separator/index.js';
+	import * as Alert from '#lib/components/ui/alert/index.js';
+	import * as Item from '#lib/components/ui/item/index.js';
+	import * as Collapsible from '#lib/components/ui/collapsible/index.js';
+	import { Skeleton } from '#lib/components/ui/skeleton/index.js';
+	import { Button, ButtonLabel } from '#lib/components/ui/button/index.js';
+	import * as Field from '#lib/components/ui/field/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
 	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
 	import CopyIcon from 'phosphor-svelte/lib/CopyIcon';
-	import Icon from '$lib/Icon.svelte';
+	import Icon from '#lib/Icon.svelte';
 	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
-	import CheckoutReferences from '$lib/CheckoutReferences.svelte';
-	import { codeText, formActions, itemTitle, nameWrap, pageContainer, pageHeader, pageHeading, section, sectionHeading } from '$lib/ui';
+	import CheckoutReferences from '#lib/CheckoutReferences.svelte';
+	import { codeText, formActions, itemTitle, nameWrap, pageContainer, pageHeader, pageHeading, section, sectionHeading } from '#lib/ui.js';
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { getI18n } from './i18n';
@@ -92,7 +92,7 @@
 			}
 			if (!id) {
 				await cart.refresh();
-				if (run === generation) await goto(i18n.href(`/checkout/${saved.checkoutId}`), { replaceState: true });
+				if (run === generation) await goto(i18n.href(`/checkout/${saved.checkoutId}`), { replace: true });
 				return;
 			}
 			const result = await readCheckout(saved);

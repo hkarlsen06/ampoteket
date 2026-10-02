@@ -1,36 +1,36 @@
 <script lang="ts">
-	import Icon from '$lib/Icon.svelte';
+	import Icon from '#lib/Icon.svelte';
 	import SlidersHorizontalIcon from 'phosphor-svelte/lib/SlidersHorizontalIcon';
 	import XIcon from 'phosphor-svelte/lib/XIcon';
-	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
-	import { Separator } from '$lib/components/ui/separator';
-	import { Checkbox } from '$lib/components/ui/checkbox';
-	import * as NativeSelect from '$lib/components/ui/native-select';
-	import * as Dialog from '$lib/components/ui/dialog';
-	import * as Field from '$lib/components/ui/field';
-	import * as Card from '$lib/components/ui/card';
-	import * as Alert from '$lib/components/ui/alert';
-	import * as Empty from '$lib/components/ui/empty';
-	import { cardLink, pageContainer, pageHeader, pageHeading, formActions, formStatus, sheetBody } from '$lib/ui';
-	import { goto, invalidateAll, replaceState } from '$app/navigation';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import { Separator } from '#lib/components/ui/separator/index.js';
+	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
+	import * as NativeSelect from '#lib/components/ui/native-select/index.js';
+	import * as Dialog from '#lib/components/ui/dialog/index.js';
+	import * as Field from '#lib/components/ui/field/index.js';
+	import * as Card from '#lib/components/ui/card/index.js';
+	import * as Alert from '#lib/components/ui/alert/index.js';
+	import * as Empty from '#lib/components/ui/empty/index.js';
+	import { cardLink, pageContainer, pageHeader, pageHeading, formActions, formStatus, sheetBody } from '#lib/ui.js';
+	import { goto, refreshAll } from '$app/navigation';
 	import { page } from '$app/state';
 	import { untrack } from 'svelte';
-	import { readCatalogPage, readCatalogFacets, type CatalogProduct } from '$lib/catalog';
+	import { readCatalogPage, readCatalogFacets, type CatalogProduct } from '#lib/catalog.js';
 	import {
 		canonicalFilterNumber, catalogLocations, CatalogQueryError, hasCatalogFilters,
 		parseCatalogQuery, serializeCatalogQuery,
 		type CatalogFacet, type CatalogConditions, type CatalogQueryIssue
-	} from '$lib/catalog-search';
-	import { compareDecimals } from '$lib/decimal';
-	import { categoryLabel, specificationLabel, getI18n } from '$lib/i18n';
-	import SpecNumberFilter from '$lib/SpecNumberFilter.svelte';
-	import LabelShelfSelection from '$lib/LabelShelfSelection.svelte';
-	import { readShelfTopology, type ShelfTopology } from '$lib/shelf-map';
-	import ProductIdentity from '$lib/ProductIdentity.svelte';
-	import ProductPrice from '$lib/ProductPrice.svelte';
-	import ProductAvailability from '$lib/ProductAvailability.svelte';
-	import CategoryGraphic from '$lib/CategoryGraphic.svelte';
+	} from '#lib/catalog-search.js';
+	import { compareDecimals } from '#lib/decimal.js';
+	import { categoryLabel, specificationLabel, getI18n } from '#lib/i18n/index.js';
+	import SpecNumberFilter from '#lib/SpecNumberFilter.svelte';
+	import LabelShelfSelection from '#lib/LabelShelfSelection.svelte';
+	import { readShelfTopology, type ShelfTopology } from '#lib/shelf-map.js';
+	import ProductIdentity from '#lib/ProductIdentity.svelte';
+	import ProductPrice from '#lib/ProductPrice.svelte';
+	import ProductAvailability from '#lib/ProductAvailability.svelte';
+	import CategoryGraphic from '#lib/CategoryGraphic.svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -172,7 +172,7 @@
 			expandedProducts = [...previous, ...following.products];
 			complete = following.complete;
 			// Restore visible rows before SvelteKit restores the reading position on Back.
-			replaceState(page.url, { ...page.state, catalog: { queryString: data.queryString, products: $state.snapshot(expandedProducts) } });
+			void goto(page.url.href, { shallow: true, replace: true, state: { ...page.state, catalog: { queryString: data.queryString, products: $state.snapshot(expandedProducts) } } });
 		} catch (error) {
 			if (!own.signal.aborted) {
 				failed = true;
@@ -183,7 +183,7 @@
 
 	function resetExpanded() {
 		expandedProducts = null;
-		replaceState(page.url, { ...page.state, catalog: undefined });
+		void goto(page.url.href, { shallow: true, replace: true, state: { ...page.state, catalog: undefined } });
 	}
 
 	$effect(() => {
@@ -289,7 +289,7 @@
 			if (q.trim()) params.set('q', q.trim());
 			parseCatalogQuery(params);
 			formError = null; resetExpanded(); filterSnapshot = null; filtersOpen = false;
-			await goto(i18n.href('/p') + (params.size ? `?${params}` : ''), { noScroll: true, keepFocus: true });
+			await goto(i18n.href('/p') + (params.size ? `?${params}` : ''), { reset: false });
 		} catch (error) {
 			formError = error instanceof CatalogQueryError ? error.issue : 'invalidFilter';
 			if (invalidField) document.getElementById(invalidField)?.focus();
@@ -304,7 +304,7 @@
 
 	async function refresh() {
 		if (failed && !pagingError) { await showMore(); return; }
-		resetExpanded(); await invalidateAll();
+		resetExpanded(); await refreshAll();
 	}
 </script>
 
@@ -416,7 +416,7 @@
 				</form>
 			</Dialog.Content>
 		</Dialog.Root>
-		{#if filtered || queryError}<Button variant="link" href={i18n.href('/p')} data-sveltekit-noscroll>{m.clearFilters}</Button>{/if}
+		{#if filtered || queryError}<Button variant="link" href={i18n.href('/p')} data-sveltekit-reset={false}>{m.clearFilters}</Button>{/if}
 	</div>
 	{#if formError && !filtersOpen}<Field.Error class="mt-3" role="alert">{m.errors[formError]}</Field.Error>{/if}
 	<noscript><p class="mt-4">{m.noScript} <a href={i18n.href('/p')}>{m.browseUnfiltered}</a></p></noscript>
@@ -454,10 +454,10 @@
 	</div>
 	{#if unavailable}<Button variant="outline" class="no-js:hidden" onclick={refresh} disabled={loading}>{m.retry}</Button>{/if}
 	<nav class="pagination mt-8 flex min-h-12 flex-wrap items-center gap-4" aria-label={m.pagination} bind:this={pagination}>
-		{#if nextAfter && !queryError}<Button variant="outline" href={pageHref(nextAfter)} data-sveltekit-noscroll onclick={loadMore}><span class="no-js:hidden">{m.showMore}</span><span class="hidden no-js:inline">{m.next}</span></Button>{/if}
+		{#if nextAfter && !queryError}<Button variant="outline" href={pageHref(nextAfter)} data-sveltekit-reset={false} onclick={loadMore}><span class="no-js:hidden">{m.showMore}</span><span class="hidden no-js:inline">{m.next}</span></Button>{/if}
 		<p class="text-sm text-muted-foreground" role="status" aria-live="polite" aria-atomic="true">
 			{#if ready && !queryError && displayed.length}{m.shownCount(displayed.length)}{/if}{#if loading}<span class="sr-only">{m.loadingSearch}</span>{/if}
 		</p>
-		{#if submitted?.after || pagingError === 'missingCursor'}<Button variant="link" href={pageHref()} data-sveltekit-noscroll>{m.firstPage}</Button>{/if}
+		{#if submitted?.after || pagingError === 'missingCursor'}<Button variant="link" href={pageHref()} data-sveltekit-reset={false}>{m.firstPage}</Button>{/if}
 	</nav>
 </div>

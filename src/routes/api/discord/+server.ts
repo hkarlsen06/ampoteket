@@ -1,7 +1,7 @@
 // Online members of the Ampoteket Discord server. Proxied so visitors' browsers never
 // contact Discord. Each cache cools down between bounded refreshes, including
 // failures, and answers from its last good copy when Discord still refuses.
-import { json } from '@sveltejs/kit';
+import { waitUntil } from 'cloudflare:workers';
 import type { RequestHandler } from './$types';
 
 const WIDGET = 'https://discord.com/api/guilds/1477943923115819230/widget.json';
@@ -31,12 +31,12 @@ async function fetchWidget(): Promise<Widget | null> {
 	}
 }
 
-export const GET: RequestHandler = async ({ platform, url }) => {
+export const GET: RequestHandler = async ({ url }) => {
 	// Cache API key for the last good answer, on this zone; never routed.
 	const lastGood = new URL('/api/discord/last-good', url).href;
 	const lastAttempt = new URL('/api/discord/last-attempt', url).href;
-	// Absent in plain `vite dev`, where every request asks Discord.
-	const cache = platform?.caches?.default;
+	// Absent in unit tests that do not provide one, where every request asks Discord.
+	const cache = (globalThis.caches as (CacheStorage & { default: Cache }) | undefined)?.default;
 	const [kept, attempted] = await Promise.all([cache?.match(lastGood), cache?.match(lastAttempt)]);
 	const age = Date.now() - Number(kept?.headers.get('X-Fetched-At'));
 	if (kept && age < FRESH_MS) return reply(await kept.text());
@@ -52,7 +52,7 @@ export const GET: RequestHandler = async ({ platform, url }) => {
 	}
 	if (typeof widget?.presence_count !== 'number') {
 		if (kept) return reply(await kept.text());
-		return json({ online: null }, { status: 502, headers: { 'Cache-Control': 'no-store' } });
+		return Response.json({ online: null }, { status: 502, headers: { 'Cache-Control': 'no-store' } });
 	}
 	const members = (widget.members ?? [])
 		.map((member) => ({ ...member, status: statusOf(member.status) }))
@@ -64,7 +64,7 @@ export const GET: RequestHandler = async ({ platform, url }) => {
 			avatar: member.avatar_url?.startsWith(AVATARS) ? `/api/discord/avatar/${member.avatar_url.slice(AVATARS.length)}` : null
 		}));
 	const body = JSON.stringify({ online: widget.presence_count, members });
-	platform?.ctx?.waitUntil(cache?.put(lastGood, new Response(body, {
+	waitUntil(cache?.put(lastGood, new Response(body, {
 		headers: { 'Cache-Control': `max-age=${KEEP_SECONDS}`, 'X-Fetched-At': String(Date.now()) }
 	})) ?? Promise.resolve());
 	return reply(body);

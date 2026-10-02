@@ -3,8 +3,8 @@
 	// `<main>` all keep working, only the page body is replaced. Handles 404s
 	// (`/fins-ikke`, `/en/no-such-page`) and any load failure under the locale.
 	import { page } from '$app/state';
-	import { getI18n } from '$lib/i18n';
-	import NotFound from '$lib/NotFound.svelte';
+	import { getI18n } from '#lib/i18n/index.js';
+	import NotFound from '#lib/NotFound.svelte';
 
 	const i18n = getI18n();
 	const m = $derived(i18n.m.notFound);

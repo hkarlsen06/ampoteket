@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { controlStyles } from "$lib/components/ui/control";
-	import { cn, type WithElementRef } from "$lib/utils.js";
+	import { controlStyles } from "#lib/components/ui/control.js";
+	import { cn, type WithElementRef } from "#lib/utils.js";
 	import type { HTMLInputAttributes, HTMLInputTypeAttribute } from "svelte/elements";
 
 	type InputType = Exclude<HTMLInputTypeAttribute, "file">;

@@ -1,13 +1,13 @@
 <script lang="ts">
-	import Icon from '$lib/Icon.svelte';
+	import Icon from '#lib/Icon.svelte';
 	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
 	import XCircleIcon from 'phosphor-svelte/lib/XCircleIcon';
 	import QuestionIcon from 'phosphor-svelte/lib/QuestionIcon';
 	import WarningIcon from 'phosphor-svelte/lib/WarningIcon';
-	import { Badge } from '$lib/components/ui/badge';
-	import { getI18n } from '$lib/i18n';
-	import { compareDecimals } from '$lib/decimal';
-	import { formatDecimal, unitLabel } from '$lib/format';
+	import { Badge } from '#lib/components/ui/badge/index.js';
+	import { getI18n } from '#lib/i18n/index.js';
+	import { compareDecimals } from '#lib/decimal.js';
+	import { formatDecimal, unitLabel } from '#lib/format.js';
 
 	// State indicator: status icon + word, never colour alone.
 	// «Ukjent»/Unavailable is a fetch state, never rendered as 0.

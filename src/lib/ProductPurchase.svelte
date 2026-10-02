@@ -1,17 +1,17 @@
 <script lang="ts">
 	import { onMount, tick, untrack } from 'svelte';
-	import Icon from '$lib/Icon.svelte';
+	import Icon from '#lib/Icon.svelte';
 	import QrCodeIcon from 'phosphor-svelte/lib/QrCodeIcon';
-	import { Button, ButtonLabel } from '$lib/components/ui/button';
-	import * as Field from '$lib/components/ui/field';
-	import { formActions, formStatus } from '$lib/ui';
-	import { getI18n } from '$lib/i18n';
-	import { productName, type CatalogProduct } from '$lib/catalog';
-	import { CartError, getCartContext, type CartErrorCode } from '$lib/cart';
-	import { addDecimals, lineTotal, normalizeDecimal, validQuantity } from '$lib/decimal';
-	import { formatDecimal, formatMoney, unitLabel } from '$lib/format';
-	import QuantityStepper from '$lib/QuantityStepper.svelte';
-	import CartNotice from '$lib/CartNotice.svelte';
+	import { Button, ButtonLabel } from '#lib/components/ui/button/index.js';
+	import * as Field from '#lib/components/ui/field/index.js';
+	import { formActions, formStatus } from '#lib/ui.js';
+	import { getI18n } from '#lib/i18n/index.js';
+	import { productName, type CatalogProduct } from '#lib/catalog.js';
+	import { CartError, getCartContext, type CartErrorCode } from '#lib/cart.js';
+	import { addDecimals, lineTotal, normalizeDecimal, validQuantity } from '#lib/decimal.js';
+	import { formatDecimal, formatMoney, unitLabel } from '#lib/format.js';
+	import QuantityStepper from '#lib/QuantityStepper.svelte';
+	import CartNotice from '#lib/CartNotice.svelte';
 
 	// Shared by product details and scanner confirmation. The scanner owns only
 	// camera lifecycle; quantity validation, cart writes and feedback live here.

@@ -1,7 +1,6 @@
-import { env } from '$env/dynamic/private';
+import { SALES_OPEN } from '$app/env/private';
 
 /** Buying (catalog, cart, checkout and its API) opens only when SALES_OPEN is exactly "true". */
-export function salesOpen(platform?: App.Platform): boolean {
-	const bindings = platform?.env as unknown as Record<string, unknown> | undefined;
-	return (bindings?.SALES_OPEN ?? env.SALES_OPEN) === 'true';
+export function salesOpen(): boolean {
+	return SALES_OPEN === 'true';
 }

@@ -1,7 +1,7 @@
 <script lang="ts">
-	import * as Dialog from "$lib/components/ui/dialog/index.js";
-	import { Separator } from "$lib/components/ui/separator/index.js";
-	import { cn, type WithElementRef } from "$lib/utils.js";
+	import * as Dialog from "#lib/components/ui/dialog/index.js";
+	import { Separator } from "#lib/components/ui/separator/index.js";
+	import { cn, type WithElementRef } from "#lib/utils.js";
 	import { SIDEBAR_WIDTH_MOBILE } from "./constants.js";
 	import { useSidebar } from "./context.svelte.js";
 	import type { HTMLAttributes } from "svelte/elements";

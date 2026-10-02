@@ -104,9 +104,9 @@ requires successful CI for the exact commit, verifies the live vars, HTTPS and
 `wrangler deploy` or `wrangler versions upload` to the `ampoteket` Worker
 ([runbook](docs/runbook-deploy.md#publish)).
 
-Web frontend: SvelteKit 2 / Svelte 5 (runes) / TypeScript, Bun,
+Web frontend: SvelteKit 3 / Svelte 5 (runes) / TypeScript, Bun,
 `adapter-cloudflare`, shadcn-svelte (Nova) and Tailwind CSS 4. Import primitives
-from `$lib/components/ui/<component>`; use `src/app.css` tokens and `$lib/ui`
+from `#lib/components/ui/<component>/index.js`; use `src/app.css` tokens and `#lib/ui.js`
 recipes. Read `src/lib/components/ui/README.md` before changing shared recipes;
 `AdminProductEditor.svelte` is the reference form. Domain components compose
 shared primitives and utilities: no local `<style>` blocks or retired global

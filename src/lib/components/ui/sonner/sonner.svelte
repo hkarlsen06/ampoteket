@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Toaster as Sonner, type ToasterProps as SonnerProps } from "svelte-sonner";
-	import Icon from "$lib/Icon.svelte";
+	import Icon from "#lib/Icon.svelte";
 	import SpinnerGapIcon from 'phosphor-svelte/lib/SpinnerGapIcon';
 	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
 	import XCircleIcon from 'phosphor-svelte/lib/XCircleIcon';

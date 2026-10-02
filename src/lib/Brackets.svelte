@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { cn } from '$lib/utils';
+	import { cn } from '#lib/utils.js';
 
 	// Instrument-frame corner marks: four L-shaped ticks around the nearest
 	// positioned ancestor. Artwork, not a boundary; colour follows currentColor.

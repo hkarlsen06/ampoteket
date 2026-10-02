@@ -9,10 +9,10 @@
 	// `data-zoom-face={id}`; ShelfDiagram does both. The caller owns `open`.
 	import { tick, type Snippet } from 'svelte';
 	import MagnifyingGlassMinusIcon from 'phosphor-svelte/lib/MagnifyingGlassMinusIcon';
-	import Icon from '$lib/Icon.svelte';
-	import { Button } from '$lib/components/ui/button';
-	import { getI18n } from '$lib/i18n';
-	import { itemTitle } from '$lib/ui';
+	import Icon from '#lib/Icon.svelte';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { getI18n } from '#lib/i18n/index.js';
+	import { itemTitle } from '#lib/ui.js';
 
 	let { open, title, headingLevel, onchange, wall, cabinet, element = $bindable(), disabled = false, class: className }: {
 		open: string | null; title: string; headingLevel?: 2 | 3 | 4 | 5; onchange: (id: string | null) => void;

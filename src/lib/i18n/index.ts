@@ -5,11 +5,9 @@ import { getContext, setContext } from 'svelte';
 import { en } from './en';
 import { nb, type Messages } from './nb';
 import { standardSpecifications } from '../product-specifications';
+import { defaultLocale, isLocale, isPrefixedLocale, locales, type Locale } from './locales';
 
-/** Every language the site is published in. The first one is the default. */
-export const locales = ['nb', 'en'] as const;
-export type Locale = (typeof locales)[number];
-export const defaultLocale: Locale = locales[0];
+export { defaultLocale, isLocale, isPrefixedLocale, locales, type Locale };
 
 /**
  * The production origin, used for `canonical` and `hreflang` links so preview
@@ -35,15 +33,6 @@ export const DISCORD_INVITE = 'https://discord.gg/X7xp3vgfyH';
 export const INSTAGRAM = 'https://www.instagram.com/ampoteket';
 
 export const THE_RESISTANCE = 'https://foreninger.sio.no/foreninger/the-resistance';
-
-export function isLocale(value: string | undefined | null): value is Locale {
-	return typeof value === 'string' && (locales as readonly string[]).includes(value);
-}
-
-/** True for the locales that live behind a URL prefix, i.e. everything but the default. */
-export function isPrefixedLocale(value: string | undefined | null): value is Locale {
-	return isLocale(value) && value !== defaultLocale;
-}
 
 export function messagesFor(locale: Locale): Messages {
 	return dictionaries[locale];

@@ -1,3 +1,3 @@
-import { handleCheckout } from '$lib/server/checkout-handler';
+import { handleCheckout } from '#lib/server/checkout-handler.js';
 import type { RequestHandler } from './$types';
 export const POST: RequestHandler = (event) => handleCheckout('prepare', event);

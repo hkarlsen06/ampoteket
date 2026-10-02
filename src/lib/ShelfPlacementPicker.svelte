@@ -3,12 +3,12 @@
 	// a wall of cabinets, and in bin mode the shared zoom into a cabinet's drawers.
 	// Selection state, spatial keyboard navigation and accessible names come from
 	// ShelfDiagram; callers render their own readout and clear control.
-	import { getI18n } from '$lib/i18n';
-	import * as Empty from '$lib/components/ui/empty';
-	import { gridCell, gridRange } from '$lib/format';
-	import ShelfDiagram from '$lib/ShelfDiagram.svelte';
-	import ShelfZoom from '$lib/ShelfZoom.svelte';
-	import { cabinetInner, type ShelfTopology } from '$lib/shelf-map';
+	import { getI18n } from '#lib/i18n/index.js';
+	import * as Empty from '#lib/components/ui/empty/index.js';
+	import { gridCell, gridRange } from '#lib/format.js';
+	import ShelfDiagram from '#lib/ShelfDiagram.svelte';
+	import ShelfZoom from '#lib/ShelfZoom.svelte';
+	import { cabinetInner, type ShelfTopology } from '#lib/shelf-map.js';
 
 	let { topology, pick = 'bin', selected, onselect, disabled = false }: {
 		topology: ShelfTopology; pick?: 'bin' | 'cabinet'; selected: string | null;

@@ -1,22 +1,22 @@
 <script lang="ts">
-	import Icon from '$lib/Icon.svelte';
+	import Icon from '#lib/Icon.svelte';
 	import TrashIcon from 'phosphor-svelte/lib/TrashIcon';
-	import * as Item from '$lib/components/ui/item';
-	import { Skeleton } from '$lib/components/ui/skeleton';
-	import * as Field from '$lib/components/ui/field';
-	import * as Alert from '$lib/components/ui/alert';
-	import { Button } from '$lib/components/ui/button';
+	import * as Item from '#lib/components/ui/item/index.js';
+	import { Skeleton } from '#lib/components/ui/skeleton/index.js';
+	import * as Field from '#lib/components/ui/field/index.js';
+	import * as Alert from '#lib/components/ui/alert/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
 	import { untrack } from 'svelte';
-	import { getI18n } from '$lib/i18n';
-	import { CartError, getCartContext, type CartLine, type CartErrorCode } from '$lib/cart';
-	import { productName } from '$lib/catalog';
-	import type { CartProductFact } from '$lib/cart-catalog';
-	import { formatDecimal, formatMeasurementText, formatMoney, unitLabel } from '$lib/format';
-	import { addDecimals, lineTotal, normalizeDecimal, validQuantity } from '$lib/decimal';
-	import ProductIdentity from '$lib/ProductIdentity.svelte';
-	import ProductAvailability from '$lib/ProductAvailability.svelte';
-	import QuantityStepper from '$lib/QuantityStepper.svelte';
-	import { codeText, nameWrap } from '$lib/ui';
+	import { getI18n } from '#lib/i18n/index.js';
+	import { CartError, getCartContext, type CartLine, type CartErrorCode } from '#lib/cart.js';
+	import { productName } from '#lib/catalog.js';
+	import type { CartProductFact } from '#lib/cart-catalog.js';
+	import { formatDecimal, formatMeasurementText, formatMoney, unitLabel } from '#lib/format.js';
+	import { addDecimals, lineTotal, normalizeDecimal, validQuantity } from '#lib/decimal.js';
+	import ProductIdentity from '#lib/ProductIdentity.svelte';
+	import ProductAvailability from '#lib/ProductAvailability.svelte';
+	import QuantityStepper from '#lib/QuantityStepper.svelte';
+	import { codeText, nameWrap } from '#lib/ui.js';
 
 	let { line, fact, locked, onremoved, onready, onretry }: { line: CartLine; fact?: CartProductFact; locked: boolean; onremoved: (returnFocus: boolean) => void; onready?: (ready: boolean) => void; onretry?: () => void } = $props();
 	const i18n = getI18n();

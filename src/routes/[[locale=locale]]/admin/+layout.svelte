@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { pageContainer, pageHeader, pageHeading } from '$lib/ui';
-	import * as Alert from '$lib/components/ui/alert';
-	import * as Sidebar from '$lib/components/ui/sidebar';
-	import Icon from '$lib/Icon.svelte';
+	import { pageContainer, pageHeader, pageHeading } from '#lib/ui.js';
+	import * as Alert from '#lib/components/ui/alert/index.js';
+	import * as Sidebar from '#lib/components/ui/sidebar/index.js';
+	import Icon from '#lib/Icon.svelte';
 	import HouseIcon from 'phosphor-svelte/lib/HouseIcon';
 	import ChartLineUpIcon from 'phosphor-svelte/lib/ChartLineUpIcon';
 	import PackageIcon from 'phosphor-svelte/lib/PackageIcon';
@@ -18,14 +18,14 @@
 	import UserGearIcon from 'phosphor-svelte/lib/UserGearIcon';
 	import SignOutIcon from 'phosphor-svelte/lib/SignOutIcon';
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
-	import { Button } from '$lib/components/ui/button';
-	import { Separator } from '$lib/components/ui/separator';
-	import { Skeleton } from '$lib/components/ui/skeleton';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { Separator } from '#lib/components/ui/separator/index.js';
+	import { Skeleton } from '#lib/components/ui/skeleton/index.js';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { afterNavigate, goto } from '$app/navigation';
-	import { getI18n, stripLocale } from '$lib/i18n';
-	import { getAdminContext } from '$lib/admin-context.svelte';
+	import { getI18n, stripLocale } from '#lib/i18n/index.js';
+	import { getAdminContext } from '#lib/admin-context.svelte.js';
 	import type { LayoutProps } from './$types';
 	let { children }: LayoutProps = $props();
 	const i18n = getI18n();
@@ -38,7 +38,7 @@
 	$effect(() => {
 		if (admin.status === 'signedOut' && !authPage) {
 			const next = encodeURIComponent(stripLocale(page.url.pathname));
-			void goto(i18n.href(`/admin/login?next=${next}`), { replaceState: true });
+			void goto(i18n.href(`/admin/login?next=${next}`), { replace: true });
 		}
 	});
 	const navEntries = $derived([
@@ -66,7 +66,7 @@
 	// While access is checked, draw the shell the staff member is about to get, so nothing jumps.
 	const shell = $derived(admin.retainsEditor || (!authPage && admin.status === 'loading'));
 	let menuOpen = $state(false);
-	afterNavigate(() => { menuOpen = false; });
+	afterNavigate(({ shallow }) => { if (!shallow) menuOpen = false; });
 </script>
 <svelte:head><meta name="robots" content="noindex, nofollow" /></svelte:head>
 <Sidebar.Provider bind:openMobile={menuOpen}>

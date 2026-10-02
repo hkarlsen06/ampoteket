@@ -1,26 +1,26 @@
 <script lang="ts">
-	import Icon from '$lib/Icon.svelte';
+	import Icon from '#lib/Icon.svelte';
 	import XIcon from 'phosphor-svelte/lib/XIcon';
 	import QrCodeIcon from 'phosphor-svelte/lib/QrCodeIcon';
-	import { AspectRatio } from '$lib/components/ui/aspect-ratio';
-	import * as Item from '$lib/components/ui/item';
-	import * as Dialog from '$lib/components/ui/dialog';
-	import * as Field from '$lib/components/ui/field';
-	import { Input } from '$lib/components/ui/input';
-	import { Button, ButtonLabel } from '$lib/components/ui/button';
-	import { formActions } from '$lib/ui';
+	import { AspectRatio } from '#lib/components/ui/aspect-ratio/index.js';
+	import * as Item from '#lib/components/ui/item/index.js';
+	import * as Dialog from '#lib/components/ui/dialog/index.js';
+	import * as Field from '#lib/components/ui/field/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import { Button, ButtonLabel } from '#lib/components/ui/button/index.js';
+	import { formActions } from '#lib/ui.js';
 	import { onMount, tick } from 'svelte';
 	import { beforeNavigate } from '$app/navigation';
-	import { getI18n } from '$lib/i18n';
-	import { lookupCatalogProduct, productName, type CatalogConfig, type CatalogProduct } from '$lib/catalog';
-	import { productCodeFromEntry, productCodeFromQr } from '$lib/scanner/payload';
-	import type { CameraSession, CameraState } from '$lib/scanner/session';
-	import ProductIdentity from '$lib/ProductIdentity.svelte';
-	import ProductPrice from '$lib/ProductPrice.svelte';
-	import ProductAvailability from '$lib/ProductAvailability.svelte';
-	import ProductPurchase from '$lib/ProductPurchase.svelte';
-	import CartNotice from '$lib/CartNotice.svelte';
-	import { getCartContext } from '$lib/cart';
+	import { getI18n } from '#lib/i18n/index.js';
+	import { lookupCatalogProduct, productName, type CatalogConfig, type CatalogProduct } from '#lib/catalog.js';
+	import { productCodeFromEntry, productCodeFromQr } from '#lib/scanner/payload.js';
+	import type { CameraSession, CameraState } from '#lib/scanner/session.js';
+	import ProductIdentity from '#lib/ProductIdentity.svelte';
+	import ProductPrice from '#lib/ProductPrice.svelte';
+	import ProductAvailability from '#lib/ProductAvailability.svelte';
+	import ProductPurchase from '#lib/ProductPurchase.svelte';
+	import CartNotice from '#lib/CartNotice.svelte';
+	import { getCartContext } from '#lib/cart.js';
 
 	// One layout-owned buyer scanner: review quantities before adding on shopping pages.
 	// Its own trigger floats on phones; above 40rem the header menu calls show().
@@ -65,7 +65,7 @@
 		cameraOperation += 1; session?.interrupt(); camera = 'interrupted';
 		if (workflow === 'resolving') { abortLookup(); workflow = 'unavailable'; }
 	}
-	beforeNavigate(close);
+	beforeNavigate(({ shallow }) => { if (!shallow) close(); });
 	onMount(() => {
 		mounted = true;
 		const visibility = () => { if (document.hidden) interrupt(); };
@@ -84,7 +84,7 @@
 		const current = ++cameraOperation;
 		await tick();
 		try {
-			const { CameraSession } = await import('$lib/scanner/session');
+			const { CameraSession } = await import('#lib/scanner/session.js');
 			if (!mounted || current !== cameraOperation || !video || !overlay) return;
 			session ??= new CameraSession(video, overlay, {
 				state: (next) => { camera = next; },

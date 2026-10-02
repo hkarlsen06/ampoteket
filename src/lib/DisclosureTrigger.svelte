@@ -1,8 +1,8 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import Icon from '$lib/Icon.svelte';
-	import { Button } from '$lib/components/ui/button';
-	import * as Collapsible from '$lib/components/ui/collapsible';
+	import Icon from '#lib/Icon.svelte';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import * as Collapsible from '#lib/components/ui/collapsible/index.js';
 	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
 
 	// The one trigger for inline disclosure: a quiet button whose caret turns when

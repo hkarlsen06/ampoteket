@@ -1,14 +1,14 @@
 <script lang="ts">
-	import * as Card from '$lib/components/ui/card';
-	import StateBadge from '$lib/StateBadge.svelte';
-	import { cardLink, codeText, nameWrap } from '$lib/ui';
-	import { productName } from '$lib/catalog';
-	import { categoryBesideName, getI18n } from '$lib/i18n';
-	import { currency, formatDecimal, unitLabel } from '$lib/format';
-	import CategoryGraphic from '$lib/CategoryGraphic.svelte';
-	import StockBadge from '$lib/StockBadge.svelte';
-	import LocationChips from '$lib/LocationChips.svelte';
-	import type { AdminProduct, ProductReferences } from '$lib/admin-products';
+	import * as Card from '#lib/components/ui/card/index.js';
+	import StateBadge from '#lib/StateBadge.svelte';
+	import { cardLink, codeText, nameWrap } from '#lib/ui.js';
+	import { productName } from '#lib/catalog.js';
+	import { categoryBesideName, getI18n } from '#lib/i18n/index.js';
+	import { currency, formatDecimal, unitLabel } from '#lib/format.js';
+	import CategoryGraphic from '#lib/CategoryGraphic.svelte';
+	import StockBadge from '#lib/StockBadge.svelte';
+	import LocationChips from '#lib/LocationChips.svelte';
+	import type { AdminProduct, ProductReferences } from '#lib/admin-products.js';
 
 	// The public catalog card (page-catalog.md) for staff lists, linking to the editor.
 	// Renders one <li>; the parent <ul> owns the grid columns.

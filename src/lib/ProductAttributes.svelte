@@ -1,21 +1,21 @@
 <script lang="ts">
-	import NewSpecificationDialog from '$lib/NewSpecificationDialog.svelte';
-	import { Separator } from '$lib/components/ui/separator';
-	import { Skeleton } from '$lib/components/ui/skeleton';
-	import { formGrid, formStatus, section, sectionHeading } from '$lib/ui';
-	import * as Alert from '$lib/components/ui/alert';
-	import * as InputGroup from '$lib/components/ui/input-group';
-	import { Button } from '$lib/components/ui/button';
-	import * as NativeSelect from '$lib/components/ui/native-select';
-	import { Input } from '$lib/components/ui/input';
-	import * as Field from '$lib/components/ui/field';
+	import NewSpecificationDialog from '#lib/NewSpecificationDialog.svelte';
+	import { Separator } from '#lib/components/ui/separator/index.js';
+	import { Skeleton } from '#lib/components/ui/skeleton/index.js';
+	import { formGrid, formStatus, section, sectionHeading } from '#lib/ui.js';
+	import * as Alert from '#lib/components/ui/alert/index.js';
+	import * as InputGroup from '#lib/components/ui/input-group/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import * as NativeSelect from '#lib/components/ui/native-select/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import * as Field from '#lib/components/ui/field/index.js';
 	import { onMount, tick } from 'svelte';
-	import { getI18n, specificationLabel } from '$lib/i18n';
-	import { standardSpecificationDefinitions, productSpecificationFields } from '$lib/product-specifications';
-	import { getAdminContext } from '$lib/admin-context.svelte';
-	import { readDraft, writeDraft } from '$lib/drafts';
-	import { engineeringUnits, formatMeasurement, measurementInput, parseMeasurement } from '$lib/format';
-	import { definitiveProductFailure, detailCommandKey, executeDetailCommand, parseAttribute, parseDetailCommand, readProductAttributes, StaleProductError, type AttributeDefinition, type AttributeValue, type DetailCommand, type ProductFamily, type ProductAttributeDraft } from '$lib/admin-products';
+	import { getI18n, specificationLabel } from '#lib/i18n/index.js';
+	import { standardSpecificationDefinitions, productSpecificationFields } from '#lib/product-specifications.js';
+	import { getAdminContext } from '#lib/admin-context.svelte.js';
+	import { readDraft, writeDraft } from '#lib/drafts.js';
+	import { engineeringUnits, formatMeasurement, measurementInput, parseMeasurement } from '#lib/format.js';
+	import { definitiveProductFailure, detailCommandKey, executeDetailCommand, parseAttribute, parseDetailCommand, readProductAttributes, StaleProductError, type AttributeDefinition, type AttributeValue, type DetailCommand, type ProductFamily, type ProductAttributeDraft } from '#lib/admin-products.js';
 	// Every field is edited in place and written by the product's Save button:
 	// prepare() validates (and stages values for a new product) before the
 	// product write; commit() then saves each changed value of a saved product

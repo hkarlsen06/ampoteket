@@ -1,9 +1,10 @@
+import type { Handle, HandleFetch } from '@sveltejs/kit/hooks';
+
 // The locale is decided by the URL prefix (see src/lib/i18n). `<html lang>` sits
 // outside the Svelte app, so it is patched into the shell here, per request.
-import type { Handle, HandleFetch } from '@sveltejs/kit';
-import { env } from '$env/dynamic/private';
-import { htmlLang, localeFromPathname } from '$lib/i18n';
-import { isPrivateRoute } from '$lib/private-route';
+import { SUPABASE_API_PROXY } from '$app/env/private';
+import { htmlLang, localeFromPathname } from '#lib/i18n/index.js';
+import { isPrivateRoute } from '#lib/private-route.js';
 
 export const handle: Handle = async ({ event, resolve }) => {
 	const productionHost = ['ampoteket.no', 'www.ampoteket.no'].includes(event.url.hostname);
@@ -33,9 +34,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 // Development only (`bun run development`): SvelteKit answers same-origin fetches
 // itself, so send server-side calls to the proxied API paths straight to the API.
 export const handleFetch: HandleFetch = ({ event, request, fetch }) => {
-	const target = env.SUPABASE_API_PROXY;
+	const target = SUPABASE_API_PROXY;
 	const url = new URL(request.url);
-	if (target && url.host === event.url.host && /^\/(auth|rest)\/v1\//.test(url.pathname)) {
+	if (target && url.host === event.url.host && (/^\/(auth|rest)\/v1\//).test(url.pathname)) {
 		return fetch(new Request(new URL(url.pathname + url.search, target), request));
 	}
 	return fetch(request);

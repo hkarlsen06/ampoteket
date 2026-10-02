@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { cn } from '$lib/utils';
+	import { cn } from '#lib/utils.js';
 
 	// Discord's official symbol (discord.com/branding). Its guidelines allow only
 	// Blurple, black or white, so it takes the foreground colour, never an accent.

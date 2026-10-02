@@ -1,21 +1,21 @@
 <script lang="ts">
-	import * as Empty from '$lib/components/ui/empty';
-	import * as Card from '$lib/components/ui/card';
-	import * as Field from '$lib/components/ui/field';
-	import * as Collapsible from '$lib/components/ui/collapsible';
-	import { Input } from '$lib/components/ui/input';
-	import { Button, ButtonLabel } from '$lib/components/ui/button';
-	import { formActions, formStatus, pageContainer, pageHeader, pageHeading, section } from '$lib/ui';
+	import * as Empty from '#lib/components/ui/empty/index.js';
+	import * as Card from '#lib/components/ui/card/index.js';
+	import * as Field from '#lib/components/ui/field/index.js';
+	import * as Collapsible from '#lib/components/ui/collapsible/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import { Button, ButtonLabel } from '#lib/components/ui/button/index.js';
+	import { formActions, formStatus, pageContainer, pageHeader, pageHeading, section } from '#lib/ui.js';
 	import { onMount, tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { getI18n } from '$lib/i18n';
-	import { CartError, getCartContext, readActiveAttempt, type CartErrorCode } from '$lib/cart';
-	import { readCartProducts, type CartProductFact } from '$lib/cart-catalog';
-	import { addDecimals, lineTotal } from '$lib/decimal';
-	import { formatMoney } from '$lib/format';
-	import CartLine from '$lib/CartLine.svelte';
-	import CartNotice from '$lib/CartNotice.svelte';
-	import { startCheckout, checkoutErrorCode, finishRegistration, readCheckout, type CheckoutErrorCode } from '$lib/checkout';
+	import { getI18n } from '#lib/i18n/index.js';
+	import { CartError, getCartContext, readActiveAttempt, type CartErrorCode } from '#lib/cart.js';
+	import { readCartProducts, type CartProductFact } from '#lib/cart-catalog.js';
+	import { addDecimals, lineTotal } from '#lib/decimal.js';
+	import { formatMoney } from '#lib/format.js';
+	import CartLine from '#lib/CartLine.svelte';
+	import CartNotice from '#lib/CartNotice.svelte';
+	import { startCheckout, checkoutErrorCode, finishRegistration, readCheckout, type CheckoutErrorCode } from '#lib/checkout.js';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();

@@ -1,13 +1,13 @@
 <script lang="ts">
 	import { BarChart } from 'layerchart';
-	import * as Chart from '$lib/components/ui/chart';
-	import * as Collapsible from '$lib/components/ui/collapsible';
-	import * as Item from '$lib/components/ui/item';
-	import DisclosureTrigger from '$lib/DisclosureTrigger.svelte';
-	import { getI18n } from '$lib/i18n';
-	import { formatDecimal, formatMoney, unitLabel } from '$lib/format';
-	import { itemTitle, sectionHeading } from '$lib/ui';
-	import { salesPlot } from '$lib/sales-chart';
+	import * as Chart from '#lib/components/ui/chart/index.js';
+	import * as Collapsible from '#lib/components/ui/collapsible/index.js';
+	import * as Item from '#lib/components/ui/item/index.js';
+	import DisclosureTrigger from '#lib/DisclosureTrigger.svelte';
+	import { getI18n } from '#lib/i18n/index.js';
+	import { formatDecimal, formatMoney, unitLabel } from '#lib/format.js';
+	import { itemTitle, sectionHeading } from '#lib/ui.js';
+	import { salesPlot } from '#lib/sales-chart.js';
 
 	type Day = { date: string; sale_count: string; total_nok: string; quantity: string | null };
 	let { days, product = false, unit = '' }: { days: Day[]; product?: boolean; unit?: string } = $props();

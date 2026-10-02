@@ -1,17 +1,17 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
-	import { getI18n } from '$lib/i18n';
-	import { getAdminContext } from '$lib/admin-context.svelte';
-	import { clearMemberCommand, memberErrorCode, memberStorageKey, readAdminMembers, readMemberCommand, runMemberCommand, saveMemberCommand, type AdminMember, type MemberCommand } from '$lib/admin-members';
-	import { formActions, formLayout, formStatus, itemTitle, lede, pageHeader, pageHeading, section, sectionHeading } from '$lib/ui';
-	import * as Alert from '$lib/components/ui/alert';
-	import * as Collapsible from '$lib/components/ui/collapsible';
-	import * as Field from '$lib/components/ui/field';
-	import * as Item from '$lib/components/ui/item';
-	import { Button, ButtonLabel } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
-	import { Skeleton } from '$lib/components/ui/skeleton';
-	import StateBadge from '$lib/StateBadge.svelte';
+	import { getI18n } from '#lib/i18n/index.js';
+	import { getAdminContext } from '#lib/admin-context.svelte.js';
+	import { clearMemberCommand, memberErrorCode, memberStorageKey, readAdminMembers, readMemberCommand, runMemberCommand, saveMemberCommand, type AdminMember, type MemberCommand } from '#lib/admin-members.js';
+	import { formActions, formLayout, formStatus, itemTitle, lede, pageHeader, pageHeading, section, sectionHeading } from '#lib/ui.js';
+	import * as Alert from '#lib/components/ui/alert/index.js';
+	import * as Collapsible from '#lib/components/ui/collapsible/index.js';
+	import * as Field from '#lib/components/ui/field/index.js';
+	import * as Item from '#lib/components/ui/item/index.js';
+	import { Button, ButtonLabel } from '#lib/components/ui/button/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import { Skeleton } from '#lib/components/ui/skeleton/index.js';
+	import StateBadge from '#lib/StateBadge.svelte';
 
 	const i18n = getI18n(), admin = getAdminContext(), fieldId = $props.id();
 	const m = $derived(i18n.m.adminMembers);
