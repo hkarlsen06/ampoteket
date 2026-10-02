@@ -35,8 +35,11 @@ async function documentBox(locator: Locator) {
 /** Below 48rem the product page starts with its shelf map closed under a disclosure. */
 async function openShelfMap(page: Page) {
 	if ((page.viewportSize()?.width ?? 1280) >= 768) return;
-	const trigger = page.locator('#map-title button[aria-expanded="false"]');
-	if (await trigger.count()) await trigger.click();
+	// The server renders the disclosure before its client handler is attached.
+	await expect(page.locator('#quantity-to-add')).toBeEnabled();
+	const trigger = page.locator('#map-title button');
+	if (await trigger.getAttribute('aria-expanded') === 'false') await trigger.click();
+	await expect(trigger).toHaveAttribute('aria-expanded', 'true');
 }
 
 async function fits(page: Page) {

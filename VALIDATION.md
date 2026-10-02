@@ -1,8 +1,8 @@
 # Current validation
 
 What has been executed, and what must still happen before launch. All runs used
-local, disposable services, except the read-only provider checks and hosted
-rehearsal recorded below.
+local, disposable services, except the provider checks and approved hosted
+release recorded below.
 Past runs live in git history, not here. Replace a row when you rerun it; do not
 append a diary. CI runs the database chain and the `boundary`, `shop`, `checkout`,
 `admin`, `admins`, `scanner`, `labels` and `statistics` browser modes; the results
@@ -18,6 +18,8 @@ below are local runs, not CI claims.
 | `bun audit` | 2026-10-02 | PASS, no reported vulnerabilities | Resolved dependency tree |
 | `python3 scripts/test-check-clipped-ink.py`, `bun run check:ink` | 2026-10-02 | PASS | Checker regressions, static SVG checks |
 | `./scripts/test-database.sh` | 2026-10-02 | PASS | Seven migrations, rollback/retry, ACLs/RLS, acceptance, 12 stored-data corruption cases including drawer bounds/overlap, 42 concurrency scenarios including competing help-order writes, restore, schema/docs comparison, signed-JWT HTTP |
+| GitHub Actions Validation | 2026-10-02 | PASS, all nine jobs on the deployed application revision | Database and all eight browser modes; [release CI](https://github.com/hkarlsen06/ampoteket/actions/runs/36961558094) |
+| Hosted release verification | 2026-10-02 | PASS | Reviewed vars/rate limits/secret names; 25 HTTP checks across both locales, HTTP/www redirects, HSTS, private admin/checkout headers, closed sales; persisted error logs with query redaction and invocation logs off |
 | Actual-snapshot migration rehearsal | 2026-10-02 | PASS | Private hosted checkpoint restored locally with owners/ACLs; all 51 app/Auth table hashes and three sequences unchanged by the CLI migration; prior six history rows unchanged, one new row; permissions, protections and invariants passed. Owned container removed. This is not the full hosted recovery drill |
 | Audit fix browser acceptance | 2026-10-02 | PASS | Real disposable Auth/PostgREST: active unplaced product in shelf/count picker; invitation password save and independent sign-in; cross-tab account switch removes password form and preserves both passwords; help reorder/focus, stale rejection and retry. No overflow at 360 px (password/help) or 1280 px (shelf/count). Owned seed and dev server removed after verification |
 | `./scripts/test-web.sh` | 2026-10-01 | PASS | Real local Auth, public/staff/Worker boundaries, exact decimal transport |
@@ -83,16 +85,19 @@ the selected products. It is a regression check, not a hosted latency guarantee.
   margins, attach it to real drawers and scan it in the workshop's light. For the
   P-touch printer, a WebUSB print from the admin editor and scanning the printed
   tape QR with a phone.
-- **Hosted setup:** on 2026-10-02 read-only Worker metadata confirmed version
-  `f80b44b0-cacb-49f3-be8f-ad2aacfd36b2`, commit `8fdbcf6`, deployed at
-  02:54:48 UTC. The expected four vars, four rate limits and both secret names
-  are present; sales remain closed. Public/staff page shells answer 200 and
-  tested buyer routes answer 503. See [current state](AGENTS.md#current-state).
-  Hosted Auth configuration matches the repository's SMTP, signup, Site URL,
-  localized password-return URL and email-template requirements. Real SMTP
-  invitation/reset/receipt delivery, receipt-archive access, aligned message
-  headers and DMARC enforcement remain unverified. The Data API cutover barrier,
-  recovery checkpoint and full hosted restore drill remain open
+- **Hosted setup:** the approved audit fixes from commit `959ea2e` passed all nine
+  CI jobs and were deployed with `bun run deploy:production` as Worker version
+  `c577fda5-a502-4a56-80b4-e2e21e67721b` at 04:00 UTC on 2026-10-02.
+  One attempt automatically rolled back after its HTTP check failed; the
+  unchanged retry and an independent HTTP client passed. The original failed
+  response was not recorded, so its cause is unproven. The expected four vars,
+  four rate limits and both secret names match. Both locales passed the 25
+  public/private/closed-route HTTP checks; sales remain closed. See
+  [current state](AGENTS.md#current-state). Hosted Auth configuration matches
+  SMTP, signup, Site URL, localized return URL and template requirements.
+  Real SMTP invitation/reset/receipt delivery, receipt-archive access, aligned
+  message headers and DMARC enforcement remain unverified. The global Data API
+  cutover barrier and full hosted recovery drill remain open
   ([deploy](docs/runbook-deploy.md), [backup](docs/runbook-backup-restore.md)).
 - **Hosted migration and release:** with the owner's approval, CLI 2.116.0 applied
   only `20261002000100_guard_help_contact_order.sql` at 03:48 UTC on 2026-10-02.
@@ -106,10 +111,11 @@ the selected products. It is a regression check, not a hosted latency guarantee.
   function-only rollout did not require or exercise the global cutover barrier;
   the hosted recovery drill remains open. The checkpoint contains one product,
   two active admins and zero checkouts. Internal production SQL checks were not
-  rerun because the Supabase connector was unavailable. The frontend and its
-  hosted staff acceptance still await release.
-- **Repository and monitoring controls:** local CI gating, deployment rollback,
-  HTTPS and error-log changes await release. The reviewed native main-protection
+  rerun because the Supabase connector was unavailable. The matching frontend
+  is live; authenticated hosted editing/reordering still requires staff acceptance.
+- **Repository and monitoring controls:** CI gating, deployment rollback, HTTPS
+  and error-log changes are live. Provider settings confirm persisted logs with
+  invocation logs off and query strings redacted. The reviewed native main-protection
   policy is `.github/main-protection.json`. On 2026-10-02 the owner approved and
   the provider APIs confirmed all nine required GitHub Actions checks, admin
   enforcement, linear history, blocked force pushes/deletion, vulnerability
