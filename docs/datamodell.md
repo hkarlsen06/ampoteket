@@ -12,6 +12,7 @@ The database contract: model, invariants, precision, concurrency, permissions an
 - Purchase orders record orders already placed elsewhere; they reserve nothing and add no stock. Receipts can be partial or unplanned (donations are unplanned receipts). Outstanding quantity can be cancelled with a reason. A surplus delivery is a normal adjustment with a note.
 - Negative recorded stock is allowed.
 - Counts are open, not blind. Each count posts immediately; closing a batch posts nothing.
+- Nothing that history refers to is deleted. A `keep_records` trigger rejects `DELETE` on staff, help contacts, units, categories, cabinets, bins, products, attribute definitions, purchase orders and lines, and count batches; ledger and audit tables reject updates too. Retire a product with `is_active=false`, unpublish a contact, archive storage. A hard delete needs the owner's explicit request and a migration-level review, not a workaround.
 
 ## 2. Sources of truth
 

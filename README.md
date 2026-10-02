@@ -1,7 +1,7 @@
 # Ampoteket
 
-Web shop and stock system for the student-run electronics workshop at
-`ampoteket.no`. Buyers need no account: they browse stock, fill a cart, pay with
+Website of Ampoteket, the student-run electronics workshop at `ampoteket.no`, with
+a self-service parts shelf and stock system for its members. Buyers need no account: they browse stock, fill a cart, pay with
 trust-based Vipps and register the purchase, which withdraws stock. Staff maintain
 products, placement, purchasing and counts with a full audit trail.
 
@@ -97,8 +97,11 @@ as a tunnel or a private network name with a real certificate; see
 | `bun test` | Unit tests (`src/lib/*.test.ts`) |
 | `bun run check:ink` | Catch clipped SVG/CSS edges |
 | `bun run i18n` | Side-by-side editor for the Norwegian and English strings, port 5175 ([i18n.md](docs/i18n.md)) |
-| `./scripts/test-database.sh` | Full database suite in a throwaway PostgreSQL |
+| `./scripts/test-database.sh` | Full database suite in a throwaway PostgreSQL; prints the schema-surface counts for `VALIDATION.md` |
+| `./scripts/test-api.sh`, `./scripts/test-backup-restore.sh` | Run one part of that suite alone: PostgREST HTTP regressions / local backup and restore |
 | `./scripts/test-web.sh [--mode]` | Real browser or HTTP tests against a throwaway stack |
+| `bun scripts/verify-live.ts` | Read-only HTTP smoke check of `https://ampoteket.no` in both locales ([diagnosing production](docs/runbook-deploy.md#diagnosing-production)) |
+| `python3 scripts/rehearse-migration.py <dump>` | Apply pending migrations to a restored hosted checkpoint in a private container ([runbook](docs/runbook-deploy.md#3-checkpoint-and-apply)) |
 | `bun scripts/build-poster.ts` | The A4 buyer poster for the shelf, `assets/poster/kjopsplakat-a4.pdf` (copy follows `src/lib/i18n`; print at 100 %), plus its picture for the showcase slide |
 | `./scripts/seed-test.sh` | A separate throwaway catalog for experiments (`--count N`, `--check`, `--workshop`) |
 | `/slopo-review`, `/slopo-analyze-ignore`, `/slopo-analyze-one` | Claude Code skills that find non-exact duplicate code with [Slopo](https://slopo.dev) (`uv tool install slopo`, key in `.env` as `SLOPO_EMBEDDING_API_KEY`, config in `slopo.conf.yaml`) |
@@ -139,6 +142,10 @@ Manual proofs run against a running dev server: `scripts/admin-sidebar-proof.ts`
   the same migration. `supabase/tests/permissions.sql` fails until you add it there.
 - Keep the table definitions in [datamodell.md](docs/datamodell.md) Appendix A in
   sync. The test suite compares them with the real schema.
+- In a `CHECK` that combines a range with other conditions, write
+  `x >= a AND x <= b`, not `BETWEEN`. PostgreSQL re-parses the dumped form with
+  flattened `AND`s, so the restore schema comparison in
+  `scripts/test-backup-restore.sh` fails.
 - Every error name the migrations raise must be listed in
   [website-guide.md](docs/website-guide.md) §8.1. The test suite checks this too.
 - Afterwards, run `./scripts/test-database.sh` and update the hashes and counts in

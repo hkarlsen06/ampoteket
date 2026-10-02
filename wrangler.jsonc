@@ -22,7 +22,8 @@
 		{ "name": "ADMIN_INVITATION_LIMIT", "namespace_id": "4732203", "simple": { "limit": 10, "period": 60 } },
 		{ "name": "RECEIPT_LIMIT", "namespace_id": "4732204", "simple": { "limit": 3, "period": 60 } }
 	],
-	// Production: `wrangler deploy --env production`. Kept out of the top level so
+	// Production, deployed only by `bun run deploy:production` (docs/runbook-deploy.md
+	// §6). Kept out of the top level so
 	// `vite dev` and `wrangler dev` never pick up hosted settings. Bindings are not
 	// inherited, so the rate limits are repeated (same namespaces).
 	"env": {

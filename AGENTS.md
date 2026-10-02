@@ -1,7 +1,9 @@
 ## Project
 
-Ampoteket is a web shop + stock system for an electronics workshop at `ampoteket.no`.
-Buyers need no account: browse stock, fill a cart, pay with trust-based Vipps
+`ampoteket.no` is the website of Ampoteket, a student-run electronics workshop
+that has been running for about a year; its audience is the workshop's members, not
+a public market. Besides presenting the workshop, it runs a self-service parts shelf
+with stock control. Buyers need no account: browse stock, fill a cart, pay with trust-based Vipps
 (self-reported, never verified), then register the purchase, which withdraws stock.
 Staff (one operational role, individual Supabase Auth identities) maintain products,
 prices, placement, purchasing, counts and corrections, all with a full audit trail.
@@ -28,10 +30,10 @@ hosted migration history and an isolated restore of the actual database checkpoi
 
 | Area | State |
 | --- | --- |
-| Site | **Live** at `https://ampoteket.no`, Worker `ampoteket`. HTTP and `www` redirect to the HTTPS apex; HTTPS pages carry HSTS. The audit fixes are deployed, including guarded contact ordering and error logging with query strings redacted. **Every push to `main` on GitHub deploys production automatically** (GitHub Actions `Deploy` workflow after Validation passes; the Cloudflare Git integration is disconnected). Pushing is deploying. The token is the `CLOUDFLARE_API_TOKEN` secret in the GitHub `production` environment (Cloudflare token "ampoteket GitHub Actions deploy"). The first Actions deploy shipped `d2a5485` as version `d1ffbf47` at 07:06 UTC on 2026-10-02. The workflow runs `bun run deploy:production` on Bun 1.3.14, requires successful CI for the exact commit, checks the live bindings and HTTP behavior, and rolls back on failure. Current version: `bunx wrangler deployments list --env production`; executed release evidence is in `VALIDATION.md`. |
+| Site | **Live** at `https://ampoteket.no`, Worker `ampoteket`. HTTP and `www` redirect to the HTTPS apex; HTTPS pages carry HSTS. The audit fixes are deployed, including guarded contact ordering and error logging with query strings redacted. **Every push to `main` on GitHub deploys production automatically** (GitHub Actions `Deploy` workflow after Validation passes; the Cloudflare Git integration is disconnected). Pushing is deploying. The token is the `CLOUDFLARE_API_TOKEN` secret in the GitHub `production` environment (Cloudflare token "ampoteket GitHub Actions deploy"). The workflow runs `bun run deploy:production` on Bun 1.3.14, requires successful CI for the exact commit, checks the live bindings and HTTP behavior, and rolls back on failure. Current version: `bunx wrangler deployments list --env production`; executed release evidence is in `VALIDATION.md`. |
 | Sales | **Closed.** `SALES_OPEN` is `"false"` in `wrangler.jsonc` `env.production`. `/`, `/en`, `/contact`, `/privacy` and `/admin` answer 200 (`/help` redirects to `/contact`); `/p`, `/cart`, `/checkout` and `/p/<code>` answer 503 "shop opens soon"; `/api/checkouts/…` answers `503 CHECKOUT_UNAVAILABLE`. Buyer-facing changes are invisible in production until sales open. Opening is the owner's decision: set `"true"` and push. |
-| Hosted database | Supabase project `mqzcbdorjuefefzvuefa` (Stockholm, PostgreSQL 17) is **production with real data**: 0 products, 2 active admins, 0 checkouts. All seven migrations are applied, including `20261002000100_guard_help_contact_order.sql` at 03:48 UTC. That migration left catalog and directory data unchanged; the guarded RPC rejects anonymous callers and the old signature is absent. The matching frontend is live. Read-only checks go through the Supabase connector; writes, migrations and deletions only at the owner's explicit request. |
-| Email | Hosted Auth, checked through the Management API: custom SMTP `smtp.resend.com:465` as `Ampoteket <noreply@notify.ampoteket.no>`, domain verified in Resend, Site URL `https://ampoteket.no`, only the two `/admin/password` return URLs, signup off, Data API schema `public` only, invite/recovery templates and subjects identical to `supabase/templates/`. No real invitation, reset or buyer receipt has been delivered and checked yet. |
+| Hosted database | Supabase project `mqzcbdorjuefefzvuefa` (Stockholm, PostgreSQL 17) is **production with real data**: 0 products, 2 active admins, 0 checkouts. All seven migrations are applied, including `20261002000100_guard_help_contact_order.sql` at 03:48 UTC. That migration left catalog and directory data unchanged; the guarded RPC rejects anonymous callers and the old signature is absent. The matching frontend is live. Connection methods: [reaching the hosted project](docs/runbook-deploy.md#reaching-the-hosted-project). Read-only checks are fine; writes, migrations and deletions only at the owner's explicit request. |
+| Email | Hosted Auth, checked through the Management API: custom SMTP `smtp.resend.com:465` as `Ampoteket <noreply@notify.ampoteket.no>`, domain verified in Resend, Site URL `https://ampoteket.no`, only the two `/admin/password` return URLs, signup off, Data API schema `public` only, invite/recovery templates and subjects identical to `supabase/templates/`. A real invitation and password reset reached an OsloMet mailbox on 2026-10-01 and the reset set a password. No buyer receipt has been delivered yet, and no real message's DKIM/SPF alignment has been checked. |
 | Stock and labels | Opening stock not entered; no labels printed or attached. |
 | Operations | Hjalmar Karlsen (`hkarlsen06`) is the primary operator for account access, backups and contact retention. An independent backup operator, accepted recovery targets, storage and schedules remain open. Main protection requires all nine GitHub Actions checks, including for admins; force pushes/deletion are blocked. Vulnerability alerts, automated security fixes, secret scanning and push protection are enabled. |
 | Before opening sales | The open checks in `VALIDATION.md`: phones (P01–P19), labels, hosted email, independent backup operator and RPO/RTO, restore drill. |
@@ -59,7 +61,7 @@ instructions take precedence over project defaults.
 | UI copy, languages, locale routing, links between pages | `docs/i18n.md` |
 | Two-connection cases, real-API checks, acceptance matrix | `docs/concurrency-tests.md`, `VALIDATION.md` |
 | Migrations, seeds, disposable validation | `README.md`, `scripts/test-database.sh` |
-| Deploying to the hosted project, backups, restore, opening-stock import | `docs/runbook-deploy.md`, `docs/runbook-backup-restore.md` |
+| Connecting to the hosted database, deploying, diagnosing production, backups, restore, opening-stock import | `docs/runbook-deploy.md`, `docs/runbook-backup-restore.md` |
 
 ## Tooling
 
@@ -102,7 +104,12 @@ what the owner wants live. A manual deploy uses `bun run deploy:production`, whi
 requires successful CI for the exact commit, verifies the live vars, HTTPS and
 `/contact`, and rolls back on failure; never a bare
 `wrangler deploy` or `wrangler versions upload` to the `ampoteket` Worker
-([runbook](docs/runbook-deploy.md#publish)).
+([runbook](docs/runbook-deploy.md#publish)). Validation takes about six minutes and
+Deploy follows it; wait with `gh run watch` instead of polling.
+
+A migration reaches the hosted database before the frontend that needs it. Pushing
+code that reads a new column or RPC before the owner has applied the migration breaks
+production ([runbook](docs/runbook-deploy.md#1-prepare-the-exact-release)).
 
 Web frontend: SvelteKit 3 / Svelte 5 (runes) / TypeScript, Bun,
 `adapter-cloudflare`, shadcn-svelte (Nova) and Tailwind CSS 4. Import primitives
@@ -122,7 +129,10 @@ them. Use a comma, colon or full stop. Unspaced en dashes stay for ranges and pa
 (`1–200`, `male–male`). Only `supabase/migrations/` is exempt.
 
 The UI is bilingual: Norwegian at `/`, English at `/en`, all copy in
-`src/lib/i18n/{nb,en}.ts`, every page under `src/routes/[[locale=locale]]/`.
+`src/lib/i18n/{nb,en}.ts`, every page under `src/routes/[[locale=locale]]/`. Buyer routes
+(`/p`, `/cart`, `/checkout`) sit in the `(sales)` group, whose layout answers 503
+(`SALES_CLOSED`, "shop opens soon") while `SALES_OPEN` is not `"true"`. The route table in
+`docs/prosjektoversikt.md` §5 links each route to its document.
 Never put user-visible text in a component and never write a bare internal
 `href`; use `i18n.href(path)`. Read `docs/i18n.md` before touching routes,
 links or copy. The colour scheme follows the OS; there is no theme toggle.
@@ -155,6 +165,20 @@ editor undo buffer before attempting reconstruction.
 Parallelize independent work with subagents where it saves time or improves quality:
 independent routes, docs plus schema plus test triples. Keep messages to other
 agents legible, with proper spacing between words, since a human may read them.
+
+Several sessions often share this worktree at once:
+
+- Stage only the paths you changed (`git add <path>`), never `git add -A` or
+  `git commit -a`. Another session's half-finished work must not ride along into a
+  commit, since a push deploys it.
+- The dev server (5174) and seed API (54329) ports are pinned. Before starting one,
+  check whether it is already serving (`ss -ltnp | grep -E ':(5174|54329) '`); a
+  running server may be the owner's or another session's, so do not kill it or
+  assume it runs your code.
+- The preview browser cannot reach `localhost`. Open `https://dev.ampoteket.no`
+  (the owner's tailnet Caddy in front of 5174) instead.
+- `node_modules` is shared too. If `svelte-kit sync` or a check fails right after
+  a dependency change landed, run `bun install --frozen-lockfile` before debugging.
 
 ## UI rules
 

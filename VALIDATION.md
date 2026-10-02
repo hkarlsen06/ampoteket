@@ -96,8 +96,10 @@ the selected products. It is a regression check, not a hosted latency guarantee.
   public/private/closed-route HTTP checks; sales remain closed. See
   [current state](AGENTS.md#current-state). Hosted Auth configuration matches
   SMTP, signup, Site URL, localized return URL and template requirements.
-  Real SMTP invitation/reset/receipt delivery, receipt-archive access, aligned
-  message headers and DMARC enforcement remain unverified. The global Data API
+  A real invitation and password reset reached an OsloMet (Microsoft 365) mailbox
+  on 2026-10-01; the reset set a password. Buyer receipt delivery,
+  receipt-archive access, aligned message headers and DMARC enforcement remain
+  unverified. The global Data API
   cutover barrier and full hosted recovery drill remain open
   ([deploy](docs/runbook-deploy.md), [backup](docs/runbook-backup-restore.md)).
 - **Hosted migration and release:** with the owner's approval, CLI 2.116.0 applied

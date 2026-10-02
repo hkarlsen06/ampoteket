@@ -15,6 +15,10 @@ deployment decision; all other work stays local and disposable.
    ready; real Auth and Worker/browser behaviour need a full-stack rehearsal.
 4. Before launch, complete the decisions in
    [backup/restore](runbook-backup-restore.md) §1.
+5. Order schema before code. Every push to `main` deploys the Worker, so a
+   frontend that reads a new column, view or RPC must not reach `main` until its
+   migration is applied (§3). Push the migration commit first, apply it, then push
+   the frontend; the old frontend must keep working on the new schema meanwhile.
 
 ## 2. Verify the target
 
@@ -40,21 +44,63 @@ Check the pending filenames against the record. Bare `supabase migration up`
 targets **local**, so always pass `--linked`. Never use `--include-all` to hide
 divergent history.
 
+### Reaching the hosted project
+
+Project reference `mqzcbdorjuefefzvuefa`. No `PGSERVICE` entries exist; use these.
+Credentials stay out of Git, logs and command arguments.
+
+| Need | Method |
+| --- | --- |
+| SQL checks, manifests, §4 tests | `psql` with the linked CLI's temporary login, below |
+| Read-only SQL from a Claude session | Supabase connector `execute_sql` also works; it returns no `NOTICE`s, so end a check with `SELECT 'PASS'` |
+| Owner-approved writes | The same `psql` login without the read-only option. The Supabase connectors refuse destructive SQL |
+| Auth, SMTP, templates, exposed schemas | Management API `https://api.supabase.com/v1/projects/<ref>/config/auth` and `/postgrest`, bearer token from `~/.config/ampoteket/supabase-token` (owner's machine) |
+| Migration history | `supabase migration list --linked` (§2) |
+| Worker versions, logs, secrets | `bunx --no-install wrangler … --env production` with the Wrangler login; [diagnosing production](#diagnosing-production) |
+
+The linked CLI hands out a short-lived login (`cli_login_postgres`). Run this in a
+subshell so the variables, password included, die with it; rerun it when the
+password expires:
+
+```sh
+(
+  eval "$(supabase db dump --linked --dry-run 2>/dev/null | grep '^export PG')"
+  export PGOPTIONS='-c role=postgres -c default_transaction_read_only=on'
+  psql -X -v ON_ERROR_STOP=1 -c 'SELECT count(*) FROM app.products'
+)
+```
+
+Leave out `default_transaction_read_only=on` only for a write the owner asked for,
+and wrap it in `BEGIN`/`COMMIT`.
+
 ## 3. Checkpoint and apply
 
-For a populated project, first rehearse the migration on an isolated restored
-snapshot with before/after row comparisons. An incompatible cutover must stop
-all writes, including from open or offline clients, using this barrier.
+For a populated project, first rehearse the pending migrations on the actual
+data. The checkpoint holds Auth data and buyer contacts: keep it under the
+ignored `test-results/`, never share it, and delete it after the release.
 
-The `20261002000100` release replaces only the help-order function and its
-execution grants, atomically with migration history. It changes no stored rows,
-table layouts, policies or sequences, so it does not require a global data
-cutover. Rehearse it on an actual restored snapshot, require identical app/Auth
-rows and sequence state, then apply it before its frontend. Old clients cannot
-call the removed signature and fail without changing order. If verification
-fails, keep that action unavailable and forward-fix; do not restore unrelated
-production data or reintroduce the unguarded function. This narrow release does
-not exercise the global barrier or close the full hosted restore-drill gate.
+```sh
+(
+  eval "$(supabase db dump --linked --dry-run 2>/dev/null | grep '^export PG')"
+  umask 077 && mkdir -p test-results/rehearsal
+  pg_dump --format=custom --role=postgres --schema=app --schema=public --schema=auth \
+    --schema=supabase_migrations --schema=extensions --file=test-results/rehearsal/checkpoint.dump
+)
+python3 scripts/rehearse-migration.py test-results/rehearsal/checkpoint.dump
+```
+
+The script restores the checkpoint into a private local container, applies the
+migrations its history lacks with the CLI, and requires unchanged rows, sequences
+and earlier history, then passing permissions, protections and invariants. A
+migration that changes rows on purpose names those tables with
+`--expect-changed app.a,app.b`. This is not the hosted restore drill.
+
+A migration that old clients survive (new functions, guarded replacements,
+additive columns) needs no global barrier: apply it, then push its frontend
+(§1). If verification fails, keep the affected action unavailable and
+forward-fix rather than restoring unrelated production data. An incompatible
+cutover must stop all writes, including from open or offline clients, using this
+barrier.
 
 ### Enforced cutover barrier
 
@@ -113,15 +159,16 @@ failed migration applied, or rerun the initializer SQL by hand.
 ## 4. Post-apply checks
 
 Owner `psql` is only for documented checks, Auth provisioning and the rehearsed
-restore. Use a libpq service entry (`PGSERVICE=ampoteket-reviewed-target`) that
-matches §2, with TLS and credentials from the secret store. Never put
-credentials in Git, logs or command arguments. Never run fixtures, acceptance
-or concurrency tests against production.
+restore. Connect as in [reaching the hosted project](#reaching-the-hosted-project),
+after checking the link matches §2. Never run fixtures, acceptance or concurrency
+tests against production. These three end in `ROLLBACK` but create temporary
+tables, which a read-only session refuses, so in that subshell first
+`export PGOPTIONS='-c role=postgres'`:
 
 ```sh
-PGSERVICE=ampoteket-reviewed-target psql -X -v ON_ERROR_STOP=1 -f supabase/tests/permissions.sql
-PGSERVICE=ampoteket-reviewed-target psql -X -v ON_ERROR_STOP=1 -f supabase/tests/protections.sql
-PGSERVICE=ampoteket-reviewed-target psql -X -v ON_ERROR_STOP=1 -f supabase/tests/v1-invariants.sql
+psql -X -v ON_ERROR_STOP=1 -f supabase/tests/permissions.sql
+psql -X -v ON_ERROR_STOP=1 -f supabase/tests/protections.sql
+psql -X -v ON_ERROR_STOP=1 -f supabase/tests/v1-invariants.sql
 ```
 
 These change nothing. Keep their output, compare counts with `VALIDATION.md`,
@@ -150,9 +197,10 @@ emergency maintainer recovery only; record the operator and reason. Deactivation
 keeps rows and actor IDs. Replace deleted accounts only through the verified
 mapping in the [restore runbook](runbook-backup-restore.md) §4.
 
-Enter products and opening stock through count batches, following the
-[counting procedure](operating-procedures.md). No invented receipts or hidden
-counters. Every active product needs `last_counted_at`. A second person
+Enter opening stock either in the new-product form, which posts it as a count
+([product editor](page-admin-stock.md)), or through count batches for products that
+already exist, following the [counting procedure](operating-procedures.md). No
+invented receipts or hidden counters. Every active product needs `last_counted_at`. A second person
 spot-recounts bins; resolve differences before launch. Save the opening
 inventory/placement manifest and check physical labels.
 
@@ -300,13 +348,31 @@ request bodies, authorization headers, checkout secrets or buyer contacts.
 Hjalmar Karlsen owns inspection/escalation. A notification recipient and monitored
 uptime/error alert must still be verified in the provider before launch.
 
+### Diagnosing production
+
+Every Wrangler command for the live Worker needs `--env production`; without it
+Wrangler targets the local-only `ampoteket-local`.
+
+```sh
+bun scripts/verify-live.ts                                          # read-only HTTP smoke check, both locales
+bunx --no-install wrangler deployments list --env production        # which version is live
+bunx --no-install wrangler versions view '<version-id>' --env production   # its vars, bindings, secret names
+bunx --no-install wrangler tail --env production --status error     # live errors
+```
+
+Check the live vars before anything else: pages that load but show "Unavailable"
+or a broken staff login usually mean a version without the production vars
+([Publish](#publish)). A missing column or RPC error after a push means the
+frontend went out before its migration (§1). Persisted error logs are in the
+Cloudflare dashboard under the `ampoteket` Worker's Logs.
+
 ## 7. Release verification and recovery
 
 Before opening the shop, take the first independent backup and finish a restore
 drill. Rehearse phone → Vipps → registration, retries and lost network on
 isolated stock. Record revision, Worker version, config/secret names, project,
-domain, results and backup ID. Smoke-check both locales, catalog, help, Auth
-and rejection of cross-origin checkout; never register test purchases in real
+domain, results and backup ID. Run `bun scripts/verify-live.ts`, then check the
+catalog, Auth and rejection of cross-origin checkout by hand; never register test purchases in real
 stock.
 
 If verification fails, turn the Data API off again first. If the previous

@@ -51,7 +51,9 @@ backup and take its manifest from an isolated restored copy.
 Follow the [Supabase CLI procedure](https://supabase.com/docs/guides/platform/migrating-within-supabase/backup-restore).
 Check the dump `--dry-run` output lists the Auth and app tables and sequences.
 Never echo credentials or enable shell tracing. Link the source project, freeze
-it (§2), then:
+it (§2), then, with the source's `PG*` login from
+[reaching the hosted project](runbook-deploy.md#reaching-the-hosted-project) (role
+`postgres`, read-only):
 
 ```sh
 umask 077
@@ -60,17 +62,19 @@ supabase db dump --linked --file schema.sql
 supabase db dump --linked --data-only --use-copy --file data.sql
 supabase db dump --linked --schema supabase_migrations --file history-schema.sql
 supabase db dump --linked --schema supabase_migrations --data-only --use-copy --file history-data.sql
-PGSERVICE=ampoteket-backup-source python3 scripts/database-manifest.py > source-manifest.json
+python3 scripts/database-manifest.py > source-manifest.json
 sha256sum roles.sql schema.sql data.sql history-schema.sql history-data.sql source-manifest.json > SHA256SUMS
 ```
 
 Restore into an empty, separate Supabase project. Do **not** run Ampoteket's
 initializer first. Keep any role-ownership edits beside the original dumps.
-Never ignore SQL errors or accept a missing table. Point the service entry only
-at the destination:
+Never ignore SQL errors or accept a missing table. Point the `PG*` variables only
+at the destination, for example the same recipe run from a separate checkout
+linked to the destination project, without the read-only option. Never re-link
+the main checkout away from production in the middle of a restore:
 
 ```sh
-PGSERVICE=ampoteket-isolated-restore psql -X --single-transaction -v ON_ERROR_STOP=1 \
+psql -X --single-transaction -v ON_ERROR_STOP=1 \
   -f roles.sql -f schema.sql -f history-schema.sql \
   -c 'SET LOCAL session_replication_role = replica' \
   -f data.sql -f history-data.sql \
@@ -104,14 +108,15 @@ staff, non-staff and guest access before cutover.
 ## 5. Reconciliation before reopening
 
 Keep writers stopped. The manifest holds counts, row hashes and sequence state,
-no personal data. Review any Auth difference individually.
+no personal data. Review any Auth difference individually. With `PG*` still
+pointing at the destination:
 
 ```sh
-PGSERVICE=ampoteket-isolated-restore python3 scripts/database-manifest.py > restored-manifest.json
+python3 scripts/database-manifest.py > restored-manifest.json
 diff -u source-manifest.json restored-manifest.json
-PGSERVICE=ampoteket-isolated-restore psql -X -v ON_ERROR_STOP=1 -f supabase/tests/permissions.sql
-PGSERVICE=ampoteket-isolated-restore psql -X -v ON_ERROR_STOP=1 -f supabase/tests/protections.sql
-PGSERVICE=ampoteket-isolated-restore psql -X -v ON_ERROR_STOP=1 -f supabase/tests/v1-invariants.sql
+psql -X -v ON_ERROR_STOP=1 -f supabase/tests/permissions.sql
+psql -X -v ON_ERROR_STOP=1 -f supabase/tests/protections.sql
+psql -X -v ON_ERROR_STOP=1 -f supabase/tests/v1-invariants.sql
 ```
 
 Require exact rows, staff/Auth mappings and sequences. Compare schema and

@@ -84,7 +84,7 @@ map with the real cabinet before editing again.
 ## Volunteer directory
 
 Agree each published name and contact method with its owner. Enter it in
-`/admin/help`, check `/help` and `/en/help`, and test the link or number on a
+`/admin/help`, check `/contact` and `/en/contact`, and test the link or number on a
 phone. At handover, unpublish outdated contacts; never reuse an entry for a
 different person.
 

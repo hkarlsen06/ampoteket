@@ -4,12 +4,14 @@ Optional contacts on unconfirmed checkouts are cleared after 90 × 24 hours.
 Confirmed checkouts are outside this rule; individual erasure uses
 `amp_clear_checkout_contact`. Checkouts and stock history are kept.
 
-Use the owner connection from [runbook-deploy.md](runbook-deploy.md) §4. Check
+Use the owner connection from
+[reaching the hosted project](runbook-deploy.md#reaching-the-hosted-project),
+without the read-only option, since this writes. Check
 the target and that **your own** Auth UUID is an active staff member. Never use
 another volunteer's UUID or invent one; it is the audit record of who ran it.
 
 ```sh
-PGSERVICE=ampoteket-reviewed-target psql -X -v ON_ERROR_STOP=1 \
+psql -X -v ON_ERROR_STOP=1 \
   -v operator_auth_user_id='<your verified active Auth UUID>' \
   -f scripts/clear-expired-contacts.sql
 ```

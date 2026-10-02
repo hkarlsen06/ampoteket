@@ -8,8 +8,11 @@ open before launch, is in [VALIDATION.md](../VALIDATION.md).
 
 ## 1. What Ampoteket is
 
-A self-service shop and stock system for the student-run electronics workshop at
-`ampoteket.no`. Buyers find components, scan QR codes on the drawers, pay with
+The website of Ampoteket, a student-run electronics workshop at Pilestredet 35
+that has been running for about a year. Its audience is the workshop's members:
+it presents the workshop and runs a self-service parts shelf with stock control.
+Write about it as an existing workshop gaining a website, not a shop opening to
+the public. Buyers find components, scan QR codes on the drawers, pay with
 Vipps on trust and register the purchase, which withdraws stock. Volunteers
 ("admins" in the UI) maintain products, prices, placement, purchasing, counts and
 corrections, all with a full audit trail.
@@ -99,15 +102,16 @@ labels always use the Norwegian, unprefixed address.
 
 | Route | Content |
 | --- | --- |
-| `/` | What the workshop is, then the parts shelf: how buying works, code lookup and a live drawer picker ([page-home.md](page-home.md)) |
+| `/` | What the workshop is, then the parts shelf: how buying works, code lookup and a live drawer picker ([page-home.md](page-home.md); the site-wide header, menu and footer are its §2.1) |
 | `/p` | Catalog: search, filters, code entry ([page-catalog.md](page-catalog.md)) |
 | `/p/[code]` | Product page and QR target, e.g. `/p/RES-A3F09` ([page-product.md](page-product.md)) |
 | `/cart` | The cart ([page-cart.md](page-cart.md)) |
 | `/checkout/[id]` | Saved checkout, Vipps instructions, registration and retry ([page-checkout.md](page-checkout.md)) |
-| `/contact` | Contact us: the Discord invite, then volunteer contacts maintained at `/admin/help`. Linked from the header menu and footer; `/help` redirects here (posters and sent receipts) |
+| `/contact` | Contact us: the Discord invite, then volunteer contacts maintained at `/admin/help`. Linked from the header menu and footer; `/help` redirects here (posters and sent receipts). No page doc: [website-guide.md §4.5](website-guide.md#45-help-when-registration-cannot-be-completed), [volunteer directory protocol](api-contract.md#public-volunteer-directory), [`help_contacts`](datamodell.md#help_contacts) |
 | `/privacy` | What buyers' data the shop stores, where, and how to have contact details deleted; linked from the footer |
 | `/admin` | Overview, statistics, products, shelf, counts, labels, stock corrections, audit ([page-admin-stock.md](page-admin-stock.md), [page-labels.md](page-labels.md)) |
 | `/admin/orders` | Orders and receipts ([page-admin-orders.md](page-admin-orders.md)) |
+| `/admin/help` | Edit, publish and reorder the `/contact` volunteer list (same documents as `/contact`) |
 | `/admin/admins` | Invite, list, reactivate and deactivate admins ([website-guide.md](website-guide.md#59-admin-access)) |
 | `POST /api/checkouts/…` | Worker-only checkout endpoints. Browsers never call the checkout RPCs directly. |
 | `POST /api/admin/invitations` | Authenticated staff invitations ([api-contract.md](api-contract.md#staff-membership-and-invitations)) |
@@ -115,6 +119,12 @@ labels always use the Norwegian, unprefixed address.
 
 Until `SALES_OPEN=true` is deployed, the buyer routes and the checkout API are closed
 behind a "shop opens soon" page ([website-guide.md](website-guide.md#11-environments-and-secrets)).
+The buyer pages live in the `src/routes/[[locale=locale]]/(sales)/` route group, whose
+layout enforces this.
+
+Private routes (`/checkout`, `/admin`, `/api/checkouts`, `/api/admin`, in either
+locale) get `Cache-Control: no-store` and `Referrer-Policy: no-referrer`; the list is
+`src/lib/private-route.ts`.
 
 One scanner dialog is shared by all shopping pages ([scanner.md](scanner.md)).
 **Scanning never registers a purchase by itself.**
