@@ -181,7 +181,7 @@
 							{#each matches as product (product.id)}
 								<Field.Field orientation="horizontal" class="min-w-0 *:data-[slot=field-label]:flex-initial">
 									<RadioGroup.Item id={`${fieldId}-drawer-${product.id}`} value={product.id} />
-									<Field.Label for={`${fieldId}-drawer-${product.id}`} class={['font-normal', nameWrap]}><span class={codeText}>{product.code}</span>: {productName(product, i18n.locale)}</Field.Label>
+									<Field.Label for={`${fieldId}-drawer-${product.id}`} class={['font-normal', nameWrap]}><span><span class={codeText}>{product.code}</span>: {productName(product, i18n.locale)}</span></Field.Label>
 									{#if !product.is_active}<StateBadge class="shrink-0">{i18n.m.adminProducts.inactive}</StateBadge>{/if}
 									{#if counted.has(product.id)}<StateBadge tone="success" class="shrink-0">{m.countedHere}</StateBadge>{/if}
 								</Field.Field>
