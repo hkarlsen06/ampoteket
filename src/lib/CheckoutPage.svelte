@@ -8,6 +8,7 @@
 	import * as Field from '$lib/components/ui/field';
 	import { Input } from '$lib/components/ui/input';
 	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
+	import CopyIcon from 'phosphor-svelte/lib/CopyIcon';
 	import Icon from '$lib/Icon.svelte';
 	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
 	import CheckoutReferences from '$lib/CheckoutReferences.svelte';
@@ -41,6 +42,8 @@
 	let receiptEmail = $state('');
 	let receipt = $state<'sending' | 'sent' | 'invalid' | 'failed' | null>(null);
 	let sentTo = $state('');
+	let messageCopied = $state(false);
+	let copiedTimer: ReturnType<typeof setTimeout> | undefined;
 	const active = $derived($cart.activeAttempt?.requestId === attempt?.requestId ? $cart.activeAttempt : null);
 	const registered = $derived(snapshot?.status === 'confirmed');
 	const confirmationAttempted = $derived(attempt?.state === 'confirming' || active?.state === 'confirming' || active?.state === 'registered');
@@ -174,6 +177,13 @@
 		receipt = await sendCheckoutReceipt(attempt, email);
 		if (receipt === 'sent') sentTo = email;
 	}
+	// Same text in both locales so the accounts can search Vipps for it.
+	const vippsMessage = $derived(snapshot ? `Ref: ${snapshot.checkout_id}` : '');
+	// No clipboard (insecure context, denied permission): the message stays visible to type.
+	async function copyMessage() {
+		try { await navigator.clipboard.writeText(vippsMessage); } catch { return; }
+		messageCopied = true; clearTimeout(copiedTimer); copiedTimer = setTimeout(() => (messageCopied = false), 2000);
+	}
 	const money = (value: string) => formatMoney(value, i18n.locale);
 </script>
 
@@ -281,8 +291,18 @@
 		{:else if canPay && snapshot?.payment_required}
 			<section class="payment grid justify-items-start gap-4" aria-labelledby="payment-heading" bind:clientHeight={paymentHeight}>
 				<h2 class={sectionHeading} id="payment-heading">{m.paymentHeading}</h2>
-				<p>{m.recipient}: <strong class="font-mono">47322</strong></p>
 				<p>{m.paymentInstructions}</p>
+				<dl class="m-0 grid gap-3">
+					<div><dt class="text-sm text-muted-foreground">{m.recipient}</dt><dd class="m-0 font-mono text-xl font-semibold">47322</dd></div>
+					<div>
+						<dt class="text-sm text-muted-foreground">{m.vippsMessage}</dt>
+						<dd class="m-0 mt-1 flex flex-wrap items-center gap-x-3 gap-y-2">
+							<span class={[codeText, 'select-all wrap-anywhere']}>{vippsMessage}</span>
+							<Button variant="outline" size="sm" type="button" onclick={copyMessage}><Icon icon={messageCopied ? CheckIcon : CopyIcon} />{m.copyMessage}</Button>
+						</dd>
+					</div>
+				</dl>
+				<p class="sr-only" role="status">{#if messageCopied}{m.messageCopied}{/if}</p>
 				<Button variant="default" href="https://qr.vipps.no/vp/swDrxGWcp" rel="noreferrer" disabled={refreshing} onclick={openVipps}>{m.openVipps}</Button>
 				<img src="/payments/vipps-47322.svg" width="246" height="246" alt={m.qrAlt} />
 				<Button variant="outline" type="button" disabled={refreshing} onclick={register}>{m.paid}</Button>

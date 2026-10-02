@@ -22,7 +22,9 @@ instructions, registration action, retry/help. The reference (checkout ID, else 
 request ID) stays readable when later requests fail.
 
 When unregistered and `payment_required=true`: recipient **47322**, the exact saved NOK
-amount, the [verified QR/link](../assets/payments/README.md) (freeform amount, typed by
+amount, the Vipps message `Ref: <checkout ID>` with a Copy button (same text in both
+locales, so accounts can match a Vipps payment to its checkout), the
+[verified QR/link](../assets/payments/README.md) (freeform amount and message, typed by
 the buyer) and an explicit "I have paid" action. Visiting Vipps changes nothing. Never
 send a buyer to Vipps before the ID is saved and read back and a snapshot read has
 succeeded. When `payment_required=false`, omit Vipps and offer direct registration.
@@ -43,7 +45,7 @@ Revalidation never creates a replacement checkout.
 | State | Actions and presentation |
 |---|---|
 | Recovering | Placeholders, known reference, no payment controls |
-| Prepared, payment required | Snapshot, recipient/amount, Vipps, "I have paid" |
+| Prepared, payment required | Snapshot, recipient/amount, copyable Vipps message, Vipps, "I have paid" |
 | Prepared, zero total | Snapshot and direct registration |
 | Confirm in flight | Keep layout; announce pending; block new commands |
 | Confirmation unknown | Read or retry the same confirmation; never pay again |
