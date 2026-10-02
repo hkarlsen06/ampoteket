@@ -16,6 +16,7 @@ const run = (args: string[], quiet = false) => {
 	if (!result.success) throw new Error(`failed: ${args.join(' ')}`);
 	return quiet ? String(result.stdout) : '';
 };
+// Workers Builds splits wrangler arguments on whitespace (build 2252d081, 2026-10-02), so none may contain a space.
 const wrangler = (...args: string[]) => run(['bunx', '--no-install', 'wrangler', ...args, '--env', 'production'], args.includes('--json'));
 const liveVersion = () => {
 	const deployments = JSON.parse(wrangler('deployments', 'list', '--json')) as { versions: { version_id: string; percentage: number }[] }[];
@@ -31,7 +32,7 @@ if (config.name !== 'ampoteket') throw new Error(`Unexpected production Worker n
 const previous = liveVersion();
 console.log(`Live before deploy: ${previous}`);
 run(['bun', 'run', 'build']);
-wrangler('deploy', '--message', run(['git', 'log', '-1', '--format=%h %s'], true).trim().slice(0, 100));
+wrangler('deploy', '--message', run(['git', 'rev-parse', '--short', 'HEAD'], true).trim());
 const current = liveVersion();
 
 const problems: string[] = [];
@@ -50,7 +51,7 @@ if (!help.ok || page.includes(nb.help.unavailable)) problems.push(`${origin}/hel
 
 if (problems.length) {
 	console.error(`Deploy ${current} failed verification:\n  ${problems.join('\n  ')}\nRolling back to ${previous}.`);
-	wrangler('rollback', previous, '--yes', '--message', `Automatic rollback: ${current} failed verification`);
+	wrangler('rollback', previous, '--yes', '--message', `automatic-rollback-of-${current}`);
 	process.exit(1);
 }
 console.log(`Verified ${current}: vars, rate limits, secrets and ${origin}/help.`);
