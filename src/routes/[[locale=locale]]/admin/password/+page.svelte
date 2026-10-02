@@ -7,12 +7,21 @@
 	import { onMount } from 'svelte';
 	import { getI18n } from '$lib/i18n';
 	import { getAdminContext, adminReturnPath } from '$lib/admin-context.svelte';
+	import { updateAdminPassword } from '$lib/admin-auth';
 	const fieldId = $props.id();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.admin);
 	let email = $state(''); let password = $state(''); let repeat = $state(''); let busy = $state(false);
 	let status = $state<'idle' | 'sent' | 'failed' | 'invalid' | 'saved' | 'mismatch'>('idle');
 	let callback = $state<{ code?: string; token_hash?: string; type?: 'invite' | 'recovery' } | null>(null);
-	let verified = $state(false); let next = $state('/admin');
+	let verifiedUserId = $state<string | null>(null); let next = $state('/admin');
+	$effect(() => {
+		const userId = verifiedUserId;
+		if (!userId || !admin.auth) return;
+		const { data } = admin.auth.onAuthStateChange((_event, session) => {
+			if (session?.user.id !== userId) { verifiedUserId = null; password = ''; repeat = ''; status = 'invalid'; }
+		});
+		return () => data.subscription.unsubscribe();
+	});
 	onMount(() => {
 		const url = new URL(window.location.href); next = adminReturnPath(url.searchParams.get('next'));
 		const code = url.searchParams.get('code'); const token = url.searchParams.get('token_hash'); const type = url.searchParams.get('type');
@@ -33,7 +42,7 @@
 			const result = callback.code ? await admin.auth.exchangeCodeForSession(callback.code)
 				: await admin.auth.verifyOtp({ token_hash: callback.token_hash!, type: callback.type! });
 			callback = null; if (result.error || !result.data.session) throw new Error();
-			verified = true; await admin.refresh();
+			verifiedUserId = result.data.session.user.id; await admin.refresh();
 		} catch { callback = null; status = 'invalid'; } finally { busy = false; }
 	}
 	async function send(event: SubmitEvent) {
@@ -45,10 +54,14 @@
 		} catch { status = 'failed'; } finally { busy = false; }
 	}
 	async function save(event: SubmitEvent) {
-		event.preventDefault(); if (!admin.auth || busy || !verified) return;
+		event.preventDefault(); if (!admin.auth || !admin.config || busy || !verifiedUserId) return;
 		if (password !== repeat) { status = 'mismatch'; return; } busy = true; status = 'idle';
-		try { const result = await admin.auth.updateUser({ password }); if (result.error) throw result.error; password = ''; repeat = ''; status = 'saved'; }
-		catch { status = 'failed'; } finally { busy = false; }
+		const verified = verifiedUserId;
+		try {
+			await updateAdminPassword(admin.config, admin.auth, verified, password);
+			if (verifiedUserId === verified) { password = ''; repeat = ''; status = 'saved'; }
+		}
+		catch { if (verifiedUserId === verified) status = 'failed'; } finally { busy = false; }
 	}
 </script>
 <svelte:head><title>{m.passwordTitle}</title></svelte:head>
@@ -57,7 +70,7 @@
 	<div class={formLayout}><Alert.Message appearance="inline" role="status">{m.passwordSaved}</Alert.Message><Button variant="default" href={i18n.href(next)}>{m.continue}</Button></div>
 {:else if callback}
 	<div class={formLayout}><Button variant="default" onclick={exchange} disabled={busy || !admin.auth}><ButtonLabel pending={busy} pendingLabel={m.working} label={m.continue} /></Button></div>
-{:else if verified}
+{:else if verifiedUserId}
 	<form class={[formLayout, "max-w-md"]} onsubmit={save}>
 		<Field.Field width="grow"><Field.Label for={`${fieldId}-1`}>{m.newPassword}</Field.Label><Input id={`${fieldId}-1`} type="password" autocomplete="new-password" minlength={8} required bind:value={password} disabled={busy} /></Field.Field>
 		<Field.Field width="grow"><Field.Label for={`${fieldId}-2`}>{m.repeatPassword}</Field.Label><Input id={`${fieldId}-2`} type="password" autocomplete="new-password" enterkeyhint="go" minlength={8} required bind:value={repeat} disabled={busy} /></Field.Field>

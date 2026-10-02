@@ -203,6 +203,13 @@ enough) and keep the `RECEIPT_LIMIT` binding from `wrangler.jsonc`. Without eith
 purchases still work but the receipt form reports that sending failed and the
 staff archive gets no copies.
 
+After checking real invitation/reset/receipt headers for aligned DKIM/SPF, publish
+one TXT record at `_dmarc.notify.ampoteket.no` with value
+`v=DMARC1; p=reject; adkim=r; aspf=r`. This covers the sending subdomain without
+changing mail policy for other `ampoteket.no` addresses. Verify the published
+record and delivery again. DNS changes require the zone owner's approval/access;
+Resend's verified-domain badge does not establish a DMARC policy.
+
 ### Publish
 
 Every push to `main` on GitHub deploys production automatically through
@@ -216,12 +223,23 @@ use only:
 bun run deploy:production
 ```
 
-It refuses a dirty tree, records the live version, builds, runs
+It refuses a dirty tree and checks up to 20 times, 45 seconds apart, for the
+**push-triggered Validation workflow on that exact commit** to succeed.
+It rechecks the clean tree and unchanged commit after waiting and after building.
+GitHub reads use the public
+API without a token. Failed/cancelled/skipped CI, API errors (including rate limits)
+and a wait timeout stop before upload; retry once validation and the API are
+available. A commit must be pushed to GitHub and validated before a manual deploy.
+
+It builds, records the live version immediately before publishing, runs
 `wrangler deploy --env production` with the commit as message, then checks that
 the new version carries every `env.production` var with its reviewed value, the
-rate limits and the `SUPABASE_SECRET_KEY`/`RESEND_API_KEY` secrets, and that
-`/help` reads the contact list. Any failure rolls back to the recorded version
-and exits non-zero. Never deploy or `wrangler versions upload` to `ampoteket` any
+rate-limit values and the `SUPABASE_SECRET_KEY`/`RESEND_API_KEY` secret names,
+that `/help` reads the contact list with HSTS, and that HTTP login redirects to
+HTTPS. Network and metadata exceptions join HTTP/config failures in the rollback
+path; health requests have a 15-second deadline. Rollback failure reports both
+errors and the prior version for manual recovery. The command exits non-zero on
+any failed deployment. Never deploy or `wrangler versions upload` to `ampoteket` any
 other way: on 2026-10-01 a version uploaded without the
 production vars made the help page and staff login unavailable while every page
 still loaded. The top-level `keep_vars` only softens a mistaken `wrangler deploy`.
@@ -239,6 +257,33 @@ Worker, confirm account and name. Do not rely on dashboard-only or command-line
 values. The custom domain needs the zone in the same Cloudflare account and no
 conflicting DNS record; confirm the certificate before opening. `workers_dev` is
 off.
+
+### Repository protection and monitoring
+
+After the owner approves these hosted settings, apply the reviewed policy:
+
+```sh
+gh api --method PUT repos/hkarlsen06/ampoteket/branches/main/protection \
+  --input .github/main-protection.json
+gh api --method PUT repos/hkarlsen06/ampoteket/vulnerability-alerts
+gh api --method PUT repos/hkarlsen06/ampoteket/automated-security-fixes
+gh api --method PATCH repos/hkarlsen06/ampoteket \
+  --input - <<'JSON'
+{"security_and_analysis":{"secret_scanning":{"status":"enabled"},"secret_scanning_push_protection":{"status":"enabled"}}}
+JSON
+```
+
+The policy requires all nine validation jobs from GitHub Actions, including for
+the owner, and forbids force pushes/deleting main. It does not require a second
+reviewer while there is only one maintainer. Validate a topic branch, rebase when
+needed and fast-forward main; do not bypass a failed required check. These
+commands are an explicit hosted change, not part of a local setup or test run.
+
+Production config enables persisted Worker error logs, omits routine invocation
+logs and redacts query strings, including Auth callbacks. Do not add logging of
+request bodies, authorization headers, checkout secrets or buyer contacts.
+Hjalmar Karlsen owns inspection/escalation. A notification recipient and monitored
+uptime/error alert must still be verified in the provider before launch.
 
 ## 7. Release verification and recovery
 

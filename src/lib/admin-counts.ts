@@ -146,7 +146,7 @@ export async function readCountDetail(session: StaffSession, batchId: string, cu
 			const id = identifier(row.id), code = text(row.code, 40), unit = text(row.unit_code, 24), step = decimal(row.stock_step);
 			if (!/^[A-Z0-9][A-Z0-9-]{0,39}$/.test(code) || !/^[a-z][a-z0-9_]{0,23}$/.test(unit)
 				|| compareDecimals(step, '0') <= 0 || typeof row.is_active !== 'boolean'
-				|| (row.is_active && row.bin_id === null) || (filter.id && !productIds.includes(id))) throw new Error('Invalid count product');
+				|| (filter.id && !productIds.includes(id))) throw new Error('Invalid count product');
 			products.push({ id, code, name_nb: text(row.name_nb, 200), name_en: text(row.name_en, 200), unit_code: unit,
 				stock_step: step, bin_id: row.bin_id === null ? null : identifier(row.bin_id), is_active: row.is_active });
 		}

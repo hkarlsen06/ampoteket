@@ -101,7 +101,8 @@ export function receiptText(snapshot: CheckoutSnapshot, origin: string): string 
  */
 export async function sendReceipt(snapshot: CheckoutSnapshot, to: string, config: ReceiptConfig & { origin: string },
 	fetcher: typeof fetch = fetch): Promise<boolean> {
-	const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(to.toLowerCase())));
+	to = to.toLowerCase();
+	const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(to)));
 	const addressKey = Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
 	try {
 		const result = await fetcher('https://api.resend.com/emails', {

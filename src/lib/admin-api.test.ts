@@ -1,13 +1,21 @@
 import { expect, test } from 'bun:test';
 import { memory } from './test-storage';
 import { adminReturnPath } from './admin-auth';
-import { clearRecoveryCommand, readRecoveryCommand, recoverStaffCheckout, saveRecoveryCommand, readStaffCheckout, staffRequest, allStaffRows } from './admin-api';
+import { clearRecoveryCommand, readRecoveryCommand, recoverStaffCheckout, saveRecoveryCommand, readStaffCheckout, staffRequest, allStaffRows, reorderHelpContacts } from './admin-api';
 const command = { userId: '11111111-1111-4111-8111-111111111111', requestId: '22222222-2222-4222-8222-222222222222', checkoutId: '33333333-3333-4333-8333-333333333333', reason: 'Helped identify the original purchase' };
 const session = { config: { url: 'https://fixture.invalid', publishableKey: 'sb_publishable_fixture' }, token: 'staff-jwt', userId: command.userId };
+test('directory moves send the displayed prior order alongside the desired order', async () => {
+	const before = [command.userId, command.requestId]; const after = [...before].reverse();
+	await reorderHelpContacts(session, after, before, async (_input, init) => {
+		expect(JSON.parse(String(init?.body))).toEqual({ p_ids: after, p_expected_ids: before });
+		return new Response(null, { status: 204 });
+	});
+});
 test('admin returns allow only built local destinations without callback material', () => {
 	for (const value of ['//evil.invalid', 'https://evil.invalid', '/en/admin', '/admin?token=secret', '/admin/password', '/admin\\evil', '/admin/%2f%2fevil', null]) expect(adminReturnPath(value)).toBe('/admin');
 	expect(adminReturnPath('/admin/privacy')).toBe('/admin/privacy');
 	expect(adminReturnPath('/admin/admins')).toBe('/admin/admins');
+	expect(adminReturnPath('/admin/statistics')).toBe('/admin/statistics');
 	for (const path of ['/admin/products', '/admin/products/new', '/admin/products/labels', `/admin/products/${command.userId}`, '/admin/shelf', '/admin/stock', '/admin/audit', '/admin/counts', `/admin/counts/${command.requestId}`]) expect(adminReturnPath(path)).toBe(path);
 	for (const path of ['/admin/products/bad-id', '/admin/counts/new', '/admin/shelf?token=secret', '/admin/products/../../password']) expect(adminReturnPath(path)).toBe('/admin');
 });

@@ -155,7 +155,7 @@
 		const edge = step < 0 ? target === 0 : target === next.length - 1;
 		document.querySelector<HTMLButtonElement>(`[data-move="${row.id}:${(step < 0) !== edge ? 'up' : 'down'}"]`)?.focus();
 		try {
-			await reorderHelpContacts(admin.credentials(), next.map(contact => contact.id));
+			await reorderHelpContacts(admin.credentials(), next.map(contact => contact.id), previous.map(contact => contact.id));
 			moveAnnouncement = m.contactMoved(row.display_name, target + 1, next.length);
 		} catch (error) {
 			contacts = previous;

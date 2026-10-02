@@ -21,6 +21,8 @@ test('receipt addresses, escaping, formatting and per-address idempotency', asyn
 	expect(await sendReceipt(snapshot, 'other@example.test', config, fetcher)).toBe(true);
 	const keys = calls.map((init) => (init.headers as Record<string, string>)['Idempotency-Key']);
 	expect(keys[0]).toBe(keys[1]);
+	expect(calls[0].body).toBe(calls[1].body);
+	expect(JSON.parse(String(calls[0].body)).to).toEqual(['buyer@example.test']);
 	expect(keys[2]).not.toBe(keys[0]);
 	expect(keys[0]).toStartWith(`receipt/${snapshot.checkout_id}/`);
 	const html = JSON.parse(String(calls[0].body)).html as string;

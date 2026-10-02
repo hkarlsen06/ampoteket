@@ -144,8 +144,11 @@ Resolve the code only through `amp_catalog(p_code)`. Never navigate to, fetch,
 prefetch or link the scanned URL. All product facts come from that response. A valid
 but unknown code is a normal result.
 
-Printed labels keep the human-readable code and a quiet zone of at least four QR
-modules on every side, clear of text, cut marks, tape and drawer edges.
+Printed labels keep the human-readable code and the compact QR borders specified by
+[product labels](page-labels.md#label-and-sheet), including its separate tape geometry.
+Keep those blank areas clear of text, cut marks, tape and drawer edges. Physical
+acceptance of the printed geometry remains a launch check in [VALIDATION.md](../VALIDATION.md);
+decoder tests alone do not establish it.
 
 ## 5. Physical acceptance record
 

@@ -7,13 +7,16 @@ audit history.
 
 ## 1. Decisions required before launch
 
-Record these in the operations record and link it here. None is agreed yet.
+Primary operator: **Hjalmar Karlsen (`hkarlsen06`)**, assigned by the owner on
+2026-10-02 for service access, backups and contact retention. An independent backup
+operator is still unassigned. The recovery targets and arrangements below remain
+unagreed; record them here when accepted.
 RPO is how much recent data the team can afford to re-enter; RTO is how long the
 shop can be down. Choose them before choosing backup frequency or a plan.
 
 | Decision | Required record |
 | --- | --- |
-| Responsible people | Primary and secondary operator, escalation path; both verify access independently |
+| Responsible people | Hjalmar Karlsen is primary; name an independent secondary operator and escalation path, then both verify access |
 | Recovery point (RPO) | Maximum acceptable data loss; backup frequency must meet it |
 | Recovery time (RTO) | Maximum acceptable outage; measured restore time must meet it |
 | Backup storage | Independent location, encryption key custody, retention, restore/delete access |

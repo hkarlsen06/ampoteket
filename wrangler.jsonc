@@ -28,6 +28,12 @@
 	"env": {
 		"production": {
 			"name": "ampoteket",
+			// Persist errors without routine request logs or Auth callback query strings.
+			"observability": {
+				"enabled": true,
+				"redact_query_string": true,
+				"logs": { "invocation_logs": false }
+			},
 			"vars": {
 				"PUBLIC_SUPABASE_URL": "https://mqzcbdorjuefefzvuefa.supabase.co",
 				"PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_Hw7RYzd3kJ8efR-NIv5S0w_VEisoMNU",

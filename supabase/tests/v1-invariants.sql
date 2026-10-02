@@ -61,6 +61,25 @@ BEGIN
     RAISE EXCEPTION 'live_bin_in_archived_cabinet: % live bin(s) sit in an archived cabinet, e.g. bin %', v_count, v_example;
   END IF;
 
+  SELECT count(*), min(b.code) INTO v_count, v_example
+    FROM app.bins b JOIN app.cabinets c ON c.id = b.cabinet_id
+    WHERE NOT b.is_archived AND (b.inner_row::bigint + b.row_span - 1 > c.inner_rows
+      OR b.inner_col::bigint + b.col_span - 1 > c.inner_cols);
+  IF v_count > 0 THEN
+    RAISE EXCEPTION 'bin_outside_cabinet_grid: % live bin(s) exceed their cabinet grid, e.g. bin %', v_count, v_example;
+  END IF;
+
+  SELECT count(*), min(a.code || ' / ' || b.code) INTO v_count, v_example
+    FROM app.bins a JOIN app.bins b ON a.cabinet_id = b.cabinet_id AND a.id < b.id
+    WHERE NOT a.is_archived AND NOT b.is_archived
+      AND a.inner_row::bigint < b.inner_row::bigint + b.row_span
+      AND b.inner_row::bigint < a.inner_row::bigint + a.row_span
+      AND a.inner_col::bigint < b.inner_col::bigint + b.col_span
+      AND b.inner_col::bigint < a.inner_col::bigint + a.col_span;
+  IF v_count > 0 THEN
+    RAISE EXCEPTION 'overlapping_live_bins: % live bin pair(s) overlap, e.g. bins %', v_count, v_example;
+  END IF;
+
   -- Sales attribution: buyer confirmations carry neither recovery field;
   -- staff recoveries carry both, with a non-blank reason (docs/datamodell.md
   -- `sales`). Attribution references the internal staff row, so a deleted

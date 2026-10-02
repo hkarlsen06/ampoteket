@@ -84,6 +84,8 @@ Direct bin insertion and cabinet shrink at `REPEATABLE READ` fail with `READ_COM
 Race: two staff forms read one contact at revision 1; A publishes and holds, B edits the name with the same revision.
 Expected: B waits, then updates zero rows; A's publication and revision 2 stand. The UI keeps B's draft and asks for review, never retrying with a new revision.
 
+Order moves carry the complete previous and desired ID lists. Two moves from the same list serialize; the second fails with `STALE_HELP_ORDER` if the first changed the order. Simultaneous duplicate moves both succeed, with one set of audit changes. Retrying a successful move after its response was lost also makes no additional changes.
+
 ## 14. Saving complete drawer layouts
 
 Races against `amp_save_shelf_layout`, each expecting the waiting side to fail cleanly:

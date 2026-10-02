@@ -139,7 +139,7 @@ test('count detail limits batches and actors and fetches narrow search/history p
 					const after = url.searchParams.get('and')?.match(/id\.gt\.([a-f0-9-]+)/)?.[1] ?? '';
 					const id = [productId, requestId].find(id => id > after);
 					return Response.json(id ? [{ id, code: id === productId ? 'RES-12345' : 'CAP-12345', name_nb: 'Del', name_en: 'Part',
-						unit_code: 'pcs', stock_step: '1', bin_id: null, is_active: false }] : []);
+						unit_code: 'pcs', stock_step: '1', bin_id: null, is_active: id === productId }] : []);
 				}
 				if (view === 'amp_staff_members') expect(url.searchParams.get('id')).toBe(`in.(${userId})`);
 				if (view === 'amp_stock_counts') expect(url.searchParams.get('batch_id')).toBe(`eq.${batchId}`);
@@ -155,6 +155,7 @@ test('count detail limits batches and actors and fetches narrow search/history p
 		expect(result.batch?.id).toBe(batchId);
 		expect(result.owners.map(owner => owner.id)).toEqual([userId]);
 		expect(result.products.map(product => product.id)).toEqual([productId, requestId]);
+		expect(result.products[0]).toMatchObject({ bin_id: null, is_active: true });
 		expect(result.observations[0].revision).toBe('9007199254740993');
 		expect(requests.filter(url => url.pathname.endsWith('amp_count_batches'))).toHaveLength(1);
 		expect(requests.filter(url => url.pathname.endsWith('amp_products'))).toHaveLength(3);

@@ -28,6 +28,10 @@ add the new maintainers and check that at least two people can reach each one.
 Staff access to the shop itself is separate: an active admin invites you at
 `/admin/admins`.
 
+Hjalmar Karlsen (`hkarlsen06`) is the primary service-access, backup and contact
+retention operator. Independent backup access and recovery targets are still open
+in the [backup runbook](docs/runbook-backup-restore.md#1-decisions-required-before-launch).
+
 ## Where to read
 
 Start with the [project overview](docs/prosjektoversikt.md); it lists the document
@@ -58,6 +62,12 @@ Useful options (after `--`):
 - `--sigkill`: take over the pinned ports from a stuck earlier run.
 
 Port **5174** is used by both `bun run dev` and `bun run preview`; run one at a time.
+
+Startup never removes another seed project, including one left by a crash. If an
+old project holds a port, inspect `docker ps` and stop that exact disposable seed
+explicitly with `supabase stop --project-id <seed-id> --network-id <seed-id> --no-backup`
+only after deciding its data can be discarded. Normal shutdown removes only the
+project created by that invocation.
 
 ### HTTPS (checkout and camera)
 

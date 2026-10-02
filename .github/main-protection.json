@@ -1,0 +1,23 @@
+{
+  "required_status_checks": {
+    "strict": true,
+    "contexts": [],
+    "checks": [
+      { "context": "database", "app_id": 15368 },
+      { "context": "web (boundary)", "app_id": 15368 },
+      { "context": "web (shop)", "app_id": 15368 },
+      { "context": "web (checkout)", "app_id": 15368 },
+      { "context": "web (admin)", "app_id": 15368 },
+      { "context": "web (admins)", "app_id": 15368 },
+      { "context": "web (scanner)", "app_id": 15368 },
+      { "context": "web (labels)", "app_id": 15368 },
+      { "context": "web (statistics)", "app_id": 15368 }
+    ]
+  },
+  "enforce_admins": true,
+  "required_pull_request_reviews": null,
+  "restrictions": null,
+  "required_linear_history": true,
+  "allow_force_pushes": false,
+  "allow_deletions": false
+}

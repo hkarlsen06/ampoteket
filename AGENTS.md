@@ -23,16 +23,19 @@ gate), update the row and the date in the same turn and commit. If you notice it
 wrong, verify and fix it. Replace rows; history belongs in git, evidence in
 `VALIDATION.md`.
 
-Last verified: **2026-10-02**, against the live site and the hosted database.
+Last verified: **2026-10-02**, against the live site, provider configuration and
+hosted migration dry-run. Internal database counts below retain the prior
+Supabase connector verification.
 
 | Area | State |
 | --- | --- |
-| Site | **Live** at `https://ampoteket.no` (`www` redirects to the apex), Worker `ampoteket`. **Every push to `main` on GitHub deploys production automatically** (Cloudflare Workers Builds, configured in the Cloudflare dashboard, not in this repo). Pushing is deploying. Since 2026-10-02 the build runs `bun run deploy:production` on Bun 1.3.14, which verifies the vars and rolls back on failure; before that it ran a bare `wrangler deploy` that shipped `bcecfda` without vars on 2026-10-01. Its first run (`aec68d6`) failed before upload because Builds splits wrangler arguments on spaces; the fix passes none. Live version: `bunx wrangler deployments list --env production`; a failed build leaves the previous version live. |
+| Site | **Live** at `https://ampoteket.no` (`www` redirects to the apex), Worker `ampoteket`, version `f80b44b0-cacb-49f3-be8f-ad2aacfd36b2`, commit `8fdbcf6`. **Every push to `main` on GitHub deploys production automatically** (Cloudflare Workers Builds, configured in the Cloudflare dashboard, not in this repo). Pushing is deploying. The build runs `bun run deploy:production` on Bun 1.3.14. The audit fixes, including HTTPS enforcement, CI gating, exception rollback and error logging, are locally validated but **not deployed**. |
 | Sales | **Closed.** `SALES_OPEN` is `"false"` in `wrangler.jsonc` `env.production`. `/`, `/en`, `/help`, `/privacy` and `/admin` answer 200; `/p`, `/cart`, `/checkout` and `/p/<code>` answer 503 "shop opens soon"; `/api/checkouts/…` answers `503 CHECKOUT_UNAVAILABLE`. Buyer-facing changes are invisible in production until sales open. Opening is the owner's decision: set `"true"` and push. |
-| Hosted database | Supabase project `mqzcbdorjuefefzvuefa` (Stockholm, PostgreSQL 17) is **production with real data**: 1 product, 2 active admins, 0 checkouts. All six migrations in `supabase/migrations/` are applied. Read-only checks go through the Supabase connector; writes, migrations and deletions only at the owner's explicit request. |
+| Hosted database | Supabase project `mqzcbdorjuefefzvuefa` (Stockholm, PostgreSQL 17) is **production with real data**: 1 product, 2 active admins, 0 checkouts. The first six migrations are applied. The dry-run lists only `20261002000100_guard_help_contact_order.sql` as pending; apply it before deploying its frontend. Read-only checks go through the Supabase connector; writes, migrations and deletions only at the owner's explicit request. |
 | Email | Hosted Auth, checked through the Management API: custom SMTP `smtp.resend.com:465` as `Ampoteket <noreply@notify.ampoteket.no>`, domain verified in Resend, Site URL `https://ampoteket.no`, only the two `/admin/password` return URLs, signup off, Data API schema `public` only, invite/recovery templates and subjects identical to `supabase/templates/`. No real invitation, reset or buyer receipt has been delivered and checked yet. |
 | Stock and labels | Opening stock not entered; no labels printed or attached. |
-| Before opening sales | The open checks in `VALIDATION.md`: phones (P01–P19), labels, hosted email, backup owners and RPO/RTO, restore drill. |
+| Operations | Hjalmar Karlsen (`hkarlsen06`) is the primary operator for account access, backups and contact retention. An independent backup operator, accepted recovery targets, storage and schedules remain open. Main protection and native GitHub security controls are prepared in the repository but not enabled remotely. |
+| Before opening sales | The open checks in `VALIDATION.md`: phones (P01–P19), labels, hosted email, independent backup operator and RPO/RTO, restore drill. |
 
 ## Read relevant guidance first
 
@@ -97,7 +100,8 @@ Rules for schema work:
 
 Pushing to `main` deploys production ([Current state](#current-state)), so push only
 what the owner wants live. A manual deploy uses `bun run deploy:production`, which
-verifies the live vars and `/help` and rolls back on failure; never a bare
+requires successful CI for the exact commit, verifies the live vars, HTTPS and
+`/help`, and rolls back on failure; never a bare
 `wrangler deploy` or `wrangler versions upload` to the `ampoteket` Worker
 ([runbook](docs/runbook-deploy.md#publish)).
 

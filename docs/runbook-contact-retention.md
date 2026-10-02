@@ -24,8 +24,9 @@ Each run clears up to 100 and prints the count.
 It is safe alongside checkout confirmation and recovery. Each clearance is
 audited as `CONTACT_CLEARED` without the text.
 
-This is manual. Before launch, name the operator, agree the schedule (daily
-keeps the delay to about a day) and set a reminder. Log every run, including
+This is manual. **Hjalmar Karlsen** is the operator, assigned on 2026-10-02.
+Before launch, agree the schedule (daily keeps the delay to about a day) and set
+a reminder. Log every run, including
 zero results, without contact text or checkout IDs:
 
 | UTC due / run time | Reviewed target | Operator | Batch counts and total | Exit status / retry or escalation |

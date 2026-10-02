@@ -150,6 +150,8 @@ idempotency request, where applicable
 
 Staff-access changes take a `SHARE ROW EXCLUSIVE` lock on `staff_members` before the idempotency request and recheck the actor after waiting. This serializes invitations, reactivation and deactivation, including maintainer helpers; a deactivated actor cannot finish a waiting access change. No self-deactivation is allowed, so mutually revoking staff cannot remove every active account. Ordinary operations keep the lock order above.
 
+Directory moves lock contacts in UUID order at `READ COMMITTED`, then compare the complete current order with the caller's previous order. A stale move fails with `STALE_HELP_ORDER`; a retry that already matches the desired order makes no further changes.
+
 The two-connection cases are in [concurrency-tests.md](concurrency-tests.md).
 
 ## 9. API and Supabase permissions
@@ -262,6 +264,8 @@ Never add quantities across units. Staff statistics are defined in [api-contract
 ## 12. Testing
 
 `./scripts/test-database.sh` runs every database check, including `scripts/check-schema-docs.py` for Appendix A; see [README.md](../README.md) and [VALIDATION.md](../VALIDATION.md). SQL cannot prove the real REST boundary; see [concurrency-tests.md](concurrency-tests.md) §7.
+
+The read-only `supabase/tests/v1-invariants.sql` diagnostic rechecks stored placement after restore, including live drawer overlap and cabinet bounds. Re-enabling triggers does not validate rows loaded while they were bypassed. Corruption probes in `supabase/tests/invariant-detector.py` exercise these checks with triggers restored before inspection.
 
 ## Appendix A. Complete table definitions
 

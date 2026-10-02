@@ -54,7 +54,8 @@ SELECT pg_temp.assert_true((SELECT id FROM public.amp_help_contacts ORDER BY dis
  ='76000000-0000-4000-8000-000000000002','new contacts go last');
 SELECT pg_temp.expect_error($q$UPDATE public.amp_help_contacts SET display_order=0$q$,'permission denied');
 SELECT pg_temp.expect_error($q$INSERT INTO public.amp_help_contacts(display_name,display_order) VALUES('Typed order',0)$q$,'permission denied');
-SELECT public.amp_reorder_help_contacts(ARRAY(SELECT id FROM public.amp_help_contacts ORDER BY display_order DESC,id DESC));
+SELECT array_agg(id ORDER BY display_order,id) AS original_help_order FROM public.amp_help_contacts \gset
+SELECT public.amp_reorder_help_contacts(ARRAY(SELECT id FROM public.amp_help_contacts ORDER BY display_order DESC,id DESC), :'original_help_order'::uuid[]);
 SELECT pg_temp.assert_true((SELECT array_agg(display_order ORDER BY display_order)=array_agg(n ORDER BY n)
  FROM (SELECT display_order,(row_number() OVER (ORDER BY display_order))::integer-1 AS n FROM public.amp_help_contacts) o)
  AND (SELECT display_order=0 FROM public.amp_help_contacts WHERE id='76000000-0000-4000-8000-000000000002'),'a move renumbers the whole list in the given order');
@@ -62,9 +63,15 @@ SELECT pg_temp.assert_true((SELECT edit_revision=2 FROM public.amp_help_contacts
  AND (SELECT edit_revision=3 FROM public.amp_help_contacts WHERE id='76000000-0000-4000-8000-000000000002'),'a move leaves open editors current');
 SELECT pg_temp.assert_true(EXISTS(SELECT FROM public.amp_audit_log WHERE table_name='help_contacts' AND action='UPDATE'
  AND actor_id='72000000-0000-4000-8000-000000000001' AND before_data->'display_order' IS DISTINCT FROM after_data->'display_order'),'moves are audited with the staff actor');
-SELECT pg_temp.expect_error($q$SELECT public.amp_reorder_help_contacts(ARRAY(SELECT id FROM public.amp_help_contacts OFFSET 1))$q$,'STALE_HELP_ORDER');
-SELECT pg_temp.expect_error($q$SELECT public.amp_reorder_help_contacts(ARRAY(SELECT id FROM public.amp_help_contacts OFFSET 1)||'76000000-0000-4000-8000-000000000002'::uuid||'76000000-0000-4000-8000-000000000002'::uuid)$q$,'STALE_HELP_ORDER');
-SELECT pg_temp.expect_error($q$SELECT public.amp_reorder_help_contacts(NULL)$q$,'STALE_HELP_ORDER');
+SELECT count(*) AS audit_before_retry FROM public.amp_audit_log \gset
+SELECT public.amp_reorder_help_contacts(ARRAY(SELECT id FROM public.amp_help_contacts ORDER BY display_order,id), :'original_help_order'::uuid[]);
+SELECT pg_temp.assert_true((SELECT count(*)=:'audit_before_retry'::bigint FROM public.amp_audit_log),'lost-response reorder retry adds no audit changes');
+SELECT pg_temp.expect_error(format('SELECT public.amp_reorder_help_contacts(%L::uuid[],%L::uuid[])', :'original_help_order', :'original_help_order'),'STALE_HELP_ORDER');
+SELECT pg_temp.expect_error($q$SELECT public.amp_reorder_help_contacts(ARRAY(SELECT id FROM public.amp_help_contacts OFFSET 1),'{}')$q$,'STALE_HELP_ORDER');
+SELECT pg_temp.expect_error($q$SELECT public.amp_reorder_help_contacts(ARRAY(SELECT id FROM public.amp_help_contacts OFFSET 1)||'76000000-0000-4000-8000-000000000002'::uuid||'76000000-0000-4000-8000-000000000002'::uuid,'{}')$q$,'STALE_HELP_ORDER');
+SELECT pg_temp.expect_error($q$SELECT public.amp_reorder_help_contacts(NULL,'{}')$q$,'STALE_HELP_ORDER');
+SELECT pg_temp.expect_error($q$SELECT public.amp_reorder_help_contacts(ARRAY(SELECT id FROM public.amp_help_contacts ORDER BY display_order,id),NULL)$q$,'STALE_HELP_ORDER');
+SELECT pg_temp.assert_true(to_regprocedure('public.amp_reorder_help_contacts(uuid[])') IS NULL,'legacy unguarded reorder signature is absent');
 RESET ROLE;
 
 SET LOCAL ROLE anon;
@@ -73,7 +80,7 @@ SELECT pg_temp.assert_true((SELECT array_agg(key ORDER BY key)=ARRAY['contact_ur
 SELECT pg_temp.expect_error('SELECT * FROM public.amp_help_contacts','permission denied');
 SELECT pg_temp.expect_error($q$INSERT INTO public.amp_help_contacts(display_name) VALUES('Forbidden')$q$,'permission denied');
 SELECT pg_temp.expect_error('SELECT * FROM public.amp_help_directory(NULL,NULL,0)','INVALID_HELP_PAGE_SIZE');
-SELECT pg_temp.expect_error($q$SELECT public.amp_reorder_help_contacts('{}')$q$,'permission denied');
+SELECT pg_temp.expect_error($q$SELECT public.amp_reorder_help_contacts('{}','{}')$q$,'permission denied');
 SELECT pg_temp.expect_error('SELECT * FROM public.amp_help_directory(0,NULL,10)','INVALID_HELP_CURSOR');
 RESET ROLE;
 
@@ -83,7 +90,7 @@ SELECT pg_temp.assert_true(NOT EXISTS(SELECT FROM public.amp_help_contacts),'ord
 SELECT pg_temp.expect_error($q$INSERT INTO public.amp_help_contacts(display_name) VALUES('Forbidden')$q$,'row-level security');
 WITH changed AS (UPDATE public.amp_help_contacts SET display_name='Forbidden' RETURNING *)
  SELECT pg_temp.assert_true((SELECT count(*)=0 FROM changed),'ordinary login cannot alter directory');
-SELECT pg_temp.expect_error($q$SELECT public.amp_reorder_help_contacts('{}')$q$,'STAFF_REQUIRED');
+SELECT pg_temp.expect_error($q$SELECT public.amp_reorder_help_contacts('{}','{}')$q$,'STAFF_REQUIRED');
 SELECT pg_temp.assert_true((SELECT count(*)=1 FROM public.amp_help_directory() WHERE id::text LIKE '76000000-%'),'ordinary login retains public directory access');
 RESET ROLE;
 ROLLBACK;

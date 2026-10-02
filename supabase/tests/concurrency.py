@@ -319,6 +319,31 @@ assert rejected_rows == '0'
 assert run('SELECT is_published AND edit_revision=2 AND display_name=\'Concurrent volunteer\' FROM app.help_contacts WHERE id=' + quote(contact_id) + ';') == 't'
 print('PASS: overlapping directory edits preserve the first publication and reject the stale write', flush=True)
 
+# A complete-list move must not silently undo another editor's unrelated move.
+def contact_order():
+    return obj('SELECT jsonb_agg(id ORDER BY display_order,id) FROM app.help_contacts;', '')
+
+def reorder_contacts(desired, previous):
+    def ids(values):
+        return 'ARRAY[' + ','.join(quote(value) + '::uuid' for value in values) + ']'
+    return 'SELECT public.amp_reorder_help_contacts(' + ids(desired) + ',' + ids(previous) + ');'
+
+previous = contact_order()
+first, second = previous[:], previous[:]
+first[0], first[1] = first[1], first[0]
+second[-1], second[-2] = second[-2], second[-1]
+race(reorder_contacts(first, previous), reorder_contacts(second, previous), error='STALE_HELP_ORDER')
+assert contact_order() == first
+print('PASS: overlapping directory moves reject the stale order without undoing the first move', flush=True)
+before_audit = run("SELECT count(*) FROM app.audit_log WHERE table_name='help_contacts';")
+run(reorder_contacts(first, previous), STAFF)
+assert run("SELECT count(*) FROM app.audit_log WHERE table_name='help_contacts';") == before_audit
+retry_move = reorder_contacts(previous, first)
+race(retry_move, retry_move)
+assert contact_order() == previous
+assert int(run("SELECT count(*) FROM app.audit_log WHERE table_name='help_contacts';")) == int(before_audit) + 2
+print('PASS: lost-response and concurrent directory move retries add no duplicate audit changes', flush=True)
+
 # Saving a drawer layout uses the same row anchors as ordinary moves and
 # assignments. Every schedule observes the second connection waiting.
 def layout_cabinet(cabinet_id):

@@ -51,6 +51,9 @@ are in [README](../README.md).
 Staff sign in with individual email/password Supabase Auth accounts, with password
 setup and recovery, but no public registration. Active admins manage access at
 `/admin/admins` (§5.9).
+Password setup binds the verified callback to its user ID. Changing accounts in
+another tab invalidates that form; the password write uses the checked identity's
+explicit bearer token, never a fresh lookup of the browser's shared session.
 Signed-out admin visits redirect (replacing history) to the same locale's
 `/admin/login?next=<path>`. Unavailable Auth and missing/revoked access are
 distinct error states. The header Admin link shows only after membership is
@@ -221,7 +224,8 @@ metadata (§5.5). Column grants decide what is writable; triggers audit and vali
   are created on demand with predefined stable IDs. Pending commands keep actor,
   IDs and exact payload for retry. Never default missing values to zero/false.
 - Attributes are typed scalars in canonical units (ohm, never `1k`).
-- Active products require a bin. Deactivate instead of deleting anything with history.
+- Active products may have no bin, with an optional public location note. Shelf and
+  count reads include those products. Deactivate instead of deleting anything with history.
 
 Shelf layouts ([editor](page-admin-stock.md#placement)):
 
@@ -376,6 +380,10 @@ sheets or silently truncate or over-shrink specs. See [page-labels.md](page-labe
 
 ## 8. Security obligations (Worker + frontend)
 
+- The production apex and www hosts redirect HTTP to the HTTPS apex before
+  rendering pages. HTTPS pages set `Strict-Transport-Security: max-age=31536000`;
+  this does not include other subdomains or preload the domain. Local development
+  keeps its configured HTTP/HTTPS origin.
 - Pages forbid embedding with `Content-Security-Policy: frame-ancestors 'none'`,
   configured through SvelteKit, so another site cannot disguise staff controls.
 - Guest RPCs are `service_role`-only; browsers reach them **only** through the Worker,

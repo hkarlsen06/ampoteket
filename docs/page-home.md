@@ -198,9 +198,13 @@ button. Members sort online, idle, do not disturb; each avatar carries Discord's
 status shape (dot, crescent, bar), with the status word in visually hidden text. The members
 load from `GET /api/discord` when the Card is about a screen away, never before the
 first byte; avatars come through `/api/discord/avatar/…`, so the browser never contacts
-Discord. Each Cloudflare data centre asks Discord at most once a minute. Discord throttles
-Cloudflare's shared egress (about half its answers are a 429 with a 0.3 s `retry_after`), so
-the Worker retries up to five times, then serves its last good answer for up to an hour.
+Discord. Each Cloudflare cache keeps successful answers fresh for a minute and records
+a one-minute cooldown before refreshing, including cold-cache failures. The Cache API
+is not an atomic lock across Worker isolates. Discord throttles Cloudflare's shared
+egress (about half its answers are a 429 with a 0.3 s `retry_after`), so the Worker
+retries up to five times within one five-second deadline, including reading the body,
+then serves its last good answer for up to an hour. Failures never extend that answer's
+retention. Avatar requests also have a five-second deadline through the body read.
 Only with no such answer does the load fail, reading «Antall pålogget er utilgjengelig.»
 with a retry, never 0.
 Without JavaScript only the invite button shows. The server's widget must stay enabled

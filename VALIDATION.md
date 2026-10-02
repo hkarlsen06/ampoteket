@@ -1,7 +1,8 @@
 # Current validation
 
 What has been executed, and what must still happen before launch. All runs used
-local, disposable services, except the hosted rehearsal recorded under Hosted setup.
+local, disposable services, except the read-only provider checks and hosted
+rehearsal recorded below.
 Past runs live in git history, not here. Replace a row when you rerun it; do not
 append a diary. CI runs the database chain and the `boundary`, `shop`, `checkout`,
 `admin`, `admins`, `scanner`, `labels` and `statistics` browser modes; the results
@@ -11,11 +12,13 @@ below are local runs, not CI claims.
 
 | Check | Last run | Result | Covers |
 | --- | --- | --- | --- |
-| `bun run check`, `bun run check:scripts`, `bun run lint` | 2026-10-01 | PASS, 0 errors/warnings | Types, scripts, lint |
-| `bun test` | 2026-10-01 | PASS, 226 tests | Unit tests |
-| `bun audit` | 2026-09-30 | PASS, no vulnerabilities after the dependency update | Resolved dependency tree |
-| `python3 scripts/test-check-clipped-ink.py`, `bun run check:ink` | 2026-09-30 | PASS | Checker regressions, static SVG checks |
-| `./scripts/test-database.sh` | 2026-10-01 | PASS | Rollback/retry, ACLs/RLS, acceptance, filters, statistics, malformed input, 10 stored-data corruption cases (including duplicate sale movements), concurrency (including mutual admin deactivation, stale invitations), restore, schema/docs comparison, signed-JWT HTTP |
+| `bun run check`, `bun run check:scripts`, `bun run lint` | 2026-10-02 | PASS, 0 errors/warnings | Types, scripts, lint |
+| `bun run build` | 2026-10-02 | PASS | Production SvelteKit/Cloudflare bundle with the audit fixes |
+| `bun test` | 2026-10-02 | PASS, 242 tests, 2,023 assertions | Unit tests, including CI/deploy failures, HTTPS headers, seed cleanup ownership, account-bound password changes, receipt retries and Discord deadlines/cooldowns |
+| `bun audit` | 2026-10-02 | PASS, no reported vulnerabilities | Resolved dependency tree |
+| `python3 scripts/test-check-clipped-ink.py`, `bun run check:ink` | 2026-10-02 | PASS | Checker regressions, static SVG checks |
+| `./scripts/test-database.sh` | 2026-10-02 | PASS | Seven migrations, rollback/retry, ACLs/RLS, acceptance, 12 stored-data corruption cases including drawer bounds/overlap, 42 concurrency scenarios including competing help-order writes, restore, schema/docs comparison, signed-JWT HTTP |
+| Audit fix browser acceptance | 2026-10-02 | PASS | Real disposable Auth/PostgREST: active unplaced product in shelf/count picker; invitation password save and independent sign-in; cross-tab account switch removes password form and preserves both passwords; help reorder/focus, stale rejection and retry. No overflow at 360 px (password/help) or 1280 px (shelf/count). Owned seed and dev server removed after verification |
 | `./scripts/test-web.sh` | 2026-10-01 | PASS | Real local Auth, public/staff/Worker boundaries, exact decimal transport |
 | `./scripts/test-web.sh --shop` | 2026-10-01 | PASS | Lifecycle freshness, retained drafts, invalid saved quantities, removal focus, mobile drawer addresses |
 | `./scripts/test-web.sh --checkout` | 2026-10-01 | PASS | Remote staff recovery, pre-payment recheck and navigation during it, framing protection, Auth invitation/recovery emails in Mailpit |
@@ -52,6 +55,8 @@ Update this section whenever a migration changes (`sha256sum supabase/migrations
   `7b0888d92f33d4c5927abc81249230d7763012e625268de26d34c59fcc3239ba`
 - `20261001000300_help_contact_order.sql`: SHA-256
   `99c58f4e01fda5334d07698c889f40e9207fb302afd7687839215e22545af76c`
+- `20261002000100_guard_help_contact_order.sql`: SHA-256
+  `884bc671e2ceec8c346a00121bf0168d346e716bdb0f7c4111b5bafde520d6dc`
 
 24 app tables, four exact numeric domains, 30 public RPCs, 29 staff views and five
 internal derived views. All views are security invoker; only `public` is exposed.
@@ -77,50 +82,35 @@ the selected products. It is a regression check, not a hosted latency guarantee.
   margins, attach it to real drawers and scan it in the workshop's light. For the
   P-touch printer, a WebUSB print from the admin editor and scanning the printed
   tape QR with a phone.
-- **Hosted setup:** on 2026-10-01 (commit `e2f4096`, CI green) the first three
-  migrations above were applied with `supabase migration up --linked` to project
-  `mqzcbdorjuefefzvuefa` (Stockholm, PostgreSQL 17); history and hashes match.
-  `permissions.sql`, `protections.sql` and `v1-invariants.sql` passed there; 24
-  app tables all have RLS. Hosted Auth has public signup off, Site URL
-  `https://ampoteket.no` and password return URLs for `https://ampoteket.no` (both
-  locales, switched 2026-10-01 13:06 UTC), the repo email templates, and Data API
-  schema `public` only. The Worker serves `ampoteket.no` and `www.ampoteket.no` (308
-  to the apex, Google Trust Services certificate) as version
-  `3c1e5819-e3ec-493b-afde-f5e2aa55d359` (commit `116c724`, `bun run deploy:production`,
-  deployed 2026-10-01 15:39 UTC, which verified the vars, rate limits, secrets and the
-  `/help` contact list; the workers.dev rehearsal address is off). It replaced
-  `1b0b327c-27ce-4ddb-9ee6-81298ad998fd`, deployed 14:43 UTC by Cloudflare Workers Builds from the push of
-  `bcecfda` without any vars, which made `/help` report the contact list unavailable;
-  the version before it was `a34fc006-0aac-4d69-b29f-ae4fa009800e` (`634513d` plus
-  `c90ce91`) with `SALES_OPEN=false`: `/`, `/en`, `/help`, `/privacy` and
-  `/admin` answer 200, `/p`, `/cart`, `/checkout` and `/p/<code>` answer 503 "shop
-  opens soon", and `POST /api/checkouts/session|prepare` answers
-  `503 CHECKOUT_UNAVAILABLE`. From Cloudflare's network, 11 of 24 Discord widget requests
-  were a global 429 with a 0.3 s `retry_after`; with the retry, `/api/discord` answered
-  20 of 20 calls over 80 s (before the fallback, 2 of 5 failed). The first admin (`hjalmar@hkarlsen06.dev`, Hjalmar Karlsen) was
-  granted with `app.grant_staff_access` by Claude Code at the owner's request. A test
-  admin, "Hjalmar 2", whose Auth account had already been deleted and which no
-  record referenced, was deleted by Claude Code at the owner's request on 2026-10-01,
-  with the `keep_records` trigger disabled for that one transaction. Still
-  open: custom SMTP
-  invitation/reset delivery (the owner reports Resend connected as
-  `Ampoteket <noreply@notify.ampoteket.no>`) and the receipt email are unverified; the Data API
-  cutover barrier and a full hosted restore drill
+- **Hosted setup:** on 2026-10-02 read-only Worker metadata confirmed version
+  `f80b44b0-cacb-49f3-be8f-ad2aacfd36b2`, commit `8fdbcf6`, deployed at
+  02:54:48 UTC. The expected four vars, four rate limits and both secret names
+  are present; sales remain closed. Public/staff page shells answer 200 and
+  tested buyer routes answer 503. See [current state](AGENTS.md#current-state).
+  Hosted Auth configuration matches the repository's SMTP, signup, Site URL,
+  localized password-return URL and email-template requirements. Real SMTP
+  invitation/reset/receipt delivery, receipt-archive access, aligned message
+  headers and DMARC enforcement remain unverified. The Data API cutover barrier,
+  recovery checkpoint and full hosted restore drill remain open
   ([deploy](docs/runbook-deploy.md), [backup](docs/runbook-backup-restore.md)).
-- **Volunteer Discord contacts:** `20261001000100` and `20261001000200` were applied
-  to the hosted project on 2026-10-01 12:42 UTC with `supabase migration up --linked`;
-  history and hashes match. The function-privilege check from `permissions.sql` and
-  the help-contact column grants, RLS and view options from `protections.sql` passed
-  there (run through the Supabase connector, the full `protections.sql` and
-  `v1-invariants.sql` were not rerun). Both locales of `/help` on the rehearsal
-  Worker list the 12 volunteers. Still open: saving the new fields in `/admin/help`
-  and `/help` at 360 px.
-- **Volunteer list ordering:** `20261001000300` was applied to the hosted project on
-  2026-10-01 13:04 UTC together with the `551798a` Worker; history and hash match.
-  Through the Supabase connector: `amp_reorder_help_contacts` is security definer
-  and executable only by `authenticated`, clients hold only `SELECT` on
-  `display_order`, and the 12 contacts have distinct positions. Still open: moving a
-  contact in `/admin/help` on the hosted site.
-- **Owners and targets:** name operators and accept RPO/RTO, backup storage and
-  drill schedule. The backup runbook proposes 24 hours each, daily off-platform
-  backups and a drill each semester; none of this is accepted yet.
+- **Hosted migration and release:** the 2026-10-02 CLI dry-run lists only
+  `20261002000100_guard_help_contact_order.sql` as pending; it applied nothing.
+  The six earlier migrations are recorded as applied. Internal row counts,
+  grants/RLS and migration hashes retain prior Supabase connector evidence;
+  the connector was unavailable for this audit. Apply the new migration before
+  its frontend: the old one-argument reorder RPC is removed, so cached old
+  clients fail closed until refreshed. Hosted staff help editing/reordering and
+  the audit fixes must still be verified after release. No production changes
+  were made during the audit fixes.
+- **Repository and monitoring controls:** local CI gating, deployment rollback,
+  HTTPS and error-log changes await release. The reviewed native main-protection
+  policy is `.github/main-protection.json`; GitHub protection, secret scanning,
+  push protection and security updates remain disabled until the owner approves
+  the [provider changes](docs/runbook-deploy.md#repository-protection-and-monitoring).
+  Verify an actual error/uptime notification path before launch.
+- **Owners and targets:** Hjalmar Karlsen (`hkarlsen06`) is the primary operator
+  for service access, backups and contact retention, assigned on 2026-10-02.
+  An independent backup operator, RPO/RTO, backup storage, retention reminder,
+  alert recipient and drill schedule remain open. The backup runbook proposes
+  24 hours each, daily off-platform backups and a drill each semester; these
+  targets and arrangements have not been accepted.

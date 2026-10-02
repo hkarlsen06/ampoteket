@@ -36,7 +36,7 @@ Staff edit through `amp_help_contacts` with their own JWT:
 - Insert with a fresh client UUID, so a lost response can be reconciled.
 - PATCH filters `id=eq.<id>` and `edit_revision=eq.<original>`, sends the same original `edit_revision` in the body, and uses `Prefer: return=representation`. Only one returned row means saved. Zero rows or `STALE_HELP_CONTACT` means someone else edited: keep the draft, refresh and review, never overwrite.
 - Send blank optional contact methods as `null`. Entries cannot be deleted; unpublish instead.
-- Never send `display_order`: a new contact goes last. `amp_reorder_help_contacts(p_ids)` takes every contact ID, drafts included, in the new order and renumbers from 0. A move does not advance `edit_revision`. `STALE_HELP_ORDER` means the list changed (a contact was added): re-read and let the user move again.
+- Never send `display_order`: a new contact goes last. `amp_reorder_help_contacts(p_ids, p_expected_ids)` takes every contact ID, drafts included, in both the desired order and the order displayed before the move, and renumbers from 0. A move does not advance `edit_revision`. The database compares the previous order after locking; `STALE_HELP_ORDER` means contacts or their order changed: re-read and let the user move again. A retry whose desired order is already current succeeds without another write. The old one-argument signature is unavailable.
 
 ## Staff membership and invitations
 

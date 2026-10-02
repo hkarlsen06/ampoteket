@@ -55,6 +55,17 @@ INSERT INTO app.bins(code,is_archived) VALUES('RETIRED-BIN',true);
 """ + BODY + '\nROLLBACK;', 'valid archived storage and retained recovery attribution after Auth deletion')
 
 mutations = [
+    ('overlapping bins loaded with placement triggers bypassed', """
+SET LOCAL session_replication_role='replica';
+INSERT INTO app.bins(code,cabinet_id,inner_row,inner_col)
+ VALUES('OVERLAPPING-BIN','74000000-0000-4000-8000-000000000001',1,1);
+SET LOCAL session_replication_role='origin';
+""", 'overlapping_live_bins'),
+    ('bin beyond cabinet grid loaded with placement triggers bypassed', """
+SET LOCAL session_replication_role='replica';
+UPDATE app.bins SET col_span=13 WHERE code='TEST-BIN-1';
+SET LOCAL session_replication_role='origin';
+""", 'bin_outside_cabinet_grid'),
     ('product in retired bin', """
 ALTER TABLE app.bins DISABLE TRIGGER guard_bin_archive;
 UPDATE app.bins SET is_archived=true,cabinet_id=NULL,inner_row=NULL,inner_col=NULL WHERE code='TEST-BIN-1';

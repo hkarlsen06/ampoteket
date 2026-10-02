@@ -1,4 +1,4 @@
-import { requestApiJson, type Fetcher } from './api';
+import { identifier, object, requestApiJson, type Fetcher } from './api';
 
 /** Public configuration only; the service credential never enters the browser. */
 export type AdminAuthConfig = { url: string; publishableKey: string };
@@ -29,6 +29,23 @@ export async function createBrowserAdminAuth(config: AdminAuthConfig) {
 	return createClient(config.url, config.publishableKey, {
 		auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, flowType: 'pkce', storageKey: adminStorageKey(config) }
 	}).auth;
+}
+
+/** Bind the write to the verified callback identity even if another tab signs in mid-request. */
+export async function updateAdminPassword(config: AdminAuthConfig,
+	auth: Pick<Awaited<ReturnType<typeof createBrowserAdminAuth>>, 'getSession'>,
+	verifiedUserId: string, password: string, fetcher: Fetcher = fetch): Promise<void> {
+	identifier(verifiedUserId);
+	const { data, error } = await auth.getSession();
+	if (error || !data.session || data.session.user.id !== verifiedUserId) throw new Error('Password identity changed');
+	const url = baseUrl(config);
+	url.pathname = '/auth/v1/user';
+	// SDK updateUser reads shared storage again. A fixed bearer token cannot switch users.
+	const user = object(await requestApiJson(url, {
+		method: 'PUT', headers: { apikey: config.publishableKey, Authorization: `Bearer ${data.session.access_token}`, 'Content-Type': 'application/json' },
+		body: JSON.stringify({ password }), credentials: 'omit', cache: 'no-store'
+	}, fetcher));
+	if (user.id !== verifiedUserId) throw new Error('Password identity changed');
 }
 
 /** supabase-js's own default key, named here so guests can be told apart without loading it. */
@@ -78,5 +95,5 @@ export async function readAdminMembership(
 
 /** A return path never carries credentials, another origin or an unbuilt screen. */
 export function adminReturnPath(value: string | null): string {
-	return value && /^\/admin(?:\/(?:privacy|help|admins|shelf|stock|audit|products(?:\/(?:new|labels|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))?|(?:counts|orders)(?:\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?))?$/.test(value) ? value : '/admin';
+	return value && /^\/admin(?:\/(?:privacy|help|admins|shelf|stock|statistics|audit|products(?:\/(?:new|labels|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))?|(?:counts|orders)(?:\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?))?$/.test(value) ? value : '/admin';
 }

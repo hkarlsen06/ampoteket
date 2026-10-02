@@ -60,7 +60,7 @@ function apiCoordinates(value: AdminCabinet | AdminBin): Record<string, unknown>
 }
 function parseAssignment(value: unknown): AssignedProduct {
 	const row = object(value), code = text(row.code, 40);
-	if (!/^[A-Z0-9][A-Z0-9-]{0,39}$/.test(code) || typeof row.is_active !== 'boolean' || (row.is_active && row.bin_id === null)) throw new Error('Invalid assigned product');
+	if (!/^[A-Z0-9][A-Z0-9-]{0,39}$/.test(code) || typeof row.is_active !== 'boolean') throw new Error('Invalid assigned product');
 	return { id: identifier(row.id), code, name_nb: text(row.name_nb, 200), name_en: text(row.name_en, 200),
 		bin_id: row.bin_id === null ? null : identifier(row.bin_id), is_active: row.is_active };
 }

@@ -58,8 +58,6 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 chmod 700 "$seed_dir"
-# Lets a later run tell a live seed from one whose script died.
-echo $$ >"$seed_dir/owner.pid"
 mkdir -p "$seed_dir/project/supabase"
 cp -r supabase/migrations "$seed_dir/project/supabase/"
 read -r seed_api_port seed_db_port seed_shadow_port seed_studio_port < <(python3 - <<'PY'
@@ -131,29 +129,6 @@ seed_kill_port() {
   fi
   seed_port_free "$port" 2>/dev/null
 }
-# A seed whose script died (SIGKILL, closed terminal, crash) never ran its EXIT
-# trap, so its containers keep the pinned ports through Docker's root-owned
-# proxy. Stop such disposable projects the way that trap would, on every start.
-# A seed whose script is still running is never touched here (see --sigkill).
-seed_reap_orphans() {
-  local project workdir dir pid
-  while IFS=' ' read -r project workdir; do
-    [[ $project == ampoteket-seed-* ]] || continue
-    dir=${workdir%/project}
-    [[ $dir == /tmp/ampoteket-seed.* && $dir != "$seed_dir" ]] || continue
-    if [[ -r $dir/owner.pid ]]; then
-      pid=$(<"$dir/owner.pid")
-      [[ $pid =~ ^[0-9]+$ ]] && ps -p "$pid" -o args= 2>/dev/null | grep -qF seed-test.sh && continue
-    elif [[ -n $(seed_holders seed-test.sh) ]]; then
-      continue # Started before owner.pid existed; only reap when no seed runs.
-    fi
-    echo "Stopping orphaned seed project $project" >&2
-    supabase stop --project-id "$project" --network-id "$project" --no-backup >/dev/null 2>&1 || true
-    docker network rm "$project" >/dev/null 2>&1 || true
-    rm -rf "$dir"
-  done < <(docker ps --format '{{.Label "com.supabase.cli.project"}} {{.Label "com.supabase.cli.workdir"}}' 2>/dev/null | sort -u)
-}
-seed_reap_orphans
 seed_claim_port() {
   local name=$1 port=$2
   if seed_port_free "$port" 2>/dev/null; then return 0; fi
