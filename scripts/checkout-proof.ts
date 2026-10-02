@@ -164,6 +164,8 @@ try {
 	await page.goto(`${origin}/en/checkout/${prepared.checkoutId}`);
 	await expect(page.getByRole('link', { name: 'Open Vipps', exact: true })).toBeVisible();
 	await expect(page.getByText('Proof capacitor', { exact: true })).toBeVisible();
+	await expect(page.getByText(`Ref: ${prepared.checkoutId}`, { exact: true })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Copy', exact: true })).toBeVisible();
 	await expect(page.getByText('Changed current name', { exact: true })).toHaveCount(0);
 	assert.equal(await page.locator('link[rel=canonical], meta[property="og:url"]').count(), 0);
 	const shell = await fetch(page.url(), { tls: { ca } });
