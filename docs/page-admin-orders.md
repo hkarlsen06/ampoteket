@@ -11,8 +11,9 @@ and RPCs in [datamodell.md](datamodell.md).
 - Placement times follow the [time rules](website-guide.md#6-numbers-the-frontend-must-respect).
 - Unit cost is per sale unit; freight and other costs go on the order header.
 - The product picker includes inactive products, since past purchases must stay
-  recordable. Its plus button opens the New product editor in a sheet above the order;
-  saving selects the new product on that line and fills an empty purchase link.
+  recordable. While a line has no product, a plus button beside the picker opens the
+  New product editor in a sheet above the order; saving selects the new product on that
+  line and fills an empty purchase link.
   Its search stays visible while the result list scrolls within the available
   popover height, including short landscape viewports. If the keyboard covers the
   trigger, the picker anchors at the visual viewport edge. On extremely short
@@ -23,8 +24,8 @@ and RPCs in [datamodell.md](datamodell.md).
 - Invalid values show an associated field error and move focus to the first invalid
   field. A generic form failure does not replace quantity, cost or product guidance.
 - Recording an order changes no stock.
-- Add line stays in the scrollable sheet body and Save in its fixed footer, so the two
-  are never confused.
+- Choosing a product on the last line adds an empty line below it, so there is no Add
+  line button. Saving ignores lines left completely empty.
 
 ## Receipts and progress
 

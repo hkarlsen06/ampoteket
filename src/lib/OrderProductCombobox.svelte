@@ -18,8 +18,8 @@
 	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
 	import XIcon from 'phosphor-svelte/lib/XIcon';
 
-	// `oncreated` adds a plus button that creates a product in a sheet; the caller adds it to
-	// `products`, and the picker then selects it.
+	// `oncreated` adds a plus button, while no product is chosen, that creates a product in a
+	// sheet; the caller adds it to `products`, and the picker then selects it.
 	let { id, products, value = $bindable(''), disabled = false, oncreated, onselect, error }: {
 		id: string; products: Omit<OrderProduct, 'purchase_url'>[]; value: string; disabled?: boolean; error?: string; onselect?: (productId: string) => void; oncreated?: (product: OrderProduct) => void;
 	} = $props();
@@ -86,7 +86,7 @@
 			</Command.Root>
 		</Popover.Content>
 	</Popover.Root>
-	{#if oncreated}
+	{#if oncreated && !selected}
 		<Dialog.Root bind:open={creating}>
 			<Dialog.Trigger {disabled}>
 				{#snippet child({ props })}<Button {...props} variant="outline" size="icon" class="shrink-0"><Icon icon={PlusIcon} /><span class="sr-only">{m.newProductFromOrder}</span></Button>{/snippet}
