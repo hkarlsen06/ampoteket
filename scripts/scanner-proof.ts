@@ -614,7 +614,18 @@ try {
 	assert.equal(await sql('SELECT count(*) FROM app.sales'), '2');
 	assert.deepEqual(errors, [], 'No browser runtime errors');
 	console.log('PASS: both locales/themes fit 360/1280 px; actual scan → basket → saved payment controls → registration and a free collection each post one disposable sale');
+	// CI sometimes stalled from here until its 30-minute limit, on calls Playwright never
+	// times out (close, evaluate). Name the step and fail instead; the forced exit covers
+	// a cleanup that stalls on the same browser.
+	let webkitStep = 'closing Firefox';
+	const watchdog = setTimeout(() => {
+		console.error(`Scanner proof stalled for 3 minutes while ${webkitStep}.`);
+		setTimeout(() => process.exit(1), 20000).unref();
+		process.kill(process.pid, 'SIGTERM');
+	}, 180000);
+	watchdog.unref();
 	await context.close(); context = undefined;
+	webkitStep = 'launching WebKit';
 
 	// Desktop WebKit blocks the local HTTPS page's loopback HTTP API. A test-only
 	// loopback HTTP transport forwards the identical production app/assets with
@@ -633,21 +644,26 @@ try {
 		return new Response(response.body, { status: response.status, headers: response.headers });
 	} });
 	try {
+		webkitStep = 'opening the WebKit cart';
 		context = await webkitBrowser.newContext({ viewport: { width: 390, height: 844 } });
 		await installCamera(context);
 		const webkitPage = await context.newPage();
 		const webkitErrors: string[] = [];
 		webkitPage.on('pageerror', (error) => webkitErrors.push(error.message));
 		await webkitPage.goto(`http://localhost:${webkitTransport.port}/en/cart`); await open(webkitPage);
+		webkitStep = 'scanning the first label in WebKit';
 		await paint(webkitPage, 'first'); await product(webkitPage); await noInternalScroll(webkitPage);
 		await action(webkitPage, 'Add to cart').click(); await expect.poll(() => quantity(webkitPage)).toBe('1');
 		await decodedFrames(webkitPage, 5); await state(webkitPage, 'idle');
+		webkitStep = 'rescanning in WebKit';
 		await rearm(webkitPage); await paint(webkitPage, 'first'); await product(webkitPage);
 		await action(webkitPage, 'Scan').click(); await action(webkitPage, 'Close scanner').click();
 		assert.equal((await stats(webkitPage)).live, 0); await fits(webkitPage);
 		assert.deepEqual(webkitErrors, []);
+		webkitStep = 'closing the WebKit context';
 		await context.close(); context = undefined;
-	} finally { await webkitBrowser.close(); void webkitTransport.stop(true); }
+	} finally { webkitStep = 'closing WebKit'; await webkitBrowser.close(); void webkitTransport.stop(true); }
+	clearTimeout(watchdog);
 	console.log('PASS: desktop WebKit real WASM scan/add/repeat/rescan/cleanup with synthetic media through a test-only localhost HTTP transport');
 	console.log('EVIDENCE LIMIT: no physical iPhone/Android camera, permission prompt, lock/unlock, printed-label optics or Vipps app behavior is proven by this suite.');
 } catch (error) {
