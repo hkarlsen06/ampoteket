@@ -228,7 +228,8 @@ export async function exerciseAdminHelp(options: ProofOptions) {
 			const link = await options.readAuthEmail(type, email);
 			const changedPassword = `${password}-${type}`;
 			await page.goto(link);
-			expect(page.url()).toBe(`${origin}/en/admin/password`);
+			// The page discards the callback once hydrated, which may be after the load event.
+			await expect(page).toHaveURL(`${origin}/en/admin/password`);
 			await page.getByRole('button', { name: 'Continue', exact: true }).click();
 			await expect(page.getByLabel(fieldLabel('New password (at least 8 characters)'))).toBeVisible();
 			await page.getByLabel(fieldLabel('New password (at least 8 characters)')).fill(changedPassword);
