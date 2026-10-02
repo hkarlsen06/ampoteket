@@ -203,7 +203,7 @@
 		<form class={formLayout} onsubmit={submit} oninput={() => { invalidField = ''; }}>
 			<Field.Set class="gap-2">
 				<Field.Legend id={`${fieldId}-kind`} variant="label">{m.kind}</Field.Legend>
-				<ToggleGroup.Root type="single" variant="outline" value={kind} disabled={Boolean(command) || busy} aria-labelledby={`${fieldId}-kind`}
+				<ToggleGroup.Root type="single" variant="outline" spacing={2} class="flex-wrap" value={kind} disabled={Boolean(command) || busy} aria-labelledby={`${fieldId}-kind`}
 					onValueChange={(value) => { if (value) { kind = value as typeof kind; movementId = ''; counted = ''; outcome = 'idle'; } }}>
 					<ToggleGroup.Item value="withdraw">{m.withdraw}</ToggleGroup.Item>
 					<ToggleGroup.Item value="adjust">{m.adjust}</ToggleGroup.Item>
@@ -249,7 +249,7 @@
 			{#each [...detail.movements.map(entry => ({ at: entry.at, id: entry.id, movement: entry, count: null })), ...detail.counts.map(entry => ({ at: entry.at, id: entry.eventId, movement: null, count: entry }))].sort((a, b) => b.at.localeCompare(a.at) || b.id.localeCompare(a.id)) as row, index (row.id)}
 				{#if index > 0}<Item.Separator />{/if}
 				<Item.Root variant="row" role="listitem">
-					<Item.Content class="min-w-0">
+					<Item.Content class="min-w-0 basis-72">
 						{#if row.movement}
 							<Item.Title class={itemTitle}>{m.kindLabels[row.movement.kind as keyof typeof m.kindLabels]} <span class="font-mono">{formatDecimal(row.movement.delta, i18n.locale)} {unitLabel(product.unit_code, i18n.locale, row.movement.delta)}</span></Item.Title>
 							<Item.Description>
