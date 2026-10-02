@@ -46,11 +46,15 @@
 	import ProductSpecificationRecovery from '$lib/ProductSpecificationRecovery.svelte';
 	import { parseAttribute, ProductSpecificationsError, type ProductAttributeDraft } from '$lib/admin-products';
 	import ShelfPlacementPicker from '$lib/ShelfPlacementPicker.svelte';
+	import { Badge } from '$lib/components/ui/badge';
+	import { readOutstandingByProduct } from '$lib/admin-orders';
 	import { draftFields, readDraft, writeDraft } from '$lib/drafts';
 	import { clearProductCommand, definitiveProductFailure, executeProductCommand, sameProduct, generateCategoryProductCode, generateProductCode, isProductCodeCollision, parseProductWrite, persistProductCommand, ProductFieldError, productCategoryOptions, readProduct, readProductCommand, readProductReferences, readProductStock, StaleProductError, type AdminProduct, type ProductCommand, type ProductFamily, type ProductReferences, type ProductStock, type ProductWrite } from '$lib/admin-products';
 	let { id }: { id: string } = $props();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.adminProducts);
 	let product = $state<AdminProduct | null>(null); let references = $state<ProductReferences | null>(null); let stock = $state<ProductStock | null>(null);
+	// Quantity still expected from open supplier orders; null when none or unreadable.
+	let onOrder = $state<string | null>(null);
 	const blank: ProductWrite = { id: '', code: '', name_nb: '', name_en: '', description: null, category_id: null, bin_id: null, location_note: null, unit_code: 'pcs', stock_step: '1', sale_step: '1', sale_unit_price_nok: '0', minimum_stock: '0', datasheet_url: null, purchase_url: null, is_active: false };
 	let draft = $state<ProductWrite>({ ...blank });
 	let staged = $state<ProductAttributeDraft[]>([]);
@@ -142,7 +146,10 @@
 		if (!product || admin.status !== 'ready') return;
 		const generation = ++stockGeneration; stockLoading = true;
 		try {
-			const session = admin.credentials(); const next = await readProductStock(session, product.id); if (alive && generation === stockGeneration && admin.session?.user.id === session.userId) stock = next; }
+			const session = admin.credentials();
+			// Read together so the on-order badge never pops in after the balance.
+			const [next, outstanding] = await Promise.all([readProductStock(session, product.id), readOutstandingByProduct(session).catch(() => null)]);
+			if (alive && generation === stockGeneration && admin.session?.user.id === session.userId) { stock = next; onOrder = outstanding?.get(product.id) ?? null; } }
 		catch (error) { if (alive && generation === stockGeneration) stock = null; await admin.permissionFailure(error); }
 		finally { if (alive && generation === stockGeneration) stockLoading = false; }
 	}
@@ -388,19 +395,19 @@
 {:else if !ready}<p>{m.missing}</p>
 {:else if references && !wrongIdentity}
 	{#if product}
-		<div class="product-stock mb-6 flex min-h-20 items-center justify-between gap-4">
-			<div class="min-w-0 text-sm" aria-live="polite">
+		<div class="product-stock mb-6 flex min-h-20 flex-wrap items-center justify-between gap-4">
+			<div class="min-w-0 grow basis-56 text-sm" aria-live="polite">
 				{#if stock}
 					<p class="text-muted-foreground">{m.inventory}</p>
 					<p class="flex flex-wrap items-center gap-x-3 gap-y-1">
 						<span class={['font-mono text-2xl font-semibold', stockLevel === 'out' ? 'text-destructive' : stockLevel === 'low' ? 'rounded-md bg-warning px-1.5 text-on-warning' : 'text-foreground']}>{formatDecimal(stock.quantity, i18n.locale)} {unitLabel(product.unit_code, i18n.locale, stock.quantity)}</span>
 						<StockBadge quantity={stock.quantity} unit={unitLabel(product.unit_code, i18n.locale)} minimum={product.minimum_stock} showQuantity={false} />
 					</p>
-					<p class="text-muted-foreground">{stock.last_counted_at ? `${m.lastCount}: ${formatCountedAt(stock.last_counted_at, i18n.locale)}` : m.neverCounted}</p>
+					<p class="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">{stock.last_counted_at ? `${m.lastCount}: ${formatCountedAt(stock.last_counted_at, i18n.locale)}` : m.neverCounted}{#if onOrder}<Badge variant="outline">{m.onOrder(`${formatDecimal(onOrder, i18n.locale)} ${unitLabel(product.unit_code, i18n.locale, onOrder)}`)}</Badge>{/if}</p>
 				{:else if stockLoading}<span class="sr-only" role="status">{m.loading}</span><Skeleton class="h-16 w-40" />
 				{:else}<div class="grid justify-items-start gap-2"><Alert.Message appearance="inline" variant="destructive" role="status">{m.inventoryUnavailable}</Alert.Message><Button variant="outline" size="sm" onclick={refreshStock}>{m.retry}</Button></div>{/if}
 			</div>
-			<div class="shrink-0"><CountForm modal {product} onsaved={refreshStock} /></div>
+			<div class="grid shrink-0 justify-items-start gap-1 md:justify-items-end"><CountForm modal {product} onsaved={refreshStock} /><Button variant="link" size="sm" href={i18n.href(`/admin/stock?product=${product.id}`)}>{m.stockLedger}</Button></div>
 		</div>
 	{/if}
 	<Tabs.Root value="details">

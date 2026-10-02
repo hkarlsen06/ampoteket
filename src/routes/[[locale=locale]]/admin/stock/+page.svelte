@@ -187,12 +187,15 @@
 	</div>
 {/if}
 {#if product && detail}
-	<div class="mt-5 text-sm">
-		<p class="text-muted-foreground">{m.stock}</p>
-		<p class="flex flex-wrap items-center gap-x-3 gap-y-1">
-			<span class={['font-mono text-xl font-semibold', compareDecimals(detail.stock.quantity, '0') <= 0 && 'text-destructive']}>{formatDecimal(detail.stock.quantity, i18n.locale)} {unitLabel(product.unit_code, i18n.locale, detail.stock.quantity)}</span>
-			<StockBadge quantity={failed ? null : detail.stock.quantity} unit={unitLabel(product.unit_code, i18n.locale)} showQuantity={false} />
-		</p>
+	<div class="mt-5 flex flex-wrap items-end justify-between gap-x-4 gap-y-2 text-sm">
+		<div>
+			<p class="text-muted-foreground">{m.stock}</p>
+			<p class="flex flex-wrap items-center gap-x-3 gap-y-1">
+				<span class={['font-mono text-xl font-semibold', compareDecimals(detail.stock.quantity, '0') <= 0 && 'text-destructive']}>{formatDecimal(detail.stock.quantity, i18n.locale)} {unitLabel(product.unit_code, i18n.locale, detail.stock.quantity)}</span>
+				<StockBadge quantity={failed ? null : detail.stock.quantity} unit={unitLabel(product.unit_code, i18n.locale)} showQuantity={false} />
+			</p>
+		</div>
+		<Button variant="link" size="sm" href={i18n.href(`/admin/products/${product.id}`)}>{i18n.m.adminProducts.editProduct}</Button>
 	</div>
 	<section class={section({ spacing: 'divided' })} aria-labelledby="stock-action-title">
 		<Separator />
