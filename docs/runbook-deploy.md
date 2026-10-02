@@ -222,12 +222,17 @@ Resend's verified-domain badge does not establish a DMARC policy.
 
 ### Publish
 
-Every push to `main` on GitHub deploys production automatically through
-Cloudflare Workers Builds, configured in the Cloudflare dashboard (Worker
-`ampoteket` → Settings → Build): no build command, deploy command
-`bun run deploy:production`, variable `BUN_VERSION=1.3.14`. A bare
-`wrangler deploy` there ships the top-level, var-less config. To deploy by hand,
-use only:
+Every push to `main` on GitHub deploys production automatically through the
+GitHub Actions workflow `.github/workflows/deploy.yml`. It starts when the
+push-triggered Validation run for that commit succeeds, skips a commit that is no
+longer `main`'s tip, and runs `bun run deploy:production` in the GitHub environment
+`production` (deployments from `main` only) with the secret `CLOUDFLARE_API_TOKEN`:
+a Cloudflare user API token for this account with *Edit Cloudflare Workers*
+permissions, including the `ampoteket.no` zone for the custom domains. A failed
+deploy can be retried from the Actions tab with **Re-run jobs**. The Cloudflare Git
+integration (Workers Builds) is disconnected; do not reconnect it, since it also
+builds every branch as a preview that has no Supabase settings. A bare
+`wrangler deploy` ships the top-level, var-less config. To deploy by hand, use only:
 
 ```sh
 bun run deploy:production

@@ -34,7 +34,6 @@ export async function requireValidation(sha: string, fetcher: Fetcher = fetch, p
 
 // Injectable process/network boundaries let tests exercise failures without contacting production.
 export async function deployProduction(command = run, fetcher: Fetcher = fetch, pause = Bun.sleep) {
-	// Workers Builds splits wrangler arguments on whitespace, so none may contain a space.
 	const wrangler = (...args: string[]) => command(['bunx', '--no-install', 'wrangler', ...args, '--env', 'production'], args.includes('--json'));
 	const liveVersion = () => {
 		const deployments = JSON.parse(wrangler('deployments', 'list', '--json')) as { versions: { version_id: string; percentage: number }[] }[];
