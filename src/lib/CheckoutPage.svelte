@@ -213,7 +213,7 @@
 		</Alert.Description>
 	</Alert.Root>
 	<CheckoutReferences checkoutId={reference} requestId={attempt?.requestId} class={['mb-4 md:grid-cols-2', (reference || attempt?.requestId || !error) && 'min-h-28 md:min-h-16']} />
-	<noscript><p>{m.noJavascript}</p><a href={i18n.href('/help')}>{m.help}</a></noscript>
+	<noscript><p>{m.noJavascript}</p><a href={i18n.href('/contact')}>{m.help}</a></noscript>
 	<div class="saved-lines" style:min-height={!snapshot && !busy && !error && linesHeight ? `${linesHeight}px` : undefined} aria-busy={!snapshot && !!busy}>
 		{#if snapshot}
 			<Item.Group>
@@ -325,7 +325,7 @@
 		{#if error || (confirmationAttempted && !registered)}
 			<p class="text-sm text-muted-foreground">{m.helpInstructions}</p>
 		{/if}
-		<p><a href={i18n.href('/help')}>{m.help}</a></p>
+		<p><a href={i18n.href('/contact')}>{m.help}</a></p>
 		<Button variant="link" href={i18n.href('/cart')}><Icon icon={ArrowLeftIcon} />{m.backToCart}</Button>
 	</div>
 	{#if canPay}

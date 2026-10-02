@@ -27,7 +27,7 @@
 		<h2 id="contacts-title" class={sectionHeading}>{m.contacts}</h2>
 		{#if data.contacts === null}
 			<Alert.Message role="status" appearance="inline" variant="destructive">{m.unavailable}</Alert.Message>
-			<Button variant="outline" href={i18n.href('/help')} data-sveltekit-reload>{m.retry}</Button>
+			<Button variant="outline" href={i18n.href('/contact')} data-sveltekit-reload>{m.retry}</Button>
 		{:else if !data.contacts.length}
 			<Empty.Root><Empty.Description>{m.empty}</Empty.Description></Empty.Root>
 		{:else}

@@ -154,8 +154,8 @@ const html = `<!doctype html>
 			Ikke betal på nytt. Åpne handlekurven og fortsett kjøpet der.
 			<span class="en">Lost your connection after paying? Don’t pay again. Open the cart and continue the purchase there.</span></p>
 		<p><strong>Trenger du hjelp?</strong>
-			Spør en frivillig, eller se <span class="mono">ampoteket.no/help</span>.
-			<span class="en">Need help? Ask a volunteer, or see ampoteket.no/help.</span></p>
+			Spør en frivillig, eller se <span class="mono">ampoteket.no/contact</span>.
+			<span class="en">Need help? Ask a volunteer, or see ampoteket.no/contact.</span></p>
 	</footer>
 </body>
 </html>`;

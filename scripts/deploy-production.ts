@@ -76,16 +76,16 @@ export async function deployProduction(command = run, fetcher: Fetcher = fetch, 
 		for (const secret of ['SUPABASE_SECRET_KEY', 'RESEND_API_KEY']) if (!bindings.some((b) => b.name === secret && b.type === 'secret_text')) problems.push(`secret ${secret} is missing`);
 
 		const options = { redirect: 'manual' as const, signal: AbortSignal.timeout(15000), headers: { 'cache-control': 'no-cache' } };
-		const help = await fetcher(`${origin}/help`, options);
+		const help = await fetcher(`${origin}/contact`, options);
 		const page = await help.text();
-		if (!help.ok || page.includes(nb.help.unavailable)) problems.push(`/help cannot read the contact list (HTTP ${help.status})`);
+		if (!help.ok || page.includes(nb.help.unavailable)) problems.push(`/contact cannot read the contact list (HTTP ${help.status})`);
 		if (help.headers.get('Strict-Transport-Security') !== 'max-age=31536000') problems.push('HTTPS response lacks the reviewed HSTS policy');
 		const http = await fetcher('http://ampoteket.no/admin/login', { ...options, signal: AbortSignal.timeout(15000) });
 		await http.body?.cancel();
 		const location = http.headers.get('Location');
 		if (![301, 308].includes(http.status) || location !== `${origin}/admin/login`) problems.push(`HTTP login does not redirect to HTTPS (HTTP ${http.status}, Location ${JSON.stringify(location)}, CF-Ray ${http.headers.get('CF-Ray') ?? 'unavailable'})`);
 		if (problems.length) throw new Error(problems.join('; '));
-		console.log(`Verified ${current}: vars, rate limits, secrets, HTTPS and /help.`);
+		console.log(`Verified ${current}: vars, rate limits, secrets, HTTPS and /contact.`);
 	} catch (error) {
 		console.error(`Post-deploy verification failed. Rolling back to ${previous}.`, error instanceof Error ? error.message : error);
 		try { wrangler('rollback', previous, '--yes', '--message', `automatic-rollback-of-${sha}`); }

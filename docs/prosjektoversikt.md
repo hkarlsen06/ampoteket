@@ -104,7 +104,7 @@ labels always use the Norwegian, unprefixed address.
 | `/p/[code]` | Product page and QR target, e.g. `/p/RES-A3F09` ([page-product.md](page-product.md)) |
 | `/cart` | The cart ([page-cart.md](page-cart.md)) |
 | `/checkout/[id]` | Saved checkout, Vipps instructions, registration and retry ([page-checkout.md](page-checkout.md)) |
-| `/help` | Volunteer contacts, maintained at `/admin/help`, and the Discord invite |
+| `/contact` | Contact us: volunteer contacts, maintained at `/admin/help`, and the Discord invite. Linked from the header menu and footer; `/help` redirects here (posters and sent receipts) |
 | `/privacy` | What buyers' data the shop stores, where, and how to have contact details deleted; linked from the footer |
 | `/admin` | Overview, statistics, products, shelf, counts, labels, stock corrections, audit ([page-admin-stock.md](page-admin-stock.md), [page-labels.md](page-labels.md)) |
 | `/admin/orders` | Orders and receipts ([page-admin-orders.md](page-admin-orders.md)) |
@@ -156,7 +156,7 @@ cabinets and 492 drawers.
 | Specifications | Standard suggestions plus custom types added in the product editor |
 | Labels | Select cabinets or drawers on the map and print A4 sheets; single labels can go to the P-touch printer |
 | Cart after checkout | One active cart and checkout at a time, locked across tabs |
-| Help when nobody is there | Buyer notes the amount and reference, then uses `/help` |
+| Help when nobody is there | Buyer notes the amount and reference, then uses `/contact` |
 | Retention | Unconfirmed checkouts' contact strings are cleared after 90 days; checkouts, sales and history are never purged ([runbook](runbook-contact-retention.md)) |
 
 ## 9. Out of scope for v1

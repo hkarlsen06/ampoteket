@@ -117,7 +117,7 @@ The support reference is the checkout ID when known and always the prepare reque
 ID; neither is a secret. Active staff can look up `amp_checkouts` by `request_id`,
 even when the prepare response was lost. The projection excludes the token digest.
 
-The buyer screenshots or notes amount, items and references, and goes to `/help`.
+The buyer screenshots or notes amount, items and references, and goes to `/contact`.
 Never invent a total when the snapshot is unavailable. Amounts, screenshots and
 contact text help identification but prove neither ownership nor payment.
 

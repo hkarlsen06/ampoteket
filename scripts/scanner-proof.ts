@@ -452,7 +452,7 @@ try {
 	assert.equal((await stats(page)).live, 0, 'Closing stops all camera tracks');
 	await expect(page.locator('.cart-line input[inputmode=decimal]').first()).toHaveValue('2');
 	await page.setViewportSize({ width: 360, height: 640 });
-	await page.goto(`${origin}/en/help`);
+	await page.goto(`${origin}/en/contact`);
 	const mobileCart = page.locator('.header-cart');
 	await expect(mobileCart).toBeVisible();
 	await expect(mobileCart).toHaveAttribute('href', '/en/cart');

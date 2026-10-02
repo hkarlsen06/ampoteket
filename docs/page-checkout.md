@@ -50,7 +50,7 @@ Revalidation never creates a replacement checkout.
 | Confirm in flight | Keep layout; announce pending; block new commands |
 | Confirmation unknown | Read or retry the same confirmation; never pay again |
 | Registered | Result, read-only lines, cart cleanup, optional receipt email, explicit new purchase |
-| Missing/changed credentials | No cookie replacement; reference and `/help` |
+| Missing/changed credentials | No cookie replacement; reference and `/contact` |
 | Different active attempt | Reading is safe; resolve the attempt before acting |
 | Unavailable snapshot | Retry or help; never invent a total or advise re-payment |
 
@@ -70,7 +70,7 @@ database. Transport and limits: [website-guide.md](website-guide.md) §4.2.
 ## Help
 
 When registration stays unresolved, ask the buyer to note the amount, items and
-reference and link `/help`. If the snapshot is unavailable, show the known IDs; a cart
+reference and link `/contact`. If the snapshot is unavailable, show the known IDs; a cart
 total cannot rebuild it. Screenshots help identify but never authorize or prove
 payment. If browser storage is gone, a volunteer must find the checkout; there is no
 guessed match or upload. Saved checkouts never expire.

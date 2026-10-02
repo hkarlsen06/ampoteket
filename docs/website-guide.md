@@ -180,9 +180,9 @@ not belong in the shop. Assets: [assets/payments/README.md](../assets/payments/R
 ### 4.5 Help when registration cannot be completed
 
 Show the checkout and request references, ask for a screenshot of amount and
-items, keep the retry available, and direct the buyer to `/help`
+items, keep the retry available, and direct the buyer to `/contact`
 ([details](checkout-recovery.md#staff-recovery-uses-the-original-checkout)). Never
-put references or contacts in its query string. Admins maintain `/help` contacts at
+put references or contacts in its query string. Admins maintain `/contact` contacts at
 `/admin/help` through the audited `amp_help_contacts` view; the public reads only
 published rows through `amp_help_directory`. Empty and unavailable are distinct
 states, and the app never invents contacts.

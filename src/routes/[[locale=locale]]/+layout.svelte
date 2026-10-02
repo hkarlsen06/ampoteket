@@ -8,6 +8,7 @@
 	import XIcon from 'phosphor-svelte/lib/XIcon';
 	import QrCodeIcon from 'phosphor-svelte/lib/QrCodeIcon';
 	import InstagramLogoIcon from 'phosphor-svelte/lib/InstagramLogoIcon';
+	import ChatsIcon from 'phosphor-svelte/lib/ChatsIcon';
 	import DiscordLogo from '$lib/DiscordLogo.svelte';
 	import { onMount, setContext, untrack } from 'svelte';
 	import { AdminContext, setAdminContext } from '$lib/admin-context.svelte';
@@ -90,15 +91,13 @@
 	const catalogLink = $derived(nav.slice(0, 1));
 	const menuLinks = $derived(admin.status === 'ready' ? [...catalogLink, adminLink] : catalogLink);
 	const headerLinks = $derived(admin.status === 'ready' ? [adminLink, ...catalogLink] : catalogLink);
-	// Phone menu: catalog, Instagram, then Admin.
-	const phoneMenu = $derived(menuLinks.length > 0 || showSocial);
 
 	function isCurrent(href: string) {
 		return bare === href || bare.startsWith(href + '/');
 	}
 
 	// Above 40rem the header row holds the wordmark, catalog/admin/cart icons (with text
-	// labels from 48rem) and the menu button; the menu holds the scanner and the language picker. On phones the
+	// labels from 48rem) and the menu button; the menu holds Contact, the scanner and the language picker. On phones the
 	// destinations move into the menu and the scanner floats (Scanner.svelte).
 	// Pure enhancement: `html.no-js` (src/app.html) hides the button and leaves
 	// the menu open, so the links are reachable without JavaScript.
@@ -175,7 +174,7 @@
      except on cart and checkout; Admin, once confirmed, enters at the far left so nothing else moves.
      Instagram follows it from 40rem and moves into the menu on phones. -->
 {#snippet instagramRow()}
-	<li>
+	<li class="hidden phone:block">
 		<Button href={INSTAGRAM} target="_blank" rel="external noopener" variant="ghost" class="w-full justify-start px-3"><Icon icon={InstagramLogoIcon} class="size-5" aria-hidden="true" />{m.header.instagram}<span class="sr-only"> {m.newTab}</span></Button>
 	</li>
 {/snippet}
@@ -257,13 +256,12 @@
 			</Collapsible.Trigger>
 			<Collapsible.Content forceMount id="site-menu" class="menu absolute top-[calc(50%+var(--header-h)/2+1px)] right-0 z-10 hidden w-64 rounded-lg border bg-card p-2 shadow-card data-[state=open]:block phone:inset-x-0 phone:top-full phone:w-auto phone:rounded-none phone:border-0 phone:px-[calc(var(--gutter)-0.75rem)] phone:pt-2 phone:pb-3 phone:shadow-none no-js:relative no-js:inset-auto no-js:block no-js:w-full no-js:rounded-none no-js:border-0 no-js:px-0 no-js:pt-2 no-js:pb-3 no-js:shadow-none">
 			<Separator class="absolute inset-x-0 top-0 hidden no-js:block" />
-			<!-- Desktop has these links in the header row. -->
-			{#if phoneMenu}
-			<nav class="site-nav hidden phone:block" aria-label={m.header.menu}>
+			<!-- Phone: catalog, Instagram and Admin, which desktop has in the header row; then Contact at every width. -->
+			<nav class="site-nav" aria-label={m.header.menu}>
 				<ul class="m-0 flex list-none flex-col p-0">
 					{#if !catalogLink.length && showSocial}{@render instagramRow()}{/if}
 					{#each menuLinks as item (item.href)}
-						<li>
+						<li class="hidden phone:block">
 							<Button
 								href={i18n.href(item.href)}
 								variant={isCurrent(item.href) ? 'secondary' : 'ghost'}
@@ -273,17 +271,23 @@
 						</li>
 						{#if item.href === '/p' && showSocial}{@render instagramRow()}{/if}
 					{/each}
+					<li>
+						<Button
+							href={i18n.href('/contact')}
+							variant={isCurrent('/contact') ? 'secondary' : 'ghost'}
+							class="w-full justify-start px-3 aria-[current=page]:border-current"
+							aria-current={isCurrent('/contact') ? 'page' : undefined}
+						><Icon icon={ChatsIcon} class="size-5" />{m.header.contact}</Button>
+					</li>
 				</ul>
 			</nav>
-			{/if}
 			{#if buyerScanPage}
 				<Button variant="ghost" class="w-full justify-start px-3 phone:hidden no-js:hidden" aria-haspopup="dialog" onclick={openScanner}>
 					<Icon icon={QrCodeIcon} class="size-5" aria-hidden="true" />{m.scanner.open}
 				</Button>
 			{/if}
-			<!-- Divided from whatever is visible above it: the phone links, or the desktop scanner row. -->
-			<nav class={['relative flex items-center', buyerScanPage ? 'mt-2 pt-2 no-js:not-phone:mt-0 no-js:not-phone:pt-0' : phoneMenu ? 'phone:mt-2 phone:pt-2' : '']} aria-label={m.header.language}>
-				<Separator class={['absolute inset-x-0 top-0', buyerScanPage ? 'no-js:not-phone:hidden' : phoneMenu ? 'hidden phone:block' : 'hidden']} />
+			<nav class="relative mt-2 flex items-center pt-2" aria-label={m.header.language}>
+				<Separator class="absolute inset-x-0 top-0" />
 				<Icon icon={TranslateIcon} class="mx-3 size-5" />
 				<ul class="m-0 flex list-none items-center gap-1 p-0">
 					{#each locales as loc (loc)}
@@ -328,7 +332,7 @@
 				{#each nav as item (item.href)}
 					<li><a href={i18n.href(item.href)}>{item.label}</a></li>
 				{/each}
-				<li><a href={i18n.href('/help')}>{m.footer.help}</a></li>
+				<li><a href={i18n.href('/contact')}>{m.footer.help}</a></li>
 				<li><a href={i18n.href('/privacy')}>{m.footer.privacy}</a></li>
 				<li><a href={DISCORD_INVITE} target="_blank" rel="external noopener">{m.footer.discord}<span class="sr-only"> {m.newTab}</span></a></li>
 				<li><a href={i18n.href('/admin')}>{m.header.admin}</a></li>

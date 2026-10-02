@@ -120,8 +120,8 @@ export const en: Messages = {
 		retryProducts: 'Retry parts list'
 	},
 	help: {
-		title: 'Help | Ampoteket', description: 'Contact a volunteer if you need help with an Ampoteket purchase.',
-		heading: 'Help with your purchase',
+		title: 'Contact us | Ampoteket', description: 'Contact an Ampoteket volunteer, for example about a purchase.',
+		heading: 'Contact us',
 		references: 'Take a screenshot of the checkout, or note the amount, parts and reference. The reference lets us find your purchase, even without the amount.',
 		payment: "If you have already paid, don't pay again. Try registering the purchase again from the same checkout, or contact a volunteer.",
 		contacts: 'Contact a volunteer', unavailable: 'The contact list is unavailable. Try again, or ask a volunteer in the workshop.',
@@ -288,7 +288,7 @@ export const en: Messages = {
 		empty: 'No changes have been recorded.', more: 'Show older changes', retry: 'Try again',
 		entryId: (id: string) => `Log entry ${id}`, actor: 'By', details: 'Show changed data',
 		recordKey: 'ID', before: 'Before', after: 'After',
-		tables: { staff_members: 'Admin account', help_contacts: 'Help page contact', units: 'Unit', categories: 'Category', cabinets: 'Cabinet', bins: 'Drawer', products: 'Product', attribute_definitions: 'Specification type', product_attributes: 'Product specification', purchase_orders: 'Order', purchase_order_lines: 'Order line', count_batches: 'Stocktake', checkout_contacts: 'Buyer contact detail' },
+		tables: { staff_members: 'Admin account', help_contacts: 'Contact page entry', units: 'Unit', categories: 'Category', cabinets: 'Cabinet', bins: 'Drawer', products: 'Product', attribute_definitions: 'Specification type', product_attributes: 'Product specification', purchase_orders: 'Order', purchase_order_lines: 'Order line', count_batches: 'Stocktake', checkout_contacts: 'Buyer contact detail' },
 		actions: { INSERT: 'Created', UPDATE: 'Changed', DELETE: 'Deleted', CONTACT_CLEARED: 'Contact detail cleared' }
 	},
 	adminMembers: {
@@ -349,10 +349,10 @@ export const en: Messages = {
 		buyerContact: 'Buyer contact detail', contactWarning: "Only show it when you need it. The buyer wrote this themselves, so it doesn't prove payment or who the purchase belongs to.",
 		showContact: 'Show contact detail', noContact: 'No contact detail is saved.', confirmClear: 'The contact detail is erased for good. The purchase is kept.', clearContact: 'Erase contact detail',
 		directoryTitle: 'Volunteer contact list | Admin | Ampoteket', directoryHeading: 'Volunteer contact list',
-		directoryConsent: 'Only publish contact details the person has agreed to show on the help page. Earlier versions stay in the history.',
-		newContact: 'New contact', viewPublic: 'View help page', noDirectoryContacts: 'No contacts have been added.', published: 'Published', unpublished: 'Unpublished',
+		directoryConsent: 'Only publish contact details the person has agreed to show on the contact page. Earlier versions stay in the history.',
+		newContact: 'New contact', viewPublic: 'View contact page', noDirectoryContacts: 'No contacts have been added.', published: 'Published', unpublished: 'Unpublished',
 		editContact: (name: string) => `Edit ${name}`, editHeading: 'Edit contact', contactName: 'Display name', contactEmail: 'Email (optional)', contactPhone: 'Phone (optional)', contactUrl: 'Contact link (optional)', contactResponsibility: 'Responsibility (optional)', contactDiscord: 'Discord username (optional)',
-		publishContact: 'Show this contact on the public help page', atLeastOneContact: 'A published contact needs a Discord username, email, phone number or link.',
+		publishContact: 'Show this contact on the public contact page', atLeastOneContact: 'A published contact needs a Discord username, email, phone number or link.',
 		saveContact: 'Save contact', retrySave: 'Try saving again', contactSaved: 'Contact saved.', contactInvalid: 'Check the fields. Email, phone and link must be valid, the Discord username is lowercase letters, digits, _ and ., the link must start with https://, and the order must be a whole number.',
 		reviewContact: 'Show the latest version', reviewedContact: 'Continue with my changes', contactStale: 'Someone else changed this contact while you were editing. Your changes are still in the form. Look at the latest version before saving.', contactUnknown: "We don't know if the contact was saved. Try saving again.",
 		moveContactUp: (name: string) => `Move ${name} up`, moveContactDown: (name: string) => `Move ${name} down`,
@@ -442,6 +442,7 @@ export const en: Messages = {
 		cartLoading: ', loading',
 		cartUnavailable: ', needs attention',
 		admin: 'Admin',
+		contact: 'Contact us',
 		discord: 'Ampoteket on Discord',
 		instagram: 'Ampoteket on Instagram',
 		cartLines: (n: number) => (n === 1 ? ', 1 part' : `, ${n} parts`)
@@ -449,7 +450,7 @@ export const en: Messages = {
 	footer: {
 		links: 'Links',
 		about: 'Run by The Resistance and RoboMEK. Photos and development: Hjalmar Karlsen.',
-		help: 'Help',
+		help: 'Contact us',
 		privacy: 'Privacy',
 		discord: 'Discord'
 	},

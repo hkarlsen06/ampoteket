@@ -185,7 +185,7 @@
 		{#if attempt}
 			<div class={formActions}>
 				<Button variant="default" href={i18n.href(attempt.checkoutId ? `/checkout/${attempt.checkoutId}` : '/checkout')}>{i18n.m.checkout.resume}</Button>
-				<a href={i18n.href('/help')}>{i18n.m.checkout.help}</a>
+				<a href={i18n.href('/contact')}>{i18n.m.checkout.help}</a>
 			</div>
 		{:else}
 			<form class="grid gap-3" onsubmit={proceed}>
