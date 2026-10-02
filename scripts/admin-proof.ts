@@ -780,7 +780,10 @@ try {
   const swapped = await lostResponse(page, 'rpc/amp_swap_bins', 'POST', () => page.getByRole('alertdialog').getByRole('button', { name: sh.confirmAction, exact: true }).click());
   await expect(page.getByText(sh.unknown, { exact: true })).toBeVisible();
   await page.getByRole('button', { name: sh.retry, exact: true }).click();
-  await expect(page.locator('[data-sonner-toast]').getByText(sh.positionsSwapped, { exact: true })).toBeVisible();
+  const drawerSwapToast = page.locator('[data-sonner-toast]').filter({ has: page.getByText(
+    sh.swapPreview(`${sh.cabinet('F7')} · ${sh.bin('A3–B3')}`, `${sh.cabinet('F7')} · ${sh.bin('A2–B2')}`), { exact: true }
+  ) });
+  await expect(drawerSwapToast.getByText(sh.positionsSwapped, { exact: true })).toBeVisible();
   expect(swapped.commands).toHaveLength(2); expect(swapped.commands[1]).toBe(swapped.commands[0]); await swapped.stop();
   expect(await sql(`SELECT inner_row FROM app.bins WHERE id='${firstBin}'`)).toBe('2');
   expect(await sql(`SELECT inner_row FROM app.bins WHERE id='${secondBin}'`)).toBe('3');
@@ -855,7 +858,10 @@ try {
   await page.getByRole('group', { name: sh.swapTarget, exact: true }).locator(`[data-item-id="${secondCabinet}"]`).click();
   await page.getByRole('button', { name: sh.swap, exact: true }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: sh.confirmAction, exact: true }).click();
-  await expect(page.locator('[data-sonner-toast]').getByText(sh.positionsSwapped, { exact: true })).toBeVisible();
+  const cabinetSwapToast = page.locator('[data-sonner-toast]').filter({ has: page.getByText(
+    sh.swapPreview(sh.cabinet('F7'), sh.cabinet('G7')), { exact: true }
+  ) });
+  await expect(cabinetSwapToast.getByText(sh.positionsSwapped, { exact: true })).toBeVisible();
   expect(await sql(`SELECT outer_col FROM app.cabinets WHERE id='${cabinetId}'`)).toBe('7');
   expect(await sql(`SELECT outer_col FROM app.cabinets WHERE id='${secondCabinet}'`)).toBe('6');
   expect(await sql(`SELECT bin_id FROM app.products WHERE id='${productId}'`)).toBe(firstBin);
