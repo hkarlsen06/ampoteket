@@ -2,8 +2,9 @@
 
 Start here. This page explains what the system does and how it is put together.
 Rules for one area live in the document listed for it in
-[§11](#11-where-to-read). What has been tested, and what is still open before
-launch, is in [VALIDATION.md](../VALIDATION.md).
+[§11](#11-where-to-read). What is live right now (deploy, sales open or closed, hosted data) is in
+[AGENTS.md](../AGENTS.md#current-state). What has been tested, and what is still
+open before launch, is in [VALIDATION.md](../VALIDATION.md).
 
 ## 1. What Ampoteket is
 

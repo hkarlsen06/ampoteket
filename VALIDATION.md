@@ -89,8 +89,8 @@ the selected products. It is a regression check, not a hosted latency guarantee.
   `3c1e5819-e3ec-493b-afde-f5e2aa55d359` (commit `116c724`, `bun run deploy:production`,
   deployed 2026-10-01 15:39 UTC, which verified the vars, rate limits, secrets and the
   `/help` contact list; the workers.dev rehearsal address is off). It replaced
-  `1b0b327c-27ce-4ddb-9ee6-81298ad998fd`, uploaded 14:43 UTC from outside this repo's
-  deploy path without any vars, which made `/help` report the contact list unavailable;
+  `1b0b327c-27ce-4ddb-9ee6-81298ad998fd`, deployed 14:43 UTC by Cloudflare Workers Builds from the push of
+  `bcecfda` without any vars, which made `/help` report the contact list unavailable;
   the version before it was `a34fc006-0aac-4d69-b29f-ae4fa009800e` (`634513d` plus
   `c90ce91`) with `SALES_OPEN=false`: `/`, `/en`, `/help`, `/privacy` and
   `/admin` answer 200, `/p`, `/cart`, `/checkout` and `/p/<code>` answer 503 "shop

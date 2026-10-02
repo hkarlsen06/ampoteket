@@ -7,11 +7,32 @@ Staff (one operational role, individual Supabase Auth identities) maintain produ
 prices, placement, purchasing, counts and corrections, all with a full audit trail.
 
 Documentation ownership is listed below. `docs/prosjektoversikt.md` is the
-project entry point; `VALIDATION.md` distinguishes executed evidence from open
+project entry point; [Current state](#current-state) below says what is live;
+`VALIDATION.md` distinguishes executed evidence from open
 launch checks. Brand source mapping lives in `assets/brand/README.md`.
 
 Guiding constraint: **new students must be able to understand, operate and extend
 the solution without depending on the original developer.**
+
+## Current state
+
+**Keep this section true.** It is the one place that says what is live right now.
+When you change anything it describes (deploy, flip `SALES_OPEN`, apply a hosted
+migration, add or remove an admin, configure email, enter stock, close a launch
+gate), update the row and the date in the same turn and commit. If you notice it is
+wrong, verify and fix it. Replace rows; history belongs in git, evidence in
+`VALIDATION.md`.
+
+Last verified: **2026-10-02**, against the live site and the hosted database.
+
+| Area | State |
+| --- | --- |
+| Site | **Live** at `https://ampoteket.no` (`www` redirects to the apex), Worker `ampoteket`. **Every push to `main` on GitHub deploys production automatically** (Cloudflare Workers Builds, configured in the Cloudflare dashboard, not in this repo). Pushing is deploying. Since 2026-10-02 the build runs `bun run deploy:production` on Bun 1.3.14, which verifies the vars and rolls back on failure; before that it ran a bare `wrangler deploy` that shipped `bcecfda` without vars on 2026-10-01. No push has exercised the new command yet, so watch the first build. Live version: `3c1e5819` from local commit `116c724`, which is not yet on `origin/main`. |
+| Sales | **Closed.** `SALES_OPEN` is `"false"` in `wrangler.jsonc` `env.production`. `/`, `/en`, `/help`, `/privacy` and `/admin` answer 200; `/p`, `/cart`, `/checkout` and `/p/<code>` answer 503 "shop opens soon"; `/api/checkouts/…` answers `503 CHECKOUT_UNAVAILABLE`. Buyer-facing changes are invisible in production until sales open. Opening is the owner's decision: set `"true"` and push. |
+| Hosted database | Supabase project `mqzcbdorjuefefzvuefa` (Stockholm, PostgreSQL 17) is **production with real data**: 1 product, 2 active admins, 0 checkouts. All six migrations in `supabase/migrations/` are applied. Read-only checks go through the Supabase connector; writes, migrations and deletions only at the owner's explicit request. |
+| Email | Hosted Auth, checked through the Management API: custom SMTP `smtp.resend.com:465` as `Ampoteket <noreply@notify.ampoteket.no>`, domain verified in Resend, Site URL `https://ampoteket.no`, only the two `/admin/password` return URLs, signup off, Data API schema `public` only, invite/recovery templates and subjects identical to `supabase/templates/`. No real invitation, reset or buyer receipt has been delivered and checked yet. |
+| Stock and labels | Opening stock not entered; no labels printed or attached. |
+| Before opening sales | The open checks in `VALIDATION.md`: phones (P01–P19), labels, hosted email, backup owners and RPO/RTO, restore drill. |
 
 ## Read relevant guidance first
 
@@ -52,8 +73,8 @@ Bun 1.3.14 with installed dependencies, and
 applies migrations through the CLI, runs acceptance/permission/concurrency checks,
 rollback/retry, corruption and workflow sequences, full restore and isolated
 PostgREST HTTP regressions, then removes its containers and temp files. No database URL or
-hosted credential is needed. Never touch a hosted Supabase project; all work is
-local/disposable until an explicit deploy decision.
+hosted credential is needed. Development and tests stay local and disposable; never
+point a script at the hosted project, which is production ([Current state](#current-state)).
 
 Rules for schema work:
 
@@ -74,9 +95,11 @@ Rules for schema work:
 - After amending the migration, re-run `./scripts/test-database.sh` and update the
   SHA-256 and counts in `VALIDATION.md`.
 
-Deploy production only with `bun run deploy:production`, which verifies the live
-vars and `/help` and rolls back on failure; never a bare `wrangler deploy` or
-`wrangler versions upload` to the `ampoteket` Worker ([runbook](docs/runbook-deploy.md#publish)).
+Pushing to `main` deploys production ([Current state](#current-state)), so push only
+what the owner wants live. A manual deploy uses `bun run deploy:production`, which
+verifies the live vars and `/help` and rolls back on failure; never a bare
+`wrangler deploy` or `wrangler versions upload` to the `ampoteket` Worker
+([runbook](docs/runbook-deploy.md#publish)).
 
 Web frontend: SvelteKit 2 / Svelte 5 (runes) / TypeScript, Bun,
 `adapter-cloudflare`, shadcn-svelte (Nova) and Tailwind CSS 4. Import primitives

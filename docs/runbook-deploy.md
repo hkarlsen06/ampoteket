@@ -205,7 +205,12 @@ staff archive gets no copies.
 
 ### Publish
 
-Deploy only with:
+Every push to `main` on GitHub deploys production automatically through
+Cloudflare Workers Builds, configured in the Cloudflare dashboard (Worker
+`ampoteket` → Settings → Build): no build command, deploy command
+`bun run deploy:production`, variable `BUN_VERSION=1.3.14`. A bare
+`wrangler deploy` there ships the top-level, var-less config. To deploy by hand,
+use only:
 
 ```sh
 bun run deploy:production
@@ -216,8 +221,8 @@ It refuses a dirty tree, records the live version, builds, runs
 the new version carries every `env.production` var with its reviewed value, the
 rate limits and the `SUPABASE_SECRET_KEY`/`RESEND_API_KEY` secrets, and that
 `/help` reads the contact list. Any failure rolls back to the recorded version
-and exits non-zero. Never deploy or `wrangler versions upload` to `ampoteket` by
-hand or from another config: on 2026-10-01 a version uploaded without the
+and exits non-zero. Never deploy or `wrangler versions upload` to `ampoteket` any
+other way: on 2026-10-01 a version uploaded without the
 production vars made the help page and staff login unavailable while every page
 still loaded. The top-level `keep_vars` only softens a mistaken `wrangler deploy`.
 
