@@ -300,9 +300,9 @@
 							{#if index > 0}<Separator />{/if}
 							<div class={['-mx-2 grid gap-2 rounded-md px-2 py-4', index === 0 && 'pt-0', scanned && 'outline-3 outline-offset-2 outline-warning ring-2 ring-[var(--focus-contrast)]']}>
 								<div class="flex flex-wrap items-center justify-between gap-2">
-									<Field.Field orientation="horizontal" class="min-w-0 flex-1 gap-3">
+									<Field.Field orientation="horizontal" class="min-w-0 flex-1 basis-56 gap-3">
 										<Checkbox id={`${id}-full-${line.id}`} checked={full(line)} onCheckedChange={(checked) => chooseFull(line, checked === true)} disabled={busy || Boolean(command)} />
-										<div class="min-w-0"><Field.Label for={`${id}-full-${line.id}`} class={['cursor-pointer', nameWrap]}>{#if product}<span class={codeText}>{product.code}</span>: {productName(product, i18n.locale)}{:else}{line.productId}{/if}</Field.Label><Field.Description>{m.lineNumber(line.lineNumber)} · {m.outstanding} <span class="font-mono">{formatDecimal(line.outstandingQuantity, i18n.locale)} {unitLabel(product?.unit_code, i18n.locale, line.outstandingQuantity)}</span></Field.Description>{@render location(line.productId)}</div>
+										<div class="min-w-0"><Field.Label for={`${id}-full-${line.id}`} class={['cursor-pointer', nameWrap]}><!-- One span: the label is a flex row, so loose text would become columns. --><span>{#if product}<span class={codeText}>{product.code}</span>: {productName(product, i18n.locale)}{:else}{line.productId}{/if}</span></Field.Label><Field.Description>{m.lineNumber(line.lineNumber)} · {m.outstanding} <span class="font-mono">{formatDecimal(line.outstandingQuantity, i18n.locale)} {unitLabel(product?.unit_code, i18n.locale, line.outstandingQuantity)}</span></Field.Description>{@render location(line.productId)}</div>
 									</Field.Field>
 									{#if !manual.has(line.id)}<Button type="button" variant="ghost" size="sm" onclick={() => override(line)} disabled={busy || Boolean(command)}>{m.differentQuantity}</Button>{/if}
 								</div>
