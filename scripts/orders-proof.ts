@@ -419,31 +419,33 @@ try {
 	const activeSupplier = `${longSupplier} (open)`;
 	await page.getByLabel(fieldLabel(m.supplier)).fill(activeSupplier);
 	await page.getByLabel(fieldLabel(m.reference)).fill('PRODUCT-NEW-1');
-	const [productTab] = await Promise.all([
-		context.waitForEvent('page'),
-		page.getByRole('link', { name: m.newProductFromOrder, exact: true }).click()
-	]);
-	await productTab.waitForLoadState();
-	await expect(productTab).toHaveURL(/\/en\/admin\/products\/new$/);
-	await productTab.getByRole('radio', { name: en.adminProducts.typeNames.MIS, exact: true }).click();
-	await productTab.getByLabel(fieldLabel(en.adminProducts.nameNb)).fill('Ny vare fra bestilling');
-	await productTab.getByLabel(fieldLabel(en.adminProducts.nameEn)).fill('New item from order');
-	await productTab.getByRole('button', { name: en.adminProducts.save, exact: true }).click();
-	// Creation replaces /new with the persisted editor, so verify its durable result after navigation.
-	await expect(productTab).toHaveURL(/\/en\/admin\/products\/[0-9a-f-]{36}$/);
+	await page.getByRole('button', { name: m.newProductFromOrder, exact: true }).click();
+	const productSheet = page.getByRole('dialog', { name: en.adminProducts.newProduct, exact: true });
+	await productSheet.getByRole('radio', { name: en.adminProducts.typeNames.MIS, exact: true }).click();
+	await productSheet.getByLabel(fieldLabel(en.adminProducts.nameNb)).fill('Ny vare fra bestilling');
+	await productSheet.getByLabel(fieldLabel(en.adminProducts.nameEn)).fill('New item from order');
+	await fits(page);
+	await page.screenshot({ path: `${artifacts}/new-product-sheet-en-360.png` });
+	await page.setViewportSize({ width: 1280, height: 900 });
+	await fits(page);
+	await page.screenshot({ path: `${artifacts}/new-product-sheet-en-1280.png` });
+	await productSheet.getByRole('button', { name: en.adminProducts.descriptionAndLinks }).click();
+	await productSheet.getByLabel(fieldLabel(en.adminProducts.purchaseUrl)).fill('https://example.test/new-item');
+	await productSheet.getByRole('button', { name: en.adminProducts.save, exact: true }).click();
+	// Saving closes the sheet, selects the product on the line and keeps the order draft.
+	await expect(productSheet).toBeHidden();
 	const newProductId = await value("SELECT id FROM app.products WHERE name_en='New item from order'");
 	const newProductCode = await value(`SELECT code FROM app.products WHERE id=${literal(newProductId)}`);
-	await expect(productTab).toHaveURL(`${origin}/en/admin/products/${newProductId}`);
-	await expect(productTab.getByRole('heading', { name: newProductCode, exact: true })).toBeVisible();
-	await expect(productTab.getByLabel(fieldLabel(en.adminProducts.nameEn))).toHaveValue('New item from order');
-	await productTab.close();
-	await page.bringToFront();
-	await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+	await expect(page).toHaveURL(`${origin}/en/admin/orders`);
+	const linePicker = page.getByRole('combobox', { name: m.product, exact: true });
+	await expect(linePicker).toContainText(newProductCode);
+	await expect(linePicker).toBeFocused();
+	await expect(page.getByLabel(fieldLabel(m.purchaseUrl))).toHaveValue('https://example.test/new-item');
 	await expect(page.getByLabel(fieldLabel(m.supplier))).toHaveValue(activeSupplier);
 	await expect(page.getByLabel(fieldLabel(m.reference))).toHaveValue('PRODUCT-NEW-1');
-	await page.getByRole('combobox', { name: m.product, exact: true }).click();
-	await page.getByRole('combobox', { name: m.searchProduct, exact: true }).fill(newProductCode);
-	await page.getByRole('option').filter({ hasText: newProductCode }).click();
+	await page.screenshot({ path: `${artifacts}/new-product-selected-en-1280.png` });
+	await page.setViewportSize({ width: 360, height: 900 });
+	await page.screenshot({ path: `${artifacts}/new-product-selected-en-360.png` });
 	await page.getByLabel(fieldLabel(`${m.quantity} (pcs)`)).fill('2');
 	await page.getByLabel(fieldLabel(`${m.unitCost} (NOK)`)).fill('0.5');
 	await page.getByRole('button', { name: m.recordOrder, exact: true }).click();
@@ -464,7 +466,7 @@ try {
 		await fits(page);
 	}
 	await activeReceipt.getByRole('button', { name: m.closeReceipt, exact: true }).click();
-	console.log('PASS: New product opens the existing editor; the order draft survives and can use the created product');
+	console.log('PASS: New product opens the editor in a sheet; saving selects it on the line and keeps the order draft');
 	await page.setViewportSize({ width: 1280, height: 900 });
 	await page.emulateMedia({ colorScheme: 'dark' });
 	await page.goto(`${origin}/admin/orders`);

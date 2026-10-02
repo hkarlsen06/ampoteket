@@ -6,19 +6,26 @@
 	import * as Field from '$lib/components/ui/field';
 	import * as Popover from '$lib/components/ui/popover';
 	import * as Command from '$lib/components/ui/command';
+	import * as Dialog from '$lib/components/ui/dialog';
+	import AdminAccessGate from '$lib/AdminAccessGate.svelte';
+	import AdminProductEditor from '$lib/AdminProductEditor.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { controlStyles } from '$lib/components/ui/control';
 	import Icon from '$lib/Icon.svelte';
 	import StateBadge from '$lib/StateBadge.svelte';
-	import { codeText, nameWrap } from '$lib/ui';
+	import { codeText, nameWrap, sheetBody } from '$lib/ui';
 	import CaretUpDownIcon from 'phosphor-svelte/lib/CaretUpDownIcon';
+	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
+	import XIcon from 'phosphor-svelte/lib/XIcon';
 
-	let { id, products, value = $bindable(''), disabled = false, newProductHref, onselect, error }: {
-		id: string; products: Omit<OrderProduct, 'purchase_url'>[]; value: string; disabled?: boolean; newProductHref?: string; error?: string; onselect?: (productId: string) => void;
+	// `oncreated` adds a plus button that creates a product in a sheet; the caller adds it to
+	// `products`, and the picker then selects it.
+	let { id, products, value = $bindable(''), disabled = false, oncreated, onselect, error }: {
+		id: string; products: Omit<OrderProduct, 'purchase_url'>[]; value: string; disabled?: boolean; error?: string; onselect?: (productId: string) => void; oncreated?: (product: OrderProduct) => void;
 	} = $props();
 	const i18n = getI18n();
 	const m = $derived(i18n.m.adminOrders);
-	let open = $state(false);
+	let open = $state(false); let creating = $state(false); let saving = $state(false); let picked = false;
 	let trigger = $state<HTMLButtonElement | null>(null);
 	const selected = $derived(products.find((product) => product.id === value));
 	// The keyboard can cover the trigger. Keep the anchor within the visible
@@ -42,15 +49,21 @@
 		open = false;
 		void tick().then(() => trigger?.focus());
 	}
+	function created(product: OrderProduct) {
+		oncreated?.(product);
+		picked = true; creating = false;
+		choose(product.id);
+	}
 </script>
 
 <Field.Field width="grow">
 	<Field.Label for={id}>{m.product}</Field.Label>
+	<div class="flex gap-2">
 	<Popover.Root bind:open>
 		<Popover.Trigger bind:ref={trigger}>
 			{#snippet child({ props })}
 				<!-- Sits among form inputs, so it wears the shared control surface rather than a button's. -->
-				<button {...props} {id} type="button" role="combobox" aria-expanded={open} aria-invalid={Boolean(error)} aria-describedby={error ? `${id}-error` : undefined} {disabled} class={[controlStyles, 'flex min-h-12 items-center justify-between gap-2 py-2 pr-2.5 pl-3 text-left']}>
+				<button {...props} {id} type="button" role="combobox" aria-expanded={open} aria-invalid={Boolean(error)} aria-describedby={error ? `${id}-error` : undefined} {disabled} class={[controlStyles, 'flex min-h-12 min-w-0 flex-1 items-center justify-between gap-2 py-2 pr-2.5 pl-3 text-left']}>
 					<span class={['min-w-0', nameWrap, !selected && 'text-muted-foreground']}>{#if selected}<span class={codeText}>{selected.code}</span>: {productName(selected, i18n.locale)}{:else}{m.selectProduct}{/if}</span>
 					<Icon icon={CaretUpDownIcon} class="size-4 shrink-0 text-muted-foreground" />
 				</button>
@@ -73,6 +86,24 @@
 			</Command.Root>
 		</Popover.Content>
 	</Popover.Root>
+	{#if oncreated}
+		<Dialog.Root bind:open={creating}>
+			<Dialog.Trigger {disabled}>
+				{#snippet child({ props })}<Button {...props} variant="outline" size="icon" class="shrink-0"><Icon icon={PlusIcon} /><span class="sr-only">{m.newProductFromOrder}</span></Button>{/snippet}
+			</Dialog.Trigger>
+			<Dialog.Content variant="sheet" preventScroll={false} aria-describedby={undefined}
+				onInteractOutside={(event) => { if (saving) event.preventDefault(); }} onEscapeKeydown={(event) => { if (saving) event.preventDefault(); }} onCloseAutoFocus={(event) => { if (picked) event.preventDefault(); picked = false; }}>
+				<Dialog.Header layout="bar">
+					<Dialog.Title id={`${id}-new-title`}>{i18n.m.adminProducts.newProduct}</Dialog.Title>
+					<Dialog.Close>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" disabled={saving}><Icon icon={XIcon} /><span class="sr-only">{m.closeEntry}</span></Button>{/snippet}</Dialog.Close>
+				</Dialog.Header>
+				<!-- svelte-ignore a11y_no_noninteractive_tabindex (Named sheet body supports native keyboard scrolling.) -->
+				<div class={sheetBody} role="region" aria-labelledby={`${id}-new-title`} tabindex="0">
+					<AdminAccessGate><AdminProductEditor id="new" oncreated={created} bind:busy={saving} /></AdminAccessGate>
+				</div>
+			</Dialog.Content>
+		</Dialog.Root>
+	{/if}
+	</div>
 	{#if error}<Field.Error id={`${id}-error`}>{error}</Field.Error>{/if}
-	{#if newProductHref && !selected}<Button href={newProductHref} target="_blank" rel="noopener noreferrer" variant="link" class="w-fit" {disabled}>{m.newProductFromOrder}</Button>{/if}
 </Field.Field>

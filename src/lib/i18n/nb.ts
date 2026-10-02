@@ -191,7 +191,7 @@ export const nb = {
 	adminOrders: {
 		invalidQuantity: (step: string) => `Skriv et tall større enn 0, i trinn på ${step}.`, exceedsOutstanding: (quantity: string, unit: string) => `Skriv høyst ${quantity} ${unit}.`, invalidCost: (scale: number) => `Skriv 0 eller mer, med høyst ${scale} desimaler.`,
 		title: 'Bestillinger og mottak | Admin | Ampoteket', heading: 'Bestillinger og mottak', detailTitle: 'Bestilling | Admin | Ampoteket', detailHeading: 'Bestilling',
-		newOrder: 'Ny bestilling', unplannedReceipt: 'Registrer mottak uten bestilling', closeEntry: 'Lukk skjema', newProductFromOrder: 'Opprett nytt produkt (ny fane)', orders: 'Bestillinger', orderLines: 'Bestillingslinjer', lineNumber: (number: number) => `Linje ${number}`,
+		newOrder: 'Ny bestilling', unplannedReceipt: 'Registrer mottak uten bestilling', closeEntry: 'Lukk skjema', newProductFromOrder: 'Opprett nytt produkt', orders: 'Bestillinger', orderLines: 'Bestillingslinjer', lineNumber: (number: number) => `Linje ${number}`,
 		loading: 'Henter bestillinger …', unavailable: 'Utilgjengelig akkurat nå.', retry: 'Prøv igjen', empty: 'Ingen bestillinger ennå.', missing: 'Bestillingen finnes ikke.',
 		supplier: 'Leverandør', reference: 'Leverandørreferanse (valgfri)', placedAt: 'Bestilt', recordedAt: 'Registrert', recordedByLabel: 'Registrert av', recordedBy: (name: string) => `Registrert av ${name}`,
 		note: 'Merknad (valgfri)', additionalCost: 'Frakt og andre kostnader', product: 'Produkt', selectProduct: 'Velg produkt', searchProduct: 'Søk etter navn eller produktkode', noProductMatches: 'Ingen produkter passer søket.',

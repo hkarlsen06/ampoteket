@@ -191,7 +191,7 @@ export const en: Messages = {
 	adminOrders: {
 		invalidQuantity: (step: string) => `Enter more than 0, in steps of ${step}.`, exceedsOutstanding: (quantity: string, unit: string) => `Enter no more than ${quantity} ${unit}.`, invalidCost: (scale: number) => `Enter 0 or more, with at most ${scale} decimal places.`,
 		title: 'Orders and receipts | Admin | Ampoteket', heading: 'Orders and receipts', detailTitle: 'Order | Admin | Ampoteket', detailHeading: 'Order',
-		newOrder: 'New order', unplannedReceipt: 'Record receipt without an order', closeEntry: 'Close form', newProductFromOrder: 'Create new product (new tab)', orders: 'Orders', orderLines: 'Order lines', lineNumber: (number: number) => `Line ${number}`,
+		newOrder: 'New order', unplannedReceipt: 'Record receipt without an order', closeEntry: 'Close form', newProductFromOrder: 'Create new product', orders: 'Orders', orderLines: 'Order lines', lineNumber: (number: number) => `Line ${number}`,
 		loading: 'Loading orders …', unavailable: 'Unavailable right now.', retry: 'Try again', empty: 'No orders yet.', missing: 'This order does not exist.',
 		supplier: 'Supplier', reference: 'Supplier reference (optional)', placedAt: 'Ordered', recordedAt: 'Recorded', recordedByLabel: 'Recorded by', recordedBy: (name: string) => `Recorded by ${name}`,
 		note: 'Note (optional)', additionalCost: 'Shipping and other costs', product: 'Product', selectProduct: 'Choose product', searchProduct: 'Search by name or product code', noProductMatches: 'No products match the search.',
