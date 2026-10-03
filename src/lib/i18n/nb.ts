@@ -336,7 +336,7 @@ export const nb = {
 		commandIdentity: 'En annen konto har en ufullført endring i denne nettleseren. Logg inn med den kontoen for å fullføre den.',
 		buyerContact: 'Kjøperens kontaktopplysning', contactWarning: 'Vis bare når du trenger det. Kjøperen har skrevet dette selv, så det beviser ikke betaling eller hvem kjøpet tilhører.',
 		showContact: 'Vis kontaktopplysning', noContact: 'Ingen kontaktopplysning er lagret.', confirmClear: 'Kontaktopplysningen slettes for godt. Kjøpet beholdes.', clearContact: 'Slett kontaktopplysning',
-		directoryTitle: 'Frivilliges kontaktliste | Admin | Ampoteket', directoryHeading: 'Frivilliges kontaktliste',
+		directoryTitle: 'Kontaktsiden | Admin | Ampoteket', directoryHeading: 'Kontaktsiden',
 		directoryConsent: 'Publiser bare kontaktopplysninger personen har sagt ja til å vise på kontaktsiden. Tidligere versjoner blir liggende i historikken.',
 		newContact: 'Ny kontakt', viewPublic: 'Se kontaktsiden', noDirectoryContacts: 'Ingen kontakter er lagt inn.', published: 'Publisert', unpublished: 'Ikke publisert',
 		editContact: (name: string) => `Rediger ${name}`, editHeading: 'Rediger kontakt', contactName: 'Visningsnavn', contactEmail: 'E-post (valgfritt)', contactPhone: 'Telefon (valgfritt)', contactUrl: 'Kontaktlenke (valgfritt)', contactResponsibility: 'Ansvar (valgfritt)', contactDiscord: 'Discord-brukernavn (valgfritt)',
