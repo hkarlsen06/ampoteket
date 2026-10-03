@@ -25,7 +25,7 @@
 	// The page renders without API reads, so nothing delays its first byte; the shelf
 	// picker loads live topology and drawer contents in the browser when opened.
 	import { goto } from '$app/navigation';
-	import { DISCORD_INVITE, THE_RESISTANCE, getI18n } from '#lib/i18n/index.js';
+	import { DISCORD_INVITE, MAZEMAP, THE_RESISTANCE, getI18n } from '#lib/i18n/index.js';
 
 	let { data }: { data: PageData } = $props();
 	const i18n = getI18n();
@@ -373,12 +373,12 @@
 				<figcaption class="mt-5 pl-6 text-sm text-night-muted md:pl-8">{m.about.quoteBy}</figcaption>
 			</figure>
 		</div>
-		<!-- The instrument strip: the place and Oslo time. The place is decoration (the
-		     lede already says where the workshop is); the clock links to the OsloMet
-		     hours it is coloured by. -->
+		<!-- The instrument strip: the room and Oslo time. The room links to MazeMap under
+		     its logo (cropped from use.mazemap.com), which students know from campus; the
+		     clock links to the OsloMet hours it is coloured by. -->
 		<div class="absolute inset-x-0 top-0 z-30">
 			<div class={pageContainer({ class: 'flex flex-wrap items-center justify-between gap-x-4 gap-y-1 pt-4 text-sm text-night-muted md:pt-8' })}>
-				<span class="inline-flex min-w-0 items-center gap-2.5" aria-hidden="true"><span class="size-1.5 rounded-full bg-night-accent"></span>{m.hero.place}</span>
+				<a href={MAZEMAP} target="_blank" rel="external noopener" class="inline-flex min-h-11 min-w-0 items-center gap-2.5 rounded-sm text-night-muted no-underline hover:text-night-foreground"><img src="/mazemap.webp" alt="" width="20" height="20" />{m.hero.place}<span class="sr-only">, {m.hero.map} {i18n.m.newTab}</span></a>
 				<a href={m.hero.hoursSource} target="_blank" rel="external noopener" class="inline-flex min-h-11 shrink-0 items-center gap-2.5 rounded-sm text-night-muted no-underline hover:text-night-foreground"><span class="grid">{#each [m.hero.open, m.hero.closed] as status (status)}<span class="invisible col-start-1 row-start-1" aria-hidden="true">{status}</span>{/each}<span class="col-start-1 row-start-1">{open === undefined ? '' : open ? m.hero.open : m.hero.closed}</span></span><Led value={clock} label={m.hero.clockTime(clock)} red={!open} size="small" class="border-night-border text-sm whitespace-nowrap" /><span class="sr-only">{m.hero.hours} {i18n.m.newTab}</span></a>
 			</div>
 		</div>

@@ -30,6 +30,9 @@ export const SOCIAL_CARD = '/photos/social-card.jpg';
 /** Permanent invite to the Ampoteket Discord server (never expires, no use limit). */
 export const DISCORD_INVITE = 'https://discord.gg/X7xp3vgfyH';
 
+/** The workshop room, P35-PS126 (MazeMap still names it "Leseplass"). */
+export const MAZEMAP = 'https://use.mazemap.com/#v=1&campusid=53&sharepoitype=identifier&sharepoi=P35-PS126';
+
 export const INSTAGRAM = 'https://www.instagram.com/ampoteket';
 
 export const THE_RESISTANCE = 'https://foreninger.sio.no/foreninger/the-resistance';

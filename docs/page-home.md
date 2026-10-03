@@ -89,13 +89,15 @@ text. Actions remain reachable by
 ordinary document scrolling in landscape and at high zoom. Scanner docking follows
 the active CSS layout after rotation or a change in motion preferences.
 
-The frame is decorative (`aria-hidden`) except the clock link. The Oslo clock has a
+The frame is decorative (`aria-hidden`) except two links. The room (PS126 · Pilestredet 35)
+opens MazeMap behind MazeMap's own logo, which students already know from campus; the
+logo is cropped from use.mazemap.com into `static/mazemap.webp`. The Oslo clock has a
 visible Open/Closed label at every width and includes its time in its accessible label.
 It is green while OsloMet's Pilestredet buildings are open and red when closed, per
 [student.oslomet.no/apningstider](https://student.oslomet.no/apningstider) (Mon–Fri
 06–22, weekends 08–22; holidays not modelled). These are building hours, not
 Ampoteket's staffed hours. The night stage is flat: no
-film-grain overlay and no glow on the headline or the place dot. The headline stays
+film-grain overlay and no glow on the headline or the MazeMap logo. The headline stays
 legible through the feathered photograph and the `--night` surface alone, and the LED
 glow belongs to `Led.svelte` only. Copy is specific to the place (the shelf you take
 parts from yourself, the printers and instruments actually there) and counts the
