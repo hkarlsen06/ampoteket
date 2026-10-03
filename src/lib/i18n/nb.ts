@@ -287,7 +287,7 @@ export const nb = {
 		related: 'Relaterte sider', loading: 'Henter logg …', unavailable: 'Loggen er utilgjengelig. Prøv igjen.',
 		empty: 'Ingen endringer er registrert.', more: 'Vis eldre endringer', retry: 'Prøv igjen',
 		entryId: (id: string) => `Loggpost ${id}`, actor: 'Utført av', details: 'Vis endrede data',
-		recordKey: 'ID', before: 'Før', after: 'Etter',
+		recordKey: 'ID', changes: 'Endringer', removed: 'fjernet:', added: 'lagt til:', before: 'Før', after: 'Etter',
 		tables: { staff_members: 'Adminkonto', help_contacts: 'Kontakt på kontaktsiden', units: 'Enhet', categories: 'Kategori', cabinets: 'Kabinett', bins: 'Skuff', products: 'Produkt', attribute_definitions: 'Spesifikasjonstype', product_attributes: 'Produktspesifikasjon', purchase_orders: 'Bestilling', purchase_order_lines: 'Bestillingslinje', count_batches: 'Tellerunde', checkout_contacts: 'Kjøperens kontaktopplysning' },
 		actions: { INSERT: 'Opprettet', UPDATE: 'Endret', DELETE: 'Slettet', CONTACT_CLEARED: 'Kontaktopplysning slettet' }
 	},

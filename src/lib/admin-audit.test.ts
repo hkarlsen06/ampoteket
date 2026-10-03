@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { readAuditPage, readAuditUpdates } from './admin-audit';
+import { auditFieldDiff, readAuditPage, readAuditUpdates } from './admin-audit';
 
 const session = { config: { url: 'https://fixture.invalid', publishableKey: 'sb_publishable_fixture' }, token: 'staff-jwt', userId: '11111111-1111-4111-8111-111111111111' };
 const entry = (id: string) => ({ id, table_name: 'products', row_key: { id: session.userId }, action: 'UPDATE', before_data: { sale_unit_price_nok: '9007199254740993.123456' }, after_data: { sale_unit_price_nok: '9007199254740994.123456' }, actor_id: session.userId, database_role: 'authenticated', recorded_at: '2026-09-23T10:00:00Z' });
@@ -41,4 +41,18 @@ test('audit paging retains exact nested values and fills capped responses withou
 		return new Response(JSON.stringify(read && url.searchParams.get('id') === 'lt.9007199254740994' ? [entry('9007199254740993')] : []));
 	});
 	expect(next.entries[0].id).toBe('9007199254740993');
+});
+
+test('audit field diff marks only the differing words of each changed value', () => {
+	const fields = auditFieldDiff({ id: 'a', role: '3d-print ansvarlig', email: null, gone: 1 }, { id: 'a', role: '3D-print ansvarlig', email: 'x@y.no', added: '😀' });
+	expect(fields).toEqual([
+		{ name: 'id', changed: false, prefix: '"a"', deleted: '', inserted: '', suffix: '' },
+		{ name: 'role', changed: true, prefix: '"', deleted: '3d', inserted: '3D', suffix: '-print ansvarlig"' },
+		{ name: 'email', changed: true, prefix: '', deleted: 'null', inserted: '"x@y.no"', suffix: '' },
+		{ name: 'gone', changed: true, prefix: '', deleted: '1', inserted: '', suffix: '' },
+		{ name: 'added', changed: true, prefix: '', deleted: '', inserted: '"😀"', suffix: '' }
+	]);
+	expect(auditFieldDiff({ r: 'Lodding' }, { r: 'Lodde og 3D-print ansvarlig' })[0]).toMatchObject({ prefix: '"', deleted: 'Lodding', inserted: 'Lodde og 3D-print ansvarlig', suffix: '"' });
+	expect(auditFieldDiff({ t: '09:15:23+00' }, { t: '09:16:22+00' })[0]).toMatchObject({ prefix: '"09:', deleted: '15:23', inserted: '16:22', suffix: '+00"' });
+	expect(auditFieldDiff({ e: '😀' }, { e: '😃' })[0]).toMatchObject({ prefix: '"', deleted: '😀', inserted: '😃', suffix: '"' });
 });

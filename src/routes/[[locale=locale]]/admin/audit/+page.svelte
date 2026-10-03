@@ -2,7 +2,7 @@
 	import { onMount, untrack } from 'svelte';
 	import { getI18n } from '#lib/i18n/index.js';
 	import { getAdminContext } from '#lib/admin-context.svelte.js';
-	import { readAuditPage, readAuditUpdates, type AuditEntry } from '#lib/admin-audit.js';
+	import { auditFieldDiff, readAuditPage, readAuditUpdates, type AuditEntry } from '#lib/admin-audit.js';
 	import { allStaffRows } from '#lib/admin-api.js';
 	import { identifier, text } from '#lib/api.js';
 	import { formatCountedAt } from '#lib/format.js';
@@ -90,8 +90,15 @@
 						<Collapsible.Content>
 						<dl class="space-y-3 text-sm [&_dt]:font-semibold [&_dd]:m-0 [&_pre]:max-w-full [&_pre]:whitespace-pre-wrap [&_pre]:break-all [&_pre]:font-mono">
 							<div><dt>{m.recordKey}</dt><dd><pre>{JSON.stringify(entry.key, null, 2)}</pre></dd></div>
-							{#if entry.before}<div><dt>{m.before}</dt><dd><pre>{JSON.stringify(entry.before, null, 2)}</pre></dd></div>{/if}
-							{#if entry.after}<div><dt>{m.after}</dt><dd><pre>{JSON.stringify(entry.after, null, 2)}</pre></dd></div>{/if}
+							{#if entry.before && entry.after}
+								{@const fields = auditFieldDiff(entry.before, entry.after)}
+								<div><dt>{m.changes}</dt><dd><pre>{'{'}
+{#each fields as field, fieldIndex (field.name)}<span class={field.changed ? undefined : 'text-muted-foreground'}>  {JSON.stringify(field.name)}: {field.prefix}{#if field.deleted}<del class="rounded-xs bg-destructive/15 px-[0.15em] text-destructive"><span class="sr-only">{m.removed} </span>{field.deleted}</del>{/if}{#if field.inserted}<ins class="rounded-xs bg-success/20 px-[0.15em]"><span class="sr-only">{m.added} </span>{field.inserted}</ins>{/if}{field.suffix}{fieldIndex < fields.length - 1 ? ',' : ''}</span>
+{/each}}</pre></dd></div>
+							{:else}
+								{#if entry.before}<div><dt>{m.before}</dt><dd><pre>{JSON.stringify(entry.before, null, 2)}</pre></dd></div>{/if}
+								{#if entry.after}<div><dt>{m.after}</dt><dd><pre>{JSON.stringify(entry.after, null, 2)}</pre></dd></div>{/if}
+							{/if}
 						</dl>
 						</Collapsible.Content>
 					</Collapsible.Root>

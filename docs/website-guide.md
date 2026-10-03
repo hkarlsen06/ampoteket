@@ -303,7 +303,9 @@ history; the audit records only that a clearance happened.
 
 `/admin/audit` reads `amp_audit_log` with the staff JWT, newest first, paging with
 `id < last_id` until complete. A failed page keeps loaded rows and the cursor for
-retry. Rows expand to key and before/after JSON with exact numeric strings. There
+retry. Rows expand to the key and the row JSON with exact numeric strings. When both
+before and after exist, one listing shows every field with each changed value's
+differing words struck (removed) and underlined (added); unchanged fields stay muted. There
 is no contact search. Movements, orders, counts and checkout recovery live on their
 own screens.
 
