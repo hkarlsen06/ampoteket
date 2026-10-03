@@ -287,7 +287,7 @@ export const en: Messages = {
 		related: 'Related pages', loading: 'Loading log …', unavailable: 'The log is unavailable. Try again.',
 		empty: 'No changes have been recorded.', more: 'Show older changes', retry: 'Try again',
 		entryId: (id: string) => `Log entry ${id}`, actor: 'By', details: 'Show changed data',
-		recordKey: 'ID', before: 'Before', after: 'After',
+		recordKey: 'ID', changes: 'Changes', removed: 'removed:', added: 'added:', before: 'Before', after: 'After',
 		tables: { staff_members: 'Admin account', help_contacts: 'Contact page entry', units: 'Unit', categories: 'Category', cabinets: 'Cabinet', bins: 'Drawer', products: 'Product', attribute_definitions: 'Specification type', product_attributes: 'Product specification', purchase_orders: 'Order', purchase_order_lines: 'Order line', count_batches: 'Stocktake', checkout_contacts: 'Buyer contact detail' },
 		actions: { INSERT: 'Created', UPDATE: 'Changed', DELETE: 'Deleted', CONTACT_CLEARED: 'Contact detail cleared' }
 	},

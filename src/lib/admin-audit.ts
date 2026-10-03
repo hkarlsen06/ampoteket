@@ -58,3 +58,25 @@ export async function readAuditUpdates(session: StaffSession, newestId: string, 
 		cursor = page.entries.at(-1)!.id;
 	}
 }
+
+export type AuditFieldDiff = { name: string; changed: boolean; prefix: string; deleted: string; inserted: string; suffix: string };
+
+const wordChar = (char: string | undefined) => char !== undefined && /[\p{L}\p{N}_]/u.test(char);
+
+/** Every field of a before/after pair as JSON text, a changed value trimmed to its differing whole words so a shared letter never splits a word. */
+export function auditFieldDiff(before: Record<string, unknown>, after: Record<string, unknown>): AuditFieldDiff[] {
+	return [...new Set([...Object.keys(before), ...Object.keys(after)])].map(name => {
+		const old = name in before ? JSON.stringify(before[name]) : '';
+		const now = name in after ? JSON.stringify(after[name]) : '';
+		const max = Math.min(old.length, now.length);
+		let start = 0;
+		while (start < max && old[start] === now[start]) start++;
+		if (start && /[\uD800-\uDBFF]/.test(old[start - 1])) start--;
+		while (start && wordChar(old[start - 1]) && (wordChar(old[start]) || wordChar(now[start]))) start--;
+		let end = 0;
+		while (end < max - start && old[old.length - 1 - end] === now[now.length - 1 - end]) end++;
+		if (end && /[\uDC00-\uDFFF]/.test(old[old.length - end])) end--;
+		while (end && wordChar(old[old.length - end]) && (wordChar(old[old.length - end - 1]) || wordChar(now[now.length - end - 1]))) end--;
+		return { name, changed: old !== now, prefix: old.slice(0, start), deleted: old.slice(start, old.length - end), inserted: now.slice(start, now.length - end), suffix: old.slice(old.length - end) };
+	});
+}
