@@ -221,7 +221,7 @@ an act on a long page; use one per page at most, and nothing inside it gets a se
 surface.
 
 **Empty secondary sections are not rendered.** A read-only history or archive
-(archived cabinets and drawers, receipt and cancellation history, receipts without
+(receipt and cancellation history, receipts without
 an order, stock history) appears only once it has entries; an empty heading or
 disclosure offers nothing to read or do. A page's primary list (catalog, cart,
 orders, counts, audit) and a status answer («nothing needs attention») keep their

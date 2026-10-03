@@ -227,7 +227,7 @@ metadata (§5.5). Column grants decide what is writable; triggers audit and vali
 - Active products may have no bin, with an optional public location note. Shelf and
   count reads include those products. Deactivate instead of deleting anything with history.
 
-Shelf layouts ([editor](page-admin-stock.md#placement)):
+Shelf layouts ([editor](page-admin-stock.md#cabinets-and-drawers)):
 
 - `amp_save_shelf_layout` saves a cabinet and its drawers atomically, guarded by
   the original snapshot. Unknown outcomes retry with the same request and payload.

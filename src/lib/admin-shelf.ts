@@ -10,12 +10,9 @@ export type AdminBin = Omit<ShelfBin, 'cabinet_id' | 'inner_row' | 'inner_col'> 
 	cabinet_id: string | null; inner_row: number | null; inner_col: number | null; is_archived: boolean;
 };
 export type AssignedProduct = { id: string; code: string; name_nb: string; name_en: string; bin_id: string | null; is_active: boolean };
-export type ArchivedBinLocation = { binId: string; cabinetId: string; cabinetCode: string; cabinetLabel: string | null;
-	cabinetOuterRow: number | null; cabinetOuterCol: number | null; innerRow: number; innerCol: number; rowSpan: number; colSpan: number };
-export type AdminShelf = { cabinets: AdminCabinet[]; bins: AdminBin[]; products: AssignedProduct[]; archivedLocations: Map<string, ArchivedBinLocation>; live: ShelfTopology };
+export type AdminShelf = { cabinets: AdminCabinet[]; bins: AdminBin[]; products: AssignedProduct[]; live: ShelfTopology };
 const cabinetSelect = 'id,code,outer_row,outer_col,inner_rows,inner_cols,label,is_archived';
 const binSelect = 'id,code,cabinet_id,inner_row,inner_col,row_span,col_span,label,is_archived';
-const archivedLocationSelect = 'bin_id,cabinet_id,cabinet_code,cabinet_label,cabinet_outer_row,cabinet_outer_col,inner_row,inner_col,row_span,col_span';
 
 /** Only bounded structural coordinates become numbers. Stock and money never do. */
 export function shelfInteger(value: unknown): number {
@@ -64,33 +61,21 @@ function parseAssignment(value: unknown): AssignedProduct {
 	return { id: identifier(row.id), code, name_nb: text(row.name_nb, 200), name_en: text(row.name_en, 200),
 		bin_id: row.bin_id === null ? null : identifier(row.bin_id), is_active: row.is_active };
 }
-function parseArchivedLocation(value: unknown): ArchivedBinLocation {
-	const row = object(value);
-	if ((row.cabinet_outer_row === null) !== (row.cabinet_outer_col === null)) throw new Error('Invalid archived cabinet location');
-	return { binId: identifier(row.bin_id), cabinetId: identifier(row.cabinet_id), cabinetCode: text(row.cabinet_code, 64),
-		cabinetLabel: label(row.cabinet_label), cabinetOuterRow: row.cabinet_outer_row === null ? null : shelfInteger(row.cabinet_outer_row),
-		cabinetOuterCol: row.cabinet_outer_col === null ? null : shelfInteger(row.cabinet_outer_col),
-		innerRow: shelfInteger(row.inner_row), innerCol: shelfInteger(row.inner_col),
-		rowSpan: shelfInteger(row.row_span), colSpan: shelfInteger(row.col_span) };
-}
 export async function readAdminShelf(session: StaffSession, fetcher: Fetcher = fetch): Promise<AdminShelf> {
-	const [cabinetRows, binRows, productRows, archivedRows] = await Promise.all([
+	const [cabinetRows, binRows, productRows] = await Promise.all([
 		allStaffRows(session, 'amp_cabinets', cabinetSelect, 'id', {}, fetcher),
 		allStaffRows(session, 'amp_bins', binSelect, 'id', {}, fetcher),
 		// Inactive assignments prevent retirement too. Never use the public catalog here.
-		allStaffRows(session, 'amp_products', 'id,code,name_nb,name_en,bin_id,is_active', 'id', {}, fetcher),
-		allStaffRows(session, 'amp_archived_bin_locations', archivedLocationSelect, 'bin_id', {}, fetcher)
+		allStaffRows(session, 'amp_products', 'id,code,name_nb,name_en,bin_id,is_active', 'id', {}, fetcher)
 	]);
 	const cabinets = cabinetRows.map(parseAdminCabinet), bins = binRows.map(parseAdminBin), products = productRows.map(parseAssignment);
-	const archivedLocations = new Map(archivedRows.map((row) => { const location = parseArchivedLocation(row); return [location.binId, location] as const; }));
 	if (new Set(cabinets.map((row) => row.code)).size !== cabinets.length || new Set(bins.map((row) => row.code)).size !== bins.length) throw new Error('Duplicate storage code');
-	if (archivedLocations.size !== archivedRows.length || [...archivedLocations.keys()].some((id) => !bins.some((bin) => bin.id === id && bin.is_archived))) throw new Error('Invalid archived drawer locations');
 	const assigned = new Set(products.flatMap((row) => row.bin_id ? [row.bin_id] : []));
 	const live = parseShelfTopology({ cabinets: cabinets.filter((row) => !row.is_archived).map(apiCoordinates),
 		bins: bins.filter((row) => !row.is_archived).map((row) => ({ ...apiCoordinates(row), has_products: assigned.has(row.id) })) });
 	const liveBins = new Set(live.bins.map((row) => row.id));
 	if (products.some((row) => row.bin_id && !liveBins.has(row.bin_id))) throw new Error('Inconsistent storage assignments');
-	return { cabinets, bins, products, archivedLocations, live };
+	return { cabinets, bins, products, live };
 }
 
 type ActorCommand = { userId: string; requestId: string };

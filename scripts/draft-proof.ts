@@ -108,26 +108,27 @@ try {
 	await expect(search).toHaveValue(seedProductCode(3));
 	console.log('PASS: product list search survives reload');
 
-	// Shelf inline cabinet editor: reload keeps the label; Discard drops it.
+	// Shelf inline cabinet editor: reload keeps a drafted layout; Discard drops it.
 	const sm = en.adminShelf;
 	await page.goto(`${origin}/en/admin/shelf`);
 	const editor = page.locator('section[data-cabinet-editor]');
-	const label = editor.getByLabel(fieldLabel(sm.label)).first();
+	const rows = editor.getByRole('slider', { name: sm.resizeRows, exact: true });
 	const openCabinet = async () => {
 		await page.locator(`[data-item-id="${cabinetId}"]`).click();
 		await expect(editor).toBeVisible();
-		if (!await label.isVisible()) await editor.getByRole('button', { name: sm.details, exact: true }).click();
 	};
 	await openCabinet();
-	await label.fill('Draft cabinet');
+	const savedRows = Number(await rows.getAttribute('aria-valuenow'));
+	await rows.focus(); await page.keyboard.press('ArrowUp');
+	await expect(rows).toHaveAttribute('aria-valuenow', String(savedRows + 1));
 	await page.reload();
 	await openCabinet();
-	await expect(label).toHaveValue('Draft cabinet');
+	await expect(rows).toHaveAttribute('aria-valuenow', String(savedRows + 1));
 	await editor.getByRole('button', { name: sm.discardChanges, exact: true }).click();
-	await expect(label).not.toHaveValue('Draft cabinet');
+	await expect(rows).toHaveAttribute('aria-valuenow', String(savedRows));
 	await page.reload();
 	await openCabinet();
-	await expect(label).not.toHaveValue('Draft cabinet');
+	await expect(rows).toHaveAttribute('aria-valuenow', String(savedRows));
 	console.log('PASS: shelf draft survives reload; Discard drops it');
 
 	// Catalog search typed but not submitted.

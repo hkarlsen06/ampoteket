@@ -5,16 +5,13 @@
 	import { Skeleton } from '#lib/components/ui/skeleton/index.js';
 	import Icon from '#lib/Icon.svelte';
 	import XIcon from 'phosphor-svelte/lib/XIcon';
-	import DisclosureTrigger from '#lib/DisclosureTrigger.svelte';
 	import StateBadge from '#lib/StateBadge.svelte';
 	import { codeText, formActions, formLayout, formStatus, itemTitle, pageHeader, pageHeading, section, sectionHeading, sheetBody } from '#lib/ui.js';
 	import * as Alert from '#lib/components/ui/alert/index.js';
 	import * as Empty from '#lib/components/ui/empty/index.js';
 	import * as Item from '#lib/components/ui/item/index.js';
 	import { Button, ButtonLabel } from '#lib/components/ui/button/index.js';
-	import * as Collapsible from '#lib/components/ui/collapsible/index.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
-	import * as Menubar from '#lib/components/ui/menubar/index.js';
 	import { Toaster } from '#lib/components/ui/sonner/index.js';
 	import { toast } from 'svelte-sonner';
 	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
@@ -33,7 +30,7 @@
 		executeShelfCommand, shelfFailure, type AdminShelf, type AdminCabinet, type AdminBin, type ShelfCommand } from '#lib/admin-shelf.js';
 	import { readDraft, writeDraft } from '#lib/drafts.js';
 	const fieldId = $props.id();
-	const shelfSection = section({ spacing: 'divided', class: 'shelf-section [&_h3]:mt-8' });
+	const shelfSection = section({ spacing: 'divided', class: 'shelf-section' });
 
 	const i18n = getI18n(), admin = getAdminContext();
 	const m = $derived(i18n.m.adminShelf);
@@ -43,28 +40,24 @@
 	let reviewCommand = $state<ShelfCommand | null>(null);
 	let outcome = $state<'idle' | 'saved' | 'stale' | 'occupied' | 'fit' | 'notEmpty' | 'invalid' | 'unknown' | 'failed' | 'saveBeforeSwap'>('idle');
 	let cabinetId = $state<string | null>(null), binId = $state<string | null>(null);
-	let editor = $state<'cabinet' | 'bin' | null>(null);
-	let editorMode = $state<'edit' | 'swap'>('edit');
-	let detailsOpen = $state(false);
+	// One cabinet editor: inline for a placed cabinet, a sheet for a new one or a move.
+	let editor = $state(false);
+	let editorMode = $state<'edit' | 'move'>('edit');
 	let swapSource = $state<AdminBin | null>(null);
-	let renameOpen = $state(false), drawerLabel = $state('');
 	let confirmation = $state<ShelfCommand | null>(null);
 	let confirmationTrigger: HTMLElement | null = null;
-	let before = $state<AdminCabinet | AdminBin | null>(null);
-	let description = $state(''), row = $state('1'), column = $state('A'), rows = $state('12'), cols = $state('4');
-	let parentId = $state(''), swapId = $state('');
+	let before = $state<AdminCabinet | null>(null);
+	// Wall position, typed only for a new cabinet; placed cabinets move through the wall picker.
+	let row = $state('1'), column = $state('A');
+	let moveId = $state('');
 	let layoutId = $state(''), layoutBins = $state<AdminBin[]>([]), beforeBins = $state<AdminBin[]>([]);
 	let layoutSize = $state<LayoutSize>({ rows: 12, cols: 4 }), layoutVersion = $state(0);
+	let layoutEditor = $state<ReturnType<typeof ShelfLayoutEditor>>();
 	const selectedDrawer = $derived(layoutBins.find((item) => item.id === binId));
-	const inlineEditor = $derived(editor === 'cabinet' && Boolean(before && !before.is_archived) && editorMode === 'edit');
-	const draftChanged = $derived(editor === 'cabinet' && Boolean(before && (JSON.stringify(layoutBins) !== JSON.stringify(beforeBins)
-		|| layoutSize.rows !== (before as AdminCabinet).inner_rows || layoutSize.cols !== (before as AdminCabinet).inner_cols
-		|| description !== (before.label ?? '') || row !== String((before as AdminCabinet).outer_row)
-		|| column.toUpperCase() !== gridCell(1, (before as AdminCabinet).outer_col ?? 1).slice(0, -1))));
-	const archivedCabinets = $derived(shelf?.cabinets.filter((item) => item.is_archived) ?? []);
-	const archivedBins = $derived(shelf?.bins.filter((item) => item.is_archived) ?? []);
+	const inlineEditor = $derived(editor && Boolean(before) && editorMode === 'edit');
+	const draftChanged = $derived(editor && Boolean(before && (JSON.stringify(layoutBins) !== JSON.stringify(beforeBins)
+		|| layoutSize.rows !== before.inner_rows || layoutSize.cols !== before.inner_cols)));
 	const assignedIds = $derived(new Set(shelf?.products.flatMap((product) => product.bin_id ? [product.bin_id] : []) ?? []));
-	const sizeUnreviewed = $derived(editor === 'cabinet' && (rows !== String(layoutSize.rows) || cols !== String(layoutSize.cols)));
 	let alive = true;
 	let editorTrigger: HTMLElement | null = null;
 	let newCabinetButton = $state<HTMLButtonElement | null>(null);
@@ -72,43 +65,26 @@
 	const locked = $derived(admin.status !== 'ready' || busy || Boolean(pending) || Boolean(reviewCommand) || !storageReady || needsRefresh || loadFailed || !shelf);
 	const currentReview = $derived.by(() => {
 		const command = reviewCommand;
-		if (!command) return undefined;
-		const id = command.kind === 'archive-cabinet' ? command.before.id
-			: command.kind === 'cabinet' || command.kind === 'layout' || command.kind === 'bin' ? command.after.id : command.first.id;
-		return command.kind === 'archive-cabinet' || command.kind === 'cabinet' || command.kind === 'layout' || command.kind === 'swap-cabinets'
-			? shelf?.cabinets.find((item) => item.id === id) : shelf?.bins.find((item) => item.id === id);
+		return command?.kind === 'layout' ? shelf?.cabinets.find((item) => item.id === command.after.id) : undefined;
 	});
 	const cabinets = $derived([...(shelf?.live.cabinets ?? [])].sort((a, b) => b.outer_row - a.outer_row || a.outer_col - b.outer_col));
 	const cabinet = $derived(cabinets.find((item) => item.id === cabinetId));
-	const bins = $derived([...(shelf?.live.bins.filter((item) => item.cabinet_id === cabinetId) ?? [])]
-		.sort((a, b) => b.inner_row - a.inner_row || a.inner_col - b.inner_col));
-	const bin = $derived(bins.find((item) => item.id === binId));
+	// The saved drawer behind the selection; drafted drawers have no contents, moves or archive yet.
+	const bin = $derived(before ? shelf?.live.bins.find((item) => item.id === binId && item.cabinet_id === before!.id) : undefined);
 	const assigned = $derived(shelf?.products.filter((item) => item.bin_id === binId) ?? []);
 	const wallRows = $derived(cabinets.reduce((max, item) => Math.max(max, item.outer_row), 1));
 	const wallCols = $derived(cabinets.reduce((max, item) => Math.max(max, item.outer_col), 1));
-	const blockers = $derived(!before ? 0 : editor === 'cabinet'
-		? (shelf?.bins.filter((item) => !item.is_archived && item.cabinet_id === before!.id).length ?? 0)
-		: (shelf?.products.filter((item) => item.bin_id === before!.id).length ?? 0));
-	const cabinetAssignments = $derived(editor === 'cabinet' && before ? (shelf?.products.filter((product) =>
+	const cabinetAssignments = $derived(editor && before ? (shelf?.products.filter((product) =>
 		product.bin_id && shelf?.bins.some((item) => item.id === product.bin_id && !item.is_archived && item.cabinet_id === before!.id)).length ?? 0) : 0);
-	const swapOptions = $derived(editor === 'cabinet' ? cabinets.filter((item) => item.id !== before?.id)
-		: (shelf?.live.bins.filter((item) => item.id !== before?.id) ?? []));
-	const swapTarget = $derived(swapOptions.find((item) => item.id === swapId));
-	// The swap target is picked on the shelf graphic; the edited unit itself is
-	// left out of the topology, so its own position shows as the empty slot.
-	const swapTopology = $derived.by(() => {
-		const live = shelf?.live ?? { cabinets: [], bins: [] };
-		if (!before) return live;
-		return editor === 'cabinet'
-			? { cabinets: live.cabinets.filter((item) => item.id !== before!.id), bins: [] }
-			: { cabinets: live.cabinets, bins: live.bins.filter((item) => item.id !== before!.id) };
+	// A move target is a vacant wall position or another cabinet to swap with.
+	const moveTarget = $derived.by(() => {
+		const vacant = /^vacant:(\d+):(\d+)$/.exec(moveId);
+		if (vacant) return { kind: 'vacant' as const, row: Number(vacant[1]), col: Number(vacant[2]) };
+		const value = shelf?.cabinets.find((item) => item.id === moveId && item.id !== before?.id && !item.is_archived);
+		return value ? { kind: 'cabinet' as const, cabinet: value } : undefined;
 	});
 	const preview = $derived.by(() => {
-		try {
-			const r = shelfInteger(row), c = shelfColumn(column);
-			return editor === 'cabinet' ? m.cabinet(gridCell(r, c))
-				: `${cabinetName(parentId)} · ${m.bin(gridRange(r, c, shelfInteger(rows), shelfInteger(cols)))}`;
-		} catch { return null; }
+		try { return m.cabinet(gridCell(shelfInteger(row), shelfColumn(column))); } catch { return null; }
 	});
 
 	onMount(() => {
@@ -124,20 +100,12 @@
 	onDestroy(() => { alive = false; });
 	function cabinetName(id: string | null): string {
 		const value = shelf?.cabinets.find((item) => item.id === id);
-		return value ? position(value) : m.chooseCabinet;
+		return value ? position(value) : m.archived;
 	}
 	function position(value: AdminCabinet | AdminBin): string {
-		if (value.is_archived) return m.archivedName('outer_row' in value ? m.cabinetKind : m.binKind, value.label || m.unnamed);
+		if (value.is_archived) return m.archived;
 		if ('outer_row' in value) return m.cabinet(gridCell(value.outer_row!, value.outer_col!));
 		return `${cabinetName(value.cabinet_id)} · ${m.bin(gridRange(value.inner_row!, value.inner_col!, value.row_span, value.col_span))}`;
-	}
-	function archivedLocation(value: AdminBin): string | null {
-		const origin = shelf?.archivedLocations.get(value.id);
-		if (!origin) return null;
-		const cabinet = origin.cabinetOuterRow && origin.cabinetOuterCol
-			? m.cabinet(gridCell(origin.cabinetOuterRow, origin.cabinetOuterCol))
-			: origin.cabinetLabel || origin.cabinetCode;
-		return `${cabinet} · ${m.bin(gridRange(origin.innerRow, origin.innerCol, origin.rowSpan, origin.colSpan))}`;
 	}
 	function summary(command: ShelfCommand) {
 		if (command.kind === 'archive-cabinet') return m.archiveCabinetWithDrawersConfirm(command.beforeBins.length);
@@ -159,18 +127,18 @@
 		finally {
 			if (alive) {
 				busy = false;
-				if (inlineEditor && !draftChanged && !locked && !reviewCommand) {
+				// A move sheet is only open here after a rejected move: its guards must be current.
+				if ((editorMode === 'move' || (inlineEditor && !draftChanged)) && before && !locked && !reviewCommand) {
 					const current = shelf?.cabinets.find((item) => item.id === before?.id && !item.is_archived);
-					if (current) syncCabinet(current); else closeEditor(false);
+					if (current) { syncCabinet(current); moveId = ''; } else closeEditor(false);
 				}
 				settleRevalidation();
 			}
 		}
 	}
 	function syncCabinet(current: AdminCabinet) {
-		before = { ...current }; description = current.label ?? '';
+		before = { ...current };
 		row = String(current.outer_row); column = gridCell(1, current.outer_col!).slice(0, -1);
-		rows = String(current.inner_rows); cols = String(current.inner_cols);
 		layoutSize = { rows: current.inner_rows, cols: current.inner_cols };
 		beforeBins = shelf!.bins.filter((item) => item.cabinet_id === current.id && !item.is_archived).map((item) => ({ ...item }));
 		layoutBins = beforeBins.map((item) => ({ ...item }));
@@ -196,7 +164,7 @@
 	$effect(() => {
 		if (!editor && cabinet && !locked) untrack(() => {
 			const status = outcome, trigger = editorTrigger;
-			edit('cabinet', shelf!.cabinets.find((item) => item.id === cabinet!.id)!);
+			edit(shelf!.cabinets.find((item) => item.id === cabinet!.id)!);
 			outcome = status; editorTrigger = trigger;
 		});
 	});
@@ -204,34 +172,24 @@
 		if (locked || draftChanged || id === cabinetId) return;
 		closeEditor(false); cabinetId = id; binId = null;
 	}
-	function edit(kind: 'cabinet' | 'bin', value: AdminCabinet | AdminBin | null) {
-		if (locked || (kind === 'bin' && !value)) return;
+	function edit(value: AdminCabinet | null) {
+		if (locked) return;
 		editorTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-		editorMode = 'edit'; detailsOpen = !value || value.is_archived;
-		editor = kind; before = value ? { ...value } : null; description = value?.label ?? ''; swapId = ''; outcome = 'idle';
-		if (kind === 'cabinet') {
-			const c = value as AdminCabinet | null;
-			row = String(c?.outer_row ?? 1); column = gridCell(1, c?.outer_col ?? 1).slice(0, -1);
-			rows = String(c?.inner_rows ?? 12); cols = String(c?.inner_cols ?? 4);
-			layoutId = c?.id ?? crypto.randomUUID(); layoutSize = { rows: Number(rows), cols: Number(cols) };
-			beforeBins = shelf!.bins.filter((bin) => bin.cabinet_id === c?.id && !bin.is_archived).map((bin) => ({ ...bin }));
-			layoutBins = c ? beforeBins.map((bin) => ({ ...bin })) : resizeLayout([], layoutId, null, layoutSize, assignedIds);
-			layoutVersion++;
-		} else {
-			const b = value as AdminBin | null;
-			row = String(b?.inner_row ?? 1); column = gridCell(1, b?.inner_col ?? 1).slice(0, -1);
-			rows = String(b?.row_span ?? 1); cols = String(b?.col_span ?? 1);
-			parentId = b?.cabinet_id ?? cabinetId ?? cabinets[0]?.id ?? '';
-		}
+		editorMode = 'edit'; editor = true; before = value ? { ...value } : null; moveId = ''; outcome = 'idle';
+		row = String(value?.outer_row ?? 1); column = gridCell(1, value?.outer_col ?? 1).slice(0, -1);
+		layoutId = value?.id ?? crypto.randomUUID(); layoutSize = { rows: value?.inner_rows ?? 12, cols: value?.inner_cols ?? 4 };
+		beforeBins = shelf!.bins.filter((bin) => bin.cabinet_id === value?.id && !bin.is_archived).map((bin) => ({ ...bin }));
+		layoutBins = value ? beforeBins.map((bin) => ({ ...bin })) : resizeLayout([], layoutId, null, layoutSize, assignedIds);
+		layoutVersion++;
 		draftStart = JSON.stringify(draftFields()); draftStored = false;
 		const saved = readDraft(admin.session?.user.id, 'shelf') as { editor?: unknown; before?: unknown; beforeBins?: unknown; fields?: Record<string, unknown> } | null;
 		const fields = saved?.fields, size = fields?.layoutSize as Record<string, unknown> | undefined;
-		if (saved?.editor === kind && JSON.stringify(saved.before) === JSON.stringify(before) && JSON.stringify(saved.beforeBins) === JSON.stringify(kind === 'cabinet' ? beforeBins : [])
-			&& ['description', 'row', 'column', 'rows', 'cols', 'parentId', 'layoutId'].every(name => typeof fields?.[name] === 'string')
+		if (saved?.editor === 'cabinet' && JSON.stringify(saved.before) === JSON.stringify(before) && JSON.stringify(saved.beforeBins) === JSON.stringify(beforeBins)
+			&& ['row', 'column', 'layoutId'].every(name => typeof fields?.[name] === 'string')
 			&& Number.isInteger(size?.rows) && Number.isInteger(size?.cols) && Array.isArray(fields?.layoutBins)
 			&& new Set(fields.layoutBins.map(bin => bin?.id)).size === fields.layoutBins.length
 			&& fields.layoutBins.every(bin => bin && typeof bin === 'object' && typeof bin.id === 'string' && Number.isInteger(bin.inner_row) && Number.isInteger(bin.inner_col) && Number.isInteger(bin.row_span) && Number.isInteger(bin.col_span))) {
-			({ description, row, column, rows, cols, parentId, layoutId, layoutSize, layoutBins } = fields as ReturnType<typeof draftFields>);
+			({ row, column, layoutId, layoutSize, layoutBins } = fields as ReturnType<typeof draftFields>);
 			layoutVersion++; draftStored = true;
 		}
 	}
@@ -239,7 +197,7 @@
 	// trip (drafts.ts). It returns only to the same unit, unchanged since the draft
 	// began; Discard and an acknowledged save drop it.
 	let draftStart = '', draftStored = false;
-	function draftFields() { return { description, row, column, rows, cols, parentId, layoutId, layoutSize: $state.snapshot(layoutSize), layoutBins: $state.snapshot(layoutBins) }; }
+	function draftFields() { return { row, column, layoutId, layoutSize: $state.snapshot(layoutSize), layoutBins: $state.snapshot(layoutBins) }; }
 	function discardDraft() { writeDraft(admin.session?.user.id, 'shelf', null); draftStored = false; }
 	$effect(() => {
 		if (!editor || editorMode !== 'edit' || busy || pending) return;
@@ -247,50 +205,31 @@
 		untrack(() => {
 			// Only this unit's own draft is removed when its edits are undone by hand.
 			if (JSON.stringify(fields) === draftStart) { if (draftStored) discardDraft(); return; }
-			writeDraft(admin.session?.user.id, 'shelf', { editor, before: $state.snapshot(before), beforeBins: editor === 'cabinet' ? $state.snapshot(beforeBins) : [], fields });
+			writeDraft(admin.session?.user.id, 'shelf', { editor: 'cabinet', before: $state.snapshot(before), beforeBins: $state.snapshot(beforeBins), fields });
 			draftStored = true;
 		});
 	});
 	function restoreDraft(command: ShelfCommand) {
-		// A failed restored request must keep its entered values just like a live form.
-		if (editor && !(editor === 'cabinet' && (command.kind === 'swap-bins' || command.kind === 'bin'))) return;
-		editorMode = command.kind === 'swap-cabinets' || command.kind === 'swap-bins' ? 'swap' : 'edit';
-		const value = command.kind === 'archive-cabinet' ? command.before : command.kind === 'cabinet' || command.kind === 'layout' || command.kind === 'bin'
-			? command.after.is_archived ? command.before! : command.after : command.first;
-		editor = 'outer_row' in value ? 'cabinet' : 'bin';
-		before = command.kind === 'archive-cabinet' || command.kind === 'cabinet' || command.kind === 'layout' || command.kind === 'bin' ? command.before : command.first;
-		description = value.label ?? '';
-		if ('outer_row' in value) {
-			row = String(value.outer_row ?? 1); column = gridCell(1, value.outer_col ?? 1).slice(0, -1);
-			rows = String(value.inner_rows); cols = String(value.inner_cols);
-			layoutId = value.id; layoutSize = { rows: value.inner_rows, cols: value.inner_cols };
-			beforeBins = command.kind === 'layout' || command.kind === 'archive-cabinet' ? command.beforeBins.map((bin) => ({ ...bin })) : [];
-			layoutBins = command.kind === 'layout' ? command.bins.map((bin) => ({ ...bin })) : [];
-			layoutVersion++;
-		} else {
-			row = String(value.inner_row ?? 1); column = gridCell(1, value.inner_col ?? 1).slice(0, -1);
-			rows = String(value.row_span); cols = String(value.col_span); parentId = value.cabinet_id ?? '';
-		}
-		if (command.kind === 'swap-cabinets' || command.kind === 'swap-bins') swapId = command.second.id;
+		// Only a layout is a draft worth keeping; a rejected move or swap is redone on
+		// the refreshed map. An open editor already holds the entered values.
+		if (command.kind !== 'layout' || editor) return;
+		const value = command.after;
+		editorMode = 'edit'; editor = true; before = command.before;
+		row = String(value.outer_row ?? 1); column = gridCell(1, value.outer_col ?? 1).slice(0, -1);
+		layoutId = value.id; layoutSize = { rows: value.inner_rows, cols: value.inner_cols };
+		beforeBins = command.beforeBins.map((bin) => ({ ...bin }));
+		layoutBins = command.bins.map((bin) => ({ ...bin }));
+		layoutVersion++;
 	}
 	function reviewPlacement() {
-		if (busy || needsRefresh || !currentReview) return;
-		if (editor === 'cabinet') {
-			const current = currentReview as AdminCabinet;
-			if (reviewCommand?.kind === 'layout') {
-				description = current.label ?? ''; row = String(current.outer_row ?? 1); column = gridCell(1, current.outer_col ?? 1).slice(0, -1);
-			}
-			rows = String(current.inner_rows); cols = String(current.inner_cols);
-			layoutId = current.id; layoutSize = { rows: current.inner_rows, cols: current.inner_cols };
-			beforeBins = shelf!.bins.filter((bin) => bin.cabinet_id === current.id && !bin.is_archived).map((bin) => ({ ...bin }));
-			layoutBins = beforeBins.map((bin) => ({ ...bin })); layoutVersion++;
-		} else {
-			const current = currentReview as AdminBin; rows = String(current.row_span); cols = String(current.col_span);
-		}
-		before = { ...currentReview }; reviewCommand = null; outcome = 'idle';
+		if (busy || needsRefresh) return;
+		// A cabinet archived or never created meanwhile leaves nothing to start from.
+		if (!currentReview || currentReview.is_archived) { closeEditor(false); return; }
+		syncCabinet(currentReview); layoutVersion++;
+		reviewCommand = null; outcome = 'idle';
 	}
 	function closeEditor(restoreFocus = document.activeElement?.matches(':focus-visible') ?? false) {
-		editor = null; before = null; reviewCommand = null;
+		editor = false; before = null; reviewCommand = null;
 		if (restoreFocus && !cabinet) void tick().then(() => {
 			if (alive) (editorTrigger?.isConnected ? editorTrigger : newCabinetButton)?.focus({ preventScroll: true });
 		});
@@ -312,14 +251,13 @@
 			const result = await executeShelfCommand(session, saved);
 			if (!alive || session.userId !== admin.session?.user.id) return;
 			clearShelfCommand(sessionStorage, saved); pending = null;
-			outcome = result;
+			outcome = result; swapSource = null;
 			// The acknowledged fields are the new baseline, even if the display refresh fails.
-			if (result !== 'stale') { discardDraft(); draftStart = JSON.stringify(draftFields()); }
-			if (result !== 'stale') swapSource = null;
 			if (result === 'stale') {
-				if (saved.kind !== 'archive-cabinet') { restoreDraft(saved); reviewCommand = saved; }
+				if (saved.kind === 'layout') { restoreDraft(saved); reviewCommand = saved; }
 				needsRefresh = true; return;
 			}
+			discardDraft(); draftStart = JSON.stringify(draftFields());
 			if (saved.kind === 'swap-bins' || saved.kind === 'swap-cabinets') {
 				toast.success(m.positionsSwapped, { description: summary(saved) }); outcome = 'idle';
 			}
@@ -333,11 +271,11 @@
 			const failure = shelfFailure(error);
 			if (failure && pending) {
 				try {
-					const saved = pending; clearShelfCommand(sessionStorage, saved); pending = null; restoreDraft(saved); outcome = failure;
+					const saved = pending; clearShelfCommand(sessionStorage, saved); pending = null; swapSource = null; restoreDraft(saved); outcome = failure;
 					needsRefresh = failure !== 'invalid';
 					// A fresh read never silently changes the original guards. The user reviews
-					// the current placement before applying their retained draft to it.
-					if (needsRefresh && saved.kind !== 'archive-cabinet' && (saved.kind === 'swap-bins' || saved.kind === 'swap-cabinets' || saved.before)) reviewCommand = saved;
+					// the current layout before applying their retained draft to it.
+					if (needsRefresh && saved.kind === 'layout' && saved.before) reviewCommand = saved;
 				}
 				catch { outcome = 'unknown'; storageReady = false; }
 			} else outcome = pending ? 'unknown' : 'failed';
@@ -350,8 +288,8 @@
 					if (current) syncCabinet(current); else closeEditor(false);
 				}
 				if (closed && restoreFocus) closeEditor(true);
-				// The app reconciles the map itself (design-system.md §4.2); the retained
-				// draft waits for the explicit placement review below.
+				// The app reconciles the map itself (design-system.md §4.2); a retained
+				// layout draft waits for the explicit review below.
 				if (needsRefresh) void load(); else settleRevalidation();
 			}
 		}
@@ -360,17 +298,10 @@
 	function save(event: SubmitEvent) {
 		event.preventDefault(); if (locked || !editor || !shelf) return;
 		try {
-			const id = before?.id ?? layoutId, code = before?.code ?? `${editor === 'cabinet' ? 'C' : 'B'}-${id}`;
-			const common = { id, code, label: description.trim() || null, is_archived: false };
-			if (editor === 'cabinet') {
-				if (sizeUnreviewed) throw new Error();
-				const after: AdminCabinet = { ...common, outer_row: shelfInteger(row), outer_col: shelfColumn(column), inner_rows: layoutSize.rows, inner_cols: layoutSize.cols };
-				void run({ ...actor(), kind: 'layout', before: before as AdminCabinet | null, beforeBins, after, bins: layoutBins });
-			} else {
-				if (!shelf.live.cabinets.some((item) => item.id === parentId)) throw new Error();
-				const after: AdminBin = { ...common, cabinet_id: parentId, inner_row: shelfInteger(row), inner_col: shelfColumn(column), row_span: shelfInteger(rows), col_span: shelfInteger(cols) };
-				void run({ ...actor(), kind: 'bin', before: before as AdminBin, after });
-			}
+			const after: AdminCabinet = before ? { ...before, inner_rows: layoutSize.rows, inner_cols: layoutSize.cols }
+				: { id: layoutId, code: `C-${layoutId}`, label: null, is_archived: false, outer_row: shelfInteger(row), outer_col: shelfColumn(column),
+					inner_rows: layoutSize.rows, inner_cols: layoutSize.cols };
+			void run({ ...actor(), kind: 'layout', before, beforeBins, after, bins: layoutBins });
 		} catch { outcome = 'invalid'; }
 	}
 	function confirm(command: ShelfCommand) {
@@ -378,7 +309,7 @@
 		confirmation = command;
 	}
 	function canSwapDraft() {
-		if (editor === 'cabinet' && (!before || draftChanged)) { outcome = 'saveBeforeSwap'; return false; }
+		if (editor && (!before || draftChanged)) { outcome = 'saveBeforeSwap'; return false; }
 		return true;
 	}
 	function dragSwap(firstId: string, secondId: string) {
@@ -401,32 +332,27 @@
 		if (locked || !swapSource || !cabinetId || !canSwapDraft()) return;
 		confirm({ ...actor(), kind: 'bin', before: { ...swapSource }, after: { ...swapSource, cabinet_id: cabinetId, inner_row, inner_col } });
 	}
-	function drawerDetails(changes: Pick<AdminBin, 'label'>) {
-		if (locked || !selectedDrawer) return;
-		layoutBins = layoutBins.map((item) => item.id === binId ? { ...item, ...changes } : item);
-	}
 	function archiveDrawer() {
 		if (locked || draftChanged || !binId || assignedIds.has(binId)) return;
 		const current = shelf?.bins.find((item) => item.id === binId && !item.is_archived);
 		if (current) confirm({ ...actor(), kind: 'bin', before: { ...current }, after: { ...current, is_archived: true, cabinet_id: null, inner_row: null, inner_col: null } });
 	}
-	function archive() {
-		if (locked || !before || before.is_archived || draftChanged || (editor === 'cabinet' ? cabinetAssignments : blockers)) return;
-		if (editor === 'cabinet') {
-			const current = before as AdminCabinet;
-			const liveBins = shelf?.bins.filter((item) => !item.is_archived && item.cabinet_id === current.id) ?? [];
-			confirm({ ...actor(), kind: 'archive-cabinet', before: { ...current }, beforeBins: liveBins.map((item) => ({ ...item })) });
-		} else {
-			const current = before as AdminBin;
-			confirm({ ...actor(), kind: 'bin', before: current, after: { ...current, is_archived: true, cabinet_id: null, inner_row: null, inner_col: null } });
-		}
+	function archiveCabinet() {
+		if (locked || !before || draftChanged || cabinetAssignments) return;
+		const current = before;
+		const liveBins = shelf?.bins.filter((item) => !item.is_archived && item.cabinet_id === current.id) ?? [];
+		confirm({ ...actor(), kind: 'archive-cabinet', before: { ...current }, beforeBins: liveBins.map((item) => ({ ...item })) });
 	}
-	function swap() {
-		if (locked || !before || !swapTarget || before.is_archived) return;
-		if (editor === 'cabinet') confirm({ ...actor(), kind: 'swap-cabinets', first: before as AdminCabinet,
-			second: shelf!.cabinets.find((item) => item.id === swapTarget.id)! });
-		else confirm({ ...actor(), kind: 'swap-bins', first: before as AdminBin,
-			second: shelf!.bins.find((item) => item.id === swapTarget.id)! });
+	function openMove() {
+		if (locked || !canSwapDraft()) return;
+		editorTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+		moveId = ''; editorMode = 'move';
+	}
+	function moveCabinet() {
+		const target = moveTarget;
+		if (locked || !before || !target) return;
+		if (target.kind === 'cabinet') confirm({ ...actor(), kind: 'swap-cabinets', first: { ...before }, second: { ...target.cabinet } });
+		else confirm({ ...actor(), kind: 'cabinet', before: { ...before }, after: { ...before, outer_row: target.row, outer_col: target.col } });
 	}
 </script>
 
@@ -436,102 +362,63 @@
 	{:else if outcome !== 'idle'}<Alert.Message appearance="inline" variant={outcome === 'saved' ? 'default' : 'destructive'} role="status">{m[outcome]}</Alert.Message>{/if}
 {/snippet}
 
-{#snippet storageEditor(inline = false)}
-{#if editor}
-	{#if inline}
-		<h2 class={sectionHeading} id="cabinet-title">{m.cabinetMap(gridCell((before as AdminCabinet).outer_row!, (before as AdminCabinet).outer_col!))}</h2>
-		<Menubar.Root aria-label={m.drawerActions} class="my-3 w-fit max-w-full">
-			<Menubar.Menu>
-				<Menubar.Trigger disabled={locked || !selectedDrawer || Boolean(swapSource)}>{m.binKind}</Menubar.Trigger>
-				<Menubar.Content>
-					<Menubar.Item disabled={draftChanged} onSelect={() => { if (binId) pickSwap(binId); }}>{m.moveDrawer}</Menubar.Item>
-					<Menubar.Item onSelect={() => { drawerLabel = selectedDrawer?.label ?? ''; renameOpen = true; }}>{m.renameDrawer}</Menubar.Item>
-					<Menubar.Separator />
-					<Menubar.Item variant="destructive" disabled={draftChanged || !binId || assignedIds.has(binId)} onSelect={archiveDrawer}>{m.archiveBin}</Menubar.Item>
-				</Menubar.Content>
-			</Menubar.Menu>
-		</Menubar.Root>
-		{#if swapSource}<div class="flex flex-wrap items-center gap-3" role="status"><p>{m.chooseSwap}</p><Button variant="outline" onclick={() => swapSource = null}>{m.cancelAction}</Button></div>{/if}
-	{:else}
-		<Dialog.Header layout="bar">
-			<Dialog.Title>{editorMode === 'swap' ? m.swapHeading : before ? position(before) : m.newCabinet}</Dialog.Title>
-			<Dialog.Close disabled={busy}>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm"><Icon icon={XIcon} class="size-5" /><span class="sr-only">{m.cancel}</span></Button>{/snippet}</Dialog.Close>
-		</Dialog.Header>
+{#snippet pendingRetry()}
+	{#if pending && !wrongIdentity}
+		<h3 class={itemTitle}>{m.pendingHeading}</h3><p>{summary(pending)}</p>
+		<Button type="button" variant="outline" disabled={admin.status !== 'ready' || busy || !storageReady} onclick={() => run()}><ButtonLabel pending={busy} pendingLabel={m.saving} label={m.retry} /></Button>
 	{/if}
-	<!-- svelte-ignore a11y_no_noninteractive_tabindex (Named dialog editor region supports native keyboard scrolling.) -->
-	<div class={inline ? 'min-w-0' : ['shelf-editor-body', sheetBody]} role={inline ? undefined : 'region'} aria-label={inline ? undefined : editorMode === 'swap' ? m.swapHeading : m.layoutHeading} tabindex={inline ? undefined : 0}>
-		<AdminAccessGate active={!inline}>
-		{#if !inline}<Dialog.Description class="sr-only">{m.moveHint}</Dialog.Description>{/if}
+{/snippet}
 
-		{#if reviewCommand}
-			<p>{summary(reviewCommand)}</p><p>{reviewCommand.kind === 'layout' ? m.reviewLayoutHint : m.reviewHint}</p>
-			{#if currentReview}<p>{m.currentPlacement(position(currentReview))}</p>{/if}
-			{#if needsRefresh && !busy}<Alert.Message appearance="inline" variant="destructive" role="status" class="mt-4">{m.unavailable}</Alert.Message>{/if}
-			<div class={[formActions, 'my-4']}>
-				{#if needsRefresh && !busy}<Button type="button" variant="outline" onclick={load}>{m.retryLoad}</Button>{/if}
-				<Button type="button" variant="outline" disabled={busy || needsRefresh || !currentReview} onclick={reviewPlacement}>{reviewCommand.kind === 'layout' ? m.reviewLayout : m.reviewPlacement}</Button>
-			</div>
-		{/if}
-		{#if editorMode === 'edit'}
-		<form id="shelf-editor-form" class={formLayout} onsubmit={save}>
-			{#if editor === 'cabinet'}
-				{#key layoutVersion}<ShelfLayoutEditor initialSelected={binId ?? ''} onselect={selectDrawer} moving={Boolean(swapSource)} onempty={moveToEmpty} cabinetId={layoutId} bind:bins={layoutBins} bind:size={layoutSize}
-					bind:rowsText={rows} bind:colsText={cols} original={beforeBins} assigned={assignedIds} disabled={locked} onswap={dragSwap} onswapselect={pickSwap} />{/key}
-			{:else if before && 'row_span' in before}<p>{m.drawerSize(before.row_span, before.col_span)}</p>{/if}
-			<Collapsible.Root bind:open={detailsOpen}>
-				<DisclosureTrigger>{m.details}</DisclosureTrigger>
-				<Collapsible.Content class="space-y-4 pt-3">
-					<Field.Group layout="row">
-						<Field.Field width="grow"><Field.Label for={`${fieldId}-1`}>{m.label}</Field.Label><Input id={`${fieldId}-1`} bind:value={description} disabled={locked} /></Field.Field>
-						<Field.Field width="short"><Field.Label for={`${fieldId}-2`}>{m.row}</Field.Label><Input id={`${fieldId}-2`} required inputmode="numeric" pattern="[1-9][0-9]*" bind:value={row} disabled={locked} /></Field.Field>
-						<Field.Field width="short"><Field.Label for={`${fieldId}-3`}>{m.column}</Field.Label><Input id={`${fieldId}-3`} class="font-mono" required pattern="[A-Za-z]+" autocapitalize="characters" bind:value={column} disabled={locked} /></Field.Field>
-					</Field.Group>
-					{#if editor === 'bin'}
-						<Field.Set class="picker-group my-4 grid min-w-0 justify-items-start gap-3 [&_.placement-picker]:justify-self-stretch" aria-labelledby="parent-cabinet-title">
-							<Field.Legend variant="label" id="parent-cabinet-title">{m.chooseCabinet}</Field.Legend>
-							<ShelfPlacementPicker topology={shelf?.live ?? { cabinets: [], bins: [] }} pick="cabinet" selected={parentId || null} disabled={locked} onselect={(id) => { parentId = id; }} />
-						</Field.Set>
-					{/if}
-					<Field.Description class="my-0 min-h-12">{preview ? m.placementPreview(preview) : m.invalid}</Field.Description>
-					{#if before && !before.is_archived}
-						<div class={formActions}><Button type="button" variant="outline" disabled={locked} onclick={() => { if (canSwapDraft()) editorMode = 'swap'; }}>{editor === 'cabinet' ? m.moveCabinet : m.swapHeading}</Button>
-						<Button type="button" variant="outline" disabled={locked || (editor === 'cabinet' ? cabinetAssignments > 0 || draftChanged : blockers > 0)} onclick={archive}>{editor === 'cabinet' ? m.archiveCabinetWithDrawers : m.archiveBin}</Button></div>
-						{#if editor === 'cabinet' && cabinetAssignments}<p class="text-sm text-muted-foreground">{m.cabinetAssignedBlocked(cabinetAssignments)}</p>
-						{:else if editor === 'bin' && blockers}<p class="text-sm text-muted-foreground">{m.binBlocked(blockers)}</p>{/if}
-					{/if}
-				</Collapsible.Content>
-			</Collapsible.Root>
-		</form>
-		{/if}
-		{#if pending && !wrongIdentity}
-			<h3>{m.pendingHeading}</h3><p>{summary(pending)}</p>
-			<Button type="button" variant="outline" disabled={admin.status !== 'ready' || busy || !storageReady} onclick={() => run()}><ButtonLabel pending={busy} pendingLabel={m.saving} label={m.retry} /></Button>
-		{/if}
-		{#if before && !before.is_archived && editorMode === 'swap'}
-			<p>{m.swapHint}</p>
-			<Field.Set class="picker-group my-4 grid min-w-0 justify-items-start gap-3 [&_.placement-picker]:justify-self-stretch" aria-labelledby="swap-target-title">
-				<Field.Legend variant="label" id="swap-target-title">{m.swapTarget}</Field.Legend>
-				<ShelfPlacementPicker topology={swapTopology} pick={editor === 'cabinet' ? 'cabinet' : 'bin'} selected={swapId || null} disabled={locked} onselect={(id) => { swapId = id; }} />
-				<Field.Description class="my-0 min-h-12" aria-live="polite">{swapTarget ? m.swapPreview(position(before), position({ ...swapTarget, is_archived: false })) : m.chooseSwap}</Field.Description>
-				<Button type="button" disabled={locked || !swapTarget} onclick={swap}>{m.swap}</Button>
-			</Field.Set>
-		{/if}
-		{#if inline}
-			<div class={formStatus} aria-live="polite" aria-atomic="true">{@render storageStatus()}</div>
-			<div class={formActions}>
-				<Button form="shelf-editor-form" type="submit" disabled={locked || sizeUnreviewed || !draftChanged}><ButtonLabel pending={busy} pendingLabel={m.saving} label={m.save} /></Button>
-				{#if draftChanged}<Button type="button" variant="outline" disabled={locked} onclick={() => { discardDraft(); edit('cabinet', shelf!.cabinets.find((item) => item.id === before!.id)!); }}>{m.discardChanges}</Button>{/if}
-			</div>
-		{/if}
-		</AdminAccessGate>
-	</div>
-	{#if !inline}
-		<Dialog.Footer variant="sheet" class="items-center">
-			<div class="min-w-0 flex-1 text-sm" aria-live="polite" aria-atomic="true">{@render storageStatus()}</div>
-			{#if editorMode === 'edit'}<Button form="shelf-editor-form" type="submit" disabled={locked || sizeUnreviewed}><ButtonLabel pending={busy} pendingLabel={m.saving} label={m.save} /></Button>{/if}
-		</Dialog.Footer>
+{#snippet review()}
+	{#if reviewCommand}
+		<p>{summary(reviewCommand)}</p><p>{m.reviewLayoutHint}</p>
+		{#if currentReview && !currentReview.is_archived}<p>{m.currentPlacement(position(currentReview))}</p>{/if}
+		{#if needsRefresh && !busy}<Alert.Message appearance="inline" variant="destructive" role="status" class="mt-4">{m.unavailable}</Alert.Message>{/if}
+		<div class={[formActions, 'my-4']}>
+			{#if needsRefresh && !busy}<Button type="button" variant="outline" onclick={load}>{m.retryLoad}</Button>{/if}
+			<Button type="button" variant="outline" disabled={busy || needsRefresh} onclick={reviewPlacement}>{m.reviewLayout}</Button>
+		</div>
 	{/if}
-{/if}
+{/snippet}
+
+{#snippet layoutView()}
+	{#key layoutVersion}<ShelfLayoutEditor bind:this={layoutEditor} initialSelected={binId ?? ''} onselect={selectDrawer} moving={Boolean(swapSource)} onempty={moveToEmpty}
+		cabinetId={layoutId} bind:bins={layoutBins} bind:size={layoutSize} original={beforeBins} assigned={assignedIds} disabled={locked} onswap={dragSwap} onswapselect={pickSwap} />{/key}
+{/snippet}
+
+<!-- The selected drawer: its heading, everything you can do with it, then what it holds. -->
+{#snippet drawerPanel()}
+	{#if selectedDrawer}
+		{@const id = selectedDrawer.id}
+		<section class="mt-6 grid min-w-0 gap-3" aria-labelledby={`${fieldId}-drawer-title`}>
+			<h3 class={itemTitle} id={`${fieldId}-drawer-title`}>{m.bin(gridRange(selectedDrawer.inner_row!, selectedDrawer.inner_col!, selectedDrawer.row_span, selectedDrawer.col_span))}</h3>
+			<div class={formActions}>
+				<Button type="button" variant="outline" disabled={locked || Boolean(swapSource) || selectedDrawer.inner_col! + selectedDrawer.col_span > layoutSize.cols} onclick={() => layoutEditor?.widen()}>{m.widenDrawer}</Button>
+				<Button type="button" variant="outline" disabled={locked || Boolean(swapSource) || assignedIds.has(id) || selectedDrawer.col_span === 1} onclick={() => layoutEditor?.narrow()}>{m.narrowDrawer}</Button>
+				{#if selectedDrawer.row_span * selectedDrawer.col_span > 1}<Button type="button" variant="outline" disabled={locked || Boolean(swapSource) || assignedIds.has(id)} onclick={() => layoutEditor?.split()}>{m.splitLayout}</Button>{/if}
+				{#if bin}
+					<Button type="button" variant="outline" disabled={locked || draftChanged || Boolean(swapSource)} onclick={() => pickSwap(id)}>{m.moveDrawer}</Button>
+					<Button type="button" variant="outline" disabled={locked || draftChanged || assignedIds.has(id)} onclick={archiveDrawer}>{m.archiveBin}</Button>
+				{/if}
+			</div>
+			{#if bin}
+				{#if !assigned.length}<p class="text-sm text-muted-foreground">{m.noProducts}</p>
+				{:else}
+					<Item.Group aria-label={m.contents}>
+						{#each assigned as product, index (product.id)}
+							{#if index > 0}<Item.Separator />{/if}
+							<Item.Root variant="row" role="listitem">
+								<Item.Content>
+								<Item.Title class={itemTitle}><a href={i18n.href(`/admin/products/${product.id}`)}>{productName(product, i18n.locale)}</a></Item.Title>
+								<Item.Description class="flex flex-wrap items-center gap-x-3 gap-y-1"><span class={codeText}>{product.code}</span>{#if !product.is_active}<StateBadge tone="neutral">{m.inactive}</StateBadge>{/if}</Item.Description>
+								</Item.Content>
+							</Item.Root>
+						{/each}
+					</Item.Group>
+				{/if}
+			{/if}
+		</section>
+	{/if}
 {/snippet}
 
 <svelte:head><title>{m.title}</title></svelte:head>
@@ -540,15 +427,10 @@
 <svelte:document onvisibilitychange={revalidate} />
 <div class={pageHeader}>
 	<h1 class={pageHeading}>{m.heading}</h1>
-	<div class={formActions}><Button type="button" bind:ref={newCabinetButton} disabled={locked || draftChanged} onclick={() => edit('cabinet', null)}>{m.newCabinet}</Button></div>
+	<div class={formActions}><Button type="button" variant="outline" bind:ref={newCabinetButton} disabled={locked || draftChanged} onclick={() => edit(null)}>{m.newCabinet}</Button></div>
 </div>
 <div class={formStatus} aria-live="polite" aria-atomic="true">
-	{#if !editor}
-	{#if wrongIdentity}<Alert.Message appearance="inline" variant="destructive" role="status">{m.wrongIdentity}</Alert.Message>
-	{:else if !storageReady}<Alert.Message appearance="inline" variant="destructive" role="status">{m.storageUnavailable}</Alert.Message>
-	{:else if outcome !== 'idle'}<Alert.Message appearance="inline" variant={(outcome !== 'saved') ? 'destructive' : 'default'} role="status">{m[outcome]}</Alert.Message>
-	{/if}
-	{/if}
+	{#if !editor}{@render storageStatus()}{/if}
 </div>
 
 {#if pending && !wrongIdentity && !editor}
@@ -574,62 +456,38 @@
 				selected={cabinetId} label={m.wall} onselect={selectCabinet} disabled={locked || draftChanged} />
 		{:else}<Empty.Root><Empty.Description>{m.noCabinets}</Empty.Description></Empty.Root>{/if}
 	</section>
-	{#if inlineEditor}
+	{#if inlineEditor && before}
 		<section data-cabinet-editor class={shelfSection} aria-labelledby="cabinet-title">
 			<Separator />
-			{@render storageEditor(true)}
+			<h2 class={sectionHeading} id="cabinet-title">{m.cabinet(gridCell(before.outer_row!, before.outer_col!))}</h2>
+			<div class={[formActions, 'mt-3']}>
+				<Button type="button" variant="outline" disabled={locked} onclick={openMove}>{m.moveCabinet}</Button>
+				<Button type="button" variant="outline" disabled={locked || cabinetAssignments > 0 || draftChanged} onclick={archiveCabinet}>{m.archiveCabinetWithDrawers}</Button>
+			</div>
+			{#if cabinetAssignments}<p class="mt-2 text-sm text-muted-foreground">{m.cabinetAssignedBlocked(cabinetAssignments)}</p>{/if}
+			<div class="mt-6 min-w-0">
+				{@render review()}
+				{#if swapSource}<div class="flex flex-wrap items-center gap-3" role="status"><p>{m.chooseSwap}</p><Button variant="outline" onclick={() => swapSource = null}>{m.cancelAction}</Button></div>{/if}
+				<form id="shelf-editor-form" class={formLayout} onsubmit={save}>
+					{@render layoutView()}
+					<div class="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground" aria-hidden="true">
+						<span class="inline-flex items-center gap-2"><span class="size-4 rounded-xs border border-drawer-edge bg-drawer"></span>{m.legendAssigned}</span>
+						<span class="inline-flex items-center gap-2"><span class="size-4 rounded-xs border border-dashed border-drawer-edge bg-steel"></span>{m.emptyDrawer}</span>
+					</div>
+				</form>
+				{@render drawerPanel()}
+				{@render pendingRetry()}
+				<div class={[formStatus, 'mt-6']} aria-live="polite" aria-atomic="true">{@render storageStatus()}</div>
+				<div class={[formActions, 'mt-6']}>
+					<Button form="shelf-editor-form" type="submit" disabled={locked || !draftChanged}><ButtonLabel pending={busy} pendingLabel={m.saving} label={m.save} /></Button>
+					{#if draftChanged}<Button type="button" variant="outline" disabled={locked} onclick={() => { discardDraft(); edit(shelf!.cabinets.find((item) => item.id === before!.id)!); }}>{m.discardChanges}</Button>{/if}
+				</div>
+			</div>
 		</section>
-	{/if}
-	{#if bin}
-		<section class={shelfSection} aria-labelledby="bin-title"><Separator /><h2 class={sectionHeading} id="bin-title">{m.bin(gridRange(bin.inner_row, bin.inner_col, bin.row_span, bin.col_span))}</h2>
-			{#if bin.label}<p>{bin.label}</p>{/if}
-			<h3>{m.contents}</h3>
-			{#if !assigned.length}<Empty.Root><Empty.Description>{m.noProducts}</Empty.Description></Empty.Root>
-			{:else}
-				<Item.Group>
-					{#each assigned as product, index (product.id)}
-						{#if index > 0}<Item.Separator />{/if}
-						<Item.Root variant="row" role="listitem">
-							<Item.Content>
-							<Item.Title class={itemTitle}><a href={i18n.href(`/admin/products/${product.id}`)}>{productName(product, i18n.locale)}</a></Item.Title>
-							<Item.Description class="flex flex-wrap items-center gap-x-3 gap-y-1"><span class={codeText}>{product.code}</span>{#if !product.is_active}<StateBadge tone="neutral">{m.inactive}</StateBadge>{/if}</Item.Description>
-							</Item.Content>
-						</Item.Root>
-					{/each}
-				</Item.Group>
-			{/if}
-		</section>
-	{/if}
-	<!-- Only when something is archived: an empty disclosure would open to nothing to do. -->
-	{#if archivedCabinets.length || archivedBins.length}
-	<Collapsible.Root class={section({ spacing: 'divided', class: 'mb-8' })}>
-		<Separator />
-		<DisclosureTrigger>{m.archivedHeading}</DisclosureTrigger>
-		<Collapsible.Content>
-		<Item.Group class="[&_.shelf-section]:basis-full [&_.shelf-section]:min-w-0">
-			{#each archivedCabinets as item, index (item.id)}
-				{#if index > 0}<Item.Separator />{/if}
-				<Item.Root variant="row" role="listitem">
-					<Item.Content><Item.Title class={itemTitle}>{position(item)}</Item.Title></Item.Content>
-					<Item.Actions><Button type="button" variant="outline" size="sm" disabled={locked || draftChanged} onclick={() => edit('cabinet', item)}>{m.reactivateCabinet}</Button></Item.Actions>
-
-				</Item.Root>
-			{/each}
-			{#each archivedBins as item, index (item.id)}
-				{#if index > 0 || archivedCabinets.length}<Item.Separator />{/if}
-				<Item.Root variant="row" role="listitem">
-					<Item.Content><Item.Title class={itemTitle}>{item.label || m.binKind}</Item.Title><Item.Description class="flex flex-wrap gap-x-3 gap-y-1">{#if archivedLocation(item)}<span>{m.archivedFrom(archivedLocation(item)!)}</span>{/if}<span class={[codeText, 'break-all']}>{item.code}</span></Item.Description></Item.Content>
-					<Item.Actions><Button type="button" variant="outline" size="sm" disabled={locked || draftChanged || !cabinets.length} onclick={() => edit('bin', item)}>{m.reactivateBin}</Button></Item.Actions>
-
-				</Item.Root>
-			{/each}
-		</Item.Group>
-		</Collapsible.Content>
-	</Collapsible.Root>
 	{/if}
 {/if}
 
-<Dialog.Root open={editor !== null && !inlineEditor} onOpenChange={(open) => { if (!open && !busy) closeEditor(); }}>
+<Dialog.Root open={editor && !inlineEditor} onOpenChange={(open) => { if (open || busy) return; if (editorMode === 'move' && before) editorMode = 'edit'; else closeEditor(); }}>
 	<Dialog.Content variant="sheet" preventScroll={false}
 		onInteractOutside={(event) => { if (busy) event.preventDefault(); }}
 		onEscapeKeydown={(event) => { if (busy || document.querySelector('[data-resizing="true"]')) event.preventDefault(); }}
@@ -641,16 +499,55 @@
 				target?.focus({ preventScroll: true });
 			});
 		}}>
-		{@render storageEditor()}
+		{#if editor}
+			<Dialog.Header layout="bar">
+				<Dialog.Title>{editorMode === 'move' ? m.moveCabinet : m.newCabinet}</Dialog.Title>
+				<Dialog.Close disabled={busy}>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm"><Icon icon={XIcon} class="size-5" /><span class="sr-only">{m.cancel}</span></Button>{/snippet}</Dialog.Close>
+			</Dialog.Header>
+			<!-- svelte-ignore a11y_no_noninteractive_tabindex (Named dialog editor region supports native keyboard scrolling.) -->
+			<div class={['shelf-editor-body', sheetBody]} role="region" aria-label={editorMode === 'move' ? m.moveCabinet : m.layoutHeading} tabindex="0">
+				<AdminAccessGate active>
+				<Dialog.Description class="sr-only">{editorMode === 'move' ? m.wallHint : m.moveHint}</Dialog.Description>
+				{#if editorMode === 'move' && before}
+					<Field.Set class="picker-group my-4 grid min-w-0 justify-items-start gap-3 [&_.placement-picker]:justify-self-stretch" aria-labelledby="move-target-title">
+						<Field.Legend variant="label" id="move-target-title">{m.moveTarget}</Field.Legend>
+						<Field.Description class="my-0">{m.moveCabinetHint}</Field.Description>
+						<ShelfPlacementPicker topology={shelf?.live ?? { cabinets: [], bins: [] }} pick="cabinet" vacant current={before.id} selected={moveId || null} disabled={locked}
+							onselect={(id) => { if (id !== before?.id) moveId = id; }} />
+						<Field.Description class="my-0 min-h-12" aria-live="polite">{!moveTarget ? m.chooseSwap
+							: moveTarget.kind === 'cabinet' ? m.swapPreview(position(before), position(moveTarget.cabinet))
+							: m.movePreview(position(before), m.cabinet(gridCell(moveTarget.row, moveTarget.col)))}</Field.Description>
+						<Button type="button" disabled={locked || !moveTarget} onclick={moveCabinet}>{moveTarget?.kind === 'cabinet' ? m.swap : m.move}</Button>
+					</Field.Set>
+				{:else}
+					{@render review()}
+					<form id="shelf-editor-form" class={formLayout} onsubmit={save}>
+						<Field.Group layout="row">
+							<Field.Field width="short"><Field.Label for={`${fieldId}-2`}>{m.row}</Field.Label><Input id={`${fieldId}-2`} required inputmode="numeric" pattern="[1-9][0-9]*" bind:value={row} disabled={locked} /></Field.Field>
+							<Field.Field width="short"><Field.Label for={`${fieldId}-3`}>{m.column}</Field.Label><Input id={`${fieldId}-3`} class="font-mono" required pattern="[A-Za-z]+" autocapitalize="characters" bind:value={column} disabled={locked} /></Field.Field>
+						</Field.Group>
+						<Field.Description class="my-0 min-h-12">{preview ? m.placementPreview(preview) : m.invalid}</Field.Description>
+						{@render layoutView()}
+					</form>
+					{@render drawerPanel()}
+				{/if}
+				{@render pendingRetry()}
+				</AdminAccessGate>
+			</div>
+			<Dialog.Footer variant="sheet" class="items-center">
+				<div class="min-w-0 flex-1 text-sm" aria-live="polite" aria-atomic="true">{@render storageStatus()}</div>
+				{#if editorMode === 'edit'}<Button form="shelf-editor-form" type="submit" disabled={locked}><ButtonLabel pending={busy} pendingLabel={m.saving} label={m.save} /></Button>{/if}
+			</Dialog.Footer>
+		{/if}
 	</Dialog.Content>
 </Dialog.Root>
 <AlertDialog.Root open={confirmation !== null} onOpenChange={(open) => { if (!open) confirmation = null; }}>
 	<AlertDialog.Content preventScroll={false} onCloseAutoFocus={(event) => { event.preventDefault(); confirmationTrigger?.focus({ preventScroll: true }); }}>
 		<AlertDialog.Header>
-			<AlertDialog.Title id={`${fieldId}-confirmation-title`}>{confirmation?.kind === 'swap-bins' || confirmation?.kind === 'swap-cabinets' ? m.swapHeading : confirmation?.kind === 'bin' && !confirmation.after.is_archived ? m.moveDrawer : confirmation?.kind === 'archive-cabinet' ? m.archiveCabinetWithDrawers : confirmation?.kind === 'cabinet' ? m.archiveCabinet : m.archiveBin}</AlertDialog.Title>
+			<AlertDialog.Title id={`${fieldId}-confirmation-title`}>{confirmation?.kind === 'swap-bins' || confirmation?.kind === 'swap-cabinets' ? m.swapHeading : confirmation?.kind === 'bin' && !confirmation.after.is_archived ? m.moveDrawer : confirmation?.kind === 'archive-cabinet' ? m.archiveCabinetWithDrawers : confirmation?.kind === 'cabinet' ? m.moveCabinet : m.archiveBin}</AlertDialog.Title>
 			<AlertDialog.Description aria-labelledby={`${fieldId}-confirmation-title`}>
 				<span class="block">{confirmation ? summary(confirmation) : ''}</span>
-				<span class="mt-3 block text-foreground">{confirmation?.kind === 'swap-bins' || confirmation?.kind === 'swap-cabinets' ? m.swapHint : confirmation?.kind === 'bin' && !confirmation.after.is_archived ? m.moveHint : m.archiveHint}</span>
+				<span class="mt-3 block text-foreground">{confirmation?.kind === 'swap-bins' ? m.swapHint : confirmation?.kind === 'swap-cabinets' || confirmation?.kind === 'cabinet' ? m.wallHint : confirmation?.kind === 'bin' && !confirmation.after.is_archived ? m.moveHint : m.archiveHint}</span>
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<AlertDialog.Footer>
@@ -659,19 +556,3 @@
 		</AlertDialog.Footer>
 	</AlertDialog.Content>
 </AlertDialog.Root>
-
-<Dialog.Root bind:open={renameOpen}>
-	<Dialog.Content preventScroll={false} aria-describedby={undefined} class="grid-rows-[auto_minmax(0,1fr)_auto] gap-0 p-0">
-		<Dialog.Header layout="bar">
-			<Dialog.Title id={`${fieldId}-rename-title`}>{m.renameDrawer}</Dialog.Title>
-			<Dialog.Close>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm"><Icon icon={XIcon} class="size-5" /><span class="sr-only">{m.cancel}</span></Button>{/snippet}</Dialog.Close>
-		</Dialog.Header>
-		<!-- svelte-ignore a11y_no_noninteractive_tabindex (Named dialog body supports native keyboard scrolling.) -->
-		<div class={sheetBody} role="region" aria-labelledby={`${fieldId}-rename-title`} tabindex="0">
-			<AdminAccessGate><form id={`${fieldId}-rename-form`} class={formLayout} onsubmit={(event) => { event.preventDefault(); if (locked) return; drawerDetails({ label: drawerLabel.trim() || null }); renameOpen = false; }}>
-				<Field.Field><Field.Label for={`${fieldId}-drawer-label`}>{m.label}</Field.Label><Input id={`${fieldId}-drawer-label`} bind:value={drawerLabel} disabled={locked} /></Field.Field>
-			</form></AdminAccessGate>
-		</div>
-		<Dialog.Footer variant="sheet"><Button form={`${fieldId}-rename-form`} type="submit" disabled={locked}>{m.applyDrawerDetails}</Button></Dialog.Footer>
-	</Dialog.Content>
-</Dialog.Root>

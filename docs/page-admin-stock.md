@@ -129,10 +129,13 @@ unit) and the category mapping. SI fields accept prefixes and units (`27p`, `4k7
 `format.ts`). Add a field by extending the mapping and both dictionaries; codes, UUIDs,
 types and units are data identities.
 
-## Placement
+## Cabinets and drawers
 
-`/admin/shelf` maintains cabinets, drawers and product assignments. Coordinates, not
-invented labels, identify places; identities survive moves. Row 1 is at the bottom,
+`/admin/shelf` (nav and title «Kabinetter og skuffer» / "Cabinets and drawers")
+maintains the cabinets on the wall and the drawers inside them. It shows each drawer's
+products but does not assign them; that happens in the product form. Coordinates, not
+invented labels, identify places; identities survive moves. The page does not edit the
+database's optional cabinet and drawer `label` text; saves keep whatever is stored. Row 1 is at the bottom,
 column A on the left, spans anchor bottom-left. Cells are at least 24px; dense layouts
 pan in a named keyboard-accessible viewport without horizontal page overflow.
 
@@ -148,10 +151,15 @@ rows:
 C2 has two wide drawers (A1–D1, C2–D2) from the merged cells in `Bok.xlsx`: 496 cells,
 492 drawers, no products or stock inferred.
 
-**Layout editor.** Selecting a cabinet opens its editor in the page with Save and
-Discard; unsaved changes block switching cabinets. Border grips (or arrow keys and
-add/remove buttons) add rows and columns, up to 4,096 cells; a width grip resizes the
-selected drawer. Save commits atomically. Rules, rechecked by the database:
+**Layout editor.** Selecting a cabinet opens it in the page: *Move cabinet* and
+*Archive cabinet and empty drawers*, then its size as text, the drawer grid, a legend
+(filled front with a strip: has products; hollow with a dashed edge: empty), and *Save
+cabinet* with *Discard* once something changed. Unsaved changes block switching cabinets.
+The border grips add or remove rows and columns, by pointer or arrow keys, up to 4,096
+cells. Selecting a drawer shows its heading, its actions (*Wider*, *Narrower*, *Split
+into single drawers*, *Move drawer*, *Archive empty drawer*) and its products. A width
+grip on the drawer also resizes it. Save commits atomically. Rules, rechecked by the
+database:
 
 - Widening keeps the drawer's ID and products and may consume only whole neighbours
   with no assigned products (inactive assignments count).
@@ -160,10 +168,13 @@ selected drawer. Save commits atomically. Rules, rechecked by the database:
 - Loading the map and ordinary moves never generate drawers.
 
 **Moves and swaps.** A mouse can drag the drawer face; touch swipes on faces pan the
-diagram. Drag its move grip to move with touch, or use the grip by tap or keyboard. A drop on
-another drawer is a confirmed swap; on a vacant cell a confirmed guarded move. Unsaved
-layout edits must be saved or discarded first. Only an acknowledged swap shows the
-success toast. Moves keep a drawer's products and size.
+diagram. Drag its move grip to move with touch, or use the grip (or *Move drawer*) by tap
+or keyboard. A drop on another drawer is a confirmed swap; on a vacant cell a confirmed
+guarded move. *Move cabinet* opens the wall with every vacant position, one row and
+column beyond the current wall included: choosing a vacant position is a confirmed
+guarded move, choosing another cabinet a confirmed swap. A new cabinet's position is
+typed as row and column. Unsaved layout edits must be saved or discarded first. Only an
+acknowledged swap shows the success toast. Moves keep a drawer's products and size.
 
 **Assigned state.** Assignment, not stock, marks a drawer as occupied: zero stock and
 inactive products count. The public topology exposes only this boolean. Failed reads
@@ -172,13 +183,16 @@ never imply emptiness.
 **Retry.** Layout commands store the original snapshot, desired layout, generated IDs,
 request ID and user, and survive reload for an identical retry. A stale layout needs an
 explicit review, never a silent rebase. Moves carry the original placement as a guard;
-swaps carry both positions and one request ID, so a retry cannot swap back. Stale
-positions require checking the physical shelf first.
+swaps carry both positions and one request ID, so a retry cannot swap back. A rejected
+move or swap is not kept as a draft: the message stays and the map refreshes, so the
+operator checks the physical shelf and redoes it.
 
 **Archive.** Only drawers with no assigned products (including inactive) can be
 archived. The cabinet action archives its unassigned drawers and the cabinet in one
-confirmed transaction, or nothing. Archive keeps audit history; the archived list shows
-the position recorded at archive time.
+confirmed transaction, or nothing. Archive keeps audit history (the change log, and
+`amp_archived_bin_locations` for a drawer's last position). The page has no archived
+list and no reactivation: a drawer needed again is made by growing or splitting the
+layout, a cabinet by adding one.
 
 ## Counts
 
