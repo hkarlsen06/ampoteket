@@ -27,27 +27,20 @@ test('complete shelf reads follow short capped pages and include inactive assign
 	const archivedBin = { ...bin, id: id(4), code: 'ARCHIVED', is_archived: true, cabinet_id: null, inner_row: null, inner_col: null };
 	const product = { id: id(5), code: 'RES-A0001', name_nb: 'Motstand', name_en: 'Resistor', bin_id: bin.id, is_active: false };
 	const unplaced = { ...product, id: id(6), code: 'RES-A0002', bin_id: null, is_active: true };
-	const origin = { bin_id: archivedBin.id, cabinet_id: cabinet.id, cabinet_code: cabinet.code, cabinet_label: null,
-		cabinet_outer_row: 1, cabinet_outer_col: 1, inner_row: 2, inner_col: 3, row_span: 1, col_span: 1 };
-	const source: Record<string, unknown[]> = { amp_cabinets: [cabinet, secondCabinet], amp_bins: [bin, archivedBin], amp_products: [product, unplaced], amp_archived_bin_locations: [origin] };
+	const source: Record<string, unknown[]> = { amp_cabinets: [cabinet, secondCabinet], amp_bins: [bin, archivedBin], amp_products: [product, unplaced] };
 	const result = await readAdminShelf(session, async (input, init) => {
 		const url = new URL(String(input)), view = url.pathname.split('/').at(-1)!;
 		expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer staff-token');
 		expect(url.searchParams.has('is_active')).toBe(false);
 		const page = pages.get(view) ?? 0; pages.set(view, page + 1);
-		if (page) {
-			const key = view === 'amp_archived_bin_locations' ? 'bin_id' : 'id';
-			expect(url.searchParams.get('and')).toBe(`(${key}.gt.${(source[view][page - 1] as Record<string, string>)[key]})`);
-		}
+		if (page) expect(url.searchParams.get('and')).toBe(`(id.gt.${(source[view][page - 1] as Record<string, string>).id})`);
 		return Response.json(source[view].slice(page, page + 1));
 	});
 	expect(result.products[0].is_active).toBe(false); expect(result.products[0].bin_id).toBe(bin.id);
 	expect(result.products[1]).toEqual(unplaced);
 	expect(result.live.cabinets).toHaveLength(2);
 	expect(result.live.bins[0].has_products).toBe(true);
-	expect(result.archivedLocations.get(archivedBin.id)).toEqual({ binId: archivedBin.id, cabinetId: cabinet.id, cabinetCode: cabinet.code, cabinetLabel: null,
-		cabinetOuterRow: 1, cabinetOuterCol: 1, innerRow: 2, innerCol: 3, rowSpan: 1, colSpan: 1 });
-	expect([...pages.entries()].sort()).toEqual([['amp_archived_bin_locations', 2], ['amp_bins', 3], ['amp_cabinets', 3], ['amp_products', 3]]);
+	expect([...pages.entries()].sort()).toEqual([['amp_bins', 3], ['amp_cabinets', 3], ['amp_products', 3]]);
 });
 test('saved storage commands preserve actor, exact original placement and request; conflicting replacement is refused', () => {
 	const storage = memory(), command: ShelfCommand = { ...actor, kind: 'bin', before: bin, after: { ...bin, inner_col: 4 } };

@@ -584,7 +584,6 @@ try {
   expect(await sql(`SELECT b.owner_id<>b.finished_by AND b.finish_reason IS NOT NULL AND b.finished_at IS NOT NULL FROM app.count_batches b WHERE id='${abandoned}'`)).toBe('t');
   console.log('PASS: batch start/count/finish with original retries, immediate zero count and eligible abandoned-owner closure');
   const sh = en.adminShelf;
-  const cabinetLabel = 'Browser cabinet, "quoted": a long placement description';
   const layout = page.locator('.layout-editor');
   async function previewSize(rows: string, columns: string) {
     for (const [label, desired] of [[sh.resizeRows, Number(rows)], [sh.resizeCols, Number(columns)]] as const) {
@@ -620,7 +619,6 @@ try {
   await expect(seededSpans.getByRole('button', { name: `A1–D1 · ${sh.emptyDrawer}`, exact: true })).toBeVisible();
   await expect(seededSpans.getByRole('button', { name: `C2–D2 · ${sh.emptyDrawer}`, exact: true })).toBeVisible();
   await page.getByRole('button', { name: sh.newCabinet, exact: true }).click();
-  await page.getByLabel(fieldLabel(sh.label)).fill(cabinetLabel);
   await page.getByLabel(fieldLabel(sh.row)).fill('7');
   await page.getByLabel(fieldLabel(sh.column)).fill('F');
   await previewSize('64', '64');
@@ -709,19 +707,19 @@ try {
   expect(await emptyDrawer.locator('.drawer').evaluate(element => {
     const style = getComputedStyle(element);
     return [style.borderTopStyle, style.borderTopWidth];
-  })).toEqual(['solid', '1px']);
+  })).toEqual(['dashed', '1px']);
   await emptyDrawer.click(); await expect(emptyDrawer).toHaveAttribute('aria-pressed', 'true');
   await chooseLayoutDrawer(layout, firstBin);
   await expect(preview.getByRole('button', { name: 'A1', exact: true })).not.toHaveClass(/\bempty\b/);
   await dragOneColumnWider();
   await expect(layout.getByRole('slider', { name: sh.resizeHandle, exact: true })).toHaveAttribute('aria-valuenow', '2');
   expect(await sql(`SELECT col_span FROM app.bins WHERE id='${firstBin}'`)).toBe('1');
-  await layout.getByRole('button', { name: sh.widenDrawer, exact: true }).click();
+  await page.getByRole('button', { name: sh.widenDrawer, exact: true }).click();
   await expect(page.locator('[data-sonner-toast]').getByText(sh.notEmpty, { exact: true })).toBeVisible();
   await expect(preview.getByRole('button', { name: 'A1–B1', exact: true })).not.toHaveClass(/\bempty\b/);
   await expect(layout.getByRole('slider', { name: sh.resizeHandle, exact: true })).toHaveAttribute('aria-valuenow', '2');
   await chooseLayoutDrawer(layout, secondBin);
-  await layout.getByRole('button', { name: sh.widenDrawer, exact: true }).click();
+  await page.getByRole('button', { name: sh.widenDrawer, exact: true }).click();
   await expect(layout.getByRole('slider', { name: sh.resizeHandle, exact: true })).toHaveAttribute('aria-valuenow', '2');
   const resizeHandle = layout.getByRole('slider', { name: sh.resizeHandle, exact: true });
   await resizeHandle.scrollIntoViewIfNeeded();
@@ -757,10 +755,8 @@ try {
   await expect(page.locator('section[aria-labelledby="cabinet-title"]').getByRole('button', { name: 'A3', exact: true })).toHaveCount(0);
   await page.locator('section[aria-labelledby="cabinet-title"]').getByRole('button', { name: 'A1–B1', exact: true }).click();
   await expect(page.getByRole('link', { name: `${en.categories.resistors} · ${longName} reviewed`, exact: true })).toBeVisible();
-  const drawerMenu = page.getByRole('menubar', { name: sh.drawerActions, exact: true });
-  await drawerMenu.getByRole('menuitem', { name: sh.binKind, exact: true }).click();
-  await expect(page.getByRole('menuitem', { name: sh.archiveBin, exact: true })).toBeDisabled();
-  await page.getByRole('menuitem', { name: sh.moveDrawer, exact: true }).click();
+  await expect(page.getByRole('button', { name: sh.archiveBin, exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: sh.moveDrawer, exact: true }).click();
   await layout.locator('[data-item-id="vacant:3:1"]').click();
   const moved = await lostResponse(page, 'amp_bins', 'PATCH', () => page.getByRole('alertdialog').getByRole('button', { name: sh.confirmAction, exact: true }).click());
   await expect(page.getByText(sh.unknown, { exact: true })).toBeVisible();
@@ -774,8 +770,7 @@ try {
   expect(await liveBinIds(cabinetId)).toHaveLength(12);
   await page.locator('section[aria-labelledby="wall-title"]').getByRole('button', { name: 'F7', exact: true }).click();
   await page.locator('section[aria-labelledby="cabinet-title"]').getByRole('button', { name: 'A3–B3', exact: true }).click();
-  await drawerMenu.getByRole('menuitem', { name: sh.binKind, exact: true }).click();
-  await page.getByRole('menuitem', { name: sh.moveDrawer, exact: true }).click();
+  await page.getByRole('button', { name: sh.moveDrawer, exact: true }).click();
   await layout.locator(`[data-item-id="${secondBin}"]`).click();
   const swapped = await lostResponse(page, 'rpc/amp_swap_bins', 'POST', () => page.getByRole('alertdialog').getByRole('button', { name: sh.confirmAction, exact: true }).click());
   await expect(page.getByText(sh.unknown, { exact: true })).toBeVisible();
@@ -809,7 +804,7 @@ try {
   await page.getByRole('button', { name: sh.discardChanges, exact: true }).click();
   await expect(page.locator('[data-cabinet-editor]')).toBeVisible();
   await chooseLayoutDrawer(layout, secondBin);
-  await layout.getByRole('button', { name: sh.splitLayout, exact: true }).click();
+  await page.getByRole('button', { name: sh.splitLayout, exact: true }).click();
   await previewSize('3', '5');
   // A competing physical move after opening the layout must invalidate its full snapshot.
   const concurrentlyMoved = await sql(`SELECT id FROM app.bins WHERE cabinet_id='${cabinetId}' AND inner_row=1 AND inner_col=4`);
@@ -826,7 +821,7 @@ try {
   await chooseLayoutDrawer(layout, concurrentlyMoved);
   await expect(layout.locator(`[data-item-id="${concurrentlyMoved}"]`)).toHaveAttribute('aria-label', `A1 · ${sh.emptyDrawer}`);
   await chooseLayoutDrawer(layout, secondBin);
-  await layout.getByRole('button', { name: sh.splitLayout, exact: true }).click();
+  await page.getByRole('button', { name: sh.splitLayout, exact: true }).click();
   await previewSize('3', '5');
   await page.getByRole('button', { name: sh.save, exact: true }).click();
   await expect(page.getByText(sh.saved, { exact: true })).toBeVisible();
@@ -838,24 +833,22 @@ try {
 
   // Larger drawers can also be configured before the cabinet's first save.
   await page.getByRole('button', { name: sh.newCabinet, exact: true }).click();
-  await page.getByLabel(fieldLabel(sh.label)).fill('Browser second cabinet');
   await page.getByLabel(fieldLabel(sh.row)).fill('7');
   await page.getByLabel(fieldLabel(sh.column)).fill('G');
   await previewSize('2', '2');
   await layout.getByRole('group', { name: sh.layoutPreview, exact: true }).getByRole('button', { name: `A1 · ${sh.emptyDrawer}`, exact: true }).click();
-  await layout.getByRole('button', { name: sh.widenDrawer, exact: true }).click();
+  await page.getByRole('button', { name: sh.widenDrawer, exact: true }).click();
   await expect(layout.locator('[data-item-id]')).toHaveCount(3);
   await page.getByRole('button', { name: sh.save, exact: true }).click();
   await expect(page.getByText(sh.saved, { exact: true })).toBeVisible();
-  const secondCabinet = await sql("SELECT id FROM app.cabinets WHERE label='Browser second cabinet'");
+  const secondCabinet = await sql('SELECT id FROM app.cabinets WHERE outer_row=7 AND outer_col=7 AND NOT is_archived');
   expect(await liveBinIds(secondCabinet)).toHaveLength(3);
   expect(await sql(`SELECT count(*) FROM app.bins WHERE cabinet_id='${secondCabinet}' AND col_span=2`)).toBe('1');
   await page.locator('section[aria-labelledby="wall-title"]').getByRole('button', { name: 'F7', exact: true }).click();
   await expect(page.locator('[data-cabinet-editor]')).toBeVisible();
-  await page.getByRole('button', { name: sh.details, exact: true }).click();
   await expect(page.getByRole('button', { name: sh.archiveCabinetWithDrawers, exact: true })).toBeDisabled();
   await page.getByRole('button', { name: sh.moveCabinet, exact: true }).click();
-  await page.getByRole('group', { name: sh.swapTarget, exact: true }).locator(`[data-item-id="${secondCabinet}"]`).click();
+  await page.getByRole('group', { name: sh.moveTarget, exact: true }).locator(`[data-item-id="${secondCabinet}"]`).click();
   await page.getByRole('button', { name: sh.swap, exact: true }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: sh.confirmAction, exact: true }).click();
   const cabinetSwapToast = page.locator('[data-sonner-toast]').filter({ has: page.getByText(

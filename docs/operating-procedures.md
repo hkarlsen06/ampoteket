@@ -65,8 +65,8 @@ too; deactivate a product before removing its required bin), archive the
 empty bins, then the empty cabinet. History is kept; archived
 storage leaves the public shelf map.
 
-To change a drawer layout, use Admin → Placement
-([details](page-admin-stock.md#placement)). Move all assigned products first
+To change a drawer layout, use Admin → Cabinets and drawers
+([details](page-admin-stock.md#cabinets-and-drawers)). Move all assigned products first
 before shrinking or splitting a drawer. After a stale-layout message, compare the
 map with the real cabinet before editing again.
 

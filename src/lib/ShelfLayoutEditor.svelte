@@ -1,22 +1,18 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { formActions } from '#lib/ui.js';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Field from '#lib/components/ui/field/index.js';
-	import DisclosureTrigger from '#lib/DisclosureTrigger.svelte';
 	import ShelfGrip from '#lib/ShelfGrip.svelte';
-	import * as Collapsible from '#lib/components/ui/collapsible/index.js';
 	import { getI18n } from '#lib/i18n/index.js';
 	import { gridRange } from '#lib/format.js';
 	import type { AdminBin } from '#lib/admin-shelf.js';
 	import { LayoutError, maxLayoutCells, resizeDrawer, resizeLayout, splitLayout, type LayoutSize } from '#lib/shelf-layout.js';
 	import ShelfDiagram from '#lib/ShelfDiagram.svelte';
 
-	// eslint-disable-next-line no-useless-assignment -- $bindable() declares a two-way prop, not a value.
-	let { cabinetId, bins = $bindable(), size = $bindable(), rowsText = $bindable(), colsText = $bindable(), original,
+	let { cabinetId, bins = $bindable(), size = $bindable(), original,
 		assigned, disabled = false, initialSelected = '', moving = false, onempty, onselect, onswap, onswapselect }: {
-		cabinetId: string; bins: AdminBin[]; size: LayoutSize; rowsText: string; colsText: string;
+		cabinetId: string; bins: AdminBin[]; size: LayoutSize;
 		original: AdminBin[]; assigned: ReadonlySet<string>; disabled?: boolean; initialSelected?: string; moving?: boolean; onempty?: (row: number, col: number) => void; onselect?: (id: string) => void; onswap?: (first: string, second: string) => void; onswapselect?: (id: string) => void;
 	} = $props();
 	const i18n = getI18n();
@@ -59,7 +55,6 @@
 			const next = { ...size, [axis]: value };
 			const result = resizeLayout(bins, cabinetId, size, next, assigned);
 			size = next;
-			rowsText = String(next.rows); colsText = String(next.cols);
 			return result;
 		});
 	}
@@ -93,6 +88,10 @@
 		if (!drag) resize(axis, Math.max(1, Math.min(maximum(axis), size[axis] + delta)));
 	}
 	function resizeSelected(id: string, width: number) { change(() => resizeDrawer(bins, size, id, width, assigned)); }
+	// The page draws the selected drawer's actions beside its heading and contents.
+	export function widen() { if (current) resizeSelected(selected, current.col_span + 1); }
+	export function narrow() { if (current) resizeSelected(selected, current.col_span - 1); }
+	export function split() { change(() => splitLayout(bins, size, selected, assigned)); }
 	function select(id: string) {
 		if (id.startsWith('vacant:')) { const [, row, col] = id.split(':'); onempty?.(Number(row), Number(col)); return; }
 		selected = id; changedRange = ''; onselect?.(id); }
@@ -114,24 +113,7 @@
 {/snippet}
 
 <div class="layout-editor min-w-0" data-resizing={drag ? 'true' : undefined}>
-	<Collapsible.Root>
-		<DisclosureTrigger>{m.grid(proposedSize.rows, proposedSize.cols)}</DisclosureTrigger>
-		<Collapsible.Content>
-			<p class="text-sm text-muted-foreground">{m.layoutHint}</p>
-	<div class="my-3 flex flex-wrap gap-3">
-		{#each ['rows', 'cols'] as dimension (dimension)}
-			{@const axis = dimension as 'rows' | 'cols'}
-			<div role="group" aria-label={axis === 'rows' ? m.innerRows : m.innerCols} class="flex items-center gap-1">
-				<Button variant="outline" type="button" size="icon" aria-label={axis === 'rows' ? m.removeRow : m.removeColumn}
-					disabled={disabled || moving || !!drag || size[axis] === 1} onclick={() => resize(axis, size[axis] - 1)}>−</Button>
-				<Button variant="outline" type="button" disabled={disabled || moving || !!drag || size[axis] >= maximum(axis)} onclick={() => resize(axis, size[axis] + 1)}>
-					<span aria-hidden="true">+</span> {axis === 'rows' ? m.addRow : m.addColumn}
-				</Button>
-			</div>
-		{/each}
-	</div>
-		</Collapsible.Content>
-	</Collapsible.Root>
+	<p class="text-sm text-muted-foreground">{m.grid(proposedSize.rows, proposedSize.cols)}</p>
 	<div bind:this={frame}>
 		<ShelfDiagram cabinet editorGeometry responsive rows={preview.size.rows} cols={preview.size.cols}
 			items={[...preview.bins.map((bin) => ({ id: bin.id, row: bin.inner_row!, col: bin.inner_col!, rowSpan: bin.row_span, colSpan: bin.col_span,
@@ -141,16 +123,6 @@
 			onresize={resizeSelected} resizeLabel={m.resizeHandle} resizeDisabled={disabled || moving || !!drag} />
 	</div>
 	{#if removed}<Field.Description>{m.layoutCount(bins.length, removed)}</Field.Description>{/if}
-	{#if current}
-		<div class={`${formActions} my-4`}>
-			<Button variant="outline" type="button" disabled={disabled || moving || !!drag || current.inner_col! + current.col_span > size.cols}
-				onclick={() => resizeSelected(selected, current!.col_span + 1)} aria-label={m.widenDrawer}>+</Button>
-			<Button variant="outline" type="button" disabled={disabled || moving || !!drag || assigned.has(selected) || current.col_span === 1}
-				onclick={() => resizeSelected(selected, current!.col_span - 1)} aria-label={m.narrowDrawer}>−</Button>
-			{#if current.row_span * current.col_span > 1}<Button variant="outline" type="button" disabled={disabled || moving || !!drag || assigned.has(selected)}
-				onclick={() => change(() => splitLayout(bins, size, selected, assigned))}>{m.splitLayout}</Button>{/if}
-		</div>
-	{/if}
 	<div aria-live="polite" aria-atomic="true">
 		{#if changedRange}<span class="sr-only">{m.layoutChanged(changedRange)}</span>{/if}
 	</div>
