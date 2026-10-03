@@ -336,7 +336,7 @@ export const en: Messages = {
 		commandIdentity: 'Another account has an unfinished change in this browser. Sign in with that account to finish it.',
 		buyerContact: 'Buyer contact detail', contactWarning: "Only show it when you need it. The buyer wrote this themselves, so it doesn't prove payment or who the purchase belongs to.",
 		showContact: 'Show contact detail', noContact: 'No contact detail is saved.', confirmClear: 'The contact detail is erased for good. The purchase is kept.', clearContact: 'Erase contact detail',
-		directoryTitle: 'Volunteer contact list | Admin | Ampoteket', directoryHeading: 'Volunteer contact list',
+		directoryTitle: 'Contact page | Admin | Ampoteket', directoryHeading: 'Contact page',
 		directoryConsent: 'Only publish contact details the person has agreed to show on the contact page. Earlier versions stay in the history.',
 		newContact: 'New contact', viewPublic: 'View contact page', noDirectoryContacts: 'No contacts have been added.', published: 'Published', unpublished: 'Unpublished',
 		editContact: (name: string) => `Edit ${name}`, editHeading: 'Edit contact', contactName: 'Display name', contactEmail: 'Email (optional)', contactPhone: 'Phone (optional)', contactUrl: 'Contact link (optional)', contactResponsibility: 'Responsibility (optional)', contactDiscord: 'Discord username (optional)',
