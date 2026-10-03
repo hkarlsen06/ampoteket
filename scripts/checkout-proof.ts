@@ -206,7 +206,7 @@ try {
 	await page.reload();
 	await expect(page.getByText('Purchase registered.', { exact: true })).toBeVisible();
 	await probe(page);
-	assert.equal(await call(page, 'readActiveAttempt'), null);
+	await expect.poll(() => call<ActiveAttempt | null>(page, 'readActiveAttempt')).toBeNull();
 	assert.equal(await sql(`SELECT count(*) FROM app.sales WHERE checkout_id='${prepared.checkoutId}'`), '1');
 	assert.equal(await sql(`SELECT count(*) FROM app.inventory_movements m JOIN app.sales s ON s.event_id=m.event_id WHERE s.checkout_id='${prepared.checkoutId}'`), '1');
 	// Receipts: the proof Worker has no Resend key, so a valid address reaches the real 503.
@@ -361,7 +361,7 @@ try {
 		await expect(page.getByText('Purchase registered.', { exact: true })).toBeVisible();
 		await expect(page.getByRole('link', { name: 'Open Vipps', exact: true })).toHaveCount(0);
 		await expect(page.getByRole('button', { name: 'Change cart', exact: true })).toHaveCount(0);
-		await probe(page); assert.equal(await call(page, 'readActiveAttempt'), null);
+		await probe(page); await expect.poll(() => call<ActiveAttempt | null>(page, 'readActiveAttempt')).toBeNull();
 		assert.equal(await sql(`SELECT count(*) FROM app.sales WHERE checkout_id='${remotelyRegistered.checkoutId}'`), '1');
 	}
 	await probe(page);
