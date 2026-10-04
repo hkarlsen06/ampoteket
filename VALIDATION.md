@@ -122,7 +122,8 @@ the selected products. It is a regression check, not a hosted latency guarantee.
   policy is `.github/main-protection.json`. On 2026-10-02 the owner approved and
   the provider APIs confirmed all nine required GitHub Actions checks, admin
   enforcement, linear history, blocked force pushes/deletion, vulnerability
-  alerts, automated security fixes, secret scanning and push protection. See
+  alerts, automated security fixes, secret scanning and push protection. On
+  2026-10-04 the owner removed the required checks from main protection. See
   [provider controls](docs/runbook-deploy.md#repository-protection-and-monitoring).
   Verify an actual error/uptime notification path before launch.
 - **Owners and targets:** Hjalmar Karlsen (`hkarlsen06`) is the primary operator

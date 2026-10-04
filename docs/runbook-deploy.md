@@ -336,10 +336,9 @@ gh api --method PATCH repos/hkarlsen06/ampoteket \
 JSON
 ```
 
-The policy requires all nine validation jobs from GitHub Actions, including for
-the owner, and forbids force pushes/deleting main. It does not require a second
-reviewer while there is only one maintainer. Validate a topic branch, rebase when
-needed and fast-forward main; do not bypass a failed required check. These
+The policy requires linear history and forbids force pushes/deleting main. It
+requires no status checks or second reviewer, so the owner can push straight to
+main; the Deploy workflow still deploys only a commit whose Validation passed. These
 commands are an explicit hosted change, not part of a local setup or test run.
 
 Production config enables persisted Worker error logs, omits routine invocation
