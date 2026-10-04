@@ -25,7 +25,7 @@
 	// The page renders without API reads, so nothing delays its first byte; the shelf
 	// picker loads live topology and drawer contents in the browser when opened.
 	import { goto } from '$app/navigation';
-	import { DISCORD_INVITE, MAZEMAP, THE_RESISTANCE, getI18n } from '#lib/i18n/index.js';
+	import { DISCORD_INVITE, INSTAGRAM, MAZEMAP, PROD_ORIGIN, THE_RESISTANCE, getI18n } from '#lib/i18n/index.js';
 
 	let { data }: { data: PageData } = $props();
 	const i18n = getI18n();
@@ -308,6 +308,21 @@
 	const stepTitle = 'text-[clamp(1.375rem,1.2rem+0.8vw,1.75rem)] font-light tracking-tight';
 	const modelStage = 'aspect-square w-full max-w-[28rem] justify-self-center';
 	const headingTrace = 'relative mb-8 bg-border data-horizontal:h-0.5 before:absolute before:top-1/2 before:left-0 before:size-2.5 before:-translate-y-1/2 before:rounded-full before:bg-border md:mb-10';
+
+	// Search engines read the site name, logo, address and Instagram profile from this.
+	// `<` is escaped so copy can never close the script element. The tag is built here
+	// because a literal script tag in the markup would be parsed as a component script.
+	const structuredData = $derived(`<script type="application/ld+json">${JSON.stringify({
+		'@context': 'https://schema.org',
+		'@graph': [
+			{ '@type': 'WebSite', name: 'Ampoteket', url: `${PROD_ORIGIN}/`, inLanguage: ['nb', 'en'] },
+			{
+				'@type': 'Organization', name: 'Ampoteket', url: `${PROD_ORIGIN}/`, logo: `${PROD_ORIGIN}/brand/mark-square-180.png`,
+				description: m.description, sameAs: [INSTAGRAM],
+				address: { '@type': 'PostalAddress', streetAddress: 'Pilestredet 35', addressLocality: 'Oslo', addressCountry: 'NO' }
+			}
+		]
+	}).replaceAll('<', '\\u003c')}${'</'}script>`);
 </script>
 
 <svelte:head>
@@ -316,6 +331,8 @@
 	<!-- The site-wide Open Graph tags live in the layout; these two are per page. -->
 	<meta property="og:title" content={m.title} />
 	<meta property="og:description" content={m.description} />
+	<!-- eslint-disable-next-line svelte/no-at-html-tags -- static, escaped JSON built above -->
+	{@html structuredData}
 </svelte:head>
 
 <!-- The storefront act. Where scroll-driven animations run, motion is welcome

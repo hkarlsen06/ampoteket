@@ -57,7 +57,8 @@ footer also names the operators and photographer (`footer.about`) and links help
 Discord. On
 phones (≤ 40rem) the scanner is a Scan button in the hero, then a floating button once
 that scrolls under the header. The layout emits site-wide link-preview metadata; this
-page adds `og:title` and `og:description`.
+page adds `og:title`, `og:description` and schema.org `WebSite` and `Organization`
+JSON-LD (name, logo, address, Instagram) for search results.
 
 ### 2.2 Hero
 
