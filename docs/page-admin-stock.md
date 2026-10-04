@@ -13,13 +13,12 @@ authoritative.
 The shared sidebar's mobile/desktop render branch is a navigation-only exception to the
 one-DOM rule; resizing never replaces the mounted editor or its unsaved input.
 
-`/admin` shows registered purchases and sales value for 30 days, active products
-needing attention and open count batches. Needing attention means zero or negative
+`/admin` shows registered purchases and sales value for 30 days with the daily sales
+chart, then active products needing attention. Needing attention means zero or negative
 recorded stock, or below the product's own minimum; never invent a global threshold.
-Open stocktakes always precede products needing attention, including when none are
-open; background refresh never swaps the sections. The preview shows eight products (sold out, negative before
-zero, then lowest share of the minimum) and the five oldest open stocktakes.
-«Start en bestilling» opens the New order form at `/admin/orders?new`, which lists
+The preview shows eight products (sold out, negative before zero, then lowest share of
+the minimum). Open stocktakes live on `/admin/counts`, not the overview.
+«Start en bestilling» is always shown and opens the New order form at `/admin/orders?new`, which lists
 every product needing attention ([orders](page-admin-orders.md#orders)).
 
 `/admin/statistics` graphs 30 days of purchases and ranks up to ten products by sales
