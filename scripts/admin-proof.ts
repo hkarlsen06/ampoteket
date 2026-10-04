@@ -47,7 +47,8 @@ async function chooseDrawer(scope: Locator, binId: string) {
     await scope.locator(`[data-item-id="${cabinetId}"]`).click();
   }
   await drawer.click();
-  await expect(drawer).toHaveAttribute('aria-pressed', 'true');
+  // Picking a drawer closes the sheet.
+  await expect(drawer).toHaveCount(0);
 }
 async function chooseLayoutDrawer(scope: Locator, binId: string) {
   const drawer = scope.locator(`[data-item-id="${binId}"]`);
@@ -219,7 +220,6 @@ try {
   await page.getByLabel(fieldLabel(`${m.price} (NOK)`)).fill('999999999998.999999');
   await page.locator('#product-placement-trigger').click();
   await chooseDrawer(page.getByRole('group', { name: m.placement, exact: true }), binId);
-  await page.getByRole('button', { name: m.closeDrawer, exact: true }).click();
   await page.getByRole('switch', { name: m.activeLabel, exact: true }).check();
   const draftSpecs = page.locator('.specifications');
   const draftSpecIds = {
@@ -265,9 +265,13 @@ try {
   await page.getByRole('button', { name: m.clearPlacement, exact: true }).click();
   await placement.locator(`[data-item-id="${await sql(`SELECT cabinet_id FROM app.bins WHERE id=${literal(binId)}`)}"]`).click();
   await originalDrawer.click();
+  await expect(placement).toHaveCount(0);
+  await page.locator('#product-placement-trigger').click();
   await expect(originalDrawer).toHaveAttribute('aria-current', 'true');
   await originalDrawer.click();
   await expect(moveDialog).toHaveCount(0);
+  await expect(placement).toHaveCount(0);
+  await page.locator('#product-placement-trigger').click();
   await targetDrawer.click();
   await expect(moveDialog.getByRole('button', { name: m.cancelMove, exact: true })).toBeFocused();
   await expect(originalDrawer).toHaveAttribute('aria-current', 'true');
@@ -281,17 +285,15 @@ try {
   expect(await sql(`SELECT bin_id FROM app.products WHERE id=${literal(productId)}`)).toBe(binId);
   await targetDrawer.click();
   await moveDialog.getByRole('button', { name: m.confirmMove, exact: true }).click();
-  await expect(targetDrawer).toHaveAttribute('aria-current', 'true');
-  await expect(targetDrawer).toBeFocused();
+  await expect(placement).toHaveCount(0);
+  await expect(page.locator('#product-placement-trigger')).toBeFocused();
   expect(await sql(`SELECT bin_id FROM app.products WHERE id=${literal(productId)}`)).toBe(binId);
-  await page.getByRole('button', { name: m.closeDrawer, exact: true }).click();
   await page.getByRole('button', { name: m.save, exact: true }).click();
   await expect(page.getByText(m.saved, { exact: true })).toBeVisible();
   expect(await sql(`SELECT bin_id FROM app.products WHERE id=${literal(productId)}`)).toBe(otherBinId);
   await page.locator('#product-placement-trigger').click();
   await originalDrawer.click();
   await moveDialog.getByRole('button', { name: m.confirmMove, exact: true }).click();
-  await page.getByRole('button', { name: m.closeDrawer, exact: true }).click();
   await page.getByRole('button', { name: m.save, exact: true }).click();
   await expect(page.getByText(m.saved, { exact: true })).toBeVisible();
   expect(await sql(`SELECT bin_id FROM app.products WHERE id=${literal(productId)}`)).toBe(binId);
@@ -324,7 +326,6 @@ try {
   expect(await sql(`SELECT NOT is_active AND bin_id IS NULL FROM app.products WHERE id=${literal(productId)}`)).toBe('t');
   await page.locator('#product-placement-trigger').click();
   await chooseDrawer(page.getByRole('group', { name: m.placement, exact: true }), binId);
-  await page.getByRole('button', { name: m.closeDrawer, exact: true }).click();
   await page.getByRole('switch', { name: m.activeLabel, exact: true }).check();
   await page.getByRole('button', { name: m.save, exact: true }).click();
   await expect(page.getByText(m.saved, { exact: true })).toBeVisible();

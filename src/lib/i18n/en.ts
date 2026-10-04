@@ -144,7 +144,7 @@ export const en: Messages = {
 	adminProducts: {
 		unset: 'Not given', attributeChanged: (current: string) => `Someone else changed this to ${current}. Save again to replace it.`,
 		specificationsNotSaved: "Some specifications weren't saved. See Specifications above.",
-		closeDrawer: 'Close drawer picker', useDrawer: 'Use this drawer',
+		closeDrawer: 'Close drawer picker',
 		addAttribute: 'Add specification',
 		reviewSpecifications: 'Review specifications',
 		saveReviewedSpecifications: 'Save specifications',

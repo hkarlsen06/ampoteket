@@ -125,9 +125,9 @@
 		return bin && cabinet ? m.location(gridCell(cabinet.outer_row, cabinet.outer_col), gridRange(bin.inner_row, bin.inner_col, bin.row_span, bin.col_span)) : m.unplaced;
 	}
 	function selectPlacement(binId: string, event: MouseEvent | KeyboardEvent) {
-		if (blocked || binId === draft.bin_id) return;
+		if (blocked) return;
 		const from = draft.bin_id ?? product?.bin_id ?? null;
-		if (!from || from === binId) { draft.bin_id = binId; return; }
+		if (!from || from === binId) { draft.bin_id = binId; placementOpen = false; return; }
 		proposedPlacement = { from, to: binId };
 		placementTrigger = event.currentTarget as HTMLElement;
 		moveOpen = true;
@@ -136,6 +136,7 @@
 		if (blocked || admin.status !== 'ready' || !proposedPlacement) return;
 		draft.bin_id = proposedPlacement.to;
 		moveOpen = false;
+		placementOpen = false;
 	}
 	onMount(() => {
 		canPrint = printerSupported() && !oncreated;
@@ -506,13 +507,8 @@
 											</Field.Set>
 											</AdminAccessGate>
 										</div>
-										{#if draft.bin_id}
-											<Dialog.Footer variant="sheet">
-												<Dialog.Close>{#snippet child({ props })}<Button {...props} disabled={admin.status !== 'ready'}>{m.useDrawer}</Button>{/snippet}</Dialog.Close>
-											</Dialog.Footer>
-										{/if}
 										<AlertDialog.Root bind:open={moveOpen}>
-											<AlertDialog.Content preventScroll={false} onCloseAutoFocus={(event) => { event.preventDefault(); placementTrigger?.focus({ preventScroll: true }); }}>
+											<AlertDialog.Content preventScroll={false} onCloseAutoFocus={(event) => { event.preventDefault(); (placementOpen ? placementTrigger : document.getElementById('product-placement-trigger'))?.focus({ preventScroll: true }); }}>
 												<AlertDialog.Header>
 													<AlertDialog.Title>{m.moveTitle}</AlertDialog.Title>
 													<AlertDialog.Description aria-label={m.moveTitle}>{proposedPlacement ? m.moveDescription(binLabel(proposedPlacement.from), binLabel(proposedPlacement.to)) : ''}</AlertDialog.Description>

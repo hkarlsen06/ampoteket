@@ -144,7 +144,7 @@ export const nb = {
 	adminProducts: {
 		unset: 'Ikke oppgitt', attributeChanged: (current: string) => `Noen andre endret verdien til ${current}. Lagre igjen for å erstatte den.`,
 		specificationsNotSaved: 'Noen spesifikasjoner ble ikke lagret. Se Spesifikasjoner ovenfor.',
-		closeDrawer: 'Lukk skuffvelger', useDrawer: 'Bruk skuffen',
+		closeDrawer: 'Lukk skuffvelger',
 		addAttribute: 'Legg til spesifikasjon',
 		reviewSpecifications: 'Gjennomgå spesifikasjoner',
 		saveReviewedSpecifications: 'Lagre spesifikasjonene',
