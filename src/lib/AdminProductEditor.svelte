@@ -41,7 +41,7 @@
 	import StockBadge from '#lib/StockBadge.svelte';
 	import ProductAttributes from '#lib/ProductAttributes.svelte';
 	import LabelPrintButton, { queueLabelPrint } from '#lib/LabelPrintButton.svelte';
-	import { choosePrinter, printerGranted, printerSupported } from '#lib/labels/ptouch.js';
+	import { choosePrinter, printerSupported } from '#lib/labels/ptouch.js';
 	import { clearCountCommand, readCountCommand, runCountCommand, saveCountCommand, updateCountStorage, validCountQuantity, type CountCommand } from '#lib/admin-counts.js';
 	import ProductSpecificationRecovery from '#lib/ProductSpecificationRecovery.svelte';
 	import { parseAttribute, ProductSpecificationsError, type ProductAttributeDraft } from '#lib/admin-products.js';
@@ -58,7 +58,7 @@
 	let product = $state<AdminProduct | null>(null); let references = $state<ProductReferences | null>(null); let stock = $state<ProductStock | null>(null);
 	// Quantity still expected from open supplier orders; null when none or unreadable.
 	let onOrder = $state<string | null>(null);
-	const blank: ProductWrite = { id: '', code: '', name_nb: '', name_en: '', description: null, category_id: null, bin_id: null, location_note: null, unit_code: 'pcs', stock_step: '1', sale_step: '1', sale_unit_price_nok: '0', minimum_stock: '0', datasheet_url: null, purchase_url: null, is_active: false };
+	const blank: ProductWrite = { id: '', code: '', name_nb: '', name_en: '', description: null, category_id: null, bin_id: null, location_note: null, unit_code: 'pcs', stock_step: '1', sale_step: '1', sale_unit_price_nok: '0', minimum_stock: '0', datasheet_url: null, purchase_url: null, is_active: true };
 	let draft = $state<ProductWrite>({ ...blank });
 	let staged = $state<ProductAttributeDraft[]>([]);
 	let attributesEditor = $state<{ prepare: () => boolean; commit: () => Promise<boolean>; suggest: (code: string, value: string) => void }>();
@@ -79,7 +79,7 @@
 	// A new product's stock is its first count, posted right after creation; empty means
 	// not counted. Its label can print as the editor opens on the product's route.
 	let openingStock = $state(''); let openingInvalid = $state(false);
-	let printAfterSave = $state(false); let canPrint = $state(false);
+	let printAfterSave = $state(true); let canPrint = $state(false);
 	const openingCount = (step: string) => openingStock.trim() ? validCountQuantity(openingStock, step, i18n.locale) : null;
 	let proposedPlacement = $state<{ from: string | null; to: string } | null>(null);
 	let placementTrigger: HTMLElement | null = null;
@@ -140,8 +140,6 @@
 	}
 	onMount(() => {
 		canPrint = printerSupported() && !oncreated;
-		// Checked once the printer is granted, so Save never opens the picker unasked.
-		if (id === 'new') void printerGranted().then(known => { printAfterSave ||= known; });
 		try { pending = readProductCommand(sessionStorage); restoringCreation = Boolean(pending && pending.revision === null && pending.payload.id === id); const probe = 'ampoteket:product-probe'; sessionStorage.setItem(probe, '1'); if (sessionStorage.getItem(probe) !== '1') throw new Error(); sessionStorage.removeItem(probe); storageReady = true; }
 		catch { storageReady = false; }
 		void load(); return () => { alive = false; if (id !== 'new') queueLabelPrint(null); };

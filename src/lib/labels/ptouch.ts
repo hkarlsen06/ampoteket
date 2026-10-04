@@ -86,8 +86,6 @@ async function device(): Promise<UsbDevice> {
 /** Grants the printer during a click, so a later print needs no user gesture. */
 export async function choosePrinter(): Promise<void> { await device(); }
 export const printerSupported = () => Boolean(usb());
-/** Whether this browser already holds the printer, so printing opens no picker. */
-export async function printerGranted(): Promise<boolean> { const api = usb(); return Boolean(api && await granted(api).catch(() => null)); }
 
 /** Prints one label. `render` receives the printable dots for the loaded tape;
  * its errors propagate unchanged. Resolves after the printer reports completion. */

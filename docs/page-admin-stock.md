@@ -60,7 +60,7 @@ remain outside the scrolling region.
   Typed values are never overwritten.
 - Code, stock unit and stock step are immutable after creation. Stock is a recorded
   balance, never an editable field or a zero shown for a failed read. Zero price is
-  valid. Deactivation keeps identity and history.
+  valid. New products start published. Deactivation keeps identity and history.
 - Minimum in stock (default 0) drives «Lite igjen» on staff views only.
 - A product may be published without a drawer, with an optional public location note;
   choosing a drawer clears the note.
@@ -75,7 +75,7 @@ remain outside the scrolling region.
   acknowledged, as a single count against balance 0 at revision 0 (empty means never
   counted, zero is a count). A stored count that fails is reopened by the count dialog;
   one that could not be stored keeps the editor open with an error. **Print label**
-  (checked once this browser holds the printer) picks the printer during the Save
+  (checked by default) picks the printer during the Save
   click and prints once the editor opens on the product's route; a cancelled picker
   just leaves **Print**.
 - Drawers are picked on the shelf graphic (`ShelfPlacementPicker`), never a coordinate
