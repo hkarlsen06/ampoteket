@@ -22,7 +22,6 @@ const wireId = seedProductId(29);
 const outOfStockId = seedProductId(10);
 const longName = 'Browser statistics resistor with a deliberately long descriptive name that must fit a narrow phone screen';
 const longNameNb = 'Motstand for statistikk i nettlesertest med et svært langt beskrivende navn som skal få plass på en smal mobilskjerm';
-const longBatch = 'Stock count with a deliberately long descriptive title for a narrow phone screen';
 await sql(`UPDATE app.products SET name_en='${longName}', name_nb='${longNameNb}', sale_unit_price_nok=999999999998.999999 WHERE id='${productId}';
   UPDATE app.products SET name_en='${longName} out of stock', name_nb='${longNameNb} uten beholdning' WHERE id='${outOfStockId}';`);
 async function authToken(email: string) {
@@ -93,9 +92,6 @@ try {
     p_request_id: crypto.randomUUID(), p_token: 'b'.repeat(64), p_items: [{ product_id: productId, quantity: '1' }]
   });
   assert.ok(preparedOnly.ok); await preparedOnly.body?.cancel();
-  const started = await rpc('amp_start_count_batch', { p_request_id: crypto.randomUUID(), p_title: longBatch }, staffToken);
-  assert.ok(started.ok);
-  const { batch_id } = await started.json() as { batch_id: string };
   // Current catalog changes must not rewrite frozen sale value.
   await sql(`UPDATE app.products SET sale_unit_price_nok=0 WHERE id='${productId}'`);
 
@@ -181,7 +177,8 @@ try {
       await page.goto(origin + prefix + path);
       if (path === '/admin') {
         await expect(page.getByRole('heading', { name: messages.admin.overview, exact: true })).toBeVisible();
-        await expect(page.getByRole('link', { name: longBatch, exact: true })).toHaveAttribute('href', `${prefix}/admin/counts/${batch_id}`);
+        await expect(page.getByRole('img', { name: m.chartTitle })).toBeVisible();
+        await expect(page.getByRole('link', { name: m.openOrder, exact: true })).toHaveAttribute('href', `${prefix}/admin/orders?new`);
         await expect(page.getByRole('link', { name: `${locale === 'nb' ? longNameNb : longName} ${locale === 'nb' ? 'uten beholdning' : 'out of stock'}`, exact: false })).toHaveAttribute('href', `${prefix}/admin/products/${outOfStockId}`);
       } else if (path.endsWith(productId)) {
         const name = page.getByLabel(fieldLabel(messages.adminProducts.nameEn));

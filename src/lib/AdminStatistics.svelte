@@ -75,7 +75,7 @@
 	{:else if !overview}<p class="text-sm text-muted-foreground">{m.basis}</p>{/if}
 </div>
 {#if data}
-	<SalesChart days={data.days} product={productId !== null} {unit} />
+	<div class="mt-8"><SalesChart days={data.days} product={productId !== null} {unit} /></div>
 	{#if data.summary.sale_count === '0'}<Empty.Root class="mt-4"><Empty.Description>{m.emptySales}</Empty.Description></Empty.Root>{/if}
 	{#if overview && data.overview}
 		{@render attentionSection(data.overview)}
