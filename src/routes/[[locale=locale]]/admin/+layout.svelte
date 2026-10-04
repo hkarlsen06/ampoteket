@@ -68,7 +68,6 @@
 	let menuOpen = $state(false);
 	afterNavigate(({ shallow }) => { if (!shallow) menuOpen = false; });
 </script>
-<svelte:head><meta name="robots" content="noindex, nofollow" /></svelte:head>
 <Sidebar.Provider bind:openMobile={menuOpen}>
 	{#if shell}
 		<Sidebar.Root collapsible="icon" label={m.navigation} closeLabel={m.closeSidebar} inert={admin.status !== 'ready'}>

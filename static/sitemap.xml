@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Indexable pages only; hreflang alternates are in each page's <head>.
+     Add /p and /en/p when SALES_OPEN is "true". -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+	<url><loc>https://ampoteket.no/</loc></url>
+	<url><loc>https://ampoteket.no/en</loc></url>
+	<url><loc>https://ampoteket.no/contact</loc></url>
+	<url><loc>https://ampoteket.no/en/contact</loc></url>
+	<url><loc>https://ampoteket.no/privacy</loc></url>
+	<url><loc>https://ampoteket.no/en/privacy</loc></url>
+</urlset>

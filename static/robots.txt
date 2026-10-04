@@ -1,7 +1,4 @@
-User-agent: *
-Disallow: /admin
-Disallow: /en/admin
-Disallow: /cart
-Disallow: /en/cart
-Disallow: /checkout
-Disallow: /en/checkout
+# Nothing is blocked here on purpose. Admin, cart and checkout answer with noindex,
+# and crawlers can only read that when they are allowed to fetch the page.
+# Cloudflare prepends its managed AI-crawler rules in production.
+Sitemap: https://ampoteket.no/sitemap.xml
