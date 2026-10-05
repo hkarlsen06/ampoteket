@@ -647,6 +647,7 @@ export const en: Messages = {
 				'New ceiling lights, a big workbench and reused equipment, set up by volunteers'
 			],
 			opened: 'Opened 26 February 2026',
+			openedStep: 'Opened',
 			openedLed: '26.02.2026',
 			openingQuote: 'Where I saw wires and chaos, the students saw possibilities and fun.',
 			openingQuoteBy: 'Silje Fekjær, Pro-Rector for Education, at the opening'

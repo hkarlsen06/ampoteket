@@ -654,6 +654,7 @@ export const nb = {
 				'Nytt taklys, et stort arbeidsbord og gjenbrukt utstyr, satt opp på dugnad'
 			],
 			opened: 'Åpnet 26. februar 2026',
+			openedStep: 'Åpnet',
 			openedLed: '26.02.2026',
 			openingQuote: 'Der jeg så ledninger og kaos, så studentene muligheter og moro.',
 			openingQuoteBy: 'Silje Fekjær, prorektor for utdanning, under åpningen'

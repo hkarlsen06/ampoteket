@@ -414,7 +414,10 @@
 		     source link covers every quote and fact from the hero to «Bygg det du brenner for». -->
 		<div class="grid items-start gap-12 md:mt-8 md:grid-cols-2">
 			<div class="grid justify-items-start gap-8">
-				<p class={leadText}>{m.about.body2}</p>
+				<div class="grid justify-items-start gap-4">
+					<p class={leadText}>{m.about.body2}</p>
+					<a href={ARTICLE} target="_blank" rel="external noopener">{m.about.sourceText}<span class="sr-only"> {i18n.m.newTab}</span></a>
+				</div>
 				<!-- A short spec table: label and value on one line, so it scans at a glance. -->
 				<dl class="m-0 grid gap-y-5">
 					{#each m.about.facts as fact (fact.term)}
@@ -441,7 +444,12 @@
 						</div>
 					{/each}
 				</dl>
-				<a href={ARTICLE} target="_blank" rel="external noopener">{m.about.sourceText}<span class="sr-only"> {i18n.m.newTab}</span></a>
+				<!-- Said at the opening that ends the timeline beside it; here it balances the
+				     columns and reads in the same style as the student quotes below. -->
+				<figure class="m-0 grid gap-3 border-l-2 border-primary pl-6">
+					<blockquote class="m-0"><p class="text-[clamp(1.25rem,1.1rem+0.6vw,1.5rem)] leading-snug font-light tracking-tight">{m.about.openingQuote}</p></blockquote>
+					<figcaption class="text-sm text-muted-foreground">{m.about.openingQuoteBy}</figcaption>
+				</figure>
 			</div>
 			<div class="grid content-start gap-8">
 				<h3 class={panelTitle}>{m.about.storyTitle}</h3>
@@ -451,12 +459,9 @@
 					{#each m.about.story as step (step)}
 						<li class={timelineStep}>{step}</li>
 					{/each}
-					<li class="{timelineStep} grid justify-items-start gap-4">
-						<Led value={m.about.openedLed} label={m.about.opened} size="small" />
-						<figure class="m-0 grid gap-2">
-							<blockquote class="m-0"><p class="text-[clamp(1.25rem,1.1rem+0.6vw,1.5rem)] leading-snug font-light tracking-tight">{m.about.openingQuote}</p></blockquote>
-							<figcaption class="text-sm text-muted-foreground">{m.about.openingQuoteBy}</figcaption>
-						</figure>
+					<!-- The visible word is decoration; the cell's label reads the whole step. -->
+					<li class="{timelineStep} flex items-center gap-3">
+						<Led value={m.about.openedLed} label={m.about.opened} size="small" /><span aria-hidden="true">{m.about.openedStep}</span>
 					</li>
 				</ol>
 			</div>
