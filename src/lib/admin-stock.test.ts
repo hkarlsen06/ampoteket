@@ -17,7 +17,10 @@ test('stock history retains correction provenance, order progress and a zero-dif
 		const path = url.pathname.split('/').at(-1);
 		const after = url.searchParams.get('and');
 		let data: unknown[] = [];
-		if (path === 'amp_products') data = [{ id: productId, code: 'DIO-00001', name_nb: 'Diode', name_en: 'Diode', unit_code: 'pcs', stock_step: '1', is_active: false }];
+		if (path === 'amp_products') {
+			expect(url.searchParams.get('select')).toContain('minimum_stock');
+			data = [{ id: productId, code: 'DIO-00001', name_nb: 'Diode', name_en: 'Diode', unit_code: 'pcs', stock_step: '1', minimum_stock: '5', is_active: false }];
+		}
 		if (path === 'amp_inventory') data = [{ product_id: productId, quantity: '7', revision: '3', last_counted_at: '2026-09-23T10:00:00Z' }];
 		if (path === 'amp_inventory_movements') data = after === '(id.gt.1)' ? [movement3] : after ? [] : [movement1];
 		if (path === 'amp_stock_counts') data = [{ event_id: event2, product_id: productId, expected_revision: '1', expected_quantity: '10', counted_quantity: '10' }];
@@ -33,7 +36,7 @@ test('stock history retains correction provenance, order progress and a zero-dif
 		return new Response(JSON.stringify(after && path !== 'amp_inventory_movements' ? [] : data));
 	};
 	const products = await readStockProducts(session, fetcher);
-	expect(products[0]).toMatchObject({ code: 'DIO-00001', name_nb: 'Diode', is_active: false });
+	expect(products[0]).toMatchObject({ code: 'DIO-00001', name_nb: 'Diode', minimum_stock: '5', is_active: false });
 	const detail = await readStockDetail(session, productId, fetcher);
 	expect(detail.movements.map(item => item.id)).toEqual(['3', '1']);
 	expect(detail.movements[0].corrects).toBe('1');

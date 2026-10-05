@@ -105,9 +105,9 @@
 			{#if type === 'number'}<Field.Field><Field.Label for={`${uid}-unit`}>{m.canonicalUnit}</Field.Label><Input id={`${uid}-unit`} bind:value={unit} maxlength={100} disabled={busy || Boolean(pending) || wrongIdentity} /></Field.Field>{/if}
 		</form>
 		<div class={formStatus} aria-live="polite">
-			{#if wrongIdentity}<Alert.Message appearance="inline" variant="destructive" role="status">{m.wrongIdentity}</Alert.Message>
-			{:else if !storageReady || outcome === 'storage'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.storage}</Alert.Message>
-			{:else if !busy && (outcome !== 'idle' || pending)}<Alert.Message appearance="inline" variant="destructive" role="status">{outcome === 'invalid' ? m.referenceInvalid : m.unknown}</Alert.Message>{/if}
+			{#if wrongIdentity}<Alert.Message appearance="inline" variant="destructive">{m.wrongIdentity}</Alert.Message>
+			{:else if !storageReady || outcome === 'storage'}<Alert.Message appearance="inline" variant="destructive">{m.storage}</Alert.Message>
+			{:else if !busy && (outcome !== 'idle' || pending)}<Alert.Message appearance="inline" variant="destructive">{outcome === 'invalid' ? m.referenceInvalid : m.unknown}</Alert.Message>{/if}
 		</div>
 		</AdminAccessGate>
 		</div>

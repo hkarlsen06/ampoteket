@@ -105,7 +105,7 @@
 		return pending && id === pendingId ? asText(pending.after as AttributeValue | null, unit) : id in edits ? edits[id] : asText(saved(id), unit);
 	}
 	function display(value: AttributeValue | null, unit: string | null): string {
-		return !value ? '–' : value.number_value !== null ? formatMeasurement(value.number_value, unit, i18n.locale)
+		return !value ? m.unset : value.number_value !== null ? formatMeasurement(value.number_value, unit, i18n.locale)
 			: value.text_value !== null ? value.text_value : value.boolean_value ? m.yes : m.no;
 	}
 	function unitOf(definition: AttributeDefinition) { return definition.value_type === 'number' ? definition.canonical_unit : null; }
@@ -217,10 +217,10 @@
 <section class={section({ spacing: 'divided', class: 'specifications' })} aria-labelledby="specifications-title">
 	<Separator />
 	<h2 class={sectionHeading} id="specifications-title">{m.attributes}</h2>
-	{#if definitionState.conflict}<Alert.Message appearance="inline" variant="destructive" role="status">{m.specificationConflict}</Alert.Message>{/if}
+	{#if definitionState.conflict}<Alert.Message appearance="inline" variant="destructive" role="alert">{m.specificationConflict}</Alert.Message>{/if}
 	{#if values === null}
 		<div class="grid min-h-24 content-start justify-items-start gap-2" aria-busy={!loadFailed}>
-			{#if loadFailed}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unavailable}</Alert.Message><Button variant="outline" onclick={load}>{m.retry}</Button>
+			{#if loadFailed}<Alert.Message appearance="inline" variant="destructive" role="alert">{m.unavailable}</Alert.Message><Button variant="outline" onclick={load}>{m.retry}</Button>
 			{:else}<Skeleton class="h-12 w-full max-w-68 justify-self-stretch" aria-hidden="true" /><span class="sr-only" role="status">{m.loading}</span>{/if}
 		</div>
 	{:else}
@@ -244,7 +244,7 @@
 					{:else}
 						<Input {id} type="text" inputmode={definition.value_type === 'number' ? 'decimal' : 'text'} maxlength={2000} bind:value={() => current(definition), (next) => edits[definition.id] = next} onchange={() => tidy(definition)} disabled={locked} aria-invalid={Boolean(error)} aria-describedby={describedBy} />
 					{/if}
-					{#if error}<Field.Error id={`${id}-error`}>{error === 'stale' ? m.attributeChanged(display(saved(definition.id), unit)) : error === 'rejected' ? m.failed : m.attributeInvalid}</Field.Error>{/if}
+					{#if error}<Field.Error id={`${id}-error`}>{error === 'stale' ? m.attributeChanged(display(saved(definition.id), unit)) : error === 'rejected' ? m.attributeRejected : m.attributeInvalid}</Field.Error>{/if}
 				</Field.Field>
 			{/each}
 		</div>
@@ -263,9 +263,9 @@
 		</div>
 	{/if}
 	<div class={formStatus} aria-live="polite">
-		{#if wrongIdentity}<Alert.Message appearance="inline" variant="destructive" role="status">{m.wrongIdentity}</Alert.Message>
-		{:else if productId && !storageReady}<Alert.Message appearance="inline" variant="destructive" role="status">{m.storage}</Alert.Message>
-		{:else if pending || outcome !== 'idle'}<Alert.Message appearance="inline" variant="destructive" role="status">{outcome === 'storage' ? m.storage : m.unknown}</Alert.Message>
-		{:else if loadFailed && values}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unavailable}</Alert.Message><Button variant="outline" onclick={load}>{m.retry}</Button>{/if}
+		{#if wrongIdentity}<Alert.Message appearance="inline" variant="destructive">{m.wrongIdentity}</Alert.Message>
+		{:else if productId && !storageReady}<Alert.Message appearance="inline" variant="destructive">{m.storage}</Alert.Message>
+		{:else if pending || outcome !== 'idle'}<Alert.Message appearance="inline" variant="destructive">{outcome === 'storage' ? m.storage : m.unknown}</Alert.Message>{/if}
 	</div>
+	{#if loadFailed && values}<Alert.Message appearance="inline" variant="destructive" role="alert">{m.unavailable}</Alert.Message><Button variant="outline" onclick={load}>{m.retry}</Button>{/if}
 </section>

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { toast } from 'svelte-sonner';
+	import * as Alert from '#lib/components/ui/alert/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Field from '#lib/components/ui/field/index.js';
 	import ShelfGrip from '#lib/ShelfGrip.svelte';
@@ -18,6 +18,7 @@
 	const i18n = getI18n();
 	const m = $derived(i18n.m.adminShelf);
 	let selected = $state(untrack(() => initialSelected)), changedRange = $state('');
+	let layoutError = $state<LayoutError['reason'] | null>(null);
 	let frame = $state<HTMLDivElement | null>(null);
 	let drag = $state<{ axis: 'rows' | 'cols'; pointer: number; start: number; step: number; initial: number; value: number } | null>(null);
 	const current = $derived(bins.find((bin) => bin.id === selected));
@@ -44,10 +45,10 @@
 	function change(action: () => AdminBin[]) {
 		if (disabled || moving) return;
 		try {
-			bins = action();
+			bins = action(); layoutError = null;
 			const after = bins.find((bin) => bin.id === selected);
 			changedRange = after ? gridRange(after.inner_row!, after.inner_col!, after.row_span, after.col_span) : '';
-		} catch (failure) { toast.error(m[failure instanceof LayoutError ? failure.reason : 'invalid'], { id: 'shelf-layout-error' }); changedRange = ''; }
+		} catch (failure) { layoutError = failure instanceof LayoutError ? failure.reason : 'invalid'; changedRange = ''; }
 	}
 	function resize(axis: 'rows' | 'cols', value: number) {
 		if (value === size[axis]) return;
@@ -94,7 +95,7 @@
 	export function split() { change(() => splitLayout(bins, size, selected, assigned)); }
 	function select(id: string) {
 		if (id.startsWith('vacant:')) { const [, row, col] = id.split(':'); onempty?.(Number(row), Number(col)); return; }
-		selected = id; changedRange = ''; onselect?.(id); }
+		selected = id; changedRange = ''; layoutError = null; onselect?.(id); }
 </script>
 
 <svelte:window onkeydown={(event) => { if (event.key === 'Escape' && drag) { event.preventDefault(); event.stopPropagation(); drag = null; } }} />
@@ -124,6 +125,7 @@
 	</div>
 	{#if removed}<Field.Description>{m.layoutCount(bins.length, removed)}</Field.Description>{/if}
 	<div aria-live="polite" aria-atomic="true">
-		{#if changedRange}<span class="sr-only">{m.layoutChanged(changedRange)}</span>{/if}
+		{#if layoutError}<Alert.Message appearance="inline" variant="destructive">{m[layoutError]}</Alert.Message>
+		{:else if changedRange}<span class="sr-only">{m.layoutChanged(changedRange)}</span>{/if}
 	</div>
 </div>

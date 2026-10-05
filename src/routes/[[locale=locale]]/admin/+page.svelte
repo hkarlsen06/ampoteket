@@ -4,6 +4,6 @@
 	import AdminStatistics from '#lib/AdminStatistics.svelte';
 	const i18n = getI18n();
 </script>
-<svelte:head><title>{i18n.m.admin.title}</title></svelte:head>
+<svelte:head><title>{i18n.m.adminStatistics.overviewTitle}</title></svelte:head>
 <header class={pageHeader}><h1 class={pageHeading}>{i18n.m.admin.overview}</h1></header>
 <AdminStatistics overview />

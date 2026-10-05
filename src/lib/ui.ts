@@ -56,3 +56,5 @@ export const sheetBody = 'min-h-0 overflow-y-auto overscroll-contain px-4 py-5 m
 export const cardLink = 'relative row-span-2 grid min-w-0 grid-rows-subgrid gap-4 overflow-visible p-4 md:p-5 hover:ring-muted-foreground has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ring has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--focus-contrast)]';
 // Product names can be long single words (Norwegian compounds): hyphenate, never split mid-syllable.
 export const nameWrap = 'wrap-break-word hyphens-auto';
+/** Product-card grid: as many ≥ 22rem columns as the space allows, so a sidebar never squeezes names into hyphenation. */
+export const cardGrid = 'grid list-none grid-cols-[repeat(auto-fill,minmax(min(100%,22rem),1fr))] gap-4 p-0';

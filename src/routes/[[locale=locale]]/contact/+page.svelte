@@ -28,7 +28,7 @@
 	<section class={section()} aria-labelledby="contacts-title">
 		<h2 id="contacts-title" class={sectionHeading}>{m.contacts}</h2>
 		{#if data.contacts === null}
-			<Alert.Message role="status" appearance="inline" variant="destructive">{m.unavailable}</Alert.Message>
+			<Alert.Message appearance="inline" variant="destructive">{m.unavailable}</Alert.Message>
 			<Button variant="outline" href={i18n.href('/contact')} data-sveltekit-reload>{m.retry}</Button>
 		{:else if !data.contacts.length}
 			<Empty.Root><Empty.Description>{m.empty}</Empty.Description></Empty.Root>

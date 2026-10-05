@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { memory } from './test-storage';
 import { ApiError } from './api';
-import { clearOrderCommand, orderCommandPath, orderRejection, readOrderCommand, readOrderDetail, readOutstandingByProduct, runOrderCommand, saveOrderCommand, type OrderCommand } from './admin-orders';
+import { clearOrderCommand, orderProductName, orderCommandPath, orderRejection, readOrderCommand, readOrderDetail, readOrders, readOutstandingByProduct, runOrderCommand, saveOrderCommand, type OrderCommand, type OrderProduct } from './admin-orders';
 
 const userId = '11111111-1111-4111-8111-111111111111';
 const orderId = '22222222-2222-4222-8222-222222222222';
@@ -10,6 +10,34 @@ const productId = '44444444-4444-4444-8444-444444444444';
 const eventId = '55555555-5555-4555-8555-555555555555';
 const requestId = '66666666-6666-4666-8666-666666666666';
 const session = { config: { url: 'https://fixture.invalid', publishableKey: 'sb_publishable_fixture' }, token: 'staff-token', userId };
+
+test('orders put outstanding work first, newest first within each group', async () => {
+	const ids = [orderId, lineId, productId, eventId];
+	const fetcher = async (input: RequestInfo | URL) => {
+		const url = new URL(String(input));
+		if (url.searchParams.has('and')) return Response.json([]);
+		if (url.pathname.endsWith('/amp_purchase_orders')) return Response.json(ids.map((id, index) => ({
+			id, request_id: requestId, supplier_name: 'Supplier', supplier_reference: null,
+			placed_at: `2026-09-${20 + index}T10:00:00Z`, additional_cost_nok: '0', note: null,
+			created_by: userId, recorded_at: '2026-09-24T10:00:00Z'
+		})));
+		if (url.pathname.endsWith('/amp_purchase_line_progress')) return Response.json(ids.map((id, index) => ({
+			id, order_id: id, outstanding_quantity: index < 2 ? '0.000001' : '0'
+		})));
+		throw new Error(`Unexpected ${url.pathname}`);
+	};
+	const orders = await readOrders(session, fetcher);
+	expect(orders.map(order => order.id)).toEqual([lineId, orderId, eventId, productId]);
+	expect(orders.map(order => order.openLineCount)).toEqual([1, 1, 0, 0]);
+});
+
+test('order product names use the locale and never fall back to an identifier', () => {
+	const product: OrderProduct = { id: productId, code: 'CAB-0001E', name_nb: 'Kabel', name_en: 'Cable', unit_code: 'm', stock_step: '1', minimum_stock: '0', is_active: false, purchase_url: null };
+	expect(orderProductName(product, 'nb')).toBe('Kabel');
+	expect(orderProductName(product, 'en')).toBe('Cable');
+	expect(orderProductName(undefined, 'nb')).toBe('Ukjent produkt');
+	expect(orderProductName(undefined, 'en')).toBe('Unknown product');
+});
 const command: OrderCommand = { kind: 'create', userId, requestId, supplierName: 'Supplier', placedAt: '2026-09-20T10:00:00Z', additionalCostNok: '0.01', supplierReference: null, note: null,
 	items: [{ productId, quantity: '999999999999', unitCostNok: '0.000001', purchaseUrl: null, supplierSku: 'SKU-1' }] };
 

@@ -571,6 +571,8 @@ CREATE TABLE app.checkout_contacts (
 ### `count_batches`
 
 Groups count observations under one owner. A product may be counted repeatedly; observations are never overwritten.
+A single-product count (`amp_record_single_count`) is its own batch, born finished, with `product_id` set and the
+product code as its title; the staff pages word it in the reader's language. Grouped stock counts leave `product_id` null.
 
 ```sql
 CREATE TABLE app.count_batches (
@@ -584,7 +586,9 @@ CREATE TABLE app.count_batches (
   finish_reason text CHECK (finish_reason IS NULL OR length(btrim(finish_reason)) BETWEEN 1 AND 2000),
   CHECK (finished_at IS NULL OR finished_at >= started_at),
   CHECK ((finished_at IS NULL) = (finished_by IS NULL)),
-  CHECK (finish_reason IS NULL OR finished_at IS NOT NULL)
+  CHECK (finish_reason IS NULL OR finished_at IS NOT NULL),
+  product_id uuid REFERENCES app.products(id),
+  CONSTRAINT count_batches_single_count_finished CHECK (product_id IS NULL OR finished_at IS NOT NULL)
 );
 ```
 

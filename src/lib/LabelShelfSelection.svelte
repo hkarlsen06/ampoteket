@@ -59,12 +59,12 @@
 		<Button variant="outline" type="button" disabled={disabled || !available.size && !onselectall} onclick={() => selectAll(true)}>{m.selectAll}</Button>
 		<Button variant="ghost" type="button" class="font-normal" disabled={disabled || !chosen.size && !onclear} onclick={() => selectAll(false)}>{m.clearSelection}</Button>
 	</div>
-	<p class="mt-3 mb-0 min-h-6" role="status">{m.selectedDrawers(chosen.size)}</p>
+	<p class="mt-3 mb-0 min-h-6">{m.selectedDrawers(chosen.size)}</p>
 	{#if !cabinets.length}
 		<Empty.Root><Empty.Description>{m.emptyShelf}</Empty.Description></Empty.Root>
 	{:else}
-		<p class="mt-6 mb-4 text-sm text-muted-foreground">{m.keyboardHint}</p>
-		<ShelfZoom class="max-w-xl" headingLevel={3} {disabled} open={openCabinet?.id ?? null} onchange={(id) => { openedId = id; }}
+		<p class="mt-6 mb-4 hidden text-sm text-muted-foreground [@media(pointer:fine)]:block">{m.keyboardHint}</p>
+		<ShelfZoom class="max-w-xl" headingLevel={2} {disabled} open={openCabinet?.id ?? null} onchange={(id) => { openedId = id; }}
 			title={openCabinet ? m.cabinet(gridCell(openCabinet.outer_row, openCabinet.outer_col)) : m.wall}>
 			{#snippet wall(zoomTo)}
 				<!-- The same steel faces as ShelfDiagram's wall: Raaco cabinets touching frame to frame. -->

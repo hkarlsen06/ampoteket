@@ -1,6 +1,8 @@
 <script lang="ts">
-	import { formLayout, formStatus, pageHeader, pageHeading } from '#lib/ui.js';
+	import { formStatus } from '#lib/ui.js';
 	import * as Alert from '#lib/components/ui/alert/index.js';
+	import AdminAuthCard from '#lib/AdminAuthCard.svelte';
+	import StateBadge from '#lib/StateBadge.svelte';
 	import { Button, ButtonLabel } from '#lib/components/ui/button/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import * as Field from '#lib/components/ui/field/index.js';
@@ -65,24 +67,26 @@
 	}
 </script>
 <svelte:head><title>{m.passwordTitle}</title></svelte:head>
-<header class={pageHeader}><h1 class={pageHeading}>{m.passwordHeading}</h1></header>
-{#if status === 'saved'}
-	<div class={formLayout}><Alert.Message appearance="inline" role="status">{m.passwordSaved}</Alert.Message><Button variant="default" href={i18n.href(next)}>{m.continue}</Button></div>
-{:else if callback}
-	<div class={formLayout}><Button variant="default" onclick={exchange} disabled={busy || !admin.auth}><ButtonLabel pending={busy} pendingLabel={m.working} label={m.continue} /></Button></div>
-{:else if verifiedUserId}
-	<form class={[formLayout, "max-w-md"]} onsubmit={save}>
-		<Field.Field width="grow"><Field.Label for={`${fieldId}-1`}>{m.newPassword}</Field.Label><Input id={`${fieldId}-1`} type="password" autocomplete="new-password" minlength={8} required bind:value={password} disabled={busy} /></Field.Field>
-		<Field.Field width="grow"><Field.Label for={`${fieldId}-2`}>{m.repeatPassword}</Field.Label><Input id={`${fieldId}-2`} type="password" autocomplete="new-password" enterkeyhint="go" minlength={8} required bind:value={repeat} disabled={busy} /></Field.Field>
-		<Button type="submit" variant="default" disabled={busy}><ButtonLabel pending={busy} pendingLabel={m.working} label={m.savePassword} /></Button>
-	</form>
-{:else}
-	<form class={[formLayout, "max-w-md"]} onsubmit={send}>
-		<Field.Field width="grow"><Field.Label for={`${fieldId}-3`}>{m.email}</Field.Label><Input id={`${fieldId}-3`} type="email" autocomplete="username" enterkeyhint="send" required bind:value={email} disabled={busy} /></Field.Field>
-		<Button type="submit" variant="default" disabled={busy || !admin.auth || !admin.callbackOrigin}><ButtonLabel pending={busy} pendingLabel={m.working} label={m.sendReset} /></Button>
-	</form>
-{/if}
-<div class={formStatus} aria-live="polite">
-	{#if status === 'sent'}<Alert.Message appearance="inline" variant="default" role="status">{m.resetSent}</Alert.Message>{:else if status === 'invalid'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.invalidCallback}</Alert.Message>{:else if status === 'failed'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.authFailed}</Alert.Message>{:else if status === 'mismatch'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.passwordMismatch}</Alert.Message>{:else if !admin.callbackOrigin || admin.status === 'unavailable'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unavailable}</Alert.Message>{/if}
-</div>
-<Button variant="link" href={i18n.href('/admin/login')}>{m.backToSignIn}</Button>
+<AdminAuthCard heading={m.passwordHeading}>
+	{#if status === 'saved'}
+		<Button variant="default" class="w-full" href={i18n.href(next)}>{m.continueToAdmin}</Button>
+	{:else if callback}
+		<Button variant="default" class="w-full" onclick={exchange} disabled={busy || !admin.auth}><ButtonLabel pending={busy} pendingLabel={m.continuing} label={m.continue} /></Button>
+	{:else if verifiedUserId}
+		<form class="grid gap-5" onsubmit={save}>
+			<Field.Field><Field.Label for={`${fieldId}-1`}>{m.newPassword}</Field.Label><Input id={`${fieldId}-1`} type="password" autocomplete="new-password" minlength={8} required aria-describedby={`${fieldId}-hint`} bind:value={password} disabled={busy} /><Field.Description id={`${fieldId}-hint`}>{m.passwordHint}</Field.Description></Field.Field>
+			<Field.Field><Field.Label for={`${fieldId}-2`}>{m.repeatPassword}</Field.Label><Input id={`${fieldId}-2`} type="password" autocomplete="new-password" enterkeyhint="go" minlength={8} required bind:value={repeat} disabled={busy} /></Field.Field>
+			<Button type="submit" variant="default" class="w-full" disabled={busy}><ButtonLabel pending={busy} pendingLabel={m.saving} label={m.savePassword} /></Button>
+		</form>
+	{:else}
+		<form class="grid gap-5" onsubmit={send}>
+			<Field.Field><Field.Label for={`${fieldId}-3`}>{m.email}</Field.Label><Input id={`${fieldId}-3`} type="email" autocomplete="username" enterkeyhint="send" required bind:value={email} disabled={busy} /></Field.Field>
+			<Button type="submit" variant="default" class="w-full" disabled={busy || !admin.auth || !admin.callbackOrigin}><ButtonLabel pending={busy} pendingLabel={m.sending} label={m.sendReset} /></Button>
+		</form>
+	{/if}
+	<div class={formStatus} aria-live="polite">
+		{#if status === 'saved'}<StateBadge tone="success">{m.saved}</StateBadge>{:else if status === 'sent'}<Alert.Message appearance="inline">{m.resetSent}</Alert.Message>{:else if status === 'invalid'}<Alert.Message appearance="inline" variant="destructive">{m.invalidCallback}</Alert.Message>{:else if status === 'failed'}<Alert.Message appearance="inline" variant="destructive">{m.authFailed}</Alert.Message>{:else if status === 'mismatch'}<Alert.Message appearance="inline" variant="destructive">{m.passwordMismatch}</Alert.Message>{:else if !admin.callbackOrigin || admin.status === 'unavailable'}<Alert.Message appearance="inline" variant="destructive">{m.accessUnavailable}</Alert.Message>{/if}
+	</div>
+	{#if admin.status === 'unavailable' && admin.callbackOrigin}<Button type="button" variant="outline" class="justify-self-start" onclick={() => admin.refresh()}>{m.retry}</Button>{/if}
+	{#if !verifiedUserId && status !== 'saved'}<Button variant="link" class="justify-self-start" href={i18n.href('/admin/login')}>{m.backToSignIn}</Button>{/if}
+</AdminAuthCard>

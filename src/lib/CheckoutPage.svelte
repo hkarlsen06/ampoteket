@@ -198,7 +198,7 @@
 
 <div class={pageContainer({ width: 'reading', padding: 'page' })}>
 	<header class={pageHeader}><h1 class={pageHeading}>{m.heading}</h1></header>
-	<Alert.Root appearance="inline" class="min-h-20 content-start gap-2 pb-4 text-base" role={undefined} aria-live="polite" aria-atomic="true">
+	<Alert.Root appearance="inline" class="min-h-20 content-start gap-2 pb-4 text-base" aria-live="polite" aria-atomic="true">
 		{#if registered}<Alert.Title class="text-base font-semibold">{m.registered}</Alert.Title>{/if}
 		<Alert.Description class={registered ? undefined : 'text-base text-foreground'}>
 			{#if registered}{m.registeredNote}
@@ -318,7 +318,7 @@
 		{/if}
 	</div>
 	<div class={section()}>
-		<Alert.Message appearance="inline" variant="destructive">{#if error}{m.errors[error]}{/if}</Alert.Message>
+		<Alert.Message role="alert" appearance="inline" variant="destructive">{#if error}{m.errors[error]}{/if}</Alert.Message>
 		{#if error && !busy && !asideDone}
 			<Button variant="outline" type="button" onclick={() => load()}>{m.retry}</Button>
 		{/if}

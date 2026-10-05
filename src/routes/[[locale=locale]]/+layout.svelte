@@ -62,9 +62,12 @@
 	/** Current path with the locale prefix removed, so the picker can swap it. */
 	const bare = $derived(stripLocale(page.url.pathname));
 	const privatePage = $derived(isPrivateRoute(page.route.id, page.url.pathname));
+	// Admin is its own workspace: the header keeps the wordmark and menu but drops the buyer
+	// and social links, and no public footer follows the page.
+	const adminPage = $derived(isCurrent('/admin'));
 	// Discord and Instagram stay off the cart and checkout, where a leaving link costs a purchase in progress.
-	const showSocial = $derived(!isCurrent('/cart') && !isCurrent('/checkout'));
-	const buyerScanPage = $derived(data.salesOpen && (bare === '/' || bare === '/p' || bare.startsWith('/p/') || bare === '/cart'));
+	const showSocial = $derived(!adminPage && !isCurrent('/cart') && !isCurrent('/checkout'));
+	const buyerScanPage = $derived(data.salesOpen && !adminPage && (bare === '/' || bare === '/p' || bare.startsWith('/p/') || bare === '/cart'));
 
 	/** Always the production URL, never a preview origin; see PROD_ORIGIN. */
 	const canonical = $derived(PROD_ORIGIN + localizeHref(bare, data.locale));
@@ -90,7 +93,7 @@
 	// session check never moves the catalog link.
 	const catalogLink = $derived(nav.slice(0, 1));
 	const menuLinks = $derived(admin.status === 'ready' ? [...catalogLink, adminLink] : catalogLink);
-	const headerLinks = $derived(admin.status === 'ready' ? [adminLink, ...catalogLink] : catalogLink);
+	const headerLinks = $derived(adminPage ? [] : admin.status === 'ready' ? [adminLink, ...catalogLink] : catalogLink);
 
 	function isCurrent(href: string) {
 		return bare === href || bare.startsWith(href + '/');
@@ -221,6 +224,7 @@
 					<Tooltip.Content side="bottom" class="md:hidden">{item.label}</Tooltip.Content>
 				</Tooltip.Root>
 			{/each}
+			{#if !adminPage}
 			{#if !data.salesOpen}{@render socialLinks()}{:else}
 			<Tooltip.Root>
 				<Tooltip.Trigger>
@@ -243,6 +247,7 @@
 				<Tooltip.Content side="bottom" class="md:hidden">{m.header.cart}</Tooltip.Content>
 			</Tooltip.Root>
 			{/if}
+			{/if}
 		</Tooltip.Provider>
 		{#if buyerScanPage}<Scanner bind:this={scanner} config={data.adminConfig} />{/if}
 		<!-- Desktop: a floating panel hanging from the header under the button. Phone: a full-width panel under the header bar. -->
@@ -257,6 +262,7 @@
 			<Collapsible.Content forceMount id="site-menu" class="menu absolute top-[calc(50%+var(--header-h)/2+1px)] right-0 z-10 hidden w-64 rounded-lg border bg-card p-2 shadow-card data-[state=open]:block phone:inset-x-0 phone:top-full phone:w-auto phone:rounded-none phone:border-0 phone:px-[calc(var(--gutter)-0.75rem)] phone:pt-2 phone:pb-3 phone:shadow-none no-js:relative no-js:inset-auto no-js:block no-js:w-full no-js:rounded-none no-js:border-0 no-js:px-0 no-js:pt-2 no-js:pb-3 no-js:shadow-none">
 			<Separator class="absolute inset-x-0 top-0 hidden no-js:block" />
 			<!-- Phone: catalog, Instagram and Admin, which desktop has in the header row; then Contact at every width. -->
+			{#if !adminPage}
 			<nav class="site-nav" aria-label={m.header.menu}>
 				<ul class="m-0 flex list-none flex-col p-0">
 					{#if !catalogLink.length && showSocial}{@render instagramRow()}{/if}
@@ -281,13 +287,14 @@
 					</li>
 				</ul>
 			</nav>
+			{/if}
 			{#if buyerScanPage}
 				<Button variant="ghost" class="w-full justify-start px-3 phone:hidden no-js:hidden" aria-haspopup="dialog" onclick={openScanner}>
 					<Icon icon={QrCodeIcon} class="size-5" aria-hidden="true" />{m.scanner.open}
 				</Button>
 			{/if}
-			<nav class="relative mt-2 flex items-center pt-2" aria-label={m.header.language}>
-				<Separator class="absolute inset-x-0 top-0" />
+			<nav class={['relative flex items-center', !adminPage && 'mt-2 pt-2']} aria-label={m.header.language}>
+				{#if !adminPage}<Separator class="absolute inset-x-0 top-0" />{/if}
 				<Icon icon={TranslateIcon} class="mx-3 size-5" />
 				<ul class="m-0 flex list-none items-center gap-1 p-0">
 					{#each locales as loc (loc)}
@@ -319,6 +326,7 @@
 	{@render children()}
 </main>
 
+{#if !adminPage}
 <footer class="site-footer bg-card text-sm text-muted-foreground">
 	<Separator />
 	<div class={pageContainer({ class: "max-w-none px-5 flex flex-wrap items-center gap-x-8 gap-y-1 py-3" })}>
@@ -340,3 +348,4 @@
 		</nav>
 	</div>
 </footer>
+{/if}

@@ -3,7 +3,7 @@
 	import Root from './alert.svelte';
 	import Description from './alert-description.svelte';
 
-	// The common text-only composition; roles/live regions still belong to callers.
+	// The common text-only composition. It sets no role: inside a live region it is announced once by the region; outside one, a dynamic error passes role="alert".
 	let { ref = $bindable(null), children, ...props }: ComponentProps<typeof Root> = $props();
 </script>
 

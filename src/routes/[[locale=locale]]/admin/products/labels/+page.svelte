@@ -43,6 +43,8 @@
 	let previewLines = $state<Record<string, string[]>>({});
 	let error = $state('');
 	let alive = true, controller: AbortController | null = null;
+	let background = $state(false);
+	let refreshing: Promise<void> | null = null;
 	const products = $derived(data ? selectedLabelProducts(data, selected, includeUnplaced) : []);
 	const unplaced = $derived(data?.products.filter(product => product.bin_id === null).length ?? 0);
 	const inactive = $derived(products.filter(product => !product.is_active).length);
@@ -66,7 +68,7 @@
 	$effect(() => {
 		if (revalidateQueued && admin.status === 'ready' && !(loading || generating)) {
 			revalidateQueued = false;
-			untrack(() => { void load(); });
+			untrack(() => { refreshing = load(true); });
 		}
 	});
 
@@ -96,9 +98,9 @@
 			requests.forEach(request => request.abort()); throw cause;
 		} finally { cleanups.forEach(cleanup => cleanup()); }
 	}
-	async function load() {
+	async function load(inBackground = false) {
 		if (generating || controller) return;
-		const operation = new AbortController(); controller = operation; loading = true;
+		const operation = new AbortController(); controller = operation; loading = true; background = inBackground;
 		try {
 			const next = await read(operation.signal);
 			if (JSON.stringify(next) !== JSON.stringify(data)) clearPreview();
@@ -107,10 +109,11 @@
 			if (selected.some(id => !live.has(id))) { selected = selected.filter(id => live.has(id)); error = m.selectionChanged; }
 		} catch (cause) {
 			operation.abort();
-			if (alive) { failed = true; clearPreview(); await admin.permissionFailure(cause); }
-		} finally { if (alive) loading = false; if (controller === operation) controller = null; }
+			if (alive) { failed = true; await admin.permissionFailure(cause); }
+		} finally { if (alive) { loading = false; background = false; } if (controller === operation) controller = null; }
 	}
 	async function generate() {
+		if (background && refreshing) await refreshing;
 		if (generating || loading || failed || !data) return;
 		if (width === undefined) { widthChecked = true; void tick().then(() => document.getElementById(`${fieldId}-width`)?.focus()); return; }
 		clearPreview(); error = ''; generating = true;
@@ -151,8 +154,7 @@
 <svelte:window onfocus={refresh} ononline={refresh} />
 <svelte:document onvisibilitychange={refresh} />
 <div class={pageHeader}><h1 class={pageHeading}>{m.heading}</h1></div>
-<div class={formStatus} aria-live="polite">{#if failed}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unavailable}</Alert.Message>{/if}</div>
-{#if failed}<Button type="button" variant="outline" class="mb-6" onclick={load} disabled={loading}>{m.retry}</Button>{/if}
+{#if failed}<Alert.Message appearance="inline" variant="destructive" role="alert">{m.unavailable}</Alert.Message><Button type="button" variant="outline" class="mb-6" onclick={() => load()} disabled={loading && !background}>{m.retry}</Button>{/if}
 {#if data}
 	<LabelShelfSelection topology={data.references.shelf} {selected} onselection={(ids) => { selected = ids; }}
 		onselectall={() => { includeUnplaced = true; }} onclear={() => { includeUnplaced = false; }} disabled={generating} />
@@ -169,21 +171,23 @@
 			{#if widthChecked && width === undefined}<Field.Error id={`${fieldId}-width-error`}>{m.widthInvalid}</Field.Error>{/if}
 		</Field.Field>
 		<div>
-			<p aria-live="polite">{m.summary(products.length, inactive)}</p>
+			<p>{m.summary(products.length, inactive)}</p>
 			{#if inactive}<p class="text-sm">{m.inactiveHint}</p>{/if}
 		</div>
-		<div class={formActions}><Button type="submit" variant="default" disabled={generating || loading || failed || !products.length}><ButtonLabel pending={generating} pendingLabel={m.generating} label={m.generate} /></Button>
-			<span class:invisible={!generating} inert={!generating} aria-hidden={!generating}><Button variant="outline" type="button" onclick={() => controller?.abort()}>{m.cancel}</Button></span>
+		<div class={formActions}><Button type="submit" variant={prepared ? 'outline' : 'default'} disabled={generating || (loading && !background) || failed || !products.length}><ButtonLabel pending={generating} pendingLabel={m.generating} label={m.generate} /></Button>
+			<span class:invisible={!generating} inert={!generating} aria-hidden={!generating}><Button variant="ghost" type="button" onclick={() => controller?.abort()}>{m.cancel}</Button></span>
 		</div>
 	</form>
-	<div class={formStatus} aria-live="polite">{#if error}<Alert.Message appearance="inline" variant="destructive" role="status">{error}</Alert.Message>{/if}</div>
+	<div class={formStatus} aria-live="polite">
+		<span class="sr-only">{m.summary(products.length, inactive)}</span>
+		{#if error && !failed}<Alert.Message appearance="inline" variant="destructive">{error}</Alert.Message>{/if}
+		{#if prepared}<p>{m.ready(prepared.totalLabels, prepared.pages, prepared.columns, prepared.rows)}</p>{/if}
+	</div>
 	{#if prepared && downloadUrl}
 		<section class={section()} aria-labelledby="label-preview-heading">
 			<h2 class={sectionHeading} id="label-preview-heading">{m.previewHeading}</h2>
-			<p role="status">{m.ready(prepared.totalLabels, prepared.pages, prepared.columns, prepared.rows)}</p>
-			<Button variant="outline" href={downloadUrl} download="ampoteket-labels.pdf">{m.download}</Button>
-			<p class="text-sm">{m.printHint}</p>
-			<p>{m.previewHint}</p>
+			<Button variant="default" href={downloadUrl} disabled={failed} download="ampoteket-labels.pdf">{m.download}</Button>
+			<div class="mt-4 space-y-2 text-sm text-muted-foreground"><p>{m.printHint}</p><p>{m.previewHint}</p></div>
 			<div class="mt-6 flex flex-wrap items-start gap-6">{#each prepared.labels as label (label.id)}
 				<figure class="m-0 w-full min-w-0" style:max-width={`${width}mm`}>
 					<AspectRatio.Root ratio={(width ?? 45) / label.height}><img class="block h-full w-full bg-[var(--paper)] object-contain" src={label.svgUrl} alt={m.previewAlt(label.code, (previewLines[label.id] ?? []).join(', '))} width={(width ?? 45) * 4} height={label.height * 4} /></AspectRatio.Root>

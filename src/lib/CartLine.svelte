@@ -170,7 +170,7 @@
 			<p class="sr-only" id={`step-${line.product_id}`}>{#if product}{m.step(formatDecimal(product.sale_step, i18n.locale), unitLabel(product.unit_symbol, i18n.locale, product.sale_step))}{/if}</p>
 			<div class={['min-w-0 text-sm', !notice && 'sr-only']} id={`result-${line.product_id}`} role={displayError ? 'alert' : 'status'}>
 				{#if displayError}<Field.Error role={undefined}>{m.errors[displayError]}{#if displayError === 'quantity' && product} {m.step(formatDecimal(product.sale_step, i18n.locale), unitLabel(product.unit_symbol, i18n.locale, product.sale_step))}{/if}</Field.Error>
-				{:else if fact?.kind === 'unavailable'}<Alert.Message role={undefined} appearance="inline" variant="destructive">{m.factsUnavailable}</Alert.Message>
+				{:else if fact?.kind === 'unavailable'}<Alert.Message appearance="inline" variant="destructive">{m.factsUnavailable}</Alert.Message>
 				{:else if fact?.kind === 'missing'}<Field.Description>{m.missing}</Field.Description>
 				{:else if !product}{m.factsLoading}
 				{:else if pending}{m.saving}

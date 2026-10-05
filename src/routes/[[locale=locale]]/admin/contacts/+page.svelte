@@ -173,17 +173,17 @@
 	<p class={lede}>{m.directoryConsent}</p>
 	<div class={formActions}><Button type="button" disabled={failed || busy || Boolean(pending)} onclick={() => edit(null)}>{m.newContact}</Button><Button variant="link" href={i18n.href('/contact')}>{m.viewPublic}</Button></div>
 </header>
+<div class="sr-only" aria-live="polite">{moveAnnouncement}</div>
 <div class={formStatus} aria-live="polite">
-	{#if moveFailure}<Alert.Message appearance="inline" variant="destructive" role="status">{moveFailure === 'stale' ? m.orderStale : m.operationFailed}</Alert.Message>{/if}
-	<span class="sr-only">{moveAnnouncement}</span>
-	{#if wrongIdentity}<Alert.Message appearance="inline" variant="destructive" role="status">{m.commandIdentity}</Alert.Message>{:else if !storageReady}<Alert.Message appearance="inline" variant="destructive" role="status">{m.storageUnavailable}</Alert.Message>{/if}
+	{#if moveFailure}<Alert.Message appearance="inline" variant="destructive">{moveFailure === 'stale' ? m.orderStale : m.operationFailed}</Alert.Message>{/if}
+	{#if wrongIdentity}<Alert.Message appearance="inline" variant="destructive">{m.commandIdentity}</Alert.Message>{:else if !storageReady}<Alert.Message appearance="inline" variant="destructive">{m.storageUnavailable}</Alert.Message>{/if}
 </div>
 {#if editing && !wrongIdentity && rowEditor === null}<div class="mb-8">{@render editor()}</div>{/if}
 {#snippet editor()}
 	<div class="grid gap-4">
 		{#if outcome === 'stale'}
 			<Button type="button" variant="outline" class="justify-self-start" disabled={busy} onclick={review}>{m.reviewContact}</Button>
-			{#if reviewFailed}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unavailable}</Alert.Message>{/if}
+			{#if reviewFailed}<Alert.Message appearance="inline" variant="destructive" role="alert">{m.directoryUnavailable}</Alert.Message>{/if}
 			{#if current}
 				<dl class="grid gap-3 md:grid-cols-2 [&_dt]:text-sm [&_dt]:text-muted-foreground [&_dd]:wrap-anywhere">
 					<div><dt>{m.contactName}</dt><dd>{current.display_name}</dd></div>
@@ -210,21 +210,21 @@
 			<Field.Field width="grow"><Field.Label for={`${fieldId}-5`}>{m.contactUrl}</Field.Label><Input id={`${fieldId}-5`} type="url" autocapitalize="none" enterkeyhint="go" maxlength={500} bind:value={url} disabled={busy || Boolean(pending)} /></Field.Field>
 			<Field.Field orientation="horizontal"><Switch id="switch-published" name="switch-published" bind:checked={published} disabled={busy || Boolean(pending)} aria-describedby="published-hint" /><Field.Content><Field.Label for="switch-published" class="cursor-pointer">{m.publishContact}</Field.Label><Field.Description id="published-hint">{m.atLeastOneContact}</Field.Description></Field.Content></Field.Field>
 			<div class={formActions}>
-				<Button type="submit" disabled={failed || busy || !storageReady || outcome === 'stale'}><ButtonLabel pending={busy} pendingLabel={m.working} label={pending ? m.retrySave : m.saveContact} reserveLabels={[m.retrySave, m.saveContact]} /></Button>
+				<Button type="submit" disabled={failed || busy || !storageReady || outcome === 'stale'}><ButtonLabel pending={busy} pendingLabel={m.saving} label={pending ? m.retrySave : m.saveContact} reserveLabels={[m.retrySave, m.saveContact]} /></Button>
 				<Button type="button" variant="ghost" disabled={busy || Boolean(pending)} onclick={() => { editing = false; }}>{m.cancel}</Button>
 			</div>
 		</form>
 		<div class={formStatus} aria-live="polite">
-			{#if outcome === 'failed'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.operationFailed}</Alert.Message>{:else if outcome === 'invalid'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.contactInvalid}</Alert.Message>{:else if outcome === 'stale'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.contactStale}</Alert.Message>{:else if outcome === 'saved'}<Alert.Message appearance="inline" variant="default" role="status">{m.contactSaved}</Alert.Message>{:else if outcome === 'unknown'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.contactUnknown}</Alert.Message>{/if}
+			{#if outcome === 'failed'}<Alert.Message appearance="inline" variant="destructive">{m.operationFailed}</Alert.Message>{:else if outcome === 'invalid'}<Alert.Message appearance="inline" variant="destructive">{m.contactInvalid}</Alert.Message>{:else if outcome === 'stale'}<Alert.Message appearance="inline" variant="destructive">{m.contactStale}</Alert.Message>{:else if outcome === 'saved'}<StateBadge tone="success">{m.saved}</StateBadge>{:else if outcome === 'unknown'}<Alert.Message appearance="inline" variant="destructive">{m.contactUnknown}</Alert.Message>{/if}
 		</div>
 	</div>
 {/snippet}
-{#if failed && contacts !== null}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unavailable}</Alert.Message><Button type="button" variant="outline" disabled={busy} onclick={load}>{m.retry}</Button>{/if}
+{#if failed && contacts !== null}<Alert.Message appearance="inline" variant="destructive" role="alert">{m.directoryUnavailable}</Alert.Message><Button type="button" variant="outline" disabled={busy} onclick={load}><ButtonLabel pending={busy} pendingLabel={m.retrying} label={m.retry} /></Button>{/if}
 {#if contacts === null}
 	{#if busy}<span class="sr-only" role="status">{m.loading}</span>{/if}
 	<div class="min-h-80 space-y-4" aria-busy={busy}>
 		{#if busy}{#each [1, 2, 3] as row (row)}<div class="space-y-3 py-3" aria-hidden="true"><Skeleton class="h-6 w-2/3" /><Skeleton class="h-5 w-1/2" /></div>{/each}
-		{:else}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unavailable}</Alert.Message><Button type="button" variant="outline" onclick={load}>{m.retry}</Button>{/if}
+		{:else}<Alert.Message appearance="inline" variant="destructive" role="alert">{m.directoryUnavailable}</Alert.Message><Button type="button" variant="outline" onclick={load}>{m.retry}</Button>{/if}
 	</div>
 {:else if !contacts.length}<Empty.Root><Empty.Description>{m.noDirectoryContacts}</Empty.Description></Empty.Root>
 {:else}
@@ -241,7 +241,7 @@
 					<Item.Title class={itemTitle}>{contact.display_name}</Item.Title>
 					<Item.Description class="flex flex-wrap items-center gap-x-3 gap-y-1"><StateBadge tone={contact.is_published ? 'success' : 'neutral'}>{contact.is_published ? m.published : m.unpublished}</StateBadge>{#if contact.responsibility}<span>{contact.responsibility}</span>{/if}</Item.Description>
 				</Item.Content>
-				<Item.Actions><Button type="button" variant="outline" size="sm" disabled={busy || failed || Boolean(pending)} onclick={() => edit(contact)}>{m.editContact(contact.display_name)}</Button></Item.Actions>
+				<Item.Actions><Button type="button" variant="outline" size="sm" disabled={busy || failed || Boolean(pending)} onclick={() => edit(contact)}>{m.edit}<span class="sr-only"> {contact.display_name}</span></Button></Item.Actions>
 				{#if rowEditor === contact.id}<div class="min-w-0 basis-full pt-2">{@render editor()}</div>{/if}
 			</Item.Root>
 		{/each}

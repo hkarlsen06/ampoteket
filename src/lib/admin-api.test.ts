@@ -13,7 +13,9 @@ test('directory moves send the displayed prior order alongside the desired order
 });
 test('admin returns allow only built local destinations without callback material', () => {
 	for (const value of ['//evil.invalid', 'https://evil.invalid', '/en/admin', '/admin?token=secret', '/admin/password', '/admin\\evil', '/admin/%2f%2fevil', null]) expect(adminReturnPath(value)).toBe('/admin');
-	expect(adminReturnPath('/admin/privacy')).toBe('/admin/privacy');
+	expect(adminReturnPath('/admin/purchases')).toBe('/admin/purchases');
+	expect(adminReturnPath('/admin/contacts')).toBe('/admin/contacts');
+	for (const retired of ['/admin/privacy', '/admin/help']) expect(adminReturnPath(retired)).toBe('/admin');
 	expect(adminReturnPath('/admin/admins')).toBe('/admin/admins');
 	expect(adminReturnPath('/admin/statistics')).toBe('/admin/statistics');
 	for (const path of ['/admin/products', '/admin/products/new', '/admin/products/labels', `/admin/products/${command.userId}`, '/admin/shelf', '/admin/stock', '/admin/audit', '/admin/counts', `/admin/counts/${command.requestId}`]) expect(adminReturnPath(path)).toBe(path);

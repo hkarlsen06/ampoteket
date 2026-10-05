@@ -56,8 +56,11 @@ another tab invalidates that form; the password write uses the checked identity'
 explicit bearer token, never a fresh lookup of the browser's shared session.
 Signed-out admin visits redirect (replacing history) to the same locale's
 `/admin/login?next=<path>`. Unavailable Auth and missing/revoked access are
-distinct error states. The header Admin link shows only after membership is
-confirmed; that visibility never replaces database authorization.
+distinct error states (a refused password and an unreachable Auth service are told apart
+at sign-in, without revealing whether an account exists). The public header's Admin link
+shows only after membership is confirmed; that visibility never replaces database
+authorization. Admin routes themselves use a reduced header and no public footer
+([design-system.md](design-system.md), Header and menu).
 
 A Supabase login alone grants nothing. A maintainer provisions the first admin
 using the [deployment runbook](runbook-deploy.md#5-first-staff-member-and-opening-stock).
@@ -183,7 +186,7 @@ Show the checkout and request references, ask for a screenshot of amount and
 items, keep the retry available, and direct the buyer to `/contact`
 ([details](checkout-recovery.md#staff-recovery-uses-the-original-checkout)). Never
 put references or contacts in its query string. Admins maintain `/contact` contacts at
-`/admin/help` through the audited `amp_help_contacts` view; the public reads only
+`/admin/contacts` through the audited `amp_help_contacts` view; the public reads only
 published rows through `amp_help_directory`. Empty and unavailable are distinct
 states, and the app never invents contacts.
 
@@ -285,12 +288,18 @@ problems with receipts, cancellations or corrections.
   **fresh physical recount**, never a resubmit with a new revision.
 - Each count posts immediately. Grouped counts use `amp_start_count_batch` /
   `amp_record_count` / `amp_finish_count_batch` (owner-only, posts nothing).
-  `amp_record_single_count` makes its own finished batch. Prompt for a note when
+  `amp_record_single_count` makes its own finished batch with `product_id` set and the
+  product code as title; the pages render «Telling av …» / “Count of …” from `product_id`. Prompt for a note when
   the difference is non-zero.
 - `amp_close_abandoned_count_batch` is only for a disabled or deleted owner; another
   staff member closes it with a reason.
 
 ### 5.7 Checkout recovery and contact erasure
+
+`/admin/purchases` ("Find purchase") looks a purchase up by the buyer's support reference,
+the checkout ID or the backup reference, and shows only what staff match against the
+buyer's account: time, items, total and whether it is registered. It also holds the
+buyer's contact detail, which staff can show and erase behind a destructive confirmation.
 
 `amp_recover_checkout` registers the **original** saved checkout with a
 non-sensitive reason; see [checkout recovery](checkout-recovery.md#staff-recovery-uses-the-original-checkout)
@@ -303,9 +312,11 @@ history; the audit records only that a clearance happened.
 
 `/admin/audit` reads `amp_audit_log` with the staff JWT, newest first, paging with
 `id < last_id` until complete. A failed page keeps loaded rows and the cursor for
-retry. Rows expand to the key and the row JSON with exact numeric strings. When both
-before and after exist, one listing shows every field with each changed value's
-differing words struck (removed) and underlined (added); unchanged fields stay muted. There
+retry. `describeAudit()` in `src/lib/admin-audit.ts` turns each row into an action
+badge, a named subject (product code and name, supplier, count, contact, drawer), the
+actor's name (database roles read as «System» or «Selvbetjent kjøp») and the changed
+fields with translated labels; a disclosure shows each changed field's formatted
+before and after values. Staff never see row ids, record keys, role names or JSON. There
 is no contact search. Movements, orders, counts and checkout recovery live on their
 own screens.
 
@@ -323,7 +334,7 @@ An existing confirmed account keeps its password and can sign in immediately
 after access is granted. Email delivery failure keeps the saved membership and
 offers a delivery retry; it does not claim the invitation was sent.
 
-Deactivation is confirmed within the existing row and preserves its audit history.
+Deactivation is confirmed in an alert dialog and preserves its audit history.
 The database forbids self-deactivation and serializes membership changes, so two
 admins cannot deactivate each other concurrently and leave nobody able to sign in.
 Pending commands keep their original actor, request ID and exact payload for retry.

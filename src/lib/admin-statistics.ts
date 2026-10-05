@@ -1,5 +1,6 @@
 import { identifier, object, text, type Fetcher } from './api';
 import { staffRequest, type StaffSession } from './admin-api';
+import { normalizeDecimal, shiftDecimal } from './decimal';
 
 export type SalesSummary = { sale_count: string; total_nok: string; quantity: string | null };
 export type SalesDay = SalesSummary & { date: string };
@@ -14,6 +15,25 @@ export type AdminStatistics = {
 		open_counts: { id: string; title: string; started_at: string }[];
 	};
 };
+
+/** Exact axis values; only the bounded SVG coordinates become numbers. */
+export function salesAxis(values: string[], wholeUnits = true): { points: number[]; maximum: string; ticks: { point: number; value: string }[] } {
+	const normalized = values.map(value => normalizeDecimal(value));
+	const scale = wholeUnits ? 0 : Math.max(0, ...normalized.map(value => value.split('.')[1]?.length ?? 0));
+	const integers = normalized.map(value => BigInt(shiftDecimal(value, scale)));
+	if (integers.some(value => value < 0n)) throw new RangeError('NEGATIVE_SALES');
+	const peak = integers.reduce((max, value) => value > max ? value : max, 0n);
+	const target = (peak + 3n) / 4n || 1n;
+	const magnitude = 10n ** BigInt(target.toString().length - 1);
+	const step = [1n, 2n, 5n, 10n].map(multiplier => multiplier * magnitude).find(value => value >= target)!;
+	const count = Number((peak + step - 1n) / step > 2n ? (peak + step - 1n) / step : 2n);
+	const ceiling = BigInt(count) * step;
+	return {
+		points: integers.map(value => Number(value * 1000n / ceiling)),
+		maximum: shiftDecimal(String(peak), -scale),
+		ticks: Array.from({ length: count + 1 }, (_, index) => ({ point: Number(BigInt(index) * step * 1000n / ceiling), value: shiftDecimal(String(BigInt(index) * step), -scale) }))
+	};
+}
 
 function decimal(value: unknown, scale: number, signed = false): string {
 	if (typeof value !== 'string' || value.length > 1000

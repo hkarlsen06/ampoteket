@@ -73,7 +73,7 @@
 		data-side={side}
 		data-slot="sidebar"
 	>
-		<!-- Sticky within the admin shell: the site footer remains reachable. -->
+		<!-- Sticky within the admin shell, below the site header. -->
 		<div
 			data-slot="sidebar-container"
 			data-side={side}

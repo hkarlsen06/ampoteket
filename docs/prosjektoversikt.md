@@ -107,11 +107,12 @@ labels always use the Norwegian, unprefixed address.
 | `/p/[code]` | Product page and QR target, e.g. `/p/RES-A3F09` ([page-product.md](page-product.md)) |
 | `/cart` | The cart ([page-cart.md](page-cart.md)) |
 | `/checkout/[id]` | Saved checkout, Vipps instructions, registration and retry ([page-checkout.md](page-checkout.md)) |
-| `/contact` | Contact us: the Discord invite, then volunteer contacts maintained at `/admin/help`. Linked from the header menu and footer; `/help` redirects here (posters and sent receipts). No page doc: [website-guide.md §4.5](website-guide.md#45-help-when-registration-cannot-be-completed), [volunteer directory protocol](api-contract.md#public-volunteer-directory), [`help_contacts`](datamodell.md#help_contacts) |
+| `/contact` | Contact us: the Discord invite, then volunteer contacts maintained at `/admin/contacts`. Linked from the header menu and footer; `/help` redirects here (posters and sent receipts). No page doc: [website-guide.md §4.5](website-guide.md#45-help-when-registration-cannot-be-completed), [volunteer directory protocol](api-contract.md#public-volunteer-directory), [`help_contacts`](datamodell.md#help_contacts) |
 | `/privacy` | What buyers' data the shop stores, where, and how to have contact details deleted; linked from the footer |
 | `/admin` | Overview, statistics, products, shelf, counts, labels, stock corrections, audit ([page-admin-stock.md](page-admin-stock.md), [page-labels.md](page-labels.md)) |
 | `/admin/orders` | Orders and receipts ([page-admin-orders.md](page-admin-orders.md)) |
-| `/admin/help` | Edit, publish and reorder the `/contact` volunteer list (same documents as `/contact`) |
+| `/admin/purchases` | Find a purchase by its support reference, register an unregistered one and erase the buyer's contact detail ([website-guide.md](website-guide.md#57-checkout-recovery-and-contact-erasure)) |
+| `/admin/contacts` | Edit, publish and reorder the `/contact` volunteer list (same documents as `/contact`) |
 | `/admin/admins` | Invite, list, reactivate and deactivate admins ([website-guide.md](website-guide.md#59-admin-access)) |
 | `POST /api/checkouts/…` | Worker-only checkout endpoints. Browsers never call the checkout RPCs directly. |
 | `POST /api/admin/invitations` | Authenticated staff invitations ([api-contract.md](api-contract.md#staff-membership-and-invitations)) |

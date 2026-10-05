@@ -48,8 +48,10 @@ Keep these when comparing with or updating from upstream:
 - **`ButtonLabel`** reserves idle and pending label sizes in overlapping grid cells;
   only the active label is exposed. `reserveLabels` covers save/retry alternatives.
 - **`Badge`** is a `rounded-sm` chip (never a pill), `text-sm`, with `success`/`warning` variants.
-  **`Alert`** has `warning`, `appearance="inline"` and `Alert.Message` (keeps the
-  caller's announcement semantics). **`Empty.Root`** is start-aligned by default.
+  **`Alert`** has `warning`, `appearance="inline"` and `Alert.Message`
+  (neither `Alert` part sets a `role`: leave it off inside a `formStatus` live region
+  and for static text, pass `role="alert"` for a dynamic error outside one; see
+  design-system.md). **`Empty.Root`** is start-aligned by default.
 - **`Separator`** is decorative by default (`decorative={false}` for a meaningful
   break), with no extra margin. `Item.Group` removes gaps around direct
   `Item.Separator` children. `Item.Title`/`Description` wrap without line clamping.
@@ -72,7 +74,7 @@ Keep these when comparing with or updating from upstream:
   contained, focusable scroll region between the title and actions. Supply its
   localized `aria-label` or `aria-labelledby`; this names the wrapper so the warning
   text still supplies the dialog's accessible description.
-- **`Sidebar`:** below 48rem the upstream mobile branch uses our shared `Dialog` as a
+- **`Sidebar`:** menu rows keep 44 px touch targets and shrink to 36 px only for a fine pointer, so the grouped admin navigation fits a 900 px tall laptop screen; below 48rem the upstream mobile branch uses our shared `Dialog` as a
   left sheet with localized title/close. `Sidebar.Content` is the named navigation
   scroll region (`overflow-y-auto overscroll-contain`).
 - **`Command`/`Popover`** (admin order product combobox): search input on the shared

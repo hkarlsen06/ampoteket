@@ -213,7 +213,9 @@ try {
   await expect(page.getByText(m.selectedDrawers(492), { exact: true })).toBeVisible();
   console.log('PASS: whole cabinets, inclusive Shift mouse/keyboard ranges, drawer drill-down, partial states and empty drawers');
   await expect(page.getByLabel(fieldLabel(m.includeUnplaced))).toBeChecked();
-  await expect(page.getByText(m.summary(30, 2), { exact: true })).toBeVisible();
+  await expect(page.getByText(m.summary(30, 2), { exact: true }).and(page.locator('p'))).toBeVisible();
+  // The same summary is announced from the polite live region as screen-reader text.
+  await expect(page.locator('[aria-live="polite"] .sr-only').getByText(m.summary(30, 2), { exact: true })).toHaveCount(1);
   await page.getByLabel(fieldLabel(`${m.width} (mm)`)).fill('45');
   const widthControl = page.getByLabel(fieldLabel(`${m.width} (mm)`));
   await widthControl.focus();
@@ -223,10 +225,10 @@ try {
   const resumed = page.waitForResponse(response => response.url().startsWith(`${api.origin}/rest/v1/amp_products?`) && response.ok());
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await resumed;
-  await expect(page.getByText(m.summary(30, 2), { exact: true })).toBeVisible();
+  await expect(page.getByText(m.summary(30, 2), { exact: true }).and(page.locator('p'))).toBeVisible();
   await expect(widthControl).toBeFocused();
   await page.getByLabel(fieldLabel(m.includeUnplaced)).uncheck();
-  await expect(page.getByText(m.summary(29, 1), { exact: true })).toBeVisible();
+  await expect(page.getByText(m.summary(29, 1), { exact: true }).and(page.locator('p'))).toBeVisible();
   expect(requests.filter(url => /\.wasm(?:\?|$)|Lato-Regular/.test(url) || exportChunks.has(new URL(url).pathname))).toEqual([]);
   await page.getByRole('button', { name: m.generate, exact: true }).click();
   const download = page.getByRole('link', { name: m.download, exact: true });
@@ -266,10 +268,10 @@ try {
   await page.getByLabel(fieldLabel(`${m.width} (mm)`)).fill('45');
   await clear.click();
   await drawers.getByRole('button', { name: 'A1', exact: true }).click();
-  await expect(page.getByText(m.summary(3, 1), { exact: true })).toBeVisible();
+  await expect(page.getByText(m.summary(3, 1), { exact: true }).and(page.locator('p'))).toBeVisible();
   await page.getByRole('button', { name: m.generate, exact: true }).click();
   await expect(download).toBeVisible();
-  await expect(page.getByText(m.summary(3, 1), { exact: true })).toBeVisible();
+  await expect(page.getByText(m.summary(3, 1), { exact: true }).and(page.locator('p'))).toBeVisible();
   await page.getByRole('button', { name: m.generate, exact: true }).click();
   await expect(page.getByText(m.ready(3, 1, 4, 5), { exact: true })).toBeVisible();
   const repeatedDownload = page.waitForEvent('download');
@@ -351,7 +353,7 @@ try {
     await geometry.getByRole('button', { name: copy.cabinet('A1'), exact: true }).click();
     expect(await geometry.getByRole('heading', { name: copy.cabinet('A1'), exact: true }).evaluate(element => element.getBoundingClientRect().top + window.scrollY)).toBeCloseTo(top, 2);
     await geometry.getByRole('group', { name: copy.cabinet('A1'), exact: true }).getByRole('button', { name: 'A1', exact: true }).click();
-    await expect(geometry.getByText(copy.summary(3, 1), { exact: true })).toBeVisible();
+    await expect(geometry.getByText(copy.summary(3, 1), { exact: true }).and(geometry.locator('p'))).toBeVisible();
     const widthInput = geometry.getByLabel(fieldLabel(`${copy.width} (mm)`));
     await widthInput.focus(); await geometry.keyboard.press('Tab'); await geometry.keyboard.press('Shift+Tab');
     expect(await geometry.evaluate(() => { const element = document.activeElement!; return element.matches(':focus-visible') && parseFloat(getComputedStyle(element.closest('[data-slot="input-group"]') ?? element).outlineWidth) >= 2; })).toBe(true);

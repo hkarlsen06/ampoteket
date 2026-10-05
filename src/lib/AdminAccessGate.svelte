@@ -18,7 +18,7 @@
 <!-- Dialog portals escape the admin layout's inert boundary. Keep recovery in the dialog. -->
 {#if active && admin.status !== 'ready'}
 	<div class="mb-4 grid justify-items-start gap-2">
-		<Alert.Message appearance="inline" variant="destructive" role="status">{i18n.m.admin.unavailable}</Alert.Message>
+		<Alert.Message appearance="inline" variant="destructive" role="alert">{i18n.m.admin.accessUnavailable}</Alert.Message>
 		<Button type="button" variant="outline" disabled={checking || admin.status === 'loading'} onclick={retry}><ButtonLabel pending={checking || admin.status === 'loading'} pendingLabel={i18n.m.admin.loading} label={i18n.m.admin.retry} /></Button>
 	</div>
 {/if}

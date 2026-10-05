@@ -1,12 +1,20 @@
 import { expect, test } from 'bun:test';
 import { memory } from './test-storage';
 import { ApiError } from './api';
+import { formatMoney } from './format';
 import { readProductSpecificationReview, replaceReviewedProductCommand, clearProductCommand, definitiveProductFailure, ProductSpecificationsError, executeDetailCommand, executeProductCommand, generateCategoryProductCode, generateProductCode, isProductCodeCollision, parseAdminProduct, parseAttribute, parseProductWrite, persistProductCommand, ProductFieldError, productCategoryOptions, productTypes, readAdminProducts, readProductAttributes, readProductCommand, StaleProductError, type ProductCommand, type ProductWrite } from './admin-products';
 const actor = '11111111-1111-4111-8111-111111111111'; const id = '22222222-2222-4222-8222-222222222222'; const bin = '33333333-3333-4333-8333-333333333333';
 const attribute = '44444444-4444-4444-8444-444444444444';
 const session = { userId: actor, token: 'staff-jwt', config: { url: 'https://fixture.invalid', publishableKey: 'sb_publishable_fixture' } };
 const payload: ProductWrite = { id, code: 'RES-A3F09', name_nb: 'Motstand', name_en: 'Resistor', description: null, category_id: null, bin_id: bin, location_note: null, unit_code: 'pcs', stock_step: '1', sale_step: '1', sale_unit_price_nok: '999999999998.999999', minimum_stock: '0', datasheet_url: null, purchase_url: null, is_active: true };
 const product = { ...payload, metadata_revision: '9007199254740993' };
+test('unit price display pads to two decimals and preserves sub-øre precision in both languages', () => {
+	for (const [stored, nb, en] of [['1.5', '1,50 kr', '1.50 NOK'], ['0.275', '0,275 kr', '0.275 NOK'], ['0', '0,00 kr', '0.00 NOK']]) {
+		const price = parseProductWrite({ ...payload, sale_unit_price_nok: stored }).sale_unit_price_nok;
+		expect(formatMoney(price, 'nb')).toBe(nb);
+		expect(formatMoney(price, 'en')).toBe(en);
+	}
+});
 test('product boundary keeps exact prices and opaque revisions and enforces steps, identity and active placement', () => {
 	expect(parseAdminProduct(product)).toEqual(product);
 	for (const change of [{ stock_step: '0' }, { unit_code: 'pcs', sale_step: '0.5' }, { stock_step: '2', sale_step: '3' }, { sale_unit_price_nok: '0.0000001' }, { sale_unit_price_nok: 1 }, { location_note: 'Filamenthylla' }, { datasheet_url: 'javascript:alert(1)' }, { metadata_revision: Number.MAX_SAFE_INTEGER + 1 }]) expect(() => parseAdminProduct({ ...product, ...change })).toThrow();

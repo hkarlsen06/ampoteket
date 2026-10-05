@@ -358,7 +358,7 @@
 					<!-- svelte-ignore a11y_no_noninteractive_tabindex (the named scroll region must be keyboard-scrollable) -->
 					<div class={[sheetBody, 'filter-dialog-body grid gap-5']} role="region" tabindex="0" aria-label={m.filterOptions}>
 					{#if facetsLoading}<p role="status" class="sr-only">{m.loadingFilters}</p>{/if}
-					{#if facetsFailed}<div class="grid justify-items-start gap-3"><Alert.Message appearance="inline" variant="destructive">{m.filtersUnavailable}</Alert.Message><Button variant="outline" onclick={() => facetsCycle++}>{m.retry}</Button></div>{/if}
+					{#if facetsFailed}<div class="grid justify-items-start gap-3"><Alert.Message role="alert" appearance="inline" variant="destructive">{m.filtersUnavailable}</Alert.Message><Button variant="outline" onclick={() => facetsCycle++}>{m.retry}</Button></div>{/if}
 					<Field.Set class="gap-3" disabled={facetsLoading || facetsFailed}>
 						<Field.Legend class="mb-0">{m.category}</Field.Legend>
 						<div class="grid gap-0 md:grid-cols-2 md:gap-x-6">
@@ -404,7 +404,7 @@
 					{#if topologyLoading && !topology}<p role="status" class="sr-only">{i18n.m.shelfMap.loading}</p>{/if}
 					{#if topologyFailed}
 						<div class="grid justify-items-start gap-3">
-							<Alert.Message appearance="inline" variant="destructive">{i18n.m.shelfMap.unavailable}</Alert.Message>
+							<Alert.Message role="alert" appearance="inline" variant="destructive">{i18n.m.shelfMap.unavailable}</Alert.Message>
 							<Button variant="outline" onclick={() => topologyCycle++}>{m.retry}</Button>
 						</div>
 					{/if}
@@ -455,8 +455,8 @@
 	<!-- Takes no space until a read fails. After the results, so a failed next page
 	is reported where the reader is and nothing above them moves. -->
 	<div class={formStatus} role="status" aria-live="polite" aria-atomic="true">
-		{#if queryError}<Alert.Message appearance="inline" variant="destructive" role={undefined}>{m.errors[queryError]}</Alert.Message>
-		{:else if unavailable}<Alert.Message appearance="inline" variant="destructive" role={undefined}>{displayed.length ? m.previousRead : m.unavailable}</Alert.Message>{/if}
+		{#if queryError}<Alert.Message appearance="inline" variant="destructive">{m.errors[queryError]}</Alert.Message>
+		{:else if unavailable}<Alert.Message appearance="inline" variant="destructive">{displayed.length ? m.previousRead : m.unavailable}</Alert.Message>{/if}
 	</div>
 	{#if unavailable}<Button variant="outline" class="no-js:hidden" onclick={refresh} disabled={loading}>{m.retry}</Button>{/if}
 	<nav class="pagination mt-8 flex min-h-12 flex-wrap items-center gap-4" aria-label={m.pagination} bind:this={pagination}>

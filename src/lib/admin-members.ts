@@ -77,3 +77,19 @@ export function memberErrorCode(error: unknown): string | null {
 	const value = error.body.error ?? error.body.message;
 	return typeof value === 'string' ? value.split(':')[0] : null;
 }
+
+/** What staff are told. The server and database codes differ, but a person needs only the consequence. */
+export type MemberFailure = 'emailFailed' | 'rateLimited' | 'invalidInput' | 'notFound' | 'conflict' | 'superseded' | 'self';
+const failures: Record<string, MemberFailure> = {
+	INVITATION_EMAIL_FAILED: 'emailFailed', RATE_LIMITED: 'rateLimited',
+	INVALID_ADMIN_INVITATION: 'invalidInput', STAFF_EMAIL_REQUIRED: 'invalidInput', STAFF_DISPLAY_NAME_REQUIRED: 'invalidInput',
+	STAFF_NOT_FOUND: 'notFound', STAFF_USER_NOT_FOUND: 'notFound',
+	IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_INPUT: 'conflict',
+	INVITATION_SUPERSEDED: 'superseded', STAFF_SELF_DEACTIVATION: 'self'
+};
+/** Null means the outcome is unknown (transport failure or an unlisted code), so the saved command stays for retry. */
+export function memberFailure(error: unknown): MemberFailure | null {
+	return failures[memberErrorCode(error) ?? ''] ?? null;
+}
+/** The server definitively refused these: retrying the same command cannot succeed. */
+export const retryableMemberFailures: readonly MemberFailure[] = ['emailFailed', 'rateLimited'];

@@ -318,6 +318,14 @@ state indicators and artwork stay borders. **A failed load** is one pattern
 everywhere (and never renders as zero stock): an inline destructive `Alert.Message` followed by an outline Retry
 (outside any live region), keeping previous content. A pending change that must be
 finished first is an inline `Alert.Message` followed by a `link` resume button.
+**Announcements:** a form's results sit in one `formStatus` element with
+`aria-live="polite"`; `Alert.Message` and `Alert.Root` set no `role` by default, so
+a message inside that region is announced once. A dynamic error shown outside any
+live region (a failed load, a scan result) passes `role="alert"`; static text present
+at render takes none. `Field.Error` keeps its `role="alert"` default for a standalone
+field error and takes `role={undefined}` inside a live region. Never put `role="status"`
+on an alert or inside a live region. Routine success is a one-word
+`StateBadge tone="success"` in that region, not a sentence ([i18n.md §7](i18n.md#7-admin-vocabulary)).
 
 **Disclosure and dialogs:** `Collapsible` with `DisclosureTrigger` for content that
 grows below its trigger, including inline confirmations and row edits (no native
@@ -326,7 +334,7 @@ close, bounded height, named `sheetBody`) are in
 [`ui/README.md`](../src/lib/components/ui/README.md). Product comboboxes fit the
 popover's available height, retaining the search field above a shrinking result
 list. Keep Escape, outside interaction, return focus and in-flight guards. Destructive or irreversible actions
-(archiving, cancelling an order, finishing a count, clearing contacts) confirm with
+(archiving, cancelling an order, finishing a count, deactivating an admin, clearing contacts) confirm with
 `AlertDialog`. An acknowledged shelf swap shows a localized `Sonner` toast;
 cancelled or uncertain requests do not.
 
@@ -347,8 +355,14 @@ Icon buttons have an accessible name and a matching `Tooltip`. The current link 
 `aria-current` and a shape cue (border, or a thick underline in the language
 picker), never colour alone. Admin appears only after an active membership check and
 never moves the catalog link. The cart's neutral count badge appears only when it has
-lines («?» when unreadable) and overlaps the icon so nothing moves. The admin
-`Sidebar` is a modal sheet below 48rem and a collapsible rail above; behaviour in
+lines («?» when unreadable) and overlaps the icon so nothing moves. **On `/admin/**` the
+header keeps the same sticky row and height but holds only the wordmark and a menu with
+the language picker: no buyer, social or Admin links, no scanner and no public footer,
+so the staff workspace has one frame.** The admin `Sidebar` is a modal sheet below
+48rem and a collapsible rail above; its entries are grouped by job under group labels
+(daily work, shelf and labels, reports, help and access; a hairline replaces the labels
+in the icon rail), and the breadcrumb shows only the section and the page inside it so
+it stays on one line at 360 px. Behaviour in
 [page-admin-stock.md](page-admin-stock.md#overview-and-statistics).
 
 **Bin label:** a depicted label is an export from the real print renderer

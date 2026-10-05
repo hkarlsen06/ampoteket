@@ -3,7 +3,7 @@ import { allStaffRows, staffRequest, type StaffSession } from './admin-api';
 import { readCountInventory, type InventorySnapshot } from './admin-counts';
 import { compareDecimals, normalizeDecimal, validQuantity } from './decimal';
 
-export type StockProduct = { id: string; code: string; name_nb: string; name_en: string; unit_code: string; stock_step: string; is_active: boolean };
+export type StockProduct = { id: string; code: string; name_nb: string; name_en: string; unit_code: string; stock_step: string; minimum_stock: string; is_active: boolean };
 export type StockMovement = { id: string; eventId: string; delta: string; kind: string; note: string | null; at: string; actor: string | null; corrects: string | null; orderLineId: string | null; orderId: string | null; received: string | null; outstanding: string | null };
 export type StockCount = { eventId: string; revision: string; expected: string; quantity: string; at: string; actor: string | null; note: string | null };
 export type StockDetail = { stock: InventorySnapshot; movements: StockMovement[]; counts: StockCount[] };
@@ -48,10 +48,10 @@ async function allBigintRows(session: StaffSession, view: string, select: string
 }
 
 export async function readStockProducts(session: StaffSession, fetcher: Fetcher = fetch): Promise<StockProduct[]> {
-	return (await allStaffRows(session, 'amp_products', 'id,code,name_nb,name_en,unit_code,stock_step,is_active', 'id', {}, fetcher)).map(value => {
+	return (await allStaffRows(session, 'amp_products', 'id,code,name_nb,name_en,unit_code,stock_step,minimum_stock,is_active', 'id', {}, fetcher)).map(value => {
 		const row = object(value), code = text(row.code, 40), unit = text(row.unit_code, 24), step = decimal(row.stock_step);
 		if (!/^[A-Z0-9][A-Z0-9-]{0,39}$/.test(code) || !/^[a-z][a-z0-9_]{0,23}$/.test(unit) || compareDecimals(step, '0') <= 0 || typeof row.is_active !== 'boolean') throw new Error('Invalid stock product');
-		return { id: identifier(row.id), code, name_nb: text(row.name_nb, 200), name_en: text(row.name_en, 200), unit_code: unit, stock_step: step, is_active: row.is_active };
+		return { id: identifier(row.id), code, name_nb: text(row.name_nb, 200), name_en: text(row.name_en, 200), unit_code: unit, stock_step: step, minimum_stock: decimal(row.minimum_stock), is_active: row.is_active };
 	}).sort((a, b) => a.code.localeCompare(b.code));
 }
 

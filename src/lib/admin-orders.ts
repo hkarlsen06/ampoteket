@@ -1,6 +1,8 @@
 import { ApiError, identifier, object, text, type Fetcher } from './api';
 import { allStaffRows, staffRequest, type StaffSession } from './admin-api';
 import { addDecimals, compareDecimals, normalizeDecimal } from './decimal';
+import { productName } from './catalog';
+import { messagesFor, type Locale } from './i18n';
 
 export type OrderProduct = { id: string; code: string; name_nb: string; name_en: string; unit_code: string; stock_step: string; minimum_stock: string; is_active: boolean; purchase_url: string | null };
 export type Order = { id: string; requestId: string; supplierName: string; supplierReference: string | null; placedAt: string; additionalCostNok: string; note: string | null; createdBy: string; recordedAt: string; lineCount: number; openLineCount: number };
@@ -10,6 +12,10 @@ export type OrderActor = { id: string; name: string };
 export type ReceiptMovement = { id: string; eventId: string; productId: string; quantityDelta: string; orderLineId: string | null };
 export type OrderReceipt = { id: string; requestId: string | null; kind: 'receipt' | 'adjustment'; actorId: string; purchaseOrderId: string | null; note: string | null; occurredAt: string; recordedAt: string; movements: ReceiptMovement[] };
 export type OrderDetail = { order: Order | null; lines: OrderLine[]; products: OrderProduct[]; actors: OrderActor[]; cancellations: OrderCancellation[]; receipts: OrderReceipt[] };
+
+export function orderProductName(product: OrderProduct | undefined, locale: Locale): string {
+	return product ? productName(product, locale) : messagesFor(locale).adminOrders.unknownProduct;
+}
 
 export type OrderCommand = { userId: string; requestId: string } & (
 	{ kind: 'create'; supplierName: string; placedAt: string; additionalCostNok: string; supplierReference: string | null; note: string | null; items: { productId: string; quantity: string; unitCostNok: string; purchaseUrl: string | null; supplierSku: string | null }[] }
@@ -125,7 +131,7 @@ export async function readOrders(session: StaffSession, fetcher: Fetcher = fetch
 		if (compareDecimals(decimal(row.outstanding_quantity), '0') > 0) order.openLineCount++;
 	}
 	if (result.some(order => order.lineCount < 1)) throw new Error('Incomplete order lines');
-	return result.sort((a, b) => b.placedAt.localeCompare(a.placedAt) || b.id.localeCompare(a.id));
+	return result.sort((a, b) => Number(b.openLineCount > 0) - Number(a.openLineCount > 0) || b.placedAt.localeCompare(a.placedAt) || b.id.localeCompare(a.id));
 }
 
 async function readReceiptMovements(session: StaffSession, allocations: { movementId: string; orderLineId: string }[], fetcher: Fetcher): Promise<OrderReceipt[]> {

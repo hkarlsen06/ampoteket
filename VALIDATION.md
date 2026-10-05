@@ -12,16 +12,16 @@ below are local runs, not CI claims.
 
 | Check | Last run | Result | Covers |
 | --- | --- | --- | --- |
-| `bun run check`, `bun run check:scripts`, `bun run lint` | 2026-10-03 | PASS, 0 errors/warnings | Types, scripts, lint |
-| `bun run build` | 2026-10-02 | PASS | Production SvelteKit/Cloudflare bundle with the audit fixes |
-| `bun test` | 2026-10-03 | PASS, 243 tests, 2,021 assertions | Unit tests, including CI/deploy failures, HTTPS headers, seed cleanup ownership, account-bound password changes, receipt retries and Discord deadlines/cooldowns |
+| `bun run check`, `bun run check:scripts`, `bun run lint` | 2026-10-05 | PASS, 0 errors/warnings | Types, scripts, lint |
+| `bun run build` | 2026-10-05 | PASS | Production SvelteKit/Cloudflare bundle with the admin professionalism fixes |
+| `bun test` | 2026-10-05 | PASS, 253 tests, 2,104 assertions | Unit tests, including CI/deploy failures, HTTPS headers, seed cleanup ownership, account-bound password changes, receipt retries and Discord deadlines/cooldowns |
 | `bun audit` | 2026-10-02 | PASS, no reported vulnerabilities | Resolved dependency tree |
 | `python3 scripts/test-check-clipped-ink.py`, `bun run check:ink` | 2026-10-02 | PASS | Checker regressions, static SVG checks |
-| `./scripts/test-database.sh` | 2026-10-02 | PASS | Seven migrations, rollback/retry, ACLs/RLS, acceptance, 12 stored-data corruption cases including drawer bounds/overlap, 42 concurrency scenarios including competing help-order writes, restore, schema/docs comparison, signed-JWT HTTP |
+| `./scripts/test-database.sh` | 2026-10-05 | PASS | Eight migrations, rollback/retry, ACLs/RLS, acceptance, 12 stored-data corruption cases including drawer bounds/overlap, 42 concurrency scenarios including competing help-order writes, restore, schema/docs comparison, signed-JWT HTTP |
 | GitHub Actions Validation | 2026-10-02 | PASS, all nine jobs on the deployed application revision `d2a5485` | Database and all eight browser modes; [release CI](https://github.com/hkarlsen06/ampoteket/actions/runs/36975296467) (scanner passed on rerun after a CI hang) |
 | GitHub Actions Deploy | 2026-10-02 | PASS, version `d1ffbf47-c54d-4f85-b555-b3c786f5883c` | First deploy from `.github/workflows/deploy.yml`: CI gate, reviewed vars/rate limits/secret names, HSTS, `/contact` and HTTP redirect checks by `deploy:production`; [run](https://github.com/hkarlsen06/ampoteket/actions/runs/36976781424) |
 | Hosted release verification | 2026-10-02 | PASS | Reviewed vars/rate limits/secret names; 25 HTTP checks across both locales, HTTP/www redirects, HSTS, private admin/checkout headers, closed sales; persisted error logs with query redaction and invocation logs off |
-| Actual-snapshot migration rehearsal | 2026-10-02 | PASS | Private hosted checkpoint restored locally with owners/ACLs; all 51 app/Auth table hashes and three sequences unchanged by the CLI migration; prior six history rows unchanged, one new row; permissions, protections and invariants passed. Owned container removed. This is not the full hosted recovery drill |
+| Actual-snapshot migration rehearsal | 2026-10-05 | PASS | Private hosted checkpoint restored locally with owners/ACLs; all 51 app/Auth table hashes and three sequences unchanged by the CLI migration of `20261004000100`; prior seven history rows unchanged, one new row; permissions, protections and invariants passed. Owned container removed. This is not the full hosted recovery drill |
 | Audit fix browser acceptance | 2026-10-02 | PASS | Real disposable Auth/PostgREST: active unplaced product in shelf/count picker; invitation password save and independent sign-in; cross-tab account switch removes password form and preserves both passwords; help reorder/focus, stale rejection and retry. No overflow at 360 px (password/help) or 1280 px (shelf/count). Owned seed and dev server removed after verification |
 | `./scripts/test-web.sh` | 2026-10-01 | PASS | Real local Auth, public/staff/Worker boundaries, exact decimal transport |
 | `./scripts/test-web.sh --shop` | 2026-10-01 | PASS | Lifecycle freshness, retained drafts, invalid saved quantities, removal focus, mobile drawer addresses |
@@ -61,6 +61,8 @@ Update this section whenever a migration changes (`sha256sum supabase/migrations
   `99c58f4e01fda5334d07698c889f40e9207fb302afd7687839215e22545af76c`
 - `20261002000100_guard_help_contact_order.sql`: SHA-256
   `884bc671e2ceec8c346a00121bf0168d346e716bdb0f7c4111b5bafde520d6dc`
+- `20261004000100_single_count_product.sql`: SHA-256
+  `25904328be34292b3a959f27b62018c3ac06a6ee12b4413c45c3ed09621148a2`
 
 24 app tables, four exact numeric domains, 30 public RPCs, 29 staff views and five
 internal derived views. All views are security invoker; only `public` is exposed.
@@ -103,19 +105,16 @@ the selected products. It is a regression check, not a hosted latency guarantee.
   cutover barrier and full hosted recovery drill remain open
   ([deploy](docs/runbook-deploy.md), [backup](docs/runbook-backup-restore.md)).
 - **Hosted migration and release:** with the owner's approval, CLI 2.116.0 applied
-  only `20261002000100_guard_help_contact_order.sql` at 03:48 UTC on 2026-10-02.
-  Linked history matches all seven local versions. The actual checkpoint was
-  taken at 03:45:41–49 UTC; its SHA-256 is
-  `665ebcceba4f78d440f8f2e153765a02e0882a5ee5c852bcb7dfe862b47b268f`.
-  The isolated rehearsal above passed before applying it. Public catalog and
-  directory response hashes are unchanged; the old one-argument signature now
-  returns `404 PGRST202`, and anonymous use of the guarded signature returns
-  `401 42501`. No test stock or accounts were created in production. This
-  function-only rollout did not require or exercise the global cutover barrier;
-  the hosted recovery drill remains open. The checkpoint contains one product,
-  two active admins and zero checkouts. Internal production SQL checks were not
-  rerun because the Supabase connector was unavailable. The matching frontend
-  is live; authenticated hosted editing/reordering still requires staff acceptance.
+  only `20261004000100_single_count_product.sql` at 13:08 UTC on 2026-10-05.
+  Linked history matches all eight local versions. The isolated rehearsal above
+  passed on a checkpoint taken minutes before; the checkpoint held zero products,
+  zero count batches and four staff rows, so the backfill changed nothing. Read-only
+  checks afterwards found `count_batches.product_id` and the matching
+  `amp_count_batches` column; `amp_record_single_count` keeps its signature and
+  stays closed to `anon`. The migration is additive, so the previous frontend kept
+  working until the matching one deployed. It did not require the global cutover
+  barrier; the hosted recovery drill remains open. Authenticated hosted counting
+  still requires staff acceptance.
 - **Repository and monitoring controls:** CI gating, deployment rollback, HTTPS
   and error-log changes are live. Provider settings confirm persisted logs with
   invocation logs off and query strings redacted. The reviewed native main-protection

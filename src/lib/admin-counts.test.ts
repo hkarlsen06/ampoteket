@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { memory } from './test-storage';
 import { ApiError } from './api';
-import { clearCountCommand, countBatchAccess, countCommandPath, countDifference, countRejection, countStorageKey, readCountBatches, readCountDetail, readCountCommand, readCountHistory, readCountInventory, runCountCommand, saveCountCommand, validCountQuantity, type CountBatch, type CountCommand } from './admin-counts';
+import { clearCountCommand, countBatchAccess, countCommandPath, countDifference, countRejection, formatSignedDifference, countStorageKey, readCountBatches, readCountDetail, readCountCommand, readCountHistory, readCountInventory, runCountCommand, saveCountCommand, validCountQuantity, type CountBatch, type CountCommand } from './admin-counts';
 
 const userId = '11111111-1111-4111-8111-111111111111';
 const productId = '22222222-2222-4222-8222-222222222222';
@@ -91,7 +91,7 @@ test('batch reads traverse capped pages, and ownership permits abandoned closure
 	const data = await readCountBatches(session, async (input) => {
 		const url = new URL(String(input)); const count = calls.get(url.pathname) ?? 0; calls.set(url.pathname, count + 1);
 		if (count) { expect(url.searchParams.get('and')).toBe(`(id.gt.${url.pathname.endsWith('amp_count_batches') ? batchId : userId})`); return Response.json([]); }
-		return Response.json(url.pathname.endsWith('amp_count_batches') ? [{ id: batchId, owner_id: userId, title: 'A1', started_at: '2026-09-20T10:00:00Z', finished_at: null, finished_by: null, finish_reason: null }] : [{ id: userId, auth_user_id: userId, display_name: 'First admin', is_active: true }]);
+		return Response.json(url.pathname.endsWith('amp_count_batches') ? [{ id: batchId, owner_id: userId, title: 'A1', product_id: null, started_at: '2026-09-20T10:00:00Z', finished_at: null, finished_by: null, finish_reason: null }] : [{ id: userId, auth_user_id: userId, display_name: 'First admin', is_active: true }]);
 	});
 	expect([...calls.values()]).toEqual([2, 2]);
 	const batch = data.batches[0]; const owner = data.owners[0];
@@ -100,6 +100,8 @@ test('batch reads traverse capped pages, and ownership permits abandoned closure
 	expect(countBatchAccess(batch, { ...owner, active: false }, productId)).toBe('abandoned');
 	expect(countBatchAccess(batch, { ...owner, authUserId: null }, productId)).toBe('abandoned');
 	expect(countBatchAccess({ ...batch, finishedAt: '2026-09-20T11:00:00Z' } as CountBatch, owner, userId)).toBe('finished');
+	expect(countBatchAccess(batch, undefined, productId)).toBe('other');
+	expect(batch.productId).toBeNull();
 });
 
 test('history continues through an empty page and preserves matching observations without a movement', async () => {
@@ -130,7 +132,7 @@ test('count detail limits batches and actors and fetches narrow search/history p
 				const view = url.pathname.split('/').at(-1);
 				if (view === 'amp_count_batches') {
 					expect(url.searchParams.get('id')).toBe(`eq.${batchId}`);
-					return Response.json([{ id: batchId, owner_id: userId, title: 'One batch', started_at: '2026-09-20T10:00:00Z',
+					return Response.json([{ id: batchId, owner_id: userId, title: 'One batch', product_id: null, started_at: '2026-09-20T10:00:00Z',
 						finished_at: finished ? '2026-09-20T11:00:00Z' : null, finished_by: finished ? userId : null, finish_reason: null }]);
 				}
 				if (view === 'amp_products') {
@@ -160,4 +162,25 @@ test('count detail limits batches and actors and fetches narrow search/history p
 		expect(requests.filter(url => url.pathname.endsWith('amp_count_batches'))).toHaveLength(1);
 		expect(requests.filter(url => url.pathname.endsWith('amp_products'))).toHaveLength(3);
 	}
+});
+
+test('a difference carries an explicit sign in both locales', () => {
+	expect(formatSignedDifference('2', 'nb')).toBe('+2');
+	expect(formatSignedDifference('-1500.5', 'en')).toBe('-1,500.5');
+	expect(formatSignedDifference('0', 'nb')).toBe('0');
+});
+
+test('count detail keeps the page readable when an owner or product row cannot be read', async () => {
+	const result = await readCountDetail(session, batchId, userId, { fetcher: async input => {
+		const view = new URL(String(input)).pathname.split('/').at(-1);
+		if (new URL(String(input)).searchParams.has('and')) return Response.json([]);
+		if (view === 'amp_count_batches') return Response.json([{ id: batchId, owner_id: eventId, title: 'LED-000AB', product_id: productId, started_at: '2026-09-20T10:00:00Z', finished_at: '2026-09-20T10:00:00Z', finished_by: eventId, finish_reason: null }]);
+		if (view === 'amp_stock_counts') return Response.json([{ event_id: eventId, batch_id: batchId, product_id: productId, expected_quantity: '5', counted_quantity: '6', expected_revision: '1' }]);
+		if (view === 'amp_inventory_events') return Response.json([{ id: eventId, kind: 'count', recorded_at: '2026-09-20T10:00:00Z', actor_id: eventId, note: null }]);
+		return Response.json([]);
+	} });
+	expect(result.batch?.productId).toBe(productId);
+	expect(result.owners).toEqual([]);
+	expect(result.products).toEqual([]);
+	expect(result.observations).toHaveLength(1);
 });

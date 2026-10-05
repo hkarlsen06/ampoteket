@@ -16,13 +16,14 @@
 	let staged = $state<ProductAttributeDraft[]>([]);
 	let review = $state<ProductSpecificationReview | null>(null);
 	let busy = $state(false); let failed = $state(false); let alive = true;
+	let storageFailed = $state(false);
 	let editor: { prepare(): boolean } | undefined;
 	const wrongIdentity = $derived(command.userId !== admin.session?.user.id);
 	const labels = $derived.by(() => { try { return standardSpecificationDefinitions(definitions); } catch { return definitions; } });
 	onMount(() => { staged = (command.attributes ?? []).map(value => ({ ...value })); return () => { alive = false; }; });
 	function label(value: AttributeValue) {
 		const definition = labels.find(item => item.id === value.attribute_id);
-		return definition ? `${specificationLabel(definition.code, definition, i18n.locale)}${definition.canonical_unit ? ` (${definition.canonical_unit})` : ''}` : value.attribute_id;
+		return definition ? `${specificationLabel(definition.code, definition, i18n.locale)}${definition.canonical_unit ? ` (${definition.canonical_unit})` : ''}` : m.unknownSpecification;
 	}
 	function display(value: AttributeValue) {
 		return value.number_value !== null ? formatDecimal(value.number_value, i18n.locale) : value.text_value !== null ? value.text_value : value.boolean_value ? m.yes : m.no;
@@ -32,30 +33,31 @@
 		const session = admin.credentials(); busy = true; failed = false;
 		try {
 			const current = await readProductSpecificationReview(session, command);
-			if (alive && session.userId === admin.session?.user.id) review = current;
+			if (alive && session.userId === admin.session?.user.id) { review = current; failed = false; }
 		} catch (error) { if (alive) failed = true; await admin.permissionFailure(error); }
 		finally { if (alive) busy = false; }
 	}
 	function confirm() {
-		if (disabled || busy || wrongIdentity || !review || admin.status !== 'ready' || !editor?.prepare()) return;
+		if (disabled || busy || wrongIdentity || failed || !review || admin.status !== 'ready' || !editor?.prepare()) return;
 		try {
 			const replacement = replaceReviewedProductCommand(sessionStorage, command, review, staged);
-			review = null; failed = false;
+			review = null; failed = false; storageFailed = false;
 			onreviewed(replacement);
-		} catch { failed = true; }
+		} catch { storageFailed = true; }
 	}
 </script>
 
 <div class="space-y-4">
-	<div class={formActions}><Button type="button" variant="outline" disabled={disabled || busy || wrongIdentity} onclick={load}><ButtonLabel pending={busy} pendingLabel={m.loading} label={m.reviewSpecifications} /></Button></div>
+	<div class={formStatus}>{#if failed}<Alert.Message appearance="inline" variant="destructive" role="alert">{m.unavailable}</Alert.Message>{/if}</div>
+	<div class={formActions}><Button type="button" variant="outline" disabled={disabled || busy || wrongIdentity} onclick={load}><ButtonLabel pending={busy} pendingLabel={m.loading} label={failed ? m.retry : m.reviewSpecifications} reserveLabels={[m.retry, m.reviewSpecifications]} /></Button></div>
 	{#if review}
-		<Alert.Message appearance="inline" role="status">{m.specificationMetadataKept}</Alert.Message>
-		<h3 class={sectionHeading}>{m.currentValues}</h3>
+		<Alert.Message appearance="inline">{m.specificationMetadataKept}</Alert.Message>
+		<h2 class={sectionHeading}>{m.currentValues}</h2>
 		{#if review.attributes.length}
 			<dl class="grid gap-4 md:grid-cols-2 lg:grid-cols-3 [&_dt]:text-muted-foreground [&_dd]:mt-1 [&_dd]:ml-0 [&_dd]:wrap-break-word">{#each review.attributes as value (value.attribute_id)}<div><dt>{label(value)}</dt><dd>{display(value)}</dd></div>{/each}</dl>
 		{:else}<Empty.Root><Empty.Description>{m.noAttributes}</Empty.Description></Empty.Root>{/if}
 	{/if}
-	<ProductAttributes bind:this={editor} productId={null} bind:definitions {family} bind:staged disabled={disabled || busy || wrongIdentity || !review} />
-	{#if review}<Button type="button" disabled={disabled || busy || wrongIdentity} onclick={confirm}>{m.saveReviewedSpecifications}</Button>{/if}
-	<div class={formStatus} aria-live="polite">{#if wrongIdentity}<Alert.Message appearance="inline" variant="destructive" role="status">{m.wrongIdentity}</Alert.Message>{:else if failed}<Alert.Message appearance="inline" variant="destructive" role="status">{m.failed}</Alert.Message>{/if}</div>
+	<ProductAttributes bind:this={editor} productId={null} bind:definitions {family} bind:staged disabled={disabled || busy || wrongIdentity || failed || !review} />
+	{#if review}<div class={formActions}><Button type="button" disabled={disabled || busy || wrongIdentity || failed} onclick={confirm}>{m.saveReviewedSpecifications}</Button></div>{/if}
+	<div class={formStatus} aria-live="polite">{#if wrongIdentity}<Alert.Message appearance="inline" variant="destructive">{m.wrongIdentity}</Alert.Message>{:else if storageFailed}<Alert.Message appearance="inline" variant="destructive">{m.storage}</Alert.Message>{/if}</div>
 </div>

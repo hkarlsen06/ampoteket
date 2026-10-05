@@ -1,6 +1,16 @@
 import { expect, test } from 'bun:test';
-import { readAdminStatistics } from './admin-statistics';
+import { readAdminStatistics, salesAxis } from './admin-statistics';
 import type { StaffSession } from './admin-api';
+
+test('sales axes show whole purchase counts with headroom and preserve exact quantities', () => {
+	expect(salesAxis(['0', '1'])).toEqual({ points: [0, 500], maximum: '1', ticks: [{ point: 0, value: '0' }, { point: 500, value: '1' }, { point: 1000, value: '2' }] });
+	expect(salesAxis(['0', '0.000001', '0.000002'], false)).toMatchObject({ points: [0, 500, 1000], maximum: '0.000002' });
+	expect(salesAxis(['9007199254740992', '9007199254740993'])).toMatchObject({ points: [900, 900], maximum: '9007199254740993' });
+	expect(salesAxis(['0.00', '0']).ticks.map(tick => tick.value)).toEqual(['0', '1', '2']);
+	expect(salesAxis(['12']).ticks.map(tick => tick.value)).toEqual(['0', '5', '10', '15']);
+	expect(() => salesAxis(['-1'])).toThrow('NEGATIVE_SALES');
+	expect(() => salesAxis(['1e3'])).toThrow('INVALID_DECIMAL');
+});
 
 test('statistics preserve exact strings and reject incomplete or mismatched reports', async () => {
 	const productId = '10000000-0000-4000-8000-000000000001';

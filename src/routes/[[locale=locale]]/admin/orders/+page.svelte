@@ -8,12 +8,13 @@
 	import { getAdminContext } from '#lib/admin-context.svelte.js';
 	import { compareDecimals, normalizeDecimal, validQuantity } from '#lib/decimal.js';
 	import { osloInstant, osloLocal, possibleOsloOffsets } from '#lib/oslo-time.js';
-	import { formatCountedAt, formatDecimal, unitLabel } from '#lib/format.js';
-	import { clearOrderCommand, orderCommandPath, orderRejection, orderStorageEvent, readOrderCommand, readOrderProducts, readOrders, readOutstandingByProduct, readUnplannedReceipts, runOrderCommand, saveOrderCommand, updateOrderStorage, type Order, type OrderCommand, type OrderProduct, type OrderReceipt } from '#lib/admin-orders.js';
+	import { currencySymbol, formatCountedAt, formatDecimal, unitLabel } from '#lib/format.js';
+	import { clearOrderCommand, orderProductName, orderCommandPath, orderRejection, orderStorageEvent, readOrderCommand, readOrderProducts, readOrders, readOutstandingByProduct, readUnplannedReceipts, runOrderCommand, saveOrderCommand, updateOrderStorage, type Order, type OrderCommand, type OrderProduct, type OrderReceipt } from '#lib/admin-orders.js';
 	import { compareAttention, readInventory, stockRank } from '#lib/admin-products.js';
 	import { Toggle, toggleVariants } from '#lib/components/ui/toggle/index.js';
 	import ListBulletsIcon from 'phosphor-svelte/lib/ListBulletsIcon';
 	import StockBadge from '#lib/StockBadge.svelte';
+	import StateBadge from '#lib/StateBadge.svelte';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
 	import TruckIcon from 'phosphor-svelte/lib/TruckIcon';
@@ -42,6 +43,8 @@
 	const blankLine = (): DraftLine => ({ key: crypto.randomUUID(), productId: '', quantity: '', unitCost: '', purchaseUrl: '', supplierSku: '' });
 	const fieldId = $props.id();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.adminOrders);
+	const orderPageSize = 20;
+	let visibleOrderCount = $state(orderPageSize);
 	let orders = $state<Order[]>([]); let products = $state<OrderProduct[]>([]); let unplanned = $state<OrderReceipt[]>([]);
 	let loaded = $state(false); let loading = $state(true); let failed = $state(false); let busy = $state(false); let storageReady = $state(false);
 	let mode = $state<'closed' | 'create' | 'receipt'>('closed'); let command = $state<OrderCommand | null>(null);
@@ -271,16 +274,16 @@
 </header>
 {#snippet entryStatus()}
 <div class={formStatus} aria-live="polite">
-	{#if !storageReady}<Alert.Message appearance="inline" variant="destructive" role="status">{m.storageUnavailable}</Alert.Message>
-	{:else if wrongIdentity}<Alert.Message appearance="inline" variant="destructive" role="status">{m.wrongIdentity}</Alert.Message>
-	{:else if pendingNotice}<Alert.Message appearance="inline" role="status">{m.pendingElsewhere}</Alert.Message>
-	{:else if outcome === 'unknown'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unknown}</Alert.Message>
-	{:else if outcome === 'conflict'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.conflict}</Alert.Message>
-	{:else if outcome === 'date'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.invalidDate}</Alert.Message>
-	{:else if outcome === 'ambiguous'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.ambiguousDate}</Alert.Message>
-	{:else if outcome === 'invalid'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.invalid}</Alert.Message>
-	{:else if outcome === 'recorded' || plannedRecorded}<Alert.Message appearance="inline" role="status">{m.receiptRecorded}</Alert.Message>{/if}
-	{#if failed && mode !== 'closed'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unavailable}</Alert.Message>{/if}
+	{#if !storageReady}<Alert.Message appearance="inline" variant="destructive">{m.storageUnavailable}</Alert.Message>
+	{:else if wrongIdentity}<Alert.Message appearance="inline" variant="destructive">{m.wrongIdentity}</Alert.Message>
+	{:else if pendingNotice}<Alert.Message appearance="inline">{m.pendingElsewhere}</Alert.Message>
+	{:else if outcome === 'unknown'}<Alert.Message appearance="inline" variant="destructive">{m.unknown}</Alert.Message>
+	{:else if outcome === 'conflict'}<Alert.Message appearance="inline" variant="destructive">{m.conflict}</Alert.Message>
+	{:else if outcome === 'date'}<Alert.Message appearance="inline" variant="destructive">{m.invalidDate}</Alert.Message>
+	{:else if outcome === 'ambiguous'}<Alert.Message appearance="inline" variant="destructive">{m.ambiguousDate}</Alert.Message>
+	{:else if outcome === 'invalid'}<Alert.Message appearance="inline" variant="destructive">{m.invalid}</Alert.Message>
+	{:else if outcome === 'recorded' || plannedRecorded}<StateBadge tone="success">{m.receiptRecorded}</StateBadge>{/if}
+	{#if failed && mode !== 'closed'}<Alert.Message appearance="inline" variant="destructive">{m.unavailable}</Alert.Message>{/if}
 </div>
 {#if pendingNotice === 'planned'}<Button type="button" variant="link" onclick={resumePlanned}>{m.resumePending}</Button>
 {:else if pendingNotice === 'other' && command}<Button variant="link" href={i18n.href(orderCommandPath(command))}>{m.resumePending}</Button>
@@ -310,7 +313,7 @@
 				<Field.Group layout="row">
 					<Field.Field width="medium"><Field.Label for={`${fieldId}-placed`}>{m.placedAt}</Field.Label><Input id={`${fieldId}-placed`} aria-invalid={invalidInput === `${fieldId}-placed`} aria-describedby={invalidInput === `${fieldId}-placed` ? `${fieldId}-placed`.concat('-error') : undefined} type="datetime-local" required bind:value={placedLocal} oninput={() => { offset = ''; placedEdited = true; }} disabled={frozen || busy} />{@render fieldError(`${fieldId}-placed`)}</Field.Field>
 						{#if offsets.length === 2}<Field.Field width="medium"><Field.Label for={`${fieldId}-offset`}>{m.offset}</Field.Label><NativeSelect.Root id={`${fieldId}-offset`} required bind:value={offset} onchange={() => { placedEdited = true; }} disabled={frozen || busy}><NativeSelect.Option value="">{m.chooseOffset}</NativeSelect.Option><NativeSelect.Option value="+02:00">{m.beforeClockChange}</NativeSelect.Option><NativeSelect.Option value="+01:00">{m.afterClockChange}</NativeSelect.Option></NativeSelect.Root></Field.Field>{/if}
-					<Field.Field width="medium"><Field.Label for={`${fieldId}-extra`}>{m.additionalCost} <span class="sr-only">(NOK)</span></Field.Label><InputGroup.Root><InputGroup.Input id={`${fieldId}-extra`} aria-invalid={invalidInput === `${fieldId}-extra`} aria-describedby={invalidInput === `${fieldId}-extra` ? `${fieldId}-extra`.concat('-error') : undefined} type="text" inputmode="decimal" required bind:value={additionalCost} disabled={frozen || busy} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>NOK</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{@render fieldError(`${fieldId}-extra`)}</Field.Field>
+					<Field.Field width="medium"><Field.Label for={`${fieldId}-extra`}>{m.additionalCost} <span class="sr-only">({currencySymbol(i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id={`${fieldId}-extra`} aria-invalid={invalidInput === `${fieldId}-extra`} aria-describedby={invalidInput === `${fieldId}-extra` ? `${fieldId}-extra`.concat('-error') : undefined} type="text" inputmode="decimal" required bind:value={additionalCost} disabled={frozen || busy} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{currencySymbol(i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{@render fieldError(`${fieldId}-extra`)}</Field.Field>
 				</Field.Group>
 				<Field.Field><Field.Label for={`${fieldId}-note`}>{m.note}</Field.Label><Textarea id={`${fieldId}-note`} rows={2} maxlength={2000} bind:value={note} disabled={frozen || busy} /></Field.Field>
 			{:else}
@@ -383,9 +386,9 @@
 						<Field.Group layout="row">
 							<OrderProductCombobox id={`${fieldId}-product-${line.key}`} error={invalidInput === `${fieldId}-product-${line.key}` ? invalidMessage : undefined} {products} bind:value={line.productId} oncreated={mode === 'create' ? (item) => { products = [...products.filter((value) => value.id !== item.id), item].sort((a, b) => a.code.localeCompare(b.code)); line.purchaseUrl ||= item.purchase_url ?? ''; } : undefined} disabled={frozen || busy || loading} />
 							<Field.Field width="short"><Field.Label for={`${fieldId}-qty-${line.key}`}>{m.quantity}{#if unit}<span class="sr-only">{` (${unit})`}</span>{/if}</Field.Label><InputGroup.Root><InputGroup.Input id={`${fieldId}-qty-${line.key}`} aria-invalid={invalidInput === `${fieldId}-qty-${line.key}`} aria-describedby={invalidInput === `${fieldId}-qty-${line.key}` ? `${fieldId}-qty-${line.key}`.concat('-error') : undefined} type="text" inputmode="decimal" required={index === 0 || lineFilled(line)} bind:value={line.quantity} disabled={frozen || busy} />{#if unit}<InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unit}</InputGroup.Text></InputGroup.Addon>{/if}</InputGroup.Root>{@render fieldError(`${fieldId}-qty-${line.key}`)}</Field.Field>
-							{#if mode === 'create'}<Field.Field width="medium"><Field.Label for={`${fieldId}-cost-${line.key}`}>{m.unitCost} <span class="sr-only">(NOK)</span></Field.Label><InputGroup.Root><InputGroup.Input id={`${fieldId}-cost-${line.key}`} aria-invalid={invalidInput === `${fieldId}-cost-${line.key}`} aria-describedby={invalidInput === `${fieldId}-cost-${line.key}` ? `${fieldId}-cost-${line.key}`.concat('-error') : undefined} type="text" inputmode="decimal" required={index === 0 || lineFilled(line)} bind:value={line.unitCost} disabled={frozen || busy} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>NOK</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{@render fieldError(`${fieldId}-cost-${line.key}`)}</Field.Field>{/if}
+							{#if mode === 'create'}<Field.Field width="medium"><Field.Label for={`${fieldId}-cost-${line.key}`}>{m.unitCost} <span class="sr-only">({currencySymbol(i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id={`${fieldId}-cost-${line.key}`} aria-invalid={invalidInput === `${fieldId}-cost-${line.key}`} aria-describedby={invalidInput === `${fieldId}-cost-${line.key}` ? `${fieldId}-cost-${line.key}`.concat('-error') : undefined} type="text" inputmode="decimal" required={index === 0 || lineFilled(line)} bind:value={line.unitCost} disabled={frozen || busy} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{currencySymbol(i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{@render fieldError(`${fieldId}-cost-${line.key}`)}</Field.Field>{/if}
 						</Field.Group>
-						{#if mode === 'create'}<Field.Group layout="row"><Field.Field width="grow"><Field.Label for={`${fieldId}-url-${line.key}`}>{m.purchaseUrl}</Field.Label><Input id={`${fieldId}-url-${line.key}`} aria-invalid={invalidInput === `${fieldId}-url-${line.key}`} aria-describedby={invalidInput === `${fieldId}-url-${line.key}` ? `${fieldId}-url-${line.key}`.concat('-error') : undefined} type="url" autocapitalize="none" enterkeyhint="go" maxlength={2000} bind:value={line.purchaseUrl} disabled={frozen || busy} />{#if openable(line.purchaseUrl)}<a class="w-fit text-sm" href={line.purchaseUrl.trim()} target="_blank" rel="noopener noreferrer" aria-describedby={`${fieldId}-line-${line.key}`}>{m.openPurchaseUrl}</a>{/if}{@render fieldError(`${fieldId}-url-${line.key}`)}</Field.Field><Field.Field width="medium"><Field.Label for={`${fieldId}-sku-${line.key}`}>{m.supplierSku}</Field.Label><Input id={`${fieldId}-sku-${line.key}`} maxlength={2000} bind:value={line.supplierSku} disabled={frozen || busy} /></Field.Field></Field.Group>{/if}
+						{#if mode === 'create'}<Field.Group layout="row"><Field.Field width="grow"><Field.Label for={`${fieldId}-url-${line.key}`}>{m.purchaseUrl}</Field.Label><Input id={`${fieldId}-url-${line.key}`} aria-invalid={invalidInput === `${fieldId}-url-${line.key}`} aria-describedby={invalidInput === `${fieldId}-url-${line.key}` ? `${fieldId}-url-${line.key}`.concat('-error') : undefined} type="url" autocapitalize="none" enterkeyhint="go" maxlength={2000} bind:value={line.purchaseUrl} disabled={frozen || busy} />{#if openable(line.purchaseUrl)}<Button variant="link" class="w-fit" href={line.purchaseUrl.trim()} target="_blank" rel="noopener noreferrer" aria-describedby={`${fieldId}-line-${line.key}`}>{m.openPurchaseUrl}</Button>{/if}{@render fieldError(`${fieldId}-url-${line.key}`)}</Field.Field><Field.Field width="medium"><Field.Label for={`${fieldId}-sku-${line.key}`}>{m.supplierSku}</Field.Label><Input id={`${fieldId}-sku-${line.key}`} maxlength={2000} bind:value={line.supplierSku} disabled={frozen || busy} /></Field.Field></Field.Group>{/if}
 						{#if !frozen && lines.length > 1 && (line.productId || index < lines.length - 1)}<Button type="button" variant="ghost" onclick={() => lines = lines.filter((item) => item.key !== line.key)} disabled={busy}>{m.removeLine}</Button>{/if}
 					</fieldset>
 				{/each}
@@ -394,7 +397,7 @@
 			</AdminAccessGate>
 		</div>
 		<Dialog.Footer variant="sheet">
-			<Button type="submit" form={`${fieldId}-order-form`} disabled={admin.status !== 'ready' || !storageReady || !loaded || loading || failed || busy || wrongIdentity || otherCommand}><ButtonLabel pending={busy} pendingLabel={m.working} label={frozen ? m.retrySame : mode === 'create' ? m.recordOrder : m.recordReceipt} reserveLabels={[m.retrySame, m.recordOrder, m.recordReceipt]} /></Button>
+			<Button type="submit" form={`${fieldId}-order-form`} disabled={admin.status !== 'ready' || !storageReady || !loaded || loading || failed || busy || wrongIdentity || otherCommand}><ButtonLabel pending={busy} pendingLabel={mode === 'create' ? m.saving : m.working} label={frozen ? mode === 'create' ? m.retryOrder : m.retryReceipt : mode === 'create' ? m.recordOrder : m.recordReceipt} reserveLabels={[m.retryOrder, m.retryReceipt, m.recordOrder, m.recordReceipt]} /></Button>
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>
@@ -402,11 +405,12 @@
 <section class={section({ spacing: 'divided' })} aria-labelledby="orders-heading">
 	<Separator />
 	<h2 class={sectionHeading} id="orders-heading">{m.orders}</h2>
-	{#if failed && mode === 'closed'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unavailable}</Alert.Message><Button type="button" variant="outline" disabled={loading} onclick={load}>{m.retry}</Button>{/if}
+	{#if failed && mode === 'closed'}<Alert.Message appearance="inline" variant="destructive" role="alert">{m.unavailable}</Alert.Message><Button type="button" variant="outline" disabled={loading} onclick={load}>{m.retry}</Button>{/if}
 	{#if loading && !loaded}<span class="sr-only" role="status">{m.loading}</span><div class="min-h-64 space-y-6" aria-hidden="true" aria-busy="true">{#each [1, 2, 3] as row (row)}<div class="space-y-3 py-3"><Skeleton class="h-6 w-2/3" /><Skeleton class="h-5 w-1/2" /></div>{/each}</div>{/if}
 	{#if loaded}
 		{#if !orders.length}<Empty.Root><Empty.Description>{m.empty}</Empty.Description></Empty.Root>{:else}
-			<Item.Group>{#each orders as order, index (order.id)}{#if index > 0}<Item.Separator />{/if}<Item.Root variant="row" role="listitem"><Item.Content class="min-w-0 basis-72"><Item.Title class={itemTitle}><a class="text-foreground no-underline hover:underline" href={i18n.href(`/admin/orders/${order.id}`)}>{order.supplierName}</a></Item.Title><Item.Description>{formatCountedAt(order.placedAt, i18n.locale)}{order.supplierReference ? ` · ${order.supplierReference}` : ''} · {m.openLines(order.openLineCount)}</Item.Description></Item.Content><Item.Actions><Button type="button" variant="outline" size="sm" aria-haspopup="dialog" disabled={Boolean(command && (command.kind !== 'receipt' || command.orderId !== order.id))} onclick={(event) => { orderReceiptTrigger = event.currentTarget; selectedOrderId = order.id; plannedRecorded = false; }}>{m.openReceipt}</Button></Item.Actions></Item.Root>{/each}</Item.Group>
+			<Item.Group>{#each orders.slice(0, visibleOrderCount) as order, index (order.id)}{#if index > 0}<Item.Separator />{/if}<Item.Root variant="row" role="listitem"><Item.Content class="min-w-0 basis-72"><Item.Title class={itemTitle}><a class="text-foreground no-underline hover:underline" href={i18n.href(`/admin/orders/${order.id}`)}>{order.supplierName}</a></Item.Title><Item.Description>{[formatCountedAt(order.placedAt, i18n.locale), order.supplierReference, order.openLineCount > 0 ? m.openLines(order.openLineCount) : null].filter(Boolean).join(' · ')}</Item.Description>{#if order.openLineCount === 0}<StateBadge>{m.completed}</StateBadge>{/if}</Item.Content>{#if order.openLineCount > 0}<Item.Actions><Button type="button" variant="outline" size="sm" aria-haspopup="dialog" disabled={Boolean(command && (command.kind !== 'receipt' || command.orderId !== order.id))} onclick={(event) => { orderReceiptTrigger = event.currentTarget; selectedOrderId = order.id; plannedRecorded = false; }}>{m.openReceipt}</Button></Item.Actions>{/if}</Item.Root>{/each}</Item.Group>
+			{#if visibleOrderCount < orders.length}<Button variant="outline" onclick={() => { visibleOrderCount += orderPageSize; }}>{m.showMore}</Button>{/if}
 		{/if}
 	{/if}
 </section>
@@ -415,6 +419,6 @@
 <section class={section({ spacing: 'divided' })} aria-labelledby="unplanned-heading">
 	<Separator />
 	<h2 class={sectionHeading} id="unplanned-heading">{m.unplannedHistory}</h2>
-	<Item.Group>{#each unplanned as receipt, index (receipt.id)}{#if index > 0}<Item.Separator />{/if}<Item.Root variant="row" role="listitem"><Item.Content class="min-w-0"><Item.Title class={itemTitle}>{receipt.note ?? m.unplannedHistory}</Item.Title><Item.Description>{formatCountedAt(receipt.occurredAt, i18n.locale)}</Item.Description><ul class="space-y-1 text-sm">{#each receipt.movements as movement (movement.id)}{@const product = products.find((item) => item.id === movement.productId)}<li class={nameWrap}>{#if product}<span class={codeText}>{product.code}</span> {productName(product, i18n.locale)}{:else}{movement.productId}{/if} · <span class="font-mono">{formatDecimal(movement.quantityDelta, i18n.locale)} {unitLabel(product?.unit_code, i18n.locale, movement.quantityDelta)}</span></li>{/each}</ul></Item.Content></Item.Root>{/each}</Item.Group>
+	<Item.Group>{#each unplanned as receipt, index (receipt.id)}{#if index > 0}<Item.Separator />{/if}<Item.Root variant="row" role="listitem"><Item.Content class="min-w-0"><Item.Title class={itemTitle}>{receipt.note ?? m.unplannedHistory}</Item.Title><Item.Description>{formatCountedAt(receipt.occurredAt, i18n.locale)}</Item.Description><ul class="space-y-1 text-sm">{#each receipt.movements as movement (movement.id)}{@const product = products.find((item) => item.id === movement.productId)}<li class={nameWrap}>{#if product}<span class={codeText}>{product.code}</span> {/if}{orderProductName(product, i18n.locale)} · <span class="font-mono">{formatDecimal(movement.quantityDelta, i18n.locale)} {unitLabel(product?.unit_code, i18n.locale, movement.quantityDelta)}</span></li>{/each}</ul></Item.Content></Item.Root>{/each}</Item.Group>
 </section>
 {/if}

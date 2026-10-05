@@ -47,7 +47,7 @@ try {
 				const inputBox = (await input.boundingBox())!;
 				expect(navBox.x + navBox.width).toBeLessThan(inputBox.x);
 			}
-			await expect(nav.getByRole('link')).toHaveCount(8);
+			await expect(nav.getByRole('link')).toHaveCount(12);
 			await expect(nav.locator('[aria-current="page"]')).toHaveAttribute('href', `${prefix}/admin/products`);
 			await firstLink.focus();
 			await page.keyboard.press('Tab');
@@ -87,7 +87,7 @@ try {
 				await trigger.click();
 				await expect(trigger).toHaveAttribute('aria-expanded', 'false');
 				await expect(page.locator('[data-slot=sidebar-container]')).toHaveCSS('width', '64px');
-				await expect(nav.getByRole('link')).toHaveCount(8);
+				await expect(nav.getByRole('link')).toHaveCount(12);
 				await page.screenshot({ path: `${artifacts}/${locale}-${colorScheme}-${width}-collapsed.png` });
 				await trigger.click();
 				await expect(page.locator('[data-slot=sidebar-container]')).toHaveCSS('width', '256px');
@@ -112,17 +112,15 @@ try {
 	const before = await input.boundingBox();
 	await page.route('**/rest/v1/amp_staff_members*', route => route.abort('failed'));
 	await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-	await expect(page.getByText(en.admin.unavailable, { exact: true })).toBeVisible();
+	await expect(page.getByText(en.admin.accessUnavailable, { exact: true })).toBeVisible();
 	await expect(input).toHaveValue('Unsaved sidebar regression draft');
 	expect(await input.boundingBox()).toEqual(before);
 	expect(await page.getByRole('navigation', { name: en.admin.navigation, includeHidden: true }).evaluate(element => Boolean(element.closest('[inert]')))).toBe(true);
 	await page.unroute('**/rest/v1/amp_staff_members*');
 	await page.getByRole('button', { name: en.admin.retry, exact: true }).click();
 	await expect(input).toBeEditable();
-	const footer = page.locator('footer').last();
-	await footer.scrollIntoViewIfNeeded();
-	const railBox = (await page.locator('[data-slot=sidebar-container]').boundingBox())!;
-	expect(railBox.y + railBox.height).toBeLessThanOrEqual((await footer.boundingBox())!.y + 1);
+	// Admin is its own workspace: no public footer follows the page.
+	await expect(page.locator('.site-footer')).toHaveCount(0);
 	await page.getByRole('button', { name: en.admin.signOut, exact: true }).click();
 	await expect(page).toHaveURL(/\/en\/admin\/login/);
 	await expect(page.locator('[data-sidebar="sidebar"]')).toHaveCount(0);

@@ -18,9 +18,13 @@ export function unitLabel(unit: string | null | undefined, locale: Locale, quant
 		: unit;
 }
 
-/** The one currency label for prices and totals: «kr» in Norwegian, “NOK” in English. */
+/** The one currency label for prices, totals and money-input affixes: «kr» in Norwegian, “NOK” in English. */
+export function currencySymbol(locale: Locale): string {
+	return locale === 'nb' ? 'kr' : 'NOK';
+}
+
 export function currency(amount: string, locale: Locale): string {
-	return `${amount} ${locale === 'nb' ? 'kr' : 'NOK'}`;
+	return `${amount} ${currencySymbol(locale)}`;
 }
 
 /** Two-decimal NOK amount for an already rounded money value. */

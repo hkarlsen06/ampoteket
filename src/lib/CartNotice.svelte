@@ -15,12 +15,12 @@
 	<!-- The live region exists from first render so later state changes announce. -->
 	<div class="grid w-full gap-3" aria-live="polite">
 		{#if state.status === 'unavailable'}
-			<Alert.Message role={undefined} appearance="inline" variant="destructive">{m.storage}</Alert.Message>
+			<Alert.Message appearance="inline" variant="destructive">{m.storage}</Alert.Message>
 		{:else if state.status === 'invalid'}
-			<Alert.Message role={undefined} appearance="inline" variant="destructive">{m.invalid}</Alert.Message>
+			<Alert.Message appearance="inline" variant="destructive">{m.invalid}</Alert.Message>
 		{/if}
 		{#if state.activeAttempt}
-			<Alert.Root role={undefined} variant="warning" class="gap-3">
+			<Alert.Root variant="warning" class="gap-3">
 				<Alert.Title>{m.locked}</Alert.Title>
 				<Alert.Description>{m.recovery}</Alert.Description>
 				<CheckoutReferences checkoutId={state.activeAttempt.checkoutId} requestId={state.activeAttempt.requestId} />

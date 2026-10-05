@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { ApiError, type Fetcher } from './api';
 import { memory } from './test-storage';
-import { clearMemberCommand, memberErrorCode, readAdminMembers, readMemberCommand, runMemberCommand, saveMemberCommand, type MemberCommand } from './admin-members';
+import { clearMemberCommand, memberErrorCode, memberFailure, readAdminMembers, readMemberCommand, runMemberCommand, saveMemberCommand, type MemberCommand } from './admin-members';
 
 const userId = '11111111-1111-4111-8111-111111111111', requestId = '22222222-2222-4222-8222-222222222222', staffId = '33333333-3333-4333-8333-333333333333';
 const session = { userId, token: 'staff-jwt', config: { url: 'https://fixture.invalid', publishableKey: 'public-test' } };
@@ -60,4 +60,10 @@ test('partial invitation failures and database rejections remain distinguishable
 	expect(memberErrorCode(new ApiError(409, { error: 'INVITATION_SUPERSEDED' }))).toBe('INVITATION_SUPERSEDED');
 	expect(memberErrorCode(new ApiError(400, { message: 'STAFF_SELF_DEACTIVATION: cannot remove own access' }))).toBe('STAFF_SELF_DEACTIVATION');
 	expect(memberErrorCode(new Error('Network unavailable'))).toBeNull();
+	expect(memberFailure(new ApiError(409, { error: 'STAFF_USER_NOT_FOUND' }))).toBe('notFound');
+	expect(memberFailure(new ApiError(400, { message: 'STAFF_EMAIL_REQUIRED' }))).toBe('invalidInput');
+	expect(memberFailure(new ApiError(409, { error: 'IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_INPUT' }))).toBe('conflict');
+	expect(memberFailure(new ApiError(502, { error: 'INVITATION_EMAIL_FAILED' }))).toBe('emailFailed');
+	expect(memberFailure(new ApiError(500, { error: 'SOMETHING_NEW' }))).toBeNull();
+	expect(memberFailure(new Error('Network unavailable'))).toBeNull();
 });

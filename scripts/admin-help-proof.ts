@@ -88,14 +88,14 @@ export async function exerciseAdminHelp(options: ProofOptions) {
 			await geometry.goto(`${origin}${prefix}/contact`);
 			await expect(geometry.getByRole('heading', { name: contactName, exact: true })).toBeVisible();
 			await inspectGeometry(geometry, `admin-public-help-${suffix}`, 'main a[href^="mailto:"]');
-			await geometry.goto(`${origin}${prefix}/admin/help`);
-			await geometry.getByRole('button', { name: (locale === 'nb' ? nb : en).admin.editContact(contactName), exact: true }).click();
+			await geometry.goto(`${origin}${prefix}/admin/contacts`);
+			await geometry.getByRole('button', { name: `${(locale === 'nb' ? nb : en).admin.edit} ${contactName}`, exact: true }).click();
 			await expect(geometry.getByLabel(fieldLabel((locale === 'nb' ? nb : en).admin.contactName))).toHaveValue(contactName);
 			await inspectGeometry(geometry, `admin-help-editor-${suffix}`, 'main input');
-			await geometry.goto(`${origin}${prefix}/admin/privacy`);
+			await geometry.goto(`${origin}${prefix}/admin/purchases`);
 			await geometry.getByLabel(fieldLabel((locale === 'nb' ? nb : en).admin.reference)).fill(requestId);
 			await geometry.getByRole('button', { name: (locale === 'nb' ? nb : en).admin.lookup, exact: true }).click();
-			await expect(geometry.getByText(checkoutId, { exact: true })).toBeVisible();
+			await expect(geometry.getByText((locale === 'nb' ? nb : en).admin.unregistered, { exact: true })).toBeVisible();
 			await geometry.getByLabel(fieldLabel((locale === 'nb' ? nb : en).admin.reason)).fill(reason);
 			await inspectGeometry(geometry, `admin-recovery-${suffix}`, 'main textarea');
 		}
@@ -121,7 +121,7 @@ export async function exerciseAdminHelp(options: ProofOptions) {
 	await expect(page.getByRole('heading', { name: en.admin.overview, exact: true })).toBeVisible();
 
 	// Real audited insert, publication and edit, using guarded original revisions.
-	await open('/admin/help');
+	await open('/admin/contacts');
 	await page.getByRole('button', { name: 'New contact', exact: true }).click();
 	const initialName = `Checkout proof volunteer ${'Longvolunteercontactname'.repeat(3)} ${crypto.randomUUID().slice(0, 8)}`;
 	const recoveryReason = 'Disposable browser proof: the buyer identified the original checkout from its reference, saved items, saved prices and time. '.repeat(8).trim();
@@ -129,25 +129,25 @@ export async function exerciseAdminHelp(options: ProofOptions) {
 	await page.getByLabel(fieldLabel('Email (optional)')).fill('checkout-proof@example.invalid');
 	await page.getByLabel(fieldLabel('Show this contact on the public contact page')).check();
 	await page.getByRole('button', { name: 'Save contact', exact: true }).click();
-	await expect(page.getByText('Contact saved.', { exact: true })).toBeVisible();
+	await expect(page.getByText(en.admin.saved, { exact: true })).toBeVisible();
 	await helpVisible(initialName, true);
 	await operationalGeometry(initialName, recoveryReason);
 	await page.getByLabel(fieldLabel('Display name')).fill(`${initialName} updated`);
 	await page.getByRole('button', { name: 'Save contact', exact: true }).click();
-	await expect(page.getByText('Contact saved.', { exact: true })).toBeVisible();
+	await expect(page.getByText(en.admin.saved, { exact: true })).toBeVisible();
 	await helpVisible(`${initialName} updated`, true);
 	await page.getByLabel(fieldLabel('Show this contact on the public contact page')).uncheck();
 	await page.getByRole('button', { name: 'Save contact', exact: true }).click();
-	await expect(page.getByText('Contact saved.', { exact: true })).toBeVisible();
+	await expect(page.getByText(en.admin.saved, { exact: true })).toBeVisible();
 	await helpVisible(`${initialName} updated`, false);
 
 	// Two real browser forms keep their shown revisions; the loser never overwrites.
 	const rival = await context.newPage();
-	await rival.goto(`${origin}/en/admin/help`);
+	await rival.goto(`${origin}/en/admin/contacts`);
 	await rival.getByRole('button', { name: `Edit ${initialName} updated`, exact: true }).click();
 	await page.getByLabel(fieldLabel('Display name')).fill(`${initialName} winner`);
 	await page.getByRole('button', { name: 'Save contact', exact: true }).click();
-	await expect(page.getByText('Contact saved.', { exact: true })).toBeVisible();
+	await expect(page.getByText(en.admin.saved, { exact: true })).toBeVisible();
 	await rival.getByLabel(fieldLabel('Display name')).fill(`${initialName} stale`);
 	await rival.getByRole('button', { name: 'Save contact', exact: true }).click();
 	await expect(rival.getByText(en.admin.contactStale, { exact: true })).toBeVisible();
@@ -156,16 +156,15 @@ export async function exerciseAdminHelp(options: ProofOptions) {
 	await expect(rival.getByLabel(fieldLabel('Display name'))).toHaveValue(`${initialName} stale`);
 	await rival.getByRole('button', { name: en.admin.reviewedContact, exact: true }).click();
 	await rival.getByRole('button', { name: 'Save contact', exact: true }).click();
-	await expect(rival.getByText('Contact saved.', { exact: true })).toBeVisible();
+	await expect(rival.getByText(en.admin.saved, { exact: true })).toBeVisible();
 	await expect(rival.getByLabel(fieldLabel('Display name'))).toHaveValue(`${initialName} stale`);
 
 	await rival.close();
 
-	await open('/admin/privacy');
+	await open('/admin/purchases');
 	await page.getByLabel(fieldLabel(en.admin.reference)).fill(requestId);
-	await page.getByRole('button', { name: 'Find purchase', exact: true }).click();
-	await expect(page.getByText(checkoutId, { exact: true })).toBeVisible();
-	await expect(page.getByText('Purchase not registered.', { exact: true })).toBeVisible();
+	await page.getByRole('button', { name: en.admin.lookup, exact: true }).click();
+	await expect(page.getByText(en.admin.unregistered, { exact: true })).toBeVisible();
 	await page.getByLabel(fieldLabel('Reason')).fill(recoveryReason);
 	await page.getByRole('checkbox').check();
 	const commands: Record<string, unknown>[] = [];
@@ -183,7 +182,7 @@ export async function exerciseAdminHelp(options: ProofOptions) {
 	await expect(page.getByText(en.admin.recoveryUnknown, { exact: true })).toBeVisible();
 	await page.getByRole('button', { name: en.admin.retryRecovery, exact: true }).click();
 	await expect(page.getByRole('button', { name: en.admin.retryRecovery, exact: true })).toHaveCount(0);
-	await expect(page.getByText('Purchase registered.', { exact: true }).first()).toBeVisible();
+	await expect(page.getByText(en.admin.registered, { exact: true }).first()).toBeVisible();
 	await context.unroute(rpc);
 	expect(commands).toHaveLength(2);
 	expect(commands[1]).toEqual(commands[0]);
@@ -191,10 +190,10 @@ export async function exerciseAdminHelp(options: ProofOptions) {
 	expect(commands[0].p_reason).toBe(recoveryReason);
 	expect(String(await sql(`SELECT recovery_reason=${literal(recoveryReason)} FROM app.sales WHERE checkout_id=${literal(checkoutId)};`)).trim()).toBe('t');
 	expect(String(await sql(`SELECT count(*) FROM app.sales WHERE checkout_id=${literal(checkoutId)};`)).trim()).toBe('1');
-	await open('/admin/privacy');
+	await open('/admin/purchases');
 	await page.getByLabel(fieldLabel(en.admin.reference)).fill(checkoutId);
-	await page.getByRole('button', { name: 'Find purchase', exact: true }).click();
-	await expect(page.getByText('Purchase registered.', { exact: true }).first()).toBeVisible();
+	await page.getByRole('button', { name: en.admin.lookup, exact: true }).click();
+	await expect(page.getByText(en.admin.registered, { exact: true }).first()).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Register the original purchase', exact: true })).toHaveCount(0);
 
 	// Private operational content disappears when the active membership is revoked.
@@ -231,12 +230,12 @@ export async function exerciseAdminHelp(options: ProofOptions) {
 			// The page discards the callback once hydrated, which may be after the load event.
 			await expect(page).toHaveURL(`${origin}/en/admin/password`);
 			await page.getByRole('button', { name: 'Continue', exact: true }).click();
-			await expect(page.getByLabel(fieldLabel('New password (at least 8 characters)'))).toBeVisible();
-			await page.getByLabel(fieldLabel('New password (at least 8 characters)')).fill(changedPassword);
+			await expect(page.getByLabel(fieldLabel('New password'))).toBeVisible();
+			await page.getByLabel(fieldLabel('New password')).fill(changedPassword);
 			await page.getByLabel(fieldLabel('Repeat new password')).fill(changedPassword);
 			await page.getByRole('button', { name: 'Save password', exact: true }).click();
-			await expect(page.getByText('Your password has been saved.', { exact: true })).toBeVisible();
-			await page.getByRole('link', { name: 'Continue', exact: true }).click();
+			await expect(page.getByText(en.admin.saved, { exact: true })).toBeVisible();
+			await page.getByRole('link', { name: en.admin.continueToAdmin, exact: true }).click();
 			await expect(page.getByText(en.admin.noAccess, { exact: true })).toBeVisible();
 			await page.getByRole('button', { name: 'Sign out', exact: true }).click();
 			await signIn(email, changedPassword);

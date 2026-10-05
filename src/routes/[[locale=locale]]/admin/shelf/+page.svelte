@@ -6,7 +6,7 @@
 	import Icon from '#lib/Icon.svelte';
 	import XIcon from 'phosphor-svelte/lib/XIcon';
 	import StateBadge from '#lib/StateBadge.svelte';
-	import { codeText, formActions, formLayout, formStatus, itemTitle, pageHeader, pageHeading, section, sectionHeading, sheetBody } from '#lib/ui.js';
+	import { codeText, formActions, formLayout, formStatus, itemTitle, nameWrap, pageHeader, pageHeading, section, sectionHeading, sheetBody } from '#lib/ui.js';
 	import * as Alert from '#lib/components/ui/alert/index.js';
 	import * as Empty from '#lib/components/ui/empty/index.js';
 	import * as Item from '#lib/components/ui/item/index.js';
@@ -46,6 +46,7 @@
 	let swapSource = $state<AdminBin | null>(null);
 	let confirmation = $state<ShelfCommand | null>(null);
 	let confirmationTrigger: HTMLElement | null = null;
+	const archiving = $derived(confirmation?.kind === 'archive-cabinet' || (confirmation?.kind === 'bin' && confirmation.after.is_archived));
 	let before = $state<AdminCabinet | null>(null);
 	// Wall position, typed only for a new cabinet; placed cabinets move through the wall picker.
 	let row = $state('1'), column = $state('A');
@@ -123,7 +124,7 @@
 			if (!alive || session.userId !== admin.session?.user.id) return;
 			shelf = result; loadFailed = false; needsRefresh = false;
 			if (!pending && !reconciling) outcome = 'idle';
-		} catch (error) { if (alive) { loadFailed = true; if (!pending) outcome = 'failed'; } await admin.permissionFailure(error); }
+		} catch (error) { if (alive) loadFailed = true; await admin.permissionFailure(error); }
 		finally {
 			if (alive) {
 				busy = false;
@@ -357,15 +358,16 @@
 </script>
 
 {#snippet storageStatus()}
-	{#if wrongIdentity}<Alert.Message appearance="inline" variant="destructive" role="status">{m.wrongIdentity}</Alert.Message>
-	{:else if !storageReady}<Alert.Message appearance="inline" variant="destructive" role="status">{m.storageUnavailable}</Alert.Message>
-	{:else if outcome !== 'idle'}<Alert.Message appearance="inline" variant={outcome === 'saved' ? 'default' : 'destructive'} role="status">{m[outcome]}</Alert.Message>{/if}
+	{#if wrongIdentity}<Alert.Message appearance="inline" variant="destructive">{m.wrongIdentity}</Alert.Message>
+	{:else if !storageReady}<Alert.Message appearance="inline" variant="destructive">{m.storageUnavailable}</Alert.Message>
+	{:else if outcome === 'saved'}<StateBadge tone="success">{m.saved}</StateBadge>
+	{:else if outcome !== 'idle'}<Alert.Message appearance="inline" variant="destructive">{m[outcome]}</Alert.Message>{/if}
 {/snippet}
 
 {#snippet pendingRetry()}
 	{#if pending && !wrongIdentity}
 		<h3 class={itemTitle}>{m.pendingHeading}</h3><p>{summary(pending)}</p>
-		<Button type="button" variant="outline" disabled={admin.status !== 'ready' || busy || !storageReady} onclick={() => run()}><ButtonLabel pending={busy} pendingLabel={m.saving} label={m.retry} /></Button>
+		<Button type="button" variant="outline" disabled={admin.status !== 'ready' || busy || !storageReady} onclick={() => run()}><ButtonLabel pending={busy} pendingLabel={m.saving} label={m.finishChange} /></Button>
 	{/if}
 {/snippet}
 
@@ -373,9 +375,9 @@
 	{#if reviewCommand}
 		<p>{summary(reviewCommand)}</p><p>{m.reviewLayoutHint}</p>
 		{#if currentReview && !currentReview.is_archived}<p>{m.currentPlacement(position(currentReview))}</p>{/if}
-		{#if needsRefresh && !busy}<Alert.Message appearance="inline" variant="destructive" role="status" class="mt-4">{m.unavailable}</Alert.Message>{/if}
+		{#if loadFailed && !busy}<Alert.Message role="alert" appearance="inline" variant="destructive" class="mt-4">{m.loadFailed}</Alert.Message>{/if}
 		<div class={[formActions, 'my-4']}>
-			{#if needsRefresh && !busy}<Button type="button" variant="outline" onclick={load}>{m.retryLoad}</Button>{/if}
+			{#if loadFailed && !busy}<Button type="button" variant="outline" onclick={load}>{m.retryLoad}</Button>{/if}
 			<Button type="button" variant="outline" disabled={busy || needsRefresh} onclick={reviewPlacement}>{m.reviewLayout}</Button>
 		</div>
 	{/if}
@@ -409,7 +411,7 @@
 							{#if index > 0}<Item.Separator />{/if}
 							<Item.Root variant="row" role="listitem">
 								<Item.Content>
-								<Item.Title class={itemTitle}><a href={i18n.href(`/admin/products/${product.id}`)}>{productName(product, i18n.locale)}</a></Item.Title>
+								<Item.Title class={[itemTitle, nameWrap]}><a class="text-foreground no-underline hover:underline" href={i18n.href(`/admin/products/${product.id}`)}>{productName(product, i18n.locale)}</a></Item.Title>
 								<Item.Description class="flex flex-wrap items-center gap-x-3 gap-y-1"><span class={codeText}>{product.code}</span>{#if !product.is_active}<StateBadge tone="neutral">{m.inactive}</StateBadge>{/if}</Item.Description>
 								</Item.Content>
 							</Item.Root>
@@ -425,20 +427,20 @@
 <Toaster position="bottom-center" closeButton containerAriaLabel={m.notifications} closeButtonAriaLabel={m.dismissNotification} />
 <svelte:window onfocus={revalidate} ononline={revalidate} onkeydown={(event) => { if (event.key === 'Escape' && swapSource && !confirmation) { swapSource = null; event.preventDefault(); } }} />
 <svelte:document onvisibilitychange={revalidate} />
-<div class={pageHeader}>
+<header class={pageHeader}>
 	<h1 class={pageHeading}>{m.heading}</h1>
-	<div class={formActions}><Button type="button" variant="outline" bind:ref={newCabinetButton} disabled={locked || draftChanged} onclick={() => edit(null)}>{m.newCabinet}</Button></div>
-</div>
+	<div class={formActions}><Button type="button" variant="default" bind:ref={newCabinetButton} disabled={locked || draftChanged} onclick={() => edit(null)}>{m.newCabinet}</Button></div>
+</header>
 <div class={formStatus} aria-live="polite" aria-atomic="true">
 	{#if !editor}{@render storageStatus()}{/if}
 </div>
 
 {#if pending && !wrongIdentity && !editor}
 	<section class={shelfSection} aria-labelledby="pending-title"><Separator /><h2 class={sectionHeading} id="pending-title">{m.pendingHeading}</h2>
-		<p>{summary(pending)}</p><Button type="button" variant="default" disabled={admin.status !== 'ready' || busy || !storageReady} onclick={() => run()}><ButtonLabel pending={busy} pendingLabel={m.saving} label={m.retry} /></Button>
+		<p>{summary(pending)}</p><Button type="button" variant="default" disabled={admin.status !== 'ready' || busy || !storageReady} onclick={() => run()}><ButtonLabel pending={busy} pendingLabel={m.saving} label={m.finishChange} /></Button>
 	</section>
 {/if}
-{#if shelf && loadFailed}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unavailable}</Alert.Message><Button type="button" variant="outline" disabled={busy} onclick={load}>{m.retryLoad}</Button>{/if}
+{#if shelf && loadFailed && !reviewCommand}<Alert.Message role="alert" appearance="inline" variant="destructive">{m.loadFailed}</Alert.Message><Button type="button" variant="outline" disabled={busy} onclick={load}>{m.retryLoad}</Button>{/if}
 {#if !shelf}
 	{#if busy}<span class="sr-only" role="status">{m.loading}</span>{/if}
 	<section class={shelfSection} aria-busy={busy}>
@@ -446,7 +448,7 @@
 		<h2 class={sectionHeading}>{m.wall}</h2>
 		<div class="grid min-h-80 content-start justify-items-start gap-2">
 			{#if busy}<Skeleton class="h-80 w-full justify-self-stretch" aria-hidden="true" />
-			{:else}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unavailable}</Alert.Message><Button type="button" variant="outline" onclick={load}>{m.retryLoad}</Button>{/if}
+			{:else}<Alert.Message role="alert" appearance="inline" variant="destructive">{m.loadFailed}</Alert.Message><Button type="button" variant="outline" onclick={load}>{m.retryLoad}</Button>{/if}
 		</div>
 	</section>
 {:else}
@@ -552,7 +554,7 @@
 		</AlertDialog.Header>
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel>{m.cancelAction}</AlertDialog.Cancel>
-			<AlertDialog.Action disabled={locked} onclick={() => { const command = confirmation; confirmation = null; if (command) void run(command); }}>{m.confirmAction}</AlertDialog.Action>
+			<AlertDialog.Action variant={archiving ? 'destructive' : 'default'} disabled={locked} onclick={() => { const command = confirmation; confirmation = null; if (command) void run(command); }}>{m.confirmAction}</AlertDialog.Action>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>
 </AlertDialog.Root>

@@ -16,6 +16,7 @@
 	import * as ToggleGroup from '#lib/components/ui/toggle-group/index.js';
 	import { Skeleton } from '#lib/components/ui/skeleton/index.js';
 	import StockBadge from '#lib/StockBadge.svelte';
+	import StateBadge from '#lib/StateBadge.svelte';
 	import * as Item from '#lib/components/ui/item/index.js';
 	import OrderProductCombobox from '#lib/OrderProductCombobox.svelte';
 	import AdminProductScanner from '#lib/AdminProductScanner.svelte';
@@ -35,12 +36,18 @@
 	let outcome = $state<'idle' | 'invalid' | 'unknown' | 'stale' | 'recount' | 'saved'>('idle');
 	let invalidField = $state(''), invalidMessage = $state('');
 	let mounted = false, generation = 0;
+	let background = $state(false);
+	let refreshing: Promise<void> | null = null;
 	const product = $derived(products.find(item => item.id === selected));
 	const original = $derived(detail?.movements.find(item => item.id === movementId));
 	const recount = $derived(command ? command.counted !== null : Boolean(detail && movementId && needsRecount(detail, movementId)));
 	const earlier = $derived(detail?.movements.filter(item => item.corrects === movementId) ?? []);
 	const wrongIdentity = $derived(Boolean(command && command.userId !== admin.session?.user.id));
 	const otherProduct = $derived(Boolean(command && command.productId !== selected));
+	function movementLabel(id: string) {
+		const movement = detail?.movements.find(item => item.id === id);
+		return movement && product ? `${m.kindLabels[movement.kind as keyof typeof m.kindLabels]} · ${formatCountedAt(movement.at, i18n.locale)} · ${formatDecimal(movement.delta, i18n.locale)} ${unitLabel(product.unit_code, i18n.locale, movement.delta)}` : m.unknownMovement;
+	}
 
 	function syncPending() {
 		if (busy) return;
@@ -60,9 +67,9 @@
 		window.addEventListener('storage', syncPending); window.addEventListener(stockStorageEvent, syncPending); void load();
 		return () => { mounted = false; generation++; window.removeEventListener('storage', syncPending); window.removeEventListener(stockStorageEvent, syncPending); };
 	});
-	async function load() {
+	async function load(inBackground = false) {
 		if (admin.status !== 'ready') return;
-		const version = ++generation, session = admin.credentials(); loading = true; failed = false;
+		const version = ++generation, session = admin.credentials(); loading = true; background = inBackground;
 		try {
 			const result = await readStockProducts(session);
 			if (!mounted || version !== generation || admin.session?.user.id !== session.userId) return;
@@ -75,8 +82,9 @@
 				detail = next;
 			}
 			else { selected = ''; detail = null; }
+			failed = false;
 		} catch (error) { if (mounted && version === generation) failed = true; await admin.permissionFailure(error); }
-		finally { if (mounted && version === generation) loading = false; }
+		finally { if (mounted && version === generation) { loading = false; background = false; } }
 	}
 	// Unsaved input outlives a reload, Back or sign-in round trip (drafts.ts). A
 	// restored correction keeps the stock revision it was typed against and any
@@ -102,7 +110,7 @@
 		selected = productId; detail = null; movementId = ''; paused = false; outcome = 'idle'; reviewNeeded = false;
 		invalidField = ''; invalidMessage = '';
 		if (!productId) return;
-		const version = ++generation, session = admin.credentials(); loading = true; failed = false;
+		const version = ++generation, session = admin.credentials(); loading = true; background = false; failed = false;
 		try { const result = await readStockDetail(session, productId); if (mounted && version === generation && session.userId === admin.session?.user.id) detail = result; }
 		catch (error) { if (mounted && version === generation) failed = true; await admin.permissionFailure(error); }
 		finally { if (mounted && version === generation) loading = false; }
@@ -112,7 +120,7 @@
 	$effect(() => {
 		if (revalidateQueued && admin.status === 'ready' && !(loading || busy)) {
 			revalidateQueued = false;
-			untrack(() => { void load(); });
+			untrack(() => { refreshing = load(true); });
 		}
 	});
 	async function rejectField(field: string, message: string) {
@@ -122,6 +130,14 @@
 	}
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
+		if (busy) return;
+		if (background && refreshing) {
+			// Freeze the form while the refresh lands, so the save cannot move to another product.
+			const target = selected;
+			busy = true;
+			try { await refreshing; } finally { busy = false; }
+			if (selected !== target) return;
+		}
 		if (busy || loading || admin.status !== 'ready' || !storageReady || wrongIdentity || otherProduct || !product || !detail || failed || reviewNeeded || (!command && kind === 'correct' && recount && !paused)) return;
 		invalidField = ''; invalidMessage = '';
 		let nextQuantity = quantity, nextCounted: string | null = null;
@@ -175,7 +191,7 @@
 		<AdminProductScanner products={loaded ? products : null} disabled={busy || Boolean(command) || failed} onproduct={productId => { void choose(productId); }} />
 	</Field.Group>
 	{#if loading && !loaded && !selected}<span class="sr-only" role="status">{m.load}</span>{/if}
-	{#if failed}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unavailable}</Alert.Message><Button type="button" variant="outline" onclick={load} disabled={loading}>{m.retry}</Button>{/if}
+	{#if failed}<Alert.Message appearance="inline" variant="destructive" role="alert">{m.unavailable}</Alert.Message><Button type="button" variant="outline" onclick={() => load()} disabled={loading && !background}>{m.retry}</Button>{/if}
 	{#if loaded && !failed && !products.length}<Empty.Root><Empty.Description>{m.noProducts}</Empty.Description></Empty.Root>{/if}
 </div>
 {#if selected && !detail && loading && !failed}
@@ -192,7 +208,7 @@
 			<p class="text-muted-foreground">{m.stock}</p>
 			<p class="flex flex-wrap items-center gap-x-3 gap-y-1">
 				<span class={['font-mono text-xl font-semibold', compareDecimals(detail.stock.quantity, '0') <= 0 && 'text-destructive']}>{formatDecimal(detail.stock.quantity, i18n.locale)} {unitLabel(product.unit_code, i18n.locale, detail.stock.quantity)}</span>
-				<StockBadge quantity={failed ? null : detail.stock.quantity} unit={unitLabel(product.unit_code, i18n.locale)} showQuantity={false} />
+				<StockBadge quantity={failed ? null : detail.stock.quantity} unit={unitLabel(product.unit_code, i18n.locale)} minimum={product.minimum_stock} showQuantity={false} />
 			</p>
 		</div>
 		<Button variant="link" size="sm" href={i18n.href(`/admin/products/${product.id}`)}>{i18n.m.adminProducts.editProduct}</Button>
@@ -210,14 +226,14 @@
 					<ToggleGroup.Item value="correct">{m.correct}</ToggleGroup.Item>
 				</ToggleGroup.Root>
 			</Field.Set>
-			<Field.Group layout="row">
-				{#if kind === 'correct'}<Field.Field width="grow"><Field.Label for={`${fieldId}-movement`}>{m.movement}</Field.Label><NativeSelect.Root id={`${fieldId}-movement`} bind:value={movementId} disabled={Boolean(command) || busy}><NativeSelect.Option value="">{m.chooseMovement}</NativeSelect.Option>{#each detail.movements as movement (movement.id)}<NativeSelect.Option value={movement.id}>#{movement.id} · {m.kindLabels[movement.kind as keyof typeof m.kindLabels]} · {formatDecimal(movement.delta, i18n.locale)} {unitLabel(product.unit_code, i18n.locale, movement.delta)}</NativeSelect.Option>{/each}</NativeSelect.Root></Field.Field>{/if}
-			</Field.Group>
+			{#if kind === 'correct'}<Field.Group layout="row">
+				<Field.Field width="grow"><Field.Label for={`${fieldId}-movement`}>{m.movement}</Field.Label><NativeSelect.Root id={`${fieldId}-movement`} bind:value={movementId} disabled={Boolean(command) || busy}><NativeSelect.Option value="">{m.chooseMovement}</NativeSelect.Option>{#each detail.movements as movement (movement.id)}<NativeSelect.Option value={movement.id}>{movementLabel(movement.id)}</NativeSelect.Option>{/each}</NativeSelect.Root></Field.Field>
+			</Field.Group>{/if}
 			{#if original}
-				<p class="text-sm">#{original.id} · {m.kindLabels[original.kind as keyof typeof m.kindLabels]} · {formatDecimal(original.delta, i18n.locale)} {unitLabel(product.unit_code, i18n.locale, original.delta)} · {formatCountedAt(original.at, i18n.locale)}</p>
+				<p class="text-sm">{movementLabel(original.id)}</p>
 				{#if original.orderId}<p class="text-sm"><a href={i18n.href(`/admin/orders/${original.orderId}`)}>{m.orderProgress(formatDecimal(original.received!, i18n.locale), formatDecimal(original.outstanding!, i18n.locale))}</a></p>{/if}
-				{#if earlier.length}<div><h3 class="font-semibold">{m.priorCorrections}</h3>{#each earlier as entry (entry.id)}<p class="text-sm">#{entry.id}: {formatDecimal(entry.delta, i18n.locale)} {unitLabel(product.unit_code, i18n.locale, entry.delta)} · {formatCountedAt(entry.at, i18n.locale)}</p>{/each}</div>{/if}
-				{#if recount}<Alert.Message appearance="inline" variant="default" role="status">{m.recount}</Alert.Message>{/if}
+				{#if earlier.length}<div><h3 class={itemTitle}>{m.priorCorrections}</h3>{#each earlier as entry (entry.id)}<p class="text-sm">{movementLabel(entry.id)}</p>{/each}</div>{/if}
+				{#if recount}<Alert.Message appearance="inline" variant="default">{m.recount}</Alert.Message>{/if}
 			{/if}
 			<Field.Group layout="row">
 				<Field.Field width="medium"><Field.Label for={`${fieldId}-quantity`}>{kind === 'withdraw' ? m.quantity : m.delta} <span class="sr-only">({unitLabel(product.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id={`${fieldId}-quantity`} aria-invalid={invalidField === 'quantity'} aria-describedby={invalidField === 'quantity' ? `${fieldId}-quantity-error` : undefined} type="text" required inputmode="decimal" autocomplete="off" bind:value={quantity} disabled={Boolean(command) || busy} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(product.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{@render fieldError('quantity')}</Field.Field>
@@ -225,19 +241,19 @@
 			</Field.Group>
 			{#if kind === 'correct' && recount}<Field.Field orientation="horizontal"><Checkbox id={`${fieldId}-paused`} required bind:checked={paused} disabled={Boolean(command) || busy} /><Field.Label for={`${fieldId}-paused`} class="cursor-pointer">{m.pauseConfirmed}</Field.Label></Field.Field>{/if}
 			<Field.Field width="grow"><Field.Label for={`${fieldId}-reason`}>{m.reason}</Field.Label><Textarea id={`${fieldId}-reason`} aria-invalid={invalidField === 'reason'} aria-describedby={`${fieldId}-reason-hint${invalidField === 'reason' ? ` ${fieldId}-reason-error` : ''}`} required maxlength={2000} bind:value={reason} disabled={Boolean(command) || busy} /><Field.Description id={`${fieldId}-reason-hint`}>{m.noteHint}</Field.Description>{@render fieldError('reason')}</Field.Field>
-			<div class={formActions}><Button type="submit" disabled={busy || loading || admin.status !== 'ready' || !storageReady || failed || reviewNeeded || wrongIdentity || otherProduct || (!command && kind === 'correct' && (!original || (recount && !paused)))}><ButtonLabel pending={busy} pendingLabel={m.working} label={command ? m.retrySame : m.save} reserveLabels={[m.retrySame, m.save]} /></Button>
+			<div class={formActions}><Button type="submit" disabled={busy || (loading && !background) || admin.status !== 'ready' || !storageReady || failed || reviewNeeded || wrongIdentity || otherProduct || (!command && kind === 'correct' && (!original || (recount && !paused)))}><ButtonLabel pending={busy} pendingLabel={m.working} label={command ? m.retrySame : m.save} reserveLabels={[m.retrySame, m.save]} /></Button>
 				{#if reviewNeeded}<Button type="button" variant="outline" disabled={loading || failed} onclick={() => { reviewNeeded = false; paused = false; outcome = 'idle'; }}>{m.reviewed}</Button>{/if}
 			</div>
 		</form>
 		<div class={formStatus} aria-live="polite">
-			{#if !storageReady}<Alert.Message appearance="inline" variant="destructive" role="status">{m.storage}</Alert.Message>
-			{:else if wrongIdentity}<Alert.Message appearance="inline" variant="destructive" role="status">{m.wrongIdentity}</Alert.Message>
-			{:else if otherProduct}<Alert.Message appearance="inline" variant="default" role="status">{m.pendingElsewhere}</Alert.Message>
-			{:else if outcome === 'unknown'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unknown}</Alert.Message>
-			{:else if outcome === 'stale'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.stale}</Alert.Message>
-			{:else if outcome === 'recount'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.recountRequired}</Alert.Message>
-			{:else if outcome === 'invalid'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.invalid}</Alert.Message>
-			{:else if outcome === 'saved'}<Alert.Message appearance="inline" variant="default" role="status">{m.saved}</Alert.Message>{/if}
+			{#if !storageReady}<Alert.Message appearance="inline" variant="destructive">{m.storage}</Alert.Message>
+			{:else if wrongIdentity}<Alert.Message appearance="inline" variant="destructive">{m.wrongIdentity}</Alert.Message>
+			{:else if otherProduct}<Alert.Message appearance="inline" variant="default">{m.pendingElsewhere}</Alert.Message>
+			{:else if outcome === 'unknown'}<Alert.Message appearance="inline" variant="destructive">{m.unknown}</Alert.Message>
+			{:else if outcome === 'stale'}<Alert.Message appearance="inline" variant="destructive">{m.stale}</Alert.Message>
+			{:else if outcome === 'recount'}<Alert.Message appearance="inline" variant="destructive">{m.recountRequired}</Alert.Message>
+			{:else if outcome === 'invalid'}<Alert.Message appearance="inline" variant="destructive">{m.invalid}</Alert.Message>
+			{:else if outcome === 'saved'}<StateBadge tone="success">{m.saved}</StateBadge>{/if}
 		</div>
 		{#if command && otherProduct && storageReady && !wrongIdentity}<Button variant="link" onclick={() => { if (command && !busy) { selected = command.productId; void load(); } }}>{i18n.m.adminProducts.resume}</Button>{/if}
 	</section>
@@ -253,18 +269,18 @@
 						{#if row.movement}
 							<Item.Title class={itemTitle}>{m.kindLabels[row.movement.kind as keyof typeof m.kindLabels]} <span class="font-mono">{formatDecimal(row.movement.delta, i18n.locale)} {unitLabel(product.unit_code, i18n.locale, row.movement.delta)}</span></Item.Title>
 							<Item.Description>
-								{formatCountedAt(row.at, i18n.locale)}{#if row.movement.actor} · {i18n.m.adminOrders.recordedBy(row.movement.actor)}{/if} · #{row.movement.id}{#if row.movement.corrects} · {m.corrects(row.movement.corrects)}{/if}{#if row.movement.orderId} · <a href={i18n.href(`/admin/orders/${row.movement.orderId}`)}>{i18n.m.adminOrders.detailHeading}</a>{/if}
+								{formatCountedAt(row.at, i18n.locale)}{#if row.movement.actor}&nbsp;· {i18n.m.adminOrders.recordedBy(row.movement.actor)}{/if}{#if row.movement.corrects}&nbsp;· {m.corrects(movementLabel(row.movement.corrects))}{/if}{#if row.movement.orderId}&nbsp;· <a href={i18n.href(`/admin/orders/${row.movement.orderId}`)}>{i18n.m.adminOrders.detailHeading}</a>{/if}
 							</Item.Description>
 							{#if row.movement.note}<p class="text-sm">{row.movement.note}</p>{/if}
 						{:else if row.count}
 							{@const difference = countDifference(row.count.quantity, row.count.expected)}
 							<Item.Title class={itemTitle}>{m.count}</Item.Title>
-							<Item.Description>{formatCountedAt(row.at, i18n.locale)}{#if row.count.actor} · {i18n.m.adminOrders.recordedBy(row.count.actor)}{/if}</Item.Description>
+							<Item.Description>{formatCountedAt(row.at, i18n.locale)}{#if row.count.actor}&nbsp;· {i18n.m.adminOrders.recordedBy(row.count.actor)}{/if}</Item.Description>
 							<dl class="grid gap-2 text-sm md:grid-cols-[repeat(3,minmax(0,14rem))] md:justify-start [&>div]:grid [&>div]:grid-cols-2 [&>div]:gap-4 md:[&>div]:block [&_dd]:m-0 [&_dd]:text-right md:[&_dd]:mt-1 md:[&_dd]:text-left md:[&_dt]:text-muted-foreground"><div><dt>{i18n.m.adminCounts.expected}</dt><dd class="font-mono">{formatDecimal(row.count.expected, i18n.locale)} {unitLabel(product.unit_code, i18n.locale, row.count.expected)}</dd></div><div><dt>{i18n.m.adminCounts.observed}</dt><dd class="font-mono">{formatDecimal(row.count.quantity, i18n.locale)} {unitLabel(product.unit_code, i18n.locale, row.count.quantity)}</dd></div><div><dt>{i18n.m.adminCounts.difference}</dt><dd class="font-mono" class:text-destructive={compareDecimals(difference, '0') !== 0}>{formatDecimal(difference, i18n.locale)} {unitLabel(product.unit_code, i18n.locale, difference)}</dd></div></dl>
 							{#if row.count.note}<p class="text-sm">{row.count.note}</p>{/if}
 						{/if}
 					</Item.Content>
-					{#if row.movement && !command}<Item.Actions><Button type="button" variant="outline" size="sm" onclick={() => { kind = 'correct'; movementId = row.movement!.id; outcome = 'idle'; }}>{m.correct}</Button></Item.Actions>{/if}
+					{#if row.movement && !command}<Item.Actions><Button type="button" variant="outline" size="sm" aria-label={m.correctMovement(movementLabel(row.movement.id))} onclick={() => { kind = 'correct'; movementId = row.movement!.id; outcome = 'idle'; }}>{m.correct}</Button></Item.Actions>{/if}
 				</Item.Root>
 			{/each}
 		</Item.Group>

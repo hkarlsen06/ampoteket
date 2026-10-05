@@ -3,7 +3,7 @@
 	import { unitLabel } from '#lib/format.js';
 	import { Separator } from '#lib/components/ui/separator/index.js';
 	import { Skeleton } from '#lib/components/ui/skeleton/index.js';
-	import { formLayout, formStatus, section, sectionHeading } from '#lib/ui.js';
+	import { formLayout, formStatus, section } from '#lib/ui.js';
 	import * as Alert from '#lib/components/ui/alert/index.js';
 	import * as InputGroup from '#lib/components/ui/input-group/index.js';
 	import { Button, ButtonLabel } from '#lib/components/ui/button/index.js';
@@ -12,6 +12,7 @@
 	import * as Field from '#lib/components/ui/field/index.js';
 	import * as Collapsible from '#lib/components/ui/collapsible/index.js';
 	import DisclosureTrigger from '#lib/DisclosureTrigger.svelte';
+	import StateBadge from '#lib/StateBadge.svelte';
 	import StockBadge from '#lib/StockBadge.svelte';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import Icon from '#lib/Icon.svelte';
@@ -21,14 +22,14 @@
 	import { getAdminContext } from './admin-context.svelte';
 	import { compareDecimals } from './decimal';
 	import { formatCountedAt, formatDecimal } from './format';
-	import { clearCountCommand, countCommandPath, countDifference, countRejection, countStorageEvent, readCountCommand, readCountInventory, runCountCommand, saveCountCommand, updateCountStorage, validCountQuantity, type CountCommand, type CountProduct, type CountResult, type InventorySnapshot } from './admin-counts';
+	import { clearCountCommand, countCommandPath, countDifference, countRejection, countStorageEvent, formatSignedDifference, readCountCommand, readCountInventory, runCountCommand, saveCountCommand, updateCountStorage, validCountQuantity, type CountCommand, type CountProduct, type CountResult, type InventorySnapshot } from './admin-counts';
 	let { product, batchId = undefined, onsaved = undefined, submissionBlocked = false, modal = false }: { product: CountProduct; batchId?: string; onsaved?: () => void; submissionBlocked?: boolean; modal?: boolean } = $props();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.adminCounts);
 	const id = $props.id();
 	let expanded = $state(false); let busy = $state(false); let storageReady = $state(false);
 	let snapshot = $state<InventorySnapshot | null>(null); let quantity = $state(''); let note = $state(''); let paused = $state(false);
 	let command = $state<CountCommand | null>(null); let result = $state<CountResult | null>(null);
-	let status = $state<'idle' | 'loading' | 'failed' | 'invalid' | 'unknown' | 'stale' | 'closed' | 'owner'>('idle');
+	let status = $state<'idle' | 'loading' | 'failed' | 'saveFailed' | 'invalid' | 'unknown' | 'stale' | 'closed' | 'owner'>('idle');
 	let mounted = false; let generation = 0; let quantityField = $state<HTMLInputElement | null>(null);
 	let trigger = $state<HTMLButtonElement | null>(null);
 	let rejectedObservation = $state<string | null>(null);
@@ -90,26 +91,26 @@
 			if (frozen && rejected) {
 				try { await updateCountStorage((storage) => clearCountCommand(storage, frozen!)); if (mounted) { if (frozen.kind === 'count') rejectedObservation = frozen.quantity; command = null; status = rejected; snapshot = null; quantity = ''; paused = false; } }
 				catch { if (mounted) status = 'unknown'; }
-			} else if (mounted) status = frozen ? 'unknown' : 'failed';
+			} else if (mounted) status = frozen ? 'unknown' : 'saveFailed';
 			await admin.permissionFailure(error);
 		} finally { if (mounted) busy = false; }
 	}
 </script>
 
 {#snippet countBody()}
-		{#if !batchId}<p>{m.immediate}</p>{/if}
-		<ol class="list-decimal space-y-2 pl-6">{#each m.steps as step (step)}<li>{step}</li>{/each}</ol>
+		<p>{m.countPrerequisite}</p>
 		<div class={formStatus} aria-live="polite">
-			{#if !storageReady}<Alert.Message appearance="inline" variant="destructive" role="status">{m.storageUnavailable}</Alert.Message>
-			{:else if wrongIdentity}<Alert.Message appearance="inline" variant="destructive" role="status">{m.wrongIdentity}</Alert.Message>
-			{:else if pendingElsewhere && command}<Alert.Message appearance="inline" variant="default" role="status">{m.pendingElsewhere}</Alert.Message>
-			{:else if status === 'loading'}<span class="sr-only" role="status">{m.loadingStock}</span>
-			{:else if status === 'failed'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unavailable}</Alert.Message>
-			{:else if status === 'unknown'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unknown}</Alert.Message>
-			{:else if status === 'stale'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.stale}</Alert.Message>{#if rejectedObservation}<Alert.Message appearance="inline" variant="default" role="status">{m.rejectedObservation(formatDecimal(rejectedObservation, i18n.locale), unitLabel(product.unit_code, i18n.locale, rejectedObservation))}</Alert.Message>{/if}
-			{:else if status === 'closed'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.closedDuringCount}</Alert.Message>
-			{:else if status === 'owner'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.ownerOnly}</Alert.Message>
-			{:else if result}<Alert.Message appearance="inline" variant="default" role="status">{m.saved(`${formatDecimal(result.quantity!, i18n.locale)} ${unitLabel(product.unit_code, i18n.locale, result.quantity!)}`, `${formatDecimal(result.difference!, i18n.locale)} ${unitLabel(product.unit_code, i18n.locale, result.difference!)}`)}</Alert.Message>{/if}
+			{#if !storageReady}<Alert.Message appearance="inline" variant="destructive">{m.storageUnavailable}</Alert.Message>
+			{:else if wrongIdentity}<Alert.Message appearance="inline" variant="destructive">{m.wrongIdentity}</Alert.Message>
+			{:else if pendingElsewhere && command}<Alert.Message appearance="inline" variant="default">{m.pendingElsewhere}</Alert.Message>
+			{:else if status === 'loading'}<span class="sr-only">{m.loadingStock}</span>
+			{:else if status === 'failed'}<Alert.Message appearance="inline" variant="destructive">{m.stockLoadFailed}</Alert.Message>
+			{:else if status === 'saveFailed'}<Alert.Message appearance="inline" variant="destructive">{m.saveFailed}</Alert.Message>
+			{:else if status === 'unknown'}<Alert.Message appearance="inline" variant="destructive">{m.unknown}</Alert.Message>
+			{:else if status === 'stale'}<Alert.Message appearance="inline" variant="destructive">{m.stale}</Alert.Message>{#if rejectedObservation}<Alert.Message appearance="inline" variant="default">{m.rejectedObservation(formatDecimal(rejectedObservation, i18n.locale), unitLabel(product.unit_code, i18n.locale, rejectedObservation))}</Alert.Message>{/if}
+			{:else if status === 'closed'}<Alert.Message appearance="inline" variant="destructive">{m.closedDuringCount}</Alert.Message>
+			{:else if status === 'owner'}<Alert.Message appearance="inline" variant="destructive">{m.ownerOnly}</Alert.Message>
+			{:else if result}<p class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm"><StateBadge tone="success">{m.savedBadge}</StateBadge>{m.savedDetail(`${formatDecimal(result.quantity!, i18n.locale)} ${unitLabel(product.unit_code, i18n.locale, result.quantity!)}`, `${formatSignedDifference(result.difference!, i18n.locale)} ${unitLabel(product.unit_code, i18n.locale, result.difference!)}`)}</p>{/if}
 		</div>
 		{#if storageReady && !wrongIdentity && pendingElsewhere && command}<Button variant="link" href={i18n.href(countCommandPath(command))}>{m.resumePending}</Button>{/if}
 		{#if status === 'loading'}
@@ -124,7 +125,7 @@
 			<form id={`${id}-form`} class={formLayout} onsubmit={submit}>
 				<Field.Group layout="row">
 					<Field.Field width="medium"><Field.Label for={`${id}-1`}>{m.observed} <span class="sr-only">({unitLabel(product.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id={`${id}-1`} bind:ref={quantityField} inputmode="decimal" autocomplete="off" enterkeyhint="next" required bind:value={quantity} disabled={busy || Boolean(command)} aria-invalid={status === 'invalid'} aria-describedby={`${id}-quantity-hint${status === 'invalid' ? ` ${id}-quantity-error` : ''}`} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(product.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root></Field.Field>
-					<Field.Field width="medium"><Field.Label for={`${id}-difference`}>{m.difference}</Field.Label><output id={`${id}-difference`} class="difference flex min-h-12 items-center font-mono wrap-anywhere" class:text-destructive={difference !== null && compareDecimals(difference, '0') !== 0} class:font-semibold={difference !== null && compareDecimals(difference, '0') !== 0}>{difference === null ? m.enterQuantity : `${formatDecimal(difference, i18n.locale)} ${unitLabel(product.unit_code, i18n.locale, difference)}`}</output></Field.Field>
+					<Field.Field width="medium"><Field.Label for={`${id}-difference`}>{m.difference}</Field.Label><output id={`${id}-difference`} class="difference flex min-h-12 items-center font-mono wrap-anywhere" class:text-destructive={difference !== null && compareDecimals(difference, '0') !== 0} class:font-semibold={difference !== null && compareDecimals(difference, '0') !== 0}>{difference === null ? m.enterQuantity : `${formatSignedDifference(difference, i18n.locale)} ${unitLabel(product.unit_code, i18n.locale, difference)}`}</output></Field.Field>
 				</Field.Group>
 				<Field.Description id={`${id}-quantity-hint`}>{m.quantityHint(formatDecimal(product.stock_step, i18n.locale), unitLabel(product.unit_code, i18n.locale, product.stock_step))}</Field.Description>
 				{#if status === 'invalid'}<Field.Error id={`${id}-quantity-error`}>{m.invalidQuantity(formatDecimal(product.stock_step, i18n.locale))}</Field.Error>{/if}
@@ -140,7 +141,7 @@
 
 {#snippet countActions()}
 	{#if snapshot}
-		<Button form={`${id}-form`} type="submit" variant="default" disabled={busy || submissionBlocked || admin.status !== 'ready' || !storageReady || wrongIdentity || pendingElsewhere || !paused}><ButtonLabel pending={busy} pendingLabel={m.working} label={ownCommand ? m.retryCount : m.saveCount} reserveLabels={[m.retryCount, m.saveCount]} /></Button>
+		<Button form={`${id}-form`} type="submit" variant="default" disabled={busy || submissionBlocked || admin.status !== 'ready' || !storageReady || wrongIdentity || pendingElsewhere || !paused}><ButtonLabel pending={busy} pendingLabel={m.recording} label={ownCommand ? m.retryCount : m.saveCount} reserveLabels={[m.retryCount, m.saveCount]} /></Button>
 	{:else if !busy && !command && status !== 'closed' && status !== 'owner'}
 		<Button variant="outline" type="button" disabled={admin.status !== 'ready'} onclick={observe}>{status === 'stale' ? m.recount : result ? m.countAgain : m.retryRead}</Button>
 	{/if}
@@ -171,9 +172,8 @@
 		</Dialog.Content>
 	</Dialog.Root>
 {:else}
-<section class={section({ spacing: 'divided', class: "count-section" })} aria-labelledby={`${id}-title`}>
+<section class={section({ spacing: 'divided', class: "count-section" })} aria-label={m.countProduct}>
 	<Separator />
-	<h2 class={sectionHeading} id={`${id}-title`}>{m.countProduct}</h2>
 	<Collapsible.Root open={expanded} disabled={busy || Boolean(command)} onOpenChange={(open) => { if (open) void observe(); else expanded = false; }}>
 		<DisclosureTrigger>{m.beginCount}</DisclosureTrigger>
 		<Collapsible.Content id={`${id}-body`}>

@@ -153,6 +153,7 @@ BEGIN
   j2:=public.amp_record_single_count(req_count,r,rev,7,'Ad-hoc recount at shelf');
   PERFORM pg_temp.assert_true(j=j2 AND (j->>'batch_id') IS NOT NULL AND (SELECT quantity=7 FROM app.inventory WHERE product_id=r),'single count posts immediately and retry is idempotent');
   PERFORM pg_temp.assert_true((SELECT finished_at IS NOT NULL AND finished_by IS NOT NULL FROM app.count_batches WHERE id=(j->>'batch_id')::uuid),'single count batch is born finished');
+  PERFORM pg_temp.assert_true((SELECT b.product_id=r AND b.title=p.code FROM public.amp_count_batches b JOIN app.products p ON p.id=r WHERE b.id=(j->>'batch_id')::uuid),'single count batch records its product and a language-neutral title');
   PERFORM pg_temp.expect_error(format('SELECT public.amp_record_single_count(%L,%L,%s,8)',gen_random_uuid(),r,rev),'STALE_STOCK_COUNT');
   PERFORM pg_temp.expect_error(format('SELECT public.amp_withdraw_stock(%L,%L::jsonb,NULL)',gen_random_uuid(),jsonb_build_array(jsonb_build_object('product_id',r,'quantity','1'))),'REASON_REQUIRED');
   PERFORM pg_temp.expect_error(format('SELECT public.amp_adjust_stock(%L,%L::jsonb,%L)',gen_random_uuid(),jsonb_build_array(jsonb_build_object('product_id',r,'quantity_delta','0.5')),'Invalid half resistor'),'INVALID_QUANTITY_STEP');

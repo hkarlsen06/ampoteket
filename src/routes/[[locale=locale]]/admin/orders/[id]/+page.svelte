@@ -1,17 +1,17 @@
 <script lang="ts">
-	import { productName as displayProductName } from '#lib/catalog.js';
+	import StateBadge from '#lib/StateBadge.svelte';
 	import { onMount, tick, untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { getI18n } from '#lib/i18n/index.js';
 	import { getAdminContext } from '#lib/admin-context.svelte.js';
 	import { ApiError, uuidPattern } from '#lib/api.js';
 	import { compareDecimals, normalizeDecimal, validQuantity } from '#lib/decimal.js';
-	import { formatCountedAt, formatDecimal, formatMoney, unitLabel } from '#lib/format.js';
+	import { currencySymbol, formatCountedAt, formatDecimal, formatMoney, unitLabel } from '#lib/format.js';
 	import { osloInstant, osloLocal, possibleOsloOffsets } from '#lib/oslo-time.js';
 	import { staffEquals, staffRequest } from '#lib/admin-api.js';
 	import AdminOrderReceipt from '#lib/AdminOrderReceipt.svelte';
-	import { clearOrderCommand, orderCommandPath, orderRejection, orderStorageEvent, readOrderCommand, readOrderDetail, runOrderCommand, saveOrderCommand, updateOrderStorage, type Order, type OrderCommand, type OrderDetail, type OrderLine } from '#lib/admin-orders.js';
-	import { codeText, formLayout, formStatus, itemTitle, nameWrap, pageHeader, pageHeading, section, sectionHeading } from '#lib/ui.js';
+	import { clearOrderCommand, orderProductName, orderCommandPath, orderRejection, orderStorageEvent, readOrderCommand, readOrderDetail, runOrderCommand, saveOrderCommand, updateOrderStorage, type Order, type OrderCommand, type OrderDetail, type OrderLine } from '#lib/admin-orders.js';
+	import { codeText, formActions, formLayout, formStatus, itemTitle, nameWrap, pageHeader, pageHeading, section, sectionHeading } from '#lib/ui.js';
 	import * as Alert from '#lib/components/ui/alert/index.js';
 	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
 	import * as Collapsible from '#lib/components/ui/collapsible/index.js';
@@ -53,6 +53,9 @@
 	let metadataOutcome = $state<'idle' | 'saved' | 'unknown' | 'invalid' | 'conflict'>('idle');
 	let receiptOpen = $state(page.url.searchParams.has('receive'));
 	let receiptTrigger = $state<HTMLButtonElement | null>(null);
+	let cancellationOpen = $state(false);
+	let reverseConfirmOpen = $state(false);
+	let reverseTrigger = $state<HTMLButtonElement | null>(null);
 	let cancelConfirmOpen = $state(false);
 	let cancelTrigger = $state<HTMLButtonElement | null>(null);
 	let mounted = false;
@@ -73,7 +76,7 @@
 
 	function productName(productId: string): string {
 		const product = products.get(productId);
-		return product ? `${product.code}: ${displayProductName(product, i18n.locale)}` : productId;
+		return product ? `${product.code}: ${orderProductName(product, i18n.locale)}` : orderProductName(undefined, i18n.locale);
 	}
 	function syncPending() {
 		if (sendingCommand) return;
@@ -84,6 +87,7 @@
 			} else if (command?.kind === 'cancel' && command.orderId === page.params.id) {
 				cancellationQuantities = Object.fromEntries(command.items.map((item) => [item.orderLineId, item.quantity]));
 				cancellationReason = command.reason;
+				cancellationOpen = true;
 				outcome = 'unknown';
 			} else if (command?.kind === 'reverse' && command.orderId === page.params.id) {
 				reversingId = command.cancellationId;
@@ -120,6 +124,9 @@
 				receiptOpen = page.url.searchParams.has('receive');
 				cancellationQuantities = {};
 				cancellationReason = '';
+				cancellationOpen = false;
+				cancelConfirmOpen = false;
+				reverseConfirmOpen = false;
 				reversalReason = '';
 				reversingId = null;
 				outcome = 'idle';
@@ -289,6 +296,9 @@
 				savedAction = kind;
 				cancellationQuantities = {};
 				cancellationReason = '';
+				cancellationOpen = false;
+				cancelConfirmOpen = false;
+				reverseConfirmOpen = false;
 				reversalReason = '';
 				reversingId = null;
 				await load();
@@ -314,30 +324,41 @@
 		catch { outcome = 'invalid'; focusInvalid(); return; }
 		outcome = 'idle'; cancelConfirmOpen = true;
 	}
+	function requestReverse(event: SubmitEvent) {
+		event.preventDefault();
+		if (command) { void submit('reverse'); return; }
+		invalidInput = ''; invalidMessage = '';
+		try { checked(`reverse-${reversingId}`, m.invalid, () => { if (!reversingId || !reversalReason.trim()) throw new Error('Invalid reversal'); }); }
+		catch { outcome = 'invalid'; focusInvalid(); return; }
+		reverseTrigger = event.submitter instanceof HTMLButtonElement ? event.submitter : null;
+		outcome = 'idle'; reverseConfirmOpen = true;
+	}
 	const reversedIds = $derived(new Set(detail?.cancellations.filter((entry) => entry.reversesId).map((entry) => entry.reversesId) ?? []));
 </script>
 
 {#snippet fieldError(id: string)}{#if invalidInput === id}<Field.Error id={`${id}-error`}>{invalidMessage}</Field.Error>{/if}{/snippet}
-<svelte:head><title>{m.detailTitle}</title></svelte:head>
+<svelte:head><title>{m.detailTitle(order?.supplierName ?? m.detailHeading)}</title></svelte:head>
 <svelte:window onfocus={revalidate} ononline={revalidate} />
 <svelte:document onvisibilitychange={revalidate} />
-<header class={pageHeader}><h1 class={[pageHeading, nameWrap]}>{order?.supplierName ?? m.detailHeading}</h1></header>
+<header class={pageHeader}>
+	<h1 class={[pageHeading, nameWrap]}>{order?.supplierName ?? m.detailHeading}</h1>
+	{#if order && outstanding}<div class={formActions}><Button bind:ref={receiptTrigger} type="button" variant="outline" aria-haspopup="dialog" onclick={() => { receiptOpen = true; }} disabled={busy}>{m.openReceipt}</Button></div>{/if}
+</header>
 <div class={formStatus} aria-live="polite">
-		{#if failed}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unavailable}</Alert.Message>{:else if !order && !loading}<Alert.Message appearance="inline" variant="default" role="status">{m.missing}</Alert.Message>{/if}{#if !storageReady}<Alert.Message appearance="inline" variant="destructive" role="status">{m.storageUnavailable}</Alert.Message>{:else if wrongIdentity}<Alert.Message appearance="inline" variant="destructive" role="status">{m.wrongIdentity}</Alert.Message>{:else if command && !pendingHere}<Alert.Message appearance="inline" variant="default" role="status">{m.pendingElsewhere}</Alert.Message>{:else if outcome === 'unknown'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unknown}</Alert.Message>{:else if outcome === 'invalid'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.invalid}</Alert.Message>{:else if outcome === 'conflict'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.conflict}</Alert.Message>{:else if outcome === 'saved'}<Alert.Message appearance="inline" variant="default" role="status">{savedAction === 'receipt' ? m.receiptRecorded : savedAction === 'cancel' ? m.cancellationRecorded : m.reversalRecorded}</Alert.Message>{/if}
+		{#if failed}<Alert.Message appearance="inline" variant="destructive">{m.detailUnavailable}</Alert.Message>{:else if !order && !loading}<Alert.Message appearance="inline" variant="default">{m.missing}</Alert.Message>{/if}{#if !storageReady}<Alert.Message appearance="inline" variant="destructive">{m.storageUnavailable}</Alert.Message>{:else if wrongIdentity}<Alert.Message appearance="inline" variant="destructive">{m.wrongIdentity}</Alert.Message>{:else if command && !pendingHere}<Alert.Message appearance="inline" variant="default">{m.pendingElsewhere}</Alert.Message>{:else if outcome === 'unknown'}<Alert.Message appearance="inline" variant="destructive">{m.unknown}</Alert.Message>{:else if outcome === 'invalid'}<Alert.Message appearance="inline" variant="destructive">{m.invalid}</Alert.Message>{:else if outcome === 'conflict'}<Alert.Message appearance="inline" variant="destructive">{m.conflict}</Alert.Message>{:else if outcome === 'saved'}<StateBadge tone="success">{savedAction === 'receipt' ? m.receiptRecorded : savedAction === 'cancel' ? m.cancellationRecorded : m.reversalRecorded}</StateBadge>{/if}
 </div>
 {#if storageReady && !wrongIdentity && command && !pendingHere}<Button variant="link" href={i18n.href(orderCommandPath(command))}>{m.resumePending}</Button>{/if}
 {#if failed}<Button type="button" variant="outline" disabled={loading || busy} onclick={() => load()}>{m.retry}</Button>{/if}
 {#if loading && !detail}<span class="sr-only" role="status">{m.loading}</span><div class="min-h-64 space-y-5" aria-busy="true" aria-hidden="true"><Skeleton class="h-6 w-1/2" /><Skeleton class="h-24 w-full" /><Skeleton class="h-24 w-full" /></div>{/if}
 {#if order}
-	<div class="mb-5"><Button bind:ref={receiptTrigger} type="button" variant="outline" onclick={() => { receiptOpen = true; }} disabled={busy}>{m.openReceipt}</Button></div>
 	{#if receiptOpen}<AdminOrderReceipt orderId={order.id} returnFocus={receiptTrigger} onclose={() => { receiptOpen = false; }} onrecorded={async () => { outcome = 'saved'; savedAction = 'receipt'; await load(); }} />{/if}
 	<dl class="grid gap-3 md:grid-cols-2 [&_dd]:m-0 [&_dt]:text-sm [&_dt]:text-muted-foreground">
 		<div><dt>{m.placedAt}</dt><dd>{formatCountedAt(order.placedAt, i18n.locale)}</dd></div>
 		<div><dt>{m.recordedAt}</dt><dd>{formatCountedAt(order.recordedAt, i18n.locale)}</dd></div>
-		<div><dt>{m.recordedByLabel}</dt><dd>{actors.get(order.createdBy)}</dd></div>
-		{#if order.supplierReference}<div><dt>{m.reference}</dt><dd class="{codeText} wrap-anywhere">{order.supplierReference}</dd></div>{/if}
+		<div><dt>{m.recordedByLabel}</dt><dd>{actors.get(order.createdBy) || m.unknownActor}</dd></div>
+		{#if order.supplierReference}<div><dt>{m.referenceLabel}</dt><dd class="{codeText} wrap-anywhere">{order.supplierReference}</dd></div>{/if}
 		<div><dt>{m.additionalCost}</dt><dd class="font-mono">{formatMoney(order.additionalCostNok, i18n.locale)}</dd></div>
-		{#if order.note}<div><dt>{m.note}</dt><dd>{order.note}</dd></div>{/if}
+		{#if order.note}<div><dt>{m.noteLabel}</dt><dd>{order.note}</dd></div>{/if}
 	</dl>
 	<Collapsible.Root class="mt-4" open={editingHeader} disabled={loading || failed || busy || Boolean(command)} onOpenChange={(open) => { if (open) openHeader(order); else editingHeader = false; }}>
 		<DisclosureTrigger>{m.editMetadata}</DisclosureTrigger>
@@ -350,14 +371,14 @@
 				<Field.Group layout="row">
 					<Field.Field width="medium"><Field.Label for={`${fieldId}-placed`}>{m.placedAt}</Field.Label><Input id={`${fieldId}-placed`} aria-invalid={invalidInput === `${fieldId}-placed`} aria-describedby={invalidInput === `${fieldId}-placed` ? `${fieldId}-placed`.concat('-error') : undefined} type="datetime-local" required bind:value={headerDraft.placedAt} oninput={() => { headerDraft.offset = ''; }} disabled={busy} />{@render fieldError(`${fieldId}-placed`)}</Field.Field>
 					{#if placedOffsets.length === 2}<Field.Field width="medium"><Field.Label for={`${fieldId}-offset`}>{m.offset}</Field.Label><NativeSelect.Root id={`${fieldId}-offset`} required bind:value={headerDraft.offset} disabled={busy}><NativeSelect.Option value="">{m.chooseOffset}</NativeSelect.Option><NativeSelect.Option value="+02:00">{m.beforeClockChange}</NativeSelect.Option><NativeSelect.Option value="+01:00">{m.afterClockChange}</NativeSelect.Option></NativeSelect.Root></Field.Field>{/if}
-					<Field.Field width="medium"><Field.Label for={`${fieldId}-additional`}>{m.additionalCost} <span class="sr-only">(NOK)</span></Field.Label><InputGroup.Root><InputGroup.Input id={`${fieldId}-additional`} aria-invalid={invalidInput === `${fieldId}-additional`} aria-describedby={invalidInput === `${fieldId}-additional` ? `${fieldId}-additional`.concat('-error') : undefined} type="text" inputmode="decimal" required bind:value={headerDraft.additionalCostNok} disabled={busy} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>NOK</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{@render fieldError(`${fieldId}-additional`)}</Field.Field>
+					<Field.Field width="medium"><Field.Label for={`${fieldId}-additional`}>{m.additionalCost} <span class="sr-only">({currencySymbol(i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id={`${fieldId}-additional`} aria-invalid={invalidInput === `${fieldId}-additional`} aria-describedby={invalidInput === `${fieldId}-additional` ? `${fieldId}-additional`.concat('-error') : undefined} type="text" inputmode="decimal" required bind:value={headerDraft.additionalCostNok} disabled={busy} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{currencySymbol(i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{@render fieldError(`${fieldId}-additional`)}</Field.Field>
 				</Field.Group>
 				<Field.Field><Field.Label for={`${fieldId}-header-note`}>{m.note}</Field.Label><Textarea id={`${fieldId}-header-note`} aria-invalid={invalidInput === `${fieldId}-header-note`} aria-describedby={invalidInput === `${fieldId}-header-note` ? `${fieldId}-header-note`.concat('-error') : undefined} rows={2} maxlength={2000} bind:value={headerDraft.note} disabled={busy} />{@render fieldError(`${fieldId}-header-note`)}</Field.Field>
-				<Button type="submit" disabled={loading || failed || busy || Boolean(command)}><ButtonLabel pending={busy} pendingLabel={m.working} label={m.saveOrderMetadata} /></Button>
+				<Button type="submit" disabled={loading || failed || busy || Boolean(command)}><ButtonLabel pending={busy} pendingLabel={m.saving} label={m.saveOrderMetadata} /></Button>
 			</form>
 		</Collapsible.Content>
 	</Collapsible.Root>
-	<div class={formStatus} aria-live="polite">{#if metadataOutcome === 'saved'}<Alert.Message appearance="inline" role="status">{m.metadataSaved}</Alert.Message>{:else if metadataOutcome === 'invalid'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.invalidMetadata}</Alert.Message>{:else if metadataOutcome === 'conflict'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.metadataConflict}</Alert.Message>{:else if metadataOutcome === 'unknown'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.metadataUnknown}</Alert.Message>{/if}</div>
+	<div class={formStatus} aria-live="polite">{#if metadataOutcome === 'saved'}<StateBadge tone="success">{m.metadataSaved}</StateBadge>{:else if metadataOutcome === 'invalid'}<Alert.Message appearance="inline" variant="destructive">{m.invalidMetadata}</Alert.Message>{:else if metadataOutcome === 'conflict'}<Alert.Message appearance="inline" variant="destructive">{m.metadataConflict}</Alert.Message>{:else if metadataOutcome === 'unknown'}<Alert.Message appearance="inline" variant="destructive">{m.metadataUnknown}</Alert.Message>{/if}</div>
 	{#if metadataOutcome === 'unknown'}<Button type="button" variant="outline" disabled={loading || busy} onclick={() => load()}>{m.reviewMetadata}</Button>{/if}
 	<section class={section({ spacing: 'divided' })} aria-labelledby="order-lines-title">
 		<Separator />
@@ -369,7 +390,11 @@
 				<Item.Root variant="row" role="listitem">
 					<Item.Content class="min-w-0">
 						<Item.Title><h3 class={[itemTitle, nameWrap]}><a class="text-foreground no-underline hover:underline" href={i18n.href(`/admin/products/${line.productId}`)}>{productName(line.productId)}</a></h3></Item.Title>
-						<Item.Description>{m.lineNumber(line.lineNumber)} · {m.unitCost}: <span class="font-mono">{formatMoney(line.unitCostNok, i18n.locale)}</span>{#if line.supplierSku} · {m.supplierSku}: <span class={codeText}>{line.supplierSku}</span>{/if}</Item.Description>
+						<Item.Description>{m.lineNumber(line.lineNumber)}</Item.Description>
+						<dl class="grid grid-cols-1 gap-x-5 gap-y-2 md:grid-cols-2 [&_dd]:m-0 [&_dd]:font-mono [&_dt]:text-sm [&_dt]:text-muted-foreground">
+							<div class="min-w-0"><dt>{m.unitCost}</dt><dd>{formatMoney(line.unitCostNok, i18n.locale)}</dd></div>
+							{#if line.supplierSku}<div class="min-w-0"><dt>{m.supplierSkuLabel}</dt><dd class="wrap-anywhere">{line.supplierSku}</dd></div>{/if}
+						</dl>
 						<dl class="mt-2 grid grid-cols-2 gap-x-5 gap-y-2 md:grid-cols-4 [&_dd]:m-0 [&_dd]:font-mono [&_dt]:text-sm [&_dt]:text-muted-foreground">
 							<div><dt>{m.ordered}</dt><dd>{formatDecimal(line.orderedQuantity, i18n.locale)} {unitLabel(unit, i18n.locale, line.orderedQuantity)}</dd></div>
 							<div><dt>{m.received}</dt><dd>{formatDecimal(line.receivedQuantity, i18n.locale)} {unitLabel(unit, i18n.locale, line.receivedQuantity)}</dd></div>
@@ -378,15 +403,15 @@
 						</dl>
 						{#if line.purchaseUrl}<Button variant="link" class="w-fit" href={line.purchaseUrl} target="_blank" rel="noopener noreferrer">{m.openPurchaseUrl}</Button>{/if}
 						<Collapsible.Root open={editingLineId === line.id} disabled={loading || failed || busy || Boolean(command)} onOpenChange={(open) => { if (open) openLine(line); else editingLineId = null; }}>
-							<DisclosureTrigger>{m.editMetadata}</DisclosureTrigger>
+							<DisclosureTrigger><span aria-hidden="true">{m.editMetadata}</span><span class="sr-only">{m.editLineMetadata(productName(line.productId), line.lineNumber)}</span></DisclosureTrigger>
 							<Collapsible.Content>
 								<form class={[formLayout, 'mt-3']} onsubmit={saveLine}>
 									<Field.Group layout="row">
-										<Field.Field width="medium"><Field.Label for={`${fieldId}-cost-${line.id}`}>{m.unitCost} <span class="sr-only">(NOK)</span></Field.Label><InputGroup.Root><InputGroup.Input id={`${fieldId}-cost-${line.id}`} aria-invalid={invalidInput === `${fieldId}-cost-${line.id}`} aria-describedby={invalidInput === `${fieldId}-cost-${line.id}` ? `${fieldId}-cost-${line.id}`.concat('-error') : undefined} type="text" inputmode="decimal" required bind:value={lineDraft.unitCostNok} disabled={busy} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>NOK</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{@render fieldError(`${fieldId}-cost-${line.id}`)}</Field.Field>
+										<Field.Field width="medium"><Field.Label for={`${fieldId}-cost-${line.id}`}>{m.unitCost} <span class="sr-only">({currencySymbol(i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id={`${fieldId}-cost-${line.id}`} aria-invalid={invalidInput === `${fieldId}-cost-${line.id}`} aria-describedby={invalidInput === `${fieldId}-cost-${line.id}` ? `${fieldId}-cost-${line.id}`.concat('-error') : undefined} type="text" inputmode="decimal" required bind:value={lineDraft.unitCostNok} disabled={busy} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{currencySymbol(i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{@render fieldError(`${fieldId}-cost-${line.id}`)}</Field.Field>
 										<Field.Field width="medium"><Field.Label for={`${fieldId}-sku-${line.id}`}>{m.supplierSku}</Field.Label><Input id={`${fieldId}-sku-${line.id}`} aria-invalid={invalidInput === `${fieldId}-sku-${line.id}`} aria-describedby={invalidInput === `${fieldId}-sku-${line.id}` ? `${fieldId}-sku-${line.id}`.concat('-error') : undefined} maxlength={2000} bind:value={lineDraft.supplierSku} disabled={busy} />{@render fieldError(`${fieldId}-sku-${line.id}`)}</Field.Field>
 									</Field.Group>
 									<Field.Field><Field.Label for={`${fieldId}-url-${line.id}`}>{m.purchaseUrl}</Field.Label><Input id={`${fieldId}-url-${line.id}`} aria-invalid={invalidInput === `${fieldId}-url-${line.id}`} aria-describedby={invalidInput === `${fieldId}-url-${line.id}` ? `${fieldId}-url-${line.id}`.concat('-error') : undefined} type="url" autocapitalize="none" enterkeyhint="go" bind:value={lineDraft.purchaseUrl} disabled={busy} />{@render fieldError(`${fieldId}-url-${line.id}`)}</Field.Field>
-									<Button type="submit" disabled={loading || failed || busy || Boolean(command)}><ButtonLabel pending={busy} pendingLabel={m.working} label={m.saveLineMetadata} /></Button>
+									<Button type="submit" disabled={loading || failed || busy || Boolean(command)}><ButtonLabel pending={busy} pendingLabel={m.saving} label={m.saveLineMetadata} /></Button>
 								</form>
 							</Collapsible.Content>
 						</Collapsible.Root>
@@ -398,7 +423,9 @@
 	{#if outstanding || (pendingHere && command?.kind === 'cancel')}
 		<section class={section({ spacing: 'divided' })} aria-labelledby="cancel-title">
 			<Separator />
-			<h2 class={sectionHeading} id="cancel-title">{m.cancelHeading}</h2>
+			<Collapsible.Root bind:open={cancellationOpen}>
+			<DisclosureTrigger><span id="cancel-title">{m.cancelHeading}</span></DisclosureTrigger>
+			<Collapsible.Content class="mt-3">
 			<form class={formLayout} onsubmit={requestCancel}>
 				{#each lines.filter((line) => compareDecimals(line.outstandingQuantity, '0') > 0 || cancellationQuantities[line.id]) as line (line.id)}
 					{@const unit = unitLabel(products.get(line.productId)?.unit_code, i18n.locale)}
@@ -409,8 +436,10 @@
 					{@render fieldError(`${fieldId}-cancel-${line.id}`)}</Field.Field>
 				{/each}
 				<Field.Field><Field.Label for={`${fieldId}-cancel-reason`}>{m.cancelReason}</Field.Label><Textarea id={`${fieldId}-cancel-reason`} aria-invalid={invalidInput === `${fieldId}-cancel-reason`} aria-describedby={invalidInput === `${fieldId}-cancel-reason` ? `${fieldId}-cancel-reason`.concat('-error') : undefined} rows={2} maxlength={2000} required bind:value={cancellationReason} disabled={loading || failed || busy || Boolean(command)} />{@render fieldError(`${fieldId}-cancel-reason`)}</Field.Field>
-				<Button bind:ref={cancelTrigger} type="submit" disabled={busy || loading || failed || !storageReady || wrongIdentity || Boolean(command && (!pendingHere || command.kind !== 'cancel'))}><ButtonLabel pending={busy} pendingLabel={m.working} label={command?.kind === 'cancel' && pendingHere ? m.retrySame : m.cancelSelected} reserveLabels={[m.retrySame, m.cancelSelected]} /></Button>
+				<Button bind:ref={cancelTrigger} variant="outline" type="submit" disabled={busy || loading || failed || !storageReady || wrongIdentity || Boolean(command && (!pendingHere || command.kind !== 'cancel'))}><ButtonLabel pending={busy} pendingLabel={m.working} label={command?.kind === 'cancel' && pendingHere ? m.retryCancel : m.cancelSelected} reserveLabels={[m.retryCancel, m.cancelSelected]} /></Button>
 			</form>
+			</Collapsible.Content>
+			</Collapsible.Root>
 			<AlertDialog.Root bind:open={cancelConfirmOpen}>
 				<AlertDialog.Content preventScroll={false} onCloseAutoFocus={(event) => { event.preventDefault(); cancelTrigger?.focus({ preventScroll: true }); }}>
 					<AlertDialog.Header>
@@ -418,8 +447,8 @@
 						<AlertDialog.Description aria-label={m.cancelSelected}>{m.cancelConfirm}</AlertDialog.Description>
 					</AlertDialog.Header>
 					<AlertDialog.Footer>
-						<AlertDialog.Cancel>{m.keepOrder}</AlertDialog.Cancel>
-						<AlertDialog.Action disabled={admin.status !== 'ready' || loading || failed || busy} onclick={() => { cancelConfirmOpen = false; void submit('cancel'); }}>{m.cancelSelected}</AlertDialog.Action>
+						<AlertDialog.Cancel>{m.cancel}</AlertDialog.Cancel>
+						<AlertDialog.Action variant="destructive" disabled={admin.status !== 'ready' || loading || failed || busy} onclick={() => { cancelConfirmOpen = false; void submit('cancel'); }}>{m.cancelSelected}</AlertDialog.Action>
 					</AlertDialog.Footer>
 				</AlertDialog.Content>
 			</AlertDialog.Root>
@@ -437,7 +466,7 @@
 				{@const recorded = formatCountedAt(receipt.recordedAt, i18n.locale)}
 				<Item.Root variant="row" role="listitem"><Item.Content class="min-w-0">
 					<Item.Title><h3 class={itemTitle}>{receipt.kind === 'receipt' ? m.receivedAt : m.historyCorrection}</h3></Item.Title>
-					<Item.Description>{occurred} · {m.recordedBy(actors.get(receipt.actorId) ?? '')}{#if recorded !== occurred} · {m.recordedAt}: {recorded}{/if}</Item.Description>
+					<Item.Description>{occurred} · {m.recordedBy(actors.get(receipt.actorId) || m.unknownActor)}{#if recorded !== occurred}&nbsp;· {m.recordedAt}: {recorded}{/if}</Item.Description>
 					{#if receipt.note}<p class="text-sm">{receipt.note}</p>{/if}
 						<ul class="mt-2 space-y-1 text-sm">{#each receipt.movements as movement (movement.id)}{@const line = lines.find((item) => item.id === movement.orderLineId)}<li class={nameWrap}>{line ? `${m.lineNumber(line.lineNumber)} · ` : ''}{productName(movement.productId)}: <span class="font-mono">{formatDecimal(movement.quantityDelta, i18n.locale)} {unitLabel(products.get(movement.productId)?.unit_code, i18n.locale, movement.quantityDelta)}</span></li>{/each}</ul>
 				</Item.Content></Item.Root>
@@ -454,14 +483,14 @@
 				{#if index > 0}<Item.Separator />{/if}
 				{@const line = lines.find((line) => line.id === entry.orderLineId)}
 				<Item.Root variant="row" role="listitem"><Item.Content class="min-w-0">
-					<Item.Title><h3 class={itemTitle}>{entry.reversesId ? m.reversalRecorded : m.cancellationRecorded}</h3></Item.Title>
-					<Item.Description>{formatCountedAt(entry.recordedAt, i18n.locale)} · {m.recordedBy(actors.get(entry.createdBy) ?? '')} · {line ? `${m.lineNumber(line.lineNumber)} · ${productName(line.productId)}` : entry.orderLineId} · <span class="font-mono">{formatDecimal(entry.quantity, i18n.locale)} {line ? unitLabel(products.get(line.productId)?.unit_code, i18n.locale, entry.quantity) : ''}</span></Item.Description>
+					<Item.Title><h3 class={itemTitle}>{entry.reversesId ? m.reversalEntry : m.cancellationEntry}</h3></Item.Title>
+					<Item.Description>{formatCountedAt(entry.recordedAt, i18n.locale)} · {m.recordedBy(actors.get(entry.createdBy) || m.unknownActor)} · {line ? `${m.lineNumber(line.lineNumber)} · ${productName(line.productId)}` : orderProductName(undefined, i18n.locale)} · <span class="font-mono">{formatDecimal(entry.quantity, i18n.locale)} {line ? unitLabel(products.get(line.productId)?.unit_code, i18n.locale, entry.quantity) : ''}</span></Item.Description>
 					<p class="text-sm">{entry.reason}</p>
 					{#if !entry.reversesId && !reversedIds.has(entry.id)}
 						<Collapsible.Root open={reversingId === entry.id} disabled={loading || failed || busy || Boolean(command)} onOpenChange={(open) => { reversingId = open ? entry.id : null; reversalReason = ''; }}>
 							<DisclosureTrigger>{m.reverseCancellation}</DisclosureTrigger>
 							<Collapsible.Content>
-								<form class={[formLayout, 'mt-3']} onsubmit={(event) => submit('reverse', event)}><Field.Field><Field.Label for={`${fieldId}-reverse-${entry.id}`}>{m.reason}</Field.Label><Textarea id={`${fieldId}-reverse-${entry.id}`} aria-invalid={invalidInput === `${fieldId}-reverse-${entry.id}`} aria-describedby={invalidInput === `${fieldId}-reverse-${entry.id}` ? `${fieldId}-reverse-${entry.id}-error` : undefined} rows={2} maxlength={2000} required bind:value={reversalReason} disabled={loading || failed || busy || Boolean(command)} />{@render fieldError(`${fieldId}-reverse-${entry.id}`)}</Field.Field><Button type="submit" disabled={busy || !storageReady || wrongIdentity || Boolean(command && (!pendingHere || command.kind !== 'reverse'))}><ButtonLabel pending={busy} pendingLabel={m.working} label={command?.kind === 'reverse' && pendingHere ? m.retrySame : m.reverseCancellation} reserveLabels={[m.retrySame, m.reverseCancellation]} /></Button></form>
+								<form class={[formLayout, 'mt-3']} onsubmit={requestReverse}><Field.Field><Field.Label for={`${fieldId}-reverse-${entry.id}`}>{m.reason}</Field.Label><Textarea id={`${fieldId}-reverse-${entry.id}`} aria-invalid={invalidInput === `${fieldId}-reverse-${entry.id}`} aria-describedby={invalidInput === `${fieldId}-reverse-${entry.id}` ? `${fieldId}-reverse-${entry.id}-error` : undefined} rows={2} maxlength={2000} required bind:value={reversalReason} disabled={loading || failed || busy || Boolean(command)} />{@render fieldError(`${fieldId}-reverse-${entry.id}`)}</Field.Field><Button type="submit" variant="outline" disabled={busy || !storageReady || wrongIdentity || Boolean(command && (!pendingHere || command.kind !== 'reverse'))}><ButtonLabel pending={busy} pendingLabel={m.working} label={command?.kind === 'reverse' && pendingHere ? m.retryReverse : m.reverseCancellation} reserveLabels={[m.retryReverse, m.reverseCancellation]} /></Button></form>
 							</Collapsible.Content>
 						</Collapsible.Root>
 					{/if}
@@ -471,3 +500,16 @@
 	</section>
 	{/if}
 {/if}
+
+<AlertDialog.Root bind:open={reverseConfirmOpen}>
+	<AlertDialog.Content preventScroll={false} onCloseAutoFocus={(event) => { event.preventDefault(); reverseTrigger?.focus({ preventScroll: true }); }}>
+		<AlertDialog.Header>
+			<AlertDialog.Title>{m.reverseCancellation}</AlertDialog.Title>
+			<AlertDialog.Description aria-label={m.reverseCancellation}>{m.reverseConfirm}</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel>{m.cancel}</AlertDialog.Cancel>
+			<AlertDialog.Action variant="destructive" disabled={admin.status !== 'ready' || loading || failed || busy} onclick={() => { reverseConfirmOpen = false; void submit('reverse'); }}>{m.reverseCancellation}</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>

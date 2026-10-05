@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { pageContainer, pageHeader, pageHeading } from '#lib/ui.js';
+	import { formActions, pageContainer, pageHeader, pageHeading } from '#lib/ui.js';
 	import * as Alert from '#lib/components/ui/alert/index.js';
 	import * as Sidebar from '#lib/components/ui/sidebar/index.js';
 	import Icon from '#lib/Icon.svelte';
@@ -12,7 +12,7 @@
 	import ClockCounterClockwiseIcon from 'phosphor-svelte/lib/ClockCounterClockwiseIcon';
 	import ArrowsDownUpIcon from 'phosphor-svelte/lib/ArrowsDownUpIcon';
 	import QrCodeIcon from 'phosphor-svelte/lib/QrCodeIcon';
-	import QuestionIcon from 'phosphor-svelte/lib/QuestionIcon';
+	import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon';
 	import UsersIcon from 'phosphor-svelte/lib/UsersIcon';
 	import UserCircleIcon from 'phosphor-svelte/lib/UserCircleIcon';
 	import UserGearIcon from 'phosphor-svelte/lib/UserGearIcon';
@@ -41,24 +41,35 @@
 			void goto(i18n.href(`/admin/login?next=${next}`), { replace: true });
 		}
 	});
-	const navEntries = $derived([
-		{ path: '/admin', label: m.overview, icon: HouseIcon },
-		{ path: '/admin/products', label: i18n.m.adminProducts.heading, icon: PackageIcon },
-		{ path: '/admin/stock', label: i18n.m.adminStock.heading, icon: ArrowsDownUpIcon },
-		{ path: '/admin/orders', label: i18n.m.adminOrders.heading, icon: ReceiptIcon },
-		{ path: '/admin/counts', label: i18n.m.adminCounts.heading, icon: ListChecksIcon },
-		{ path: '/admin/shelf', label: i18n.m.adminShelf.heading, icon: SquaresFourIcon },
-		{ path: '/admin/products/labels', label: i18n.m.adminLabels.heading, icon: QrCodeIcon },
-		{ path: '/admin/statistics', label: i18n.m.adminStatistics.heading, icon: ChartLineUpIcon },
-		{ path: '/admin/audit', label: i18n.m.adminAudit.heading, icon: ClockCounterClockwiseIcon },
-		{ path: '/admin/privacy', label: m.recoveryHeading, icon: QuestionIcon },
-		{ path: '/admin/help', label: m.directoryHeading, icon: UsersIcon },
-		{ path: '/admin/admins', label: i18n.m.adminMembers.heading, icon: UserGearIcon }
+	// Grouped by job, so staff find a page by what they are doing, not by memorising a list.
+	const navGroups = $derived([
+		{ key: 'daily', label: m.groups.daily, entries: [
+			{ path: '/admin', label: m.overview, icon: HouseIcon },
+			{ path: '/admin/products', label: i18n.m.adminProducts.heading, icon: PackageIcon },
+			{ path: '/admin/stock', label: i18n.m.adminStock.heading, icon: ArrowsDownUpIcon },
+			{ path: '/admin/orders', label: i18n.m.adminOrders.heading, icon: ReceiptIcon },
+			{ path: '/admin/counts', label: i18n.m.adminCounts.heading, icon: ListChecksIcon }
+		] },
+		{ key: 'shelf', label: m.groups.shelf, entries: [
+			{ path: '/admin/shelf', label: i18n.m.adminShelf.heading, icon: SquaresFourIcon },
+			{ path: '/admin/products/labels', label: i18n.m.adminLabels.heading, icon: QrCodeIcon }
+		] },
+		{ key: 'reports', label: m.groups.reports, entries: [
+			{ path: '/admin/statistics', label: i18n.m.adminStatistics.heading, icon: ChartLineUpIcon },
+			{ path: '/admin/audit', label: i18n.m.adminAudit.heading, icon: ClockCounterClockwiseIcon }
+		] },
+		{ key: 'access', label: m.groups.access, entries: [
+			{ path: '/admin/purchases', label: m.recoveryHeading, icon: MagnifyingGlassIcon },
+			{ path: '/admin/contacts', label: m.directoryHeading, icon: UsersIcon },
+			{ path: '/admin/admins', label: i18n.m.adminMembers.heading, icon: UserGearIcon }
+		] }
 	]);
+	const navEntries = $derived(navGroups.flatMap(group => group.entries));
 	const currentPath = $derived(stripLocale(page.url.pathname));
 	// Longest prefix wins so /admin/products/labels marks the labels entry, not products.
 	const currentNav = $derived([...navEntries].sort((a, b) => b.path.length - a.path.length)
 		.find(({ path }) => currentPath === path || currentPath.startsWith(`${path}/`))?.path);
+	const currentLabel = $derived(navEntries.find(entry => entry.path === currentNav)?.label);
 	const productPage = $derived(currentNav === '/admin/products' && Boolean(page.params.id));
 	// Detail pages link their section crumb, so pages need no separate back link.
 	const detailPage = $derived(Boolean(currentNav && currentNav !== '/admin' && currentPath !== currentNav));
@@ -82,21 +93,25 @@
 				</Sidebar.MenuButton>
 			</Sidebar.Header>
 			<Sidebar.Content>
-				<Sidebar.Group>
-					<nav aria-label={m.navigation}>
-						<Sidebar.Menu>
-							{#each navEntries as { path, label, icon } (path)}
-								<Sidebar.MenuItem>
-									<Sidebar.MenuButton isActive={currentNav === path} tooltipContent={label} aria-label={label} aria-current={currentNav === path ? 'page' : undefined}>
-										{#snippet child({ props })}
-											<a {...props} href={i18n.href(path)}><Icon {icon} /><span>{label}</span></a>
-										{/snippet}
-									</Sidebar.MenuButton>
-								</Sidebar.MenuItem>
-							{/each}
-						</Sidebar.Menu>
-					</nav>
-				</Sidebar.Group>
+				<nav aria-label={m.navigation}>
+					{#each navGroups as { key, label: groupLabel, entries } (key)}
+						<!-- The label is hidden in the icon rail, where a hairline separates the groups instead. -->
+						<Sidebar.Group role="group" aria-labelledby={`admin-nav-${key}`} class="py-1 group-data-[collapsible=icon]:not-first:border-t">
+							<Sidebar.GroupLabel id={`admin-nav-${key}`}>{groupLabel}</Sidebar.GroupLabel>
+							<Sidebar.Menu>
+								{#each entries as { path, label, icon } (path)}
+									<Sidebar.MenuItem>
+										<Sidebar.MenuButton isActive={currentNav === path} tooltipContent={label} aria-label={label} aria-current={currentNav === path ? 'page' : undefined}>
+											{#snippet child({ props })}
+												<a {...props} href={i18n.href(path)}><Icon {icon} /><span>{label}</span></a>
+											{/snippet}
+										</Sidebar.MenuButton>
+									</Sidebar.MenuItem>
+								{/each}
+							</Sidebar.Menu>
+						</Sidebar.Group>
+					{/each}
+				</nav>
 			</Sidebar.Content>
 			<Sidebar.Footer class="p-3 group-data-[collapsible=icon]:px-2">
 				<div class="flex min-w-0 items-center gap-2 p-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0">
@@ -122,16 +137,15 @@
 			<div class="flex min-h-16 items-center gap-3 px-4 md:px-6" inert={admin.status !== 'ready'}>
 				<Sidebar.Trigger label={m.toggleSidebar} />
 				<Separator orientation="vertical" class="my-5" />
+				<!-- Section, then the page inside it. The sidebar already names Admin, and a third crumb would wrap on phones. -->
 				<nav aria-label={m.breadcrumb} class="min-w-0">
-					<ol class="flex min-w-0 flex-wrap items-center gap-2 text-sm">
-						<li><a href={i18n.href('/admin')} class="text-muted-foreground no-underline">{m.heading}</a></li>
-						{#if currentNav && currentNav !== '/admin'}
-							<li aria-hidden="true"><Icon icon={CaretRightIcon} class="size-4" /></li>
-							<li>{#if detailPage}<a href={i18n.href(currentNav)} class="text-muted-foreground no-underline">{navEntries.find(entry => entry.path === currentNav)?.label}</a>{:else}<span aria-current="page">{navEntries.find(entry => entry.path === currentNav)?.label}</span>{/if}</li>
+					<ol class="flex min-w-0 items-center gap-2 text-sm">
+						{#if currentNav}
+							<li class="shrink-0">{#if detailPage}<a href={i18n.href(currentNav)} class="text-muted-foreground no-underline">{currentLabel}</a>{:else}<span aria-current="page">{currentLabel}</span>{/if}</li>
 						{/if}
 						{#if detailPage}
-							<li aria-hidden="true"><Icon icon={CaretRightIcon} class="size-4" /></li>
-							<li class="min-w-0 wrap-anywhere" aria-current="page">{productPage ? productCode ?? (page.params.id === 'new' ? i18n.m.adminProducts.newProduct : i18n.m.adminProducts.editProduct) : currentNav === '/admin/orders' ? i18n.m.adminOrders.detailHeading : i18n.m.adminCounts.detailHeading}</li>
+							<li class="shrink-0" aria-hidden="true"><Icon icon={CaretRightIcon} class="size-4" /></li>
+							<li class="min-w-0 truncate" aria-current="page">{productPage ? productCode ?? (page.params.id === 'new' ? i18n.m.adminProducts.newProduct : i18n.m.adminProducts.editProduct) : currentNav === '/admin/orders' ? i18n.m.adminOrders.detailHeading : i18n.m.adminCounts.detailHeading}</li>
 						{/if}
 					</ol>
 				</nav>
@@ -148,25 +162,30 @@
 					{#key authPage ? 'auth' : admin.session?.user.id}{@render children()}{/key}
 				</div>
 			{/if}
-			{#if !authPage && admin.status !== 'ready'}
+			<!-- Signed out: the effect above is already redirecting, so draw nothing rather than flash a prompt. -->
+			{#if !authPage && admin.status !== 'ready' && admin.status !== 'signedOut'}
 				{#if !admin.retainsEditor && admin.status !== 'loading'}<header class={pageHeader}><h1 class={pageHeading}>{m.heading}</h1></header>{/if}
-				<div class="min-h-40" aria-live="polite">
-					{#if admin.status === 'loading'}
-						<span class="sr-only" role="status">{m.loading}</span>
-						{#if !admin.retainsEditor}
-							<div class="space-y-6" aria-hidden="true">
-								<Skeleton class="h-10 w-64 max-w-full" />
-								<Skeleton class="h-5 w-80 max-w-full" />
-								{#each [1, 2, 3] as row (row)}<div class="space-y-3 py-3"><Skeleton class="h-6 w-2/3" /><Skeleton class="h-5 w-1/2" /></div>{/each}
-							</div>
-						{/if}
-					{:else if admin.status === 'signedOut'}
-						<Alert.Message appearance="inline" variant="default" role="status">{m.signInRequired}</Alert.Message><Button variant="default" href={i18n.href(`/admin/login?next=${encodeURIComponent(stripLocale(page.url.pathname))}`)}>{m.signIn}</Button>
-					{:else if admin.status === 'noAccess' || admin.status === 'revoked'}
-						<Alert.Message appearance="inline" variant="default" role="status">{admin.status === 'revoked' ? m.revoked : m.noAccess}</Alert.Message>
-						<Button type="button" variant="outline" onclick={() => admin.refresh()}>{m.retry}</Button>
-						<Button type="button" variant="ghost" onclick={() => admin.signOut()}>{m.signOut}</Button>
-					{:else}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unavailable}</Alert.Message><Button type="button" variant="outline" onclick={() => admin.refresh()}>{m.retry}</Button>{/if}
+				<div class="min-h-40 space-y-4">
+					<div aria-live="polite">
+						{#if admin.status === 'loading'}
+							<span class="sr-only">{m.loading}</span>
+							{#if !admin.retainsEditor}
+								<div class="space-y-6" aria-hidden="true">
+									<Skeleton class="h-10 w-64 max-w-full" />
+									<Skeleton class="h-5 w-80 max-w-full" />
+									{#each [1, 2, 3] as row (row)}<div class="space-y-3 py-3"><Skeleton class="h-6 w-2/3" /><Skeleton class="h-5 w-1/2" /></div>{/each}
+								</div>
+							{/if}
+						{:else if admin.status === 'noAccess' || admin.status === 'revoked'}
+							<Alert.Message appearance="inline" variant="destructive">{admin.status === 'revoked' ? m.revoked : m.noAccess}</Alert.Message>
+						{:else}<Alert.Message appearance="inline" variant="destructive">{m.accessUnavailable}</Alert.Message>{/if}
+					</div>
+					{#if admin.status === 'noAccess' || admin.status === 'revoked'}
+						<div class={formActions}>
+							<Button type="button" variant="outline" onclick={() => admin.refresh()}>{m.retry}</Button>
+							<Button type="button" variant="ghost" onclick={() => admin.signOut()}>{m.signOut}</Button>
+						</div>
+					{:else if admin.status !== 'loading'}<Button type="button" variant="outline" onclick={() => admin.refresh()}>{m.retry}</Button>{/if}
 				</div>
 			{/if}
 			</div>

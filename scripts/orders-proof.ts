@@ -157,10 +157,10 @@ try {
 	await expect(orderRow.getByRole('button', { name: m.openReceipt, exact: true })).toBeVisible();
 	await orderRow.getByRole('button', { name: m.openReceipt, exact: true }).click();
 	await expect(page).toHaveURL(`${origin}/en/admin/orders`);
-	const receive = page.getByRole('dialog', { name: new RegExp(m.receiveHeading) });
+	const receive = page.getByRole('dialog', { name: new RegExp(m.openReceipt) });
 	await expect(receive).toBeVisible();
 	await expect(receive.getByRole('checkbox')).toHaveCount(2);
-	await expect(receive.getByRole('button', { name: m.confirmReceived, exact: true })).toBeDisabled();
+	await expect(receive.getByRole('button', { name: m.recordReceipt, exact: true })).toBeDisabled();
 	await receive.getByRole('button', { name: m.scanProduct, exact: true }).click();
 	const receiptLines = receive.locator('form[id$="-form"] > div');
 	await expect(receiptLines.first()).toHaveClass(/ring-2/, { timeout: 20000 });
@@ -178,12 +178,12 @@ try {
 	await receive.getByRole('button', { name: m.differentQuantity, exact: true }).first().click();
 	const receivedQuantity = receive.getByLabel(fieldLabel(`${m.receivedQuantity} (pcs)`));
 	await receivedQuantity.fill('0');
-	await receive.getByRole('button', { name: m.confirmReceived, exact: true }).click();
+	await receive.getByRole('button', { name: m.recordReceipt, exact: true }).click();
 	await expect(receivedQuantity).toHaveAttribute('aria-invalid', 'true');
 	await expect(receivedQuantity).toBeFocused();
 	await expect(receive.getByText(m.invalidQuantity('1'), { exact: true })).toBeVisible();
 	await receivedQuantity.fill('11');
-	await receive.getByRole('button', { name: m.confirmReceived, exact: true }).click();
+	await receive.getByRole('button', { name: m.recordReceipt, exact: true }).click();
 	await expect(receivedQuantity).toHaveAttribute('aria-invalid', 'true');
 	await expect(receivedQuantity).toBeFocused();
 	await expect(receive.getByText(m.exceedsOutstanding('10', unitLabel('pcs', 'en', '10')), { exact: true })).toBeVisible();
@@ -207,7 +207,7 @@ try {
 		if (route.request().method() !== 'POST') { await route.continue(); return; }
 		requestSeen(); await held; await route.continue();
 	});
-	const confirming = receive.getByRole('button', { name: m.confirmReceived, exact: true }).click();
+	const confirming = receive.getByRole('button', { name: m.recordReceipt, exact: true }).click();
 	try { await started; await expect(receive.getByText(m.unknown, { exact: true })).toHaveCount(0); }
 	finally { releaseReceipt(); }
 	await confirming;
@@ -230,14 +230,14 @@ try {
 	await orderRow.getByRole('button', { name: m.openReceipt, exact: true }).click();
 	await receive.getByRole('button', { name: m.differentQuantity, exact: true }).first().click();
 	await receive.getByLabel(fieldLabel(`${m.receivedQuantity} (pcs)`)).fill('1');
-	await receive.getByRole('button', { name: m.confirmReceived, exact: true }).click();
+	await receive.getByRole('button', { name: m.recordReceipt, exact: true }).click();
 	await expect(receive.getByText(m.unknown, { exact: true })).toBeVisible();
 	await receive.getByRole('button', { name: m.closeReceipt, exact: true }).click();
 	await page.getByRole('button', { name: m.resumePending, exact: true }).click();
 	await expect(receive).toBeVisible();
 	await page.reload();
 	await expect(receive).toBeVisible();
-	await receive.getByRole('button', { name: m.retrySame, exact: true }).click();
+	await receive.getByRole('button', { name: m.retryReceipt, exact: true }).click();
 	await expect(page.getByText(m.receiptRecorded, { exact: true })).toBeVisible();
 	await page.unroute(receiptRpc);
 	expect(commands).toHaveLength(2);
@@ -248,6 +248,7 @@ try {
 
 	await page.goto(`${origin}/en/admin/orders/${orderId}`);
 	const cancel = page.locator('section[aria-labelledby="cancel-title"]');
+	await cancel.getByRole('button', { name: m.cancelHeading, exact: true }).click();
 	await cancel.locator('input').first().fill('2');
 	await cancel.getByLabel(fieldLabel(m.cancelReason)).fill('Supplier short shipment');
 	await cancel.getByRole('button', { name: m.cancelSelected, exact: true }).click();
@@ -264,7 +265,7 @@ try {
 		await page.setViewportSize(viewport);
 		await expect(cancellationDialog).toBeInViewport({ ratio: 1 });
 		await cancellationDialog.evaluate(async element => { await Promise.all(element.getAnimations().map(animation => animation.finished)); });
-		const fixedContent = [cancellationDialog.getByRole('heading'), cancellationDialog.getByRole('button', { name: m.keepOrder, exact: true }), cancellationDialog.getByRole('button', { name: m.cancelSelected, exact: true })];
+		const fixedContent = [cancellationDialog.getByRole('heading'), cancellationDialog.getByRole('button', { name: m.cancel, exact: true }), cancellationDialog.getByRole('button', { name: m.cancelSelected, exact: true })];
 		for (const control of fixedContent) await expect(control).toBeInViewport({ ratio: 1 });
 		const beforeScroll = await Promise.all(fixedContent.map(control => control.boundingBox()));
 		await expect(confirmationBody).toHaveAttribute('tabindex', '0');
@@ -283,13 +284,18 @@ try {
 	await expect(cancellationDialog).toHaveAccessibleDescription(m.cancelConfirm);
 	await page.setViewportSize(beforeConfirmationViewport);
 	await cancellationDialog.getByRole('button', { name: m.cancelSelected, exact: true }).click();
-	await expect(page.getByText(m.cancellationRecorded, { exact: true })).toBeVisible();
+	// The state is a badge; the same word also labels a line's cancelled quantity.
+	await expect(page.locator('[data-slot="badge"]').getByText(m.cancellationRecorded, { exact: true })).toBeVisible();
 	expect(await value(`SELECT cancelled_quantity||'|'||outstanding_quantity FROM app.purchase_line_progress WHERE order_id=${literal(orderId)} AND product_id=${literal(seedProductId(0))}`)).toBe('2|3');
 	const history = page.locator('section[aria-labelledby="cancellation-history-title"]');
 	await history.getByRole('button', { name: m.reverseCancellation, exact: true }).click();
 	await history.getByLabel(fieldLabel(m.reason)).fill('Supplier delivered the missing quantity');
 	await history.getByRole('button', { name: m.reverseCancellation, exact: true }).last().click();
-	await expect(page.getByText(m.reversalRecorded, { exact: true })).toBeVisible();
+	const reversalDialog = page.getByRole('alertdialog', { name: m.reverseCancellation, exact: true });
+	await expect(reversalDialog).toHaveAccessibleDescription(m.reverseConfirm);
+	expect(await value(`SELECT cancelled_quantity FROM app.purchase_line_progress WHERE order_id=${literal(orderId)} AND product_id=${literal(seedProductId(0))}`)).toBe('2');
+	await reversalDialog.getByRole('button', { name: m.reverseCancellation, exact: true }).click();
+	await expect(page.locator('[data-slot="badge"]').getByText(m.reversalRecorded, { exact: true })).toBeVisible();
 	expect(await value(`SELECT cancelled_quantity||'|'||outstanding_quantity FROM app.purchase_line_progress WHERE order_id=${literal(orderId)} AND product_id=${literal(seedProductId(0))}`)).toBe('0|5');
 	expect(await value(`SELECT count(*) FROM app.purchase_order_cancellations c JOIN app.purchase_order_lines l ON l.id=c.order_line_id WHERE l.order_id=${literal(orderId)}`)).toBe('2');
 	await page.getByRole('button', { name: m.openReceipt, exact: true }).click();
@@ -309,13 +315,15 @@ try {
 			await route.abort('failed');
 		} else await route.continue();
 	});
-	await receive.getByRole('button', { name: m.confirmReceived, exact: true }).click();
+	await receive.getByRole('button', { name: m.recordReceipt, exact: true }).click();
 	await expect(receive.getByText(m.unknown, { exact: true })).toBeVisible();
 	await page.reload();
 	await expect(receive.getByRole('checkbox')).toHaveCount(2);
-	await receive.getByRole('button', { name: m.retrySame, exact: true }).click();
+	await receive.getByRole('button', { name: m.retryReceipt, exact: true }).click();
 	await expect(page.getByText(m.receiptRecorded, { exact: true })).toBeVisible();
-	await expect(orderRow).toContainText(m.openLines(0));
+	await expect(orderRow).toContainText(m.completed);
+	await expect(orderRow).not.toContainText(m.openLines(0));
+	await expect(orderRow.getByRole('button', { name: m.openReceipt, exact: true })).toHaveCount(0);
 	await page.unroute(receiptRpc);
 	expect(finalCommands).toHaveLength(2);
 	expect(finalCommands[1]).toEqual(finalCommands[0]);
@@ -359,17 +367,18 @@ try {
 	const membershipRead = `${api.origin}/rest/v1/amp_staff_members*`;
 	await page.route(membershipRead, route => route.abort('failed'));
 	await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-	await expect(unplannedSheet.getByText(en.admin.unavailable, { exact: true })).toBeVisible();
-	await expect(unplannedSheet.getByRole('button', { name: m.retrySame, exact: true })).toBeDisabled();
+	await expect(unplannedSheet.getByText(en.admin.accessUnavailable, { exact: true })).toBeVisible();
+	// The access gate's retry and the command's retry share the words "Try again", so tell them apart by type.
+	await expect(unplannedSheet.locator('button[type="submit"]').filter({ hasText: m.retryReceipt })).toBeDisabled();
 	await expect(unplannedSheet.getByRole('button', { name: m.closeEntry, exact: true })).toBeEnabled();
 	await page.unroute(membershipRead);
-	await unplannedSheet.getByRole('button', { name: en.admin.retry, exact: true }).click();
-	await expect(unplannedSheet.getByText(en.admin.unavailable, { exact: true })).toHaveCount(0);
+	await unplannedSheet.locator('button[type="button"]').filter({ hasText: en.admin.retry }).click();
+	await expect(unplannedSheet.getByText(en.admin.accessUnavailable, { exact: true })).toHaveCount(0);
 	expect(await page.evaluate(() => localStorage.getItem('ampoteket:admin-order-command:v1'))).toBe(pendingBeforeAccessFailure);
 	await unplannedSheet.getByRole('button', { name: m.closeEntry, exact: true }).click();
 	await expect(unplannedSheet).toHaveCount(0);
 	await page.getByRole('button', { name: m.resumePending, exact: true }).click();
-	await unplannedSheet.getByRole('button', { name: m.retrySame, exact: true }).click();
+	await unplannedSheet.getByRole('button', { name: m.retryReceipt, exact: true }).click();
 	await expect(page.getByText(m.receiptRecorded, { exact: true })).toBeVisible();
 	await page.unroute(receiptRpc);
 	expect(unplannedCommands).toHaveLength(2);
@@ -396,9 +405,11 @@ try {
 		await expect(page.getByText(messages.placedAt, { exact: true }).first()).toBeVisible();
 		await fits(page); await headingClear(page, longSupplier);
 		await page.screenshot({ path: `${artifacts}/detail-${locale}-${width}.png`, fullPage: true });
-		await page.getByRole('button', { name: messages.openReceipt, exact: true }).click();
-		const receipt = page.getByRole('dialog', { name: new RegExp(messages.receiveHeading) });
-		const receiptBody = receipt.getByRole('region', { name: messages.receiveHeading, exact: true });
+		// A completed order offers no receipt button; the sheet's complete state is still reachable by its link.
+		await expect(page.getByRole('button', { name: messages.openReceipt, exact: true })).toHaveCount(0);
+		await page.goto(`${origin}${prefix}/admin/orders/${orderId}?receive`);
+		const receipt = page.getByRole('dialog', { name: new RegExp(messages.openReceipt) });
+		const receiptBody = receipt.getByRole('region', { name: messages.openReceipt, exact: true });
 		await expect(receiptBody.getByText(longSupplier, { exact: true })).toBeVisible();
 		const closeReceipt = receipt.getByRole('button', { name: messages.closeReceipt, exact: true });
 		for (const viewport of [{ width, height: 900 }, ...(width === 360 ? [{ width: 320, height: 256 }, { width: 667, height: 375 }] : [])]) {
@@ -456,12 +467,12 @@ try {
 	await expect(page).toHaveURL(/\/en\/admin\/orders\/[0-9a-f-]{36}$/);
 	expect(await value(`SELECT count(*) FROM app.purchase_order_lines WHERE order_id=${literal(page.url().split('/').at(-1)!)} AND product_id=${literal(newProductId)}`)).toBe('1');
 	await page.getByRole('button', { name: m.openReceipt, exact: true }).click();
-	const activeReceipt = page.getByRole('dialog', { name: m.receiveHeading, exact: true });
-	const activeBody = activeReceipt.getByRole('region', { name: m.receiveHeading, exact: true });
+	const activeReceipt = page.getByRole('dialog', { name: m.openReceipt, exact: true });
+	const activeBody = activeReceipt.getByRole('region', { name: m.openReceipt, exact: true });
 	await expect(activeBody.getByText(activeSupplier, { exact: true })).toBeVisible();
 	for (const viewport of [{ width: 320, height: 256 }, { width: 667, height: 375 }]) {
 		await page.setViewportSize(viewport);
-		for (const control of [activeReceipt.getByRole('heading'), activeReceipt.getByRole('button', { name: m.closeReceipt, exact: true }), activeReceipt.getByRole('button', { name: m.confirmReceived, exact: true })]) {
+		for (const control of [activeReceipt.getByRole('heading'), activeReceipt.getByRole('button', { name: m.closeReceipt, exact: true }), activeReceipt.getByRole('button', { name: m.recordReceipt, exact: true })]) {
 			await expect(control).toBeInViewport({ ratio: 1 });
 		}
 		const line = activeBody.getByRole('checkbox').first();

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { ApiError } from './api';
 import { createClient, type Session } from '@supabase/supabase-js';
 import { memory } from './test-storage';
-import { createBrowserAdminAuth, readAdminMembership, updateAdminPassword } from './admin-auth';
+import { createBrowserAdminAuth, readAdminMembership, signInFailure, updateAdminPassword } from './admin-auth';
 
 const config = { url: 'https://example.invalid', publishableKey: 'sb_publishable_fixture' };
 const userId = 'df5aa780-0f36-44d4-a05f-d61206cc8bc9';
@@ -83,4 +83,13 @@ describe('admin Auth boundary', () => {
 		expect(calls).toBe(1);
 		expect((await client.auth.getSession()).data.session?.user.id).toBe(otherId);
 	});
+});
+
+test('sign-in failures separate a refused login from an unreachable service', () => {
+	expect(signInFailure({ status: 400, code: 'invalid_credentials' })).toBe('invalid');
+	expect(signInFailure({ status: 429, code: 'over_request_rate_limit' })).toBe('rateLimited');
+	expect(signInFailure({ status: 0, name: 'AuthRetryableFetchError' })).toBe('unavailable');
+	expect(signInFailure({ status: 503 })).toBe('unavailable');
+	expect(signInFailure(new TypeError('Failed to fetch'))).toBe('unavailable');
+	expect(signInFailure(null)).toBe('unavailable');
 });

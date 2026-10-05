@@ -9,7 +9,7 @@ import { en } from '../src/lib/i18n/en';
 import { nb } from '../src/lib/i18n/nb';
 import { productTypes } from '../src/lib/admin-products';
 import { standardSpecifications } from '../src/lib/product-specifications';
-import { formatMeasurement, measurementInput } from '../src/lib/format';
+import { currencySymbol, formatMeasurement, measurementInput } from '../src/lib/format';
 
 const { directory, origin, api, publicKey, anonKey, serviceKey, password, secrets, sql, createUser, startWorker } = await proofEnvironment();
 const staffEmail = 'admin-staff@example.test';
@@ -105,7 +105,7 @@ try {
   const membershipRead = `${api.origin}/rest/v1/amp_staff_members*`;
   await page.route(membershipRead, route => route.abort('failed'));
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await expect(page.getByText(en.admin.unavailable, { exact: true })).toBeVisible();
+  await expect(page.getByText(en.admin.accessUnavailable, { exact: true })).toBeVisible();
   await expect(page.locator('#product-name-en')).toHaveValue('Miscellaneous browser test part');
   expect(await page.locator('#product-name-en').evaluate(element => Boolean(element.closest('[inert]')))).toBe(true);
   expect(await page.locator('#product-name-en').boundingBox()).toEqual(draftGeometry);
@@ -543,13 +543,13 @@ try {
   const historyRead = `${api.origin}/rest/v1/amp_stock_counts*`;
   await page.route(historyRead, route => route.abort('failed'));
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await expect(page.getByText(c.unavailable, { exact: true })).toBeVisible();
+  await expect(page.getByText(c.detailLoadFailed, { exact: true })).toBeVisible();
   await expect(count.getByLabel(c.observed, { exact: false })).toHaveValue('0');
   await expect(count.getByLabel(fieldLabel(c.note))).toHaveValue('Keep this physical observation during a failed refresh');
   await expect(count.getByRole('button', { name: c.saveCount, exact: true })).toBeDisabled();
   await page.unroute(historyRead);
   await page.getByRole('button', { name: c.retryLoad, exact: true }).click();
-  await expect(page.getByText(c.unavailable, { exact: true })).toHaveCount(0);
+  await expect(page.getByText(c.detailLoadFailed, { exact: true })).toHaveCount(0);
   await expect(count.getByLabel(c.observed, { exact: false })).toHaveValue('0');
   console.log('PASS: failed batch refresh preserves physical count input and blocks submission until retry');
 
@@ -651,7 +651,7 @@ try {
   const initialBins = await liveBinIds(cabinetId);
   expect(initialBins).toEqual(newLayout.p_bins.map((bin: { id: string }) => bin.id).sort());
   await page.reload();
-  await page.getByRole('button', { name: sh.retry, exact: true }).click();
+  await page.getByRole('button', { name: sh.finishChange, exact: true }).click();
   await expect(page.getByText(sh.saved, { exact: true })).toBeVisible();
   expect(layoutCreated.commands).toHaveLength(2);
   expect(layoutCreated.commands[1]).toBe(layoutCreated.commands[0]); await layoutCreated.stop();
@@ -716,7 +716,7 @@ try {
   await expect(layout.getByRole('slider', { name: sh.resizeHandle, exact: true })).toHaveAttribute('aria-valuenow', '2');
   expect(await sql(`SELECT col_span FROM app.bins WHERE id='${firstBin}'`)).toBe('1');
   await page.getByRole('button', { name: sh.widenDrawer, exact: true }).click();
-  await expect(page.locator('[data-sonner-toast]').getByText(sh.notEmpty, { exact: true })).toBeVisible();
+  await expect(layout.getByText(sh.notEmpty, { exact: true })).toBeVisible();
   await expect(preview.getByRole('button', { name: 'A1–B1', exact: true })).not.toHaveClass(/\bempty\b/);
   await expect(layout.getByRole('slider', { name: sh.resizeHandle, exact: true })).toHaveAttribute('aria-valuenow', '2');
   await chooseLayoutDrawer(layout, secondBin);
@@ -762,7 +762,7 @@ try {
   const moved = await lostResponse(page, 'amp_bins', 'PATCH', () => page.getByRole('alertdialog').getByRole('button', { name: sh.confirmAction, exact: true }).click());
   await expect(page.getByText(sh.unknown, { exact: true })).toBeVisible();
   await page.reload();
-  await page.getByRole('button', { name: sh.retry, exact: true }).click();
+  await page.getByRole('button', { name: sh.finishChange, exact: true }).click();
   await expect(page.getByText(sh.saved, { exact: true })).toBeVisible();
   expect(moved.commands).toHaveLength(1); await moved.stop();
   expect(await sql(`SELECT inner_row=3 AND col_span=2 FROM app.bins WHERE id='${firstBin}'`)).toBe('t');
@@ -775,7 +775,7 @@ try {
   await layout.locator(`[data-item-id="${secondBin}"]`).click();
   const swapped = await lostResponse(page, 'rpc/amp_swap_bins', 'POST', () => page.getByRole('alertdialog').getByRole('button', { name: sh.confirmAction, exact: true }).click());
   await expect(page.getByText(sh.unknown, { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: sh.retry, exact: true }).click();
+  await page.getByRole('button', { name: sh.finishChange, exact: true }).click();
   const drawerSwapToast = page.locator('[data-sonner-toast]').filter({ has: page.getByText(
     sh.swapPreview(`${sh.cabinet('F7')} · ${sh.bin('A3–B3')}`, `${sh.cabinet('F7')} · ${sh.bin('A2–B2')}`), { exact: true }
   ) });
@@ -798,7 +798,7 @@ try {
   expect(await sql(`SELECT count(*) FROM app.bins WHERE cabinet_id='${cabinetId}' AND inner_row=1 AND inner_col IN (1,2)`)).toBe('2');
   await expect(page.locator('[data-cabinet-editor]')).toBeVisible();
   await previewSize('1', '5');
-  await expect(page.locator('[data-sonner-toast]').getByText(sh.notEmpty, { exact: true })).toBeVisible();
+  await expect(layout.getByText(sh.notEmpty, { exact: true })).toBeVisible();
   expect(await liveBinIds(cabinetId)).toEqual(grown);
   // Incremental resizing drops empty draft rows before the occupied row blocks it.
   // Discard that draft before checking drawer identities in the saved layout.
@@ -905,7 +905,7 @@ try {
     await geometry.screenshot({ path: `${artifacts}/new-product-${suffix}.png`, fullPage: true });
     await geometry.goto(`${origin}${prefix}/admin/products/${productId}`);
     await expect(geometry.getByLabel(fieldLabel(messages.adminProducts.nameEn))).toHaveValue(`${longName} reviewed`);
-    await geometry.getByLabel(fieldLabel(`${messages.adminProducts.price} (NOK)`)).focus();
+    await geometry.getByLabel(fieldLabel(`${messages.adminProducts.price} (${currencySymbol(locale)})`)).focus();
     await geometry.keyboard.press('Tab'); await geometry.keyboard.press('Shift+Tab');
     expect(await geometry.evaluate(() => {
       const input = document.activeElement!;
@@ -1038,24 +1038,31 @@ try {
   await expect(auditRows).toHaveCount(30);
   await page.getByRole('button', { name: en.adminAudit.more, exact: true }).click();
   await expect(auditRows).toHaveCount(60);
-  const originalHead = await auditRows.first().locator('[data-slot="item-description"]').innerText();
-  const headId = /Log entry (\d+)/.exec(originalHead)![1];
-  const originalRow = auditRows.filter({ hasText: en.adminAudit.entryId(headId) });
+  // Entry IDs are intentionally never shown; keep the first row that has details by position.
+  const originalIndex = await auditRows.evaluateAll(rows => rows.findIndex(row => row.querySelector('[aria-expanded]')));
+  expect(originalIndex).toBeGreaterThanOrEqual(0);
+  const originalRow = auditRows.nth(originalIndex);
   const disclosure = originalRow.getByRole('button', { name: en.adminAudit.details, exact: true });
   await disclosure.click(); await disclosure.focus();
+  const originalText = await originalRow.innerText();
   await sql(`UPDATE app.products SET description='Design audit refresh proof' WHERE id=${literal(productId)}`);
-  const newHead = await sql('SELECT max(id) FROM app.audit_log');
+  const changedCode = await sql(`SELECT code FROM app.products WHERE id=${literal(productId)}`);
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
-  await expect(auditRows.first()).toContainText(en.adminAudit.entryId(newHead));
+  await expect(auditRows.first()).toContainText(`${en.adminAudit.tables.products}: ${changedCode}`);
+  await expect(auditRows.first()).toContainText(`${en.adminAudit.actor}: ${en.adminAudit.system}`);
+  await expect(auditRows.first()).toContainText(en.adminAudit.fields.description);
   await expect(auditRows).toHaveCount(61);
-  await expect(disclosure).toHaveAttribute('aria-expanded', 'true');
-  await expect(disclosure).toBeFocused();
+  const movedRow = auditRows.nth(originalIndex + 1);
+  expect(await movedRow.innerText()).toBe(originalText);
+  const movedDisclosure = movedRow.getByRole('button', { name: en.adminAudit.details, exact: true });
+  await expect(movedDisclosure).toHaveAttribute('aria-expanded', 'true');
+  await expect(movedDisclosure).toBeFocused();
   const auditRead = `${api.origin}/rest/v1/amp_audit_log?*`;
   await page.route(auditRead, route => route.abort('failed'));
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(page.getByText(en.adminAudit.unavailable, { exact: true })).toBeVisible();
   await expect(auditRows).toHaveCount(61);
-  await expect(disclosure).toBeFocused();
+  await expect(movedDisclosure).toBeFocused();
   await page.unroute(auditRead);
   await page.getByRole('button', { name: en.adminAudit.retry, exact: true }).click();
   await expect(page.getByText(en.adminAudit.unavailable, { exact: true })).toHaveCount(0);

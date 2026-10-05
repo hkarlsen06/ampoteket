@@ -21,6 +21,7 @@
 	let loaded = $state(false); let loading = $state(true); let failed = $state(false); let busy = $state(false); let storageReady = $state(false);
 	let command = $state<CountCommand | null>(null); let outcome = $state<'idle' | 'failed' | 'unknown'>('idle'); let mounted = false; let generation = 0;
 	const wrongIdentity = $derived(Boolean(command && command.userId !== admin.session?.user.id));
+	const ownerById = $derived(new Map(owners.map((owner) => [owner.id, owner])));
 	const batchTone = { owner: 'success', other: 'neutral', abandoned: 'warning', finished: 'neutral' } as const;
 	onMount(() => {
 		mounted = true;
@@ -73,22 +74,22 @@
 	<form class={formLayout} onsubmit={start}>
 		<Field.Group layout="row">
 			<Field.Field width="grow"><Field.Label for={`${fieldId}-1`}>{m.batchTitle}</Field.Label><Input id={`${fieldId}-1`} required maxlength={200} autocomplete="off" enterkeyhint="go" bind:value={title} disabled={busy || Boolean(command)} /></Field.Field>
-			<Button type="submit" variant="default" disabled={busy || !storageReady || wrongIdentity || (command !== null && command.kind !== 'start') || !title.trim()}><ButtonLabel pending={busy} pendingLabel={m.working} label={command?.kind === 'start' ? m.retryStart : m.start} reserveLabels={[m.retryStart, m.start]} /></Button>
+			<Button type="submit" variant="default" disabled={busy || !storageReady || wrongIdentity || (command !== null && command.kind !== 'start') || !title.trim()}><ButtonLabel pending={busy} pendingLabel={m.starting} label={command?.kind === 'start' ? m.retryStart : m.start} reserveLabels={[m.retryStart, m.start]} /></Button>
 		</Field.Group>
 	</form>
 	<div class={formStatus} aria-live="polite">
-		{#if !storageReady}<Alert.Message appearance="inline" variant="destructive" role="status">{m.storageUnavailable}</Alert.Message>
-		{:else if wrongIdentity}<Alert.Message appearance="inline" variant="destructive" role="status">{m.wrongIdentity}</Alert.Message>
-		{:else if command && command.kind !== 'start'}<Alert.Message appearance="inline" variant="default" role="status">{m.pendingElsewhere}</Alert.Message>
-		{:else if outcome === 'unknown'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unknownStart}</Alert.Message>
-		{:else if outcome === 'failed'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unavailable}</Alert.Message>{/if}
+		{#if !storageReady}<Alert.Message appearance="inline" variant="destructive">{m.storageUnavailable}</Alert.Message>
+		{:else if wrongIdentity}<Alert.Message appearance="inline" variant="destructive">{m.wrongIdentity}</Alert.Message>
+		{:else if command && command.kind !== 'start'}<Alert.Message appearance="inline" variant="default">{m.pendingElsewhere}</Alert.Message>
+		{:else if outcome === 'unknown'}<Alert.Message appearance="inline" variant="destructive">{m.unknownStart}</Alert.Message>
+		{:else if outcome === 'failed'}<Alert.Message appearance="inline" variant="destructive">{m.startFailed}</Alert.Message>{/if}
 	</div>
 	{#if storageReady && !wrongIdentity && command && command.kind !== 'start'}<Button variant="link" href={i18n.href(countCommandPath(command))}>{m.resumePending}</Button>{/if}
 </section>
 <section class={section({ spacing: 'divided' })} aria-labelledby="count-list-title">
 	<Separator />
 	<h2 class={sectionHeading} id="count-list-title">{m.batches}</h2>
-	<div class={formStatus} aria-live="polite">{#if failed}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unavailable}</Alert.Message>{/if}</div>
+	<div class={formStatus} aria-live="polite">{#if failed}<Alert.Message appearance="inline" variant="destructive">{m.loadFailed}</Alert.Message>{/if}</div>
 	{#if failed}<Button variant="outline" type="button" disabled={loading} onclick={load}>{m.retryLoad}</Button>
 	{:else if loaded && !batches.length}<Empty.Root><Empty.Description>{m.empty}</Empty.Description></Empty.Root>{/if}
 	{#if loading && !loaded}
@@ -99,12 +100,12 @@
 		<Item.Group class="batch-list">
 			{#each batches as batch, index (batch.id)}
 				{#if index > 0}<Item.Separator />{/if}
-				{@const owner = owners.find((owner) => owner.id === batch.ownerId)!}
+				{@const owner = ownerById.get(batch.ownerId)}
 				{@const access = countBatchAccess(batch, owner, admin.membership!.id)}
 				<Item.Root variant="row" role="listitem">
 					<Item.Content class="min-w-0 basis-72">
-						<Item.Title><h3 class={itemTitle}><a class="text-foreground no-underline hover:underline" href={i18n.href(`/admin/counts/${batch.id}`)}>{batch.title}</a></h3></Item.Title>
-						<Item.Description>{m.owner}: {owner.name} · {m.started(formatCountedAt(batch.startedAt, i18n.locale))}</Item.Description>
+						<Item.Title><h3 class={itemTitle}><a class="text-foreground no-underline hover:underline" href={i18n.href(`/admin/counts/${batch.id}`)}>{batch.productId ? m.singleCount(batch.title) : batch.title}</a></h3></Item.Title>
+						<Item.Description>{m.owner}: {owner?.name ?? m.unknownAdmin}{access === 'owner' ? ` ${m.you}` : ''} · {m.started(formatCountedAt(batch.startedAt, i18n.locale))}</Item.Description>
 					</Item.Content>
 					<Item.Actions><StateBadge tone={batchTone[access]}>{m.batchStates[access]}</StateBadge></Item.Actions>
 				</Item.Root>

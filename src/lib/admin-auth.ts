@@ -95,5 +95,18 @@ export async function readAdminMembership(
 
 /** A return path never carries credentials, another origin or an unbuilt screen. */
 export function adminReturnPath(value: string | null): string {
-	return value && /^\/admin(?:\/(?:privacy|help|admins|shelf|stock|statistics|audit|products(?:\/(?:new|labels|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))?|(?:counts|orders)(?:\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?))?$/.test(value) ? value : '/admin';
+	return value && /^\/admin(?:\/(?:purchases|contacts|admins|shelf|stock|statistics|audit|products(?:\/(?:new|labels|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))?|(?:counts|orders)(?:\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?))?$/.test(value) ? value : '/admin';
+}
+
+/**
+ * Tell a refused sign-in from an unreachable Auth service. Supabase answers a
+ * wrong password and an unknown email identically (400 invalid_credentials), so
+ * naming `invalid` reveals nothing about which accounts exist. Anything else,
+ * including a thrown fetch error or a 5xx, is not the person's mistake.
+ */
+export type SignInFailure = 'invalid' | 'rateLimited' | 'unavailable';
+export function signInFailure(error: unknown): SignInFailure {
+	const { status, code } = (error && typeof error === 'object' ? error : {}) as { status?: unknown; code?: unknown };
+	if (status === 429) return 'rateLimited';
+	return code === 'invalid_credentials' || (status === 400 && code === undefined) ? 'invalid' : 'unavailable';
 }

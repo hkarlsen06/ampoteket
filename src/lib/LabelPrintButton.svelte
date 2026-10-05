@@ -1,4 +1,6 @@
 <script module lang="ts">
+	import { printerSupported } from '#lib/labels/ptouch.js';
+	export const labelPrinterSupported = () => printerSupported() && window.matchMedia('(pointer: fine)').matches;
 	// Creating a product remounts its editor on the product's own route; a label
 	// requested with the save prints from there. Memory only, so reload never reprints,
 	// and the product's editor clears it on leaving, so Back never does either.
@@ -9,6 +11,7 @@
 	import { onMount } from 'svelte';
 	import { Button, ButtonLabel } from '#lib/components/ui/button/index.js';
 	import * as Alert from '#lib/components/ui/alert/index.js';
+	import { formStatus } from '#lib/ui.js';
 	import Icon from '#lib/Icon.svelte';
 	import QrCodeIcon from 'phosphor-svelte/lib/QrCodeIcon';
 	import { getI18n } from '#lib/i18n/index.js';
@@ -20,6 +23,7 @@
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.adminProducts);
 	type Outcome = 'idle' | 'printed' | keyof typeof m.labelPrinter;
 	let busy = $state(false); let outcome = $state<Outcome>('idle');
+	let supported = $state(false);
 	// Prints the saved code and specifications. The printer is chosen first, while
 	// the click still grants the browser's device-picker permission.
 	async function print() {
@@ -40,15 +44,15 @@
 		} finally { busy = false; }
 	}
 	onMount(() => {
+		supported = labelPrinterSupported();
 		const job = queued; queued = null;
-		if (job?.productId === product.id && job.userId === admin.session?.user.id) void print();
+		if (supported && job?.productId === product.id && job.userId === admin.session?.user.id) void print();
 	});
 </script>
-<!-- Two cells of the product editor's header grid: the button under the category
-     illustration, and a full-width status row below the heading. -->
-<Button variant="outline" class="col-start-2 h-auto flex-col gap-1 justify-self-center px-3 py-2" aria-label={m.printLabelName} disabled={busy} onclick={print}>
-	<Icon icon={QrCodeIcon} class="size-6" /><ButtonLabel pending={busy} pendingLabel={m.printingLabel} label={m.printLabel} />
+<Button variant="outline" size="sm" aria-label={m.printLabelName} aria-describedby={!supported ? 'label-printer-unsupported' : undefined} disabled={busy || !supported} onclick={print}>
+	<Icon icon={QrCodeIcon} /><ButtonLabel pending={busy} pendingLabel={m.printingLabel} label={m.printLabel} />
 </Button>
-<div class="col-span-full text-sm [&:not(:has(*))]:-mt-3" aria-live="polite">
-	{#if outcome !== 'idle'}<Alert.Message appearance="inline" role={undefined} variant={outcome === 'printed' ? 'default' : 'destructive'}>{outcome === 'printed' ? m.labelPrinted : m.labelPrinter[outcome]}</Alert.Message>{/if}
+{#if !supported}<p id="label-printer-unsupported" class="basis-full text-sm text-muted-foreground">{m.labelPrinter.unsupported}</p>{/if}
+<div class={[formStatus, 'basis-full text-sm']} aria-live="polite">
+	{#if outcome !== 'idle'}<Alert.Message appearance="inline" variant={outcome === 'printed' ? 'default' : 'destructive'}>{outcome === 'printed' ? m.labelPrinted : m.labelPrinter[outcome]}</Alert.Message>{/if}
 </div>

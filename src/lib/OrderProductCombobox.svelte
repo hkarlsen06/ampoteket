@@ -65,6 +65,7 @@
 				<!-- Sits among form inputs, so it wears the shared control surface rather than a button's. -->
 				<button {...props} {id} type="button" role="combobox" aria-expanded={open} aria-invalid={Boolean(error)} aria-describedby={error ? `${id}-error` : undefined} {disabled} class={[controlStyles, 'flex min-h-12 min-w-0 flex-1 items-center justify-between gap-2 py-2 pr-2.5 pl-3 text-left']}>
 					<span class={['min-w-0', nameWrap, !selected && 'text-muted-foreground']}>{#if selected}<span class={codeText}>{selected.code}</span>: {productName(selected, i18n.locale)}{:else}{m.selectProduct}{/if}</span>
+					{#if selected && !selected.is_active}<StateBadge>{i18n.m.adminProducts.inactive}</StateBadge>{/if}
 					<Icon icon={CaretUpDownIcon} class="size-4 shrink-0 text-muted-foreground" />
 				</button>
 			{/snippet}

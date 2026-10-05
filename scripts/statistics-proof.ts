@@ -177,7 +177,13 @@ try {
       await page.goto(origin + prefix + path);
       if (path === '/admin') {
         await expect(page.getByRole('heading', { name: messages.admin.overview, exact: true })).toBeVisible();
-        await expect(page.getByRole('img', { name: m.chartTitle })).toBeVisible();
+        await expect(page.getByRole('heading', { name: m.attention, exact: true })).toBeVisible();
+        await expect(page.getByRole('heading', { name: m.openCounts, exact: true })).toBeVisible();
+        await expect(page.getByRole('heading', { name: m.period, exact: true })).toBeVisible();
+        await expect(page.getByText(m.saleCount, { exact: true })).toBeVisible();
+        await expect(page.getByText(m.value, { exact: true })).toBeVisible();
+        await expect(page.getByRole('img', { name: m.chartTitle })).toHaveCount(0);
+        await expect(page.getByRole('link', { name: m.allStatistics, exact: true })).toHaveAttribute('href', `${prefix}/admin/statistics`);
         await expect(page.getByRole('link', { name: m.openOrder, exact: true })).toHaveAttribute('href', `${prefix}/admin/orders?new`);
         await expect(page.getByRole('link', { name: `${locale === 'nb' ? longNameNb : longName} ${locale === 'nb' ? 'uten beholdning' : 'out of stock'}`, exact: false })).toHaveAttribute('href', `${prefix}/admin/products/${outOfStockId}`);
       } else if (path.endsWith(productId)) {

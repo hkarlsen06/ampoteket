@@ -13,11 +13,13 @@ authoritative.
 The shared sidebar's mobile/desktop render branch is a navigation-only exception to the
 one-DOM rule; resizing never replaces the mounted editor or its unsaved input.
 
-`/admin` shows registered purchases and sales value for 30 days with the daily sales
-chart, then active products needing attention. Needing attention means zero or negative
+`/admin` leads with published products needing attention, then links to open stock
+counts and compact purchase and sales-value totals for 30 days, linking to Statistics.
+Needing attention means zero or negative
 recorded stock, or below the product's own minimum; never invent a global threshold.
 The preview shows eight products (sold out, negative before zero, then lowest share of
-the minimum). Open stocktakes live on `/admin/counts`, not the overview.
+the minimum). The overview links to the five most recent open stock counts and to
+`/admin/counts` when more are open.
 «Start en bestilling» is always shown and opens the New order form at `/admin/orders?new`, which lists
 every product needing attention ([orders](page-admin-orders.md#orders)).
 
@@ -29,13 +31,17 @@ editor's unsaved input). Rules, with aggregation in
 - Period, counting and valuation follow the linked contract; the figures are
   registered purchases. Public pages show no sales history.
 - Only plot coordinates are JS numbers; quantities and money stay strings.
-- Graphs include zero days and a keyboard-accessible data table, with no animation.
+- Graphs include zero days, labeled vertical scales and a keyboard-accessible
+  daily-data disclosure, with no animation. Purchase counts use integer scale steps;
+  short date labels are thinned automatically when they would overlap.
 
 ## Products
 
-`/admin/products` lists active and inactive products, searching after complete keyset
-pagination. Default sort is needs attention (overview order), then other active, then
-inactive; alternatives are longest since count, code and name. There is no lowest-stock
+`/admin/products` lists published and unpublished products, searching after complete keyset
+pagination and showing 50 cards at a time with **Show more**, as in the public catalog.
+An empty catalog offers **New product**; an unmatched search offers clearing search and filters.
+Default sort is needs attention (overview order), then other published, then
+unpublished; alternatives are least recently counted, code and name. There is no lowest-stock
 sort because unlike units do not compare. Search includes a hyphen-free code alias
 (`res00026` finds `RES-00026`), here and in the count picker. **Scan product** opens a
 label's editor for any loaded product; unknown labels stay in the dialog. This scan
@@ -59,8 +65,9 @@ remain outside the scrolling region.
   Typed values are never overwritten.
 - Code, stock unit and stock step are immutable after creation. Stock is a recorded
   balance, never an editable field or a zero shown for a failed read. Zero price is
-  valid. New products start published. Deactivation keeps identity and history.
-- Minimum in stock (default 0) drives «Lite igjen» on staff views only.
+  valid. Unit prices use `formatMoney`, with at least two decimals and all stored
+  significant digits. New products start published. Unpublishing keeps identity and history.
+- Minimum stock (default 0), «Minstebeholdning», drives «Lite igjen» on staff views only.
 - A product may be published without a drawer, with an optional public location note;
   choosing a drawer clears the note.
 - `datasheet_url` is public; `purchase_url` is a staff-only reorder link, separate from
@@ -68,7 +75,7 @@ remain outside the scrolling region.
 - The editor counts through CountForm in a dialog and prints through **Print**
   ([P-touch tape labels](page-labels.md#p-touch-tape-labels)). Beside the balance it
   shows any quantity still on open supplier orders and links to the product's
-  [stock history](#stock-withdrawals-and-corrections), which links back.
+  [stock changes](#stock-changes), which links back.
 - A new product takes its opening stock and a **Print label** choice in the same
   form. The quantity travels in the creation command and is posted once that command is
   acknowledged, as a single count against balance 0 at revision 0 (empty means never
@@ -161,7 +168,7 @@ grip on the drawer also resizes it. Save commits atomically. Rules, rechecked by
 database:
 
 - Widening keeps the drawer's ID and products and may consume only whole neighbours
-  with no assigned products (inactive assignments count).
+  with no assigned products (unpublished assignments count).
 - Shrinking or splitting an assigned drawer is blocked; splitting keeps the bottom-left
   identity. Grid resizing fills uncovered cells and never removes assigned drawers.
 - Loading the map and ordinary moves never generate drawers.
@@ -176,7 +183,7 @@ typed as row and column. Unsaved layout edits must be saved or discarded first. 
 acknowledged swap shows the success toast. Moves keep a drawer's products and size.
 
 **Assigned state.** Assignment, not stock, marks a drawer as occupied: zero stock and
-inactive products count. The public topology exposes only this boolean. Failed reads
+unpublished products count. The public topology exposes only this boolean. Failed reads
 never imply emptiness.
 
 **Retry.** Layout commands store the original snapshot, desired layout, generated IDs,
@@ -186,7 +193,7 @@ swaps carry both positions and one request ID, so a retry cannot swap back. A re
 move or swap is not kept as a draft: the message stays and the map refreshes, so the
 operator checks the physical shelf and redoes it.
 
-**Archive.** Only drawers with no assigned products (including inactive) can be
+**Archive.** Only drawers with no assigned products (including unpublished) can be
 archived. The cabinet action archives its unassigned drawers and the cabinet in one
 confirmed transaction, or nothing. Archive keeps audit history (the change log, and
 `amp_archived_bin_locations` for a drawer's last position). The page has no archived
@@ -212,10 +219,14 @@ with a required reason.
   handling.
 - Count detail reads only its batch; finished batches read only referenced products.
 
-## Stock withdrawals and corrections
+## Stock changes
 
-`/admin/stock` selects any product (combobox or [scanner](scanner.md)) and shows its
-full history. A failed read is unavailable, never an empty ledger.
+`/admin/stock`, «Beholdningsendringer» / "Stock changes", selects any product
+(combobox or [scanner](scanner.md)) and shows its full history. Movements are identified
+by kind, date and quantity, never database row numbers. Its stock badge uses the same
+minimum as the list and editor. A failed read keeps previous content unavailable,
+never an empty ledger. Background reads keep controls stable; submission waits for
+an ongoing read before validating the draft against fresh history.
 
 - A withdrawal records a positive quantity and reason; the database posts it negative.
   An adjustment records a signed non-zero quantity and reason.

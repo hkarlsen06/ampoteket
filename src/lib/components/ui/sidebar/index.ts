@@ -7,6 +7,7 @@ export { default as MenuButton } from './sidebar-menu-button.svelte';
 export { default as Provider } from './sidebar-provider.svelte';
 export { default as Header } from './sidebar-header.svelte';
 export { default as Group } from './sidebar-group.svelte';
+export { default as GroupLabel } from './sidebar-group-label.svelte';
 export { default as Inset } from './sidebar-inset.svelte';
 export { default as Trigger } from './sidebar-trigger.svelte';
 export { useSidebar } from './context.svelte';

@@ -8,10 +8,14 @@ and RPCs in [datamodell.md](datamodell.md).
 
 ## Orders
 
+- Orders with outstanding lines come first, newest first within open and completed
+  groups. The list shows 20 orders initially; «Vis flere» appends the next 20.
+  Each order has a status badge. Completed means no quantity remains outstanding,
+  whether received or cancelled. Only open orders offer «Registrer mottak».
 - Placement times follow the [time rules](website-guide.md#6-numbers-the-frontend-must-respect).
 - Unit cost is per sale unit; freight and other costs go on the order header.
-- The product picker includes inactive products, since past purchases must stay
-  recordable. While a line has no product, a plus button beside the picker opens the
+- The product picker includes unpublished products and marks them in the results
+  and selected value, since past orders must stay recordable. While a line has no product, a plus button beside the picker opens the
   New product editor in a sheet above the order; saving selects the new product on that
   line and fills an empty purchase link.
   Its search stays visible while the result list scrolls within the available
@@ -43,14 +47,18 @@ An **unplanned receipt** (including donations) needs products, positive quantiti
 a source note. A **planned receipt** belongs to one order: checking a line takes its
 current outstanding quantity (never the original), and never more. A scan only
 highlights the matching line; it never selects a quantity or changes stock.
+The confirmation is «Registrer mottaket» for both receipt forms. Planned receipts
+show the selection requirement next to the confirmation button.
 Each line shows its product's drawer (or location note) so the delivery can be
 shelved from the sheet; a failed placement read only omits it.
 The full supplier name wraps in the scrolling receipt body; the short title, Close
 and confirmation action remain outside it, including in short landscape viewports.
 
 The database derives progress as ordered minus received minus net cancellations,
-floored at zero. Cancellation needs a reason, is confirmed in an `AlertDialog` and
-changes only the commitment; a mistaken one is reversed once by a new audited record.
+floored at zero. Cancellation opens below a disclosure, needs a reason, is confirmed
+in an `AlertDialog` and changes only the commitment. A mistaken one is reversed
+once by a new audited record; its confirmation explains that the reversal cannot
+itself be undone. Both confirmations use the destructive action style.
 No history is overwritten. Metadata edits are limited to the fields in
 [website-guide.md](website-guide.md) §5.5.
 

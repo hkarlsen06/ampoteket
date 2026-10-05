@@ -94,7 +94,7 @@ JavaScript, always show the content with a plain heading. -->
 				{#if balanceState !== null && balanceState <= 0}<p class="mt-3 text-sm text-muted-foreground">{m.stockNote}</p>{/if}
 				{#key product.product_id}<ProductPurchase {product} unavailable={unavailable || refreshing} />{/key}
 				{#if unavailable}
-					<Alert.Message appearance="inline" variant="destructive" role="status">{m.unavailable}</Alert.Message>
+					<Alert.Message appearance="inline" variant="destructive" role="alert">{m.unavailable}</Alert.Message>
 					<Button variant="outline" class="mt-3" disabled={refreshing} onclick={refreshProduct}>{m.retry}</Button>
 				{/if}
 				<noscript><p class="text-sm text-muted-foreground">{m.noJavascript}</p></noscript>

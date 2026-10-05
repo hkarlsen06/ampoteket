@@ -156,9 +156,9 @@
 	<Collapsible.Content forceMount class={collapsible ? 'hidden data-[state=open]:block md:block no-js:block' : 'block'}>
 	<noscript><p class="text-sm text-muted-foreground">{m.noJavascript}</p></noscript>
 	<div class="map-status text-sm" role="status">
-		{#if mapState === 'error'}<Alert.Message appearance="inline" role={undefined} variant="destructive" class="my-3">{topology ? m.previousRead : m.unavailable}</Alert.Message>
-		{:else if mapState === 'ready' && placed && !location}<Alert.Message appearance="inline" role={undefined} class="my-3">{m.locationUnavailable}</Alert.Message>
-		{:else if location?.moved}<Alert.Message appearance="inline" role={undefined} class="my-3">{m.moved}</Alert.Message>
+		{#if mapState === 'error'}<Alert.Message appearance="inline" variant="destructive" class="my-3">{topology ? m.previousRead : m.unavailable}</Alert.Message>
+		{:else if mapState === 'ready' && placed && !location}<Alert.Message appearance="inline" class="my-3">{m.locationUnavailable}</Alert.Message>
+		{:else if location?.moved}<Alert.Message appearance="inline" class="my-3">{m.moved}</Alert.Message>
 		{:else if mapState === 'loading'}<span class="sr-only">{m.loading}</span>{/if}
 	</div>
 	{#if mapState === 'error'}
@@ -197,7 +197,7 @@
 				<div class="contents-status my-2 text-sm" role="status">
 					{#if !bin.has_products}<Empty.Root><Empty.Description>{m.noProducts}</Empty.Description></Empty.Root>
 					{:else if catalogState === 'loading' && !assigned.length}<div class="grid min-h-11 items-center"><span class="sr-only">{m.productsLoading}</span><Skeleton class="h-5 w-full" aria-hidden="true" /></div>
-					{:else if catalogState === 'error'}<Alert.Message appearance="inline" role={undefined} variant="destructive">{m.productsUnavailable}</Alert.Message>
+					{:else if catalogState === 'error'}<Alert.Message appearance="inline" variant="destructive">{m.productsUnavailable}</Alert.Message>
 					{:else if catalogState === 'ready' && !assigned.length}<Empty.Root><Empty.Description>{m.noProducts}</Empty.Description></Empty.Root>{/if}
 				</div>
 				{#if bin.has_products && catalogState === 'error'}<Button variant="outline" type="button" onclick={() => bin && selectBin(bin.id)}>{m.retryProducts}</Button>{/if}

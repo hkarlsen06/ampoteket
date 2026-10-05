@@ -41,7 +41,10 @@ try {
 	await page.getByRole('button', { name: m.newOrder, exact: true }).click();
 	await expect(page.getByLabel(fieldLabel(m.supplier))).toHaveValue('Draft supplier');
 	await expect(page.locator('input[id*="-qty-"]').first()).toHaveValue('5');
-	await expect(page.getByRole('combobox', { name: m.product, exact: true })).toContainText(seedProductCode(0));
+	// The form keeps an empty next line below the chosen product.
+	const productPickers = page.getByRole('combobox', { name: m.product, exact: true });
+	await expect(productPickers.first()).toContainText(seedProductCode(0));
+	await expect(productPickers.last()).toContainText(m.selectProduct);
 	await page.keyboard.press('Escape');
 	await signOutAndIn(page);
 	await page.goto(`${origin}/en/admin/orders`);

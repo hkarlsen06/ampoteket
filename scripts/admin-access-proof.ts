@@ -186,10 +186,13 @@ try {
 		await expect(name).toHaveValue('Preserved draft');
 		const returnedRow = page.getByRole('listitem').filter({ hasText: disabledEmail });
 		await returnedRow.getByRole('button', { name: en.adminMembers.deactivateNamed('Returning operator'), exact: true }).click();
-		await returnedRow.getByRole('button', { name: en.adminMembers.confirmDeactivate, exact: true }).click();
+		// Confirmation is a shared AlertDialog outside the row; it names the person and states the consequence.
+		const deactivationDialog = page.getByRole('alertdialog', { name: en.adminMembers.deactivateNamed('Returning operator'), exact: true });
+		await expect(deactivationDialog).toHaveAccessibleDescription(en.adminMembers.deactivateHint('Returning operator'));
+		await deactivationDialog.getByRole('button', { name: en.adminMembers.confirmDeactivate, exact: true }).click();
 		await expect(returnedRow.getByText(en.adminMembers.inactive, { exact: true })).toBeVisible();
 		await expect(returnedRow.getByText(en.adminMembers.feedback.deactivated, { exact: true })).toBeVisible();
-		await returnedRow.getByRole('button', { name: en.adminMembers.close, exact: true }).click();
+		// The deactivate button is gone once confirmed, so focus lands on the person's name.
 		await expect(returnedRow.getByText('Returning operator', { exact: true })).toBeFocused();
 		await returnedRow.getByRole('button', { name: en.adminMembers.reactivate, exact: true }).click();
 		await expect(returnedRow.getByText(en.adminMembers.active, { exact: true })).toBeVisible();

@@ -1,12 +1,11 @@
 <script lang="ts">
 	import AdminAccessGate from '#lib/AdminAccessGate.svelte';
-	import { productName } from '#lib/catalog.js';
 	import { onMount, tick, untrack } from 'svelte';
 	import { getI18n } from '#lib/i18n/index.js';
 	import { getAdminContext } from '#lib/admin-context.svelte.js';
 	import { compareDecimals, validQuantity } from '#lib/decimal.js';
 	import { formatDecimal, unitLabel } from '#lib/format.js';
-	import { clearOrderCommand, orderCommandPath, orderRejection, orderStorageEvent, readOrderCommand, readOrderDetail, runOrderCommand, saveOrderCommand, updateOrderStorage, type OrderCommand, type OrderDetail, type OrderLine } from '#lib/admin-orders.js';
+	import { clearOrderCommand, orderProductName, orderCommandPath, orderRejection, orderStorageEvent, readOrderCommand, readOrderDetail, runOrderCommand, saveOrderCommand, updateOrderStorage, type OrderCommand, type OrderDetail, type OrderLine } from '#lib/admin-orders.js';
 	import { productCodeFromQr } from '#lib/scanner/payload.js';
 	import { readDraft, writeDraft } from '#lib/drafts.js';
 	import type { CameraSession, CameraState } from '#lib/scanner/session.js';
@@ -17,7 +16,7 @@
 	import LocationChips from '#lib/LocationChips.svelte';
 	import { readAdminProducts, type AdminProduct } from '#lib/admin-products.js';
 	import { readShelfTopology, type ShelfTopology } from '#lib/shelf-map.js';
-	import { codeText, nameWrap, sheetBody } from '#lib/ui.js';
+	import { codeText, formStatus, nameWrap, sheetBody } from '#lib/ui.js';
 	import * as Alert from '#lib/components/ui/alert/index.js';
 	import * as Collapsible from '#lib/components/ui/collapsible/index.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
@@ -261,20 +260,23 @@
 		onEscapeKeydown={(event) => { if (busy) event.preventDefault(); }}
 		onCloseAutoFocus={(event) => { event.preventDefault(); void tick().then(() => returnFocus?.focus({ preventScroll: true })); }}>
 		<Dialog.Header layout="bar">
-			<Dialog.Title id={`${id}-title`}>{m.receiveHeading}</Dialog.Title>
+			<Dialog.Title id={`${id}-title`}>{m.openReceipt}</Dialog.Title>
 			<Dialog.Close>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" disabled={busy}><Icon icon={XIcon} /><span class="sr-only">{m.closeReceipt}</span></Button>{/snippet}</Dialog.Close>
 		</Dialog.Header>
 		<!-- svelte-ignore a11y_no_noninteractive_tabindex (Named sheet body supports native keyboard scrolling.) -->
 		<div class={sheetBody} role="region" aria-labelledby={`${id}-title`} tabindex="0">
 			<AdminAccessGate>
 			{#if detail?.order}<p class={[nameWrap, 'mb-4 font-medium']}>{detail.order.supplierName}</p>{/if}
-			{#if !storageReady}<Alert.Message appearance="inline" variant="destructive" role="status">{m.storageUnavailable}</Alert.Message>{/if}
-			{#if wrongIdentity}<Alert.Message appearance="inline" variant="destructive" role="status">{m.wrongIdentity}</Alert.Message>
-			{:else if command && !pendingHere}<Alert.Message appearance="inline" role="status">{m.pendingElsewhere}</Alert.Message><Button variant="link" href={i18n.href(orderCommandPath(command))}>{m.resumePending}</Button>{/if}
-			{#if outcome === 'unknown'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unknown}</Alert.Message>
-			{:else if outcome === 'invalid'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.invalid}</Alert.Message>
-			{:else if outcome === 'conflict'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.conflict}</Alert.Message>{/if}
-			{#if failed}<Alert.Message appearance="inline" variant="destructive" role="status">{m.unavailable}</Alert.Message><Button type="button" variant="outline" onclick={load} disabled={loading}>{m.retry}</Button>{/if}
+			<div class={formStatus} aria-live="polite">
+			{#if !storageReady}<Alert.Message appearance="inline" variant="destructive">{m.storageUnavailable}</Alert.Message>{/if}
+			{#if wrongIdentity}<Alert.Message appearance="inline" variant="destructive">{m.wrongIdentity}</Alert.Message>
+			{:else if command && !pendingHere}<Alert.Message appearance="inline">{m.pendingElsewhere}</Alert.Message>{/if}
+			{#if outcome === 'unknown'}<Alert.Message appearance="inline" variant="destructive">{m.unknown}</Alert.Message>
+			{:else if outcome === 'invalid'}<Alert.Message appearance="inline" variant="destructive">{m.invalid}</Alert.Message>
+			{:else if outcome === 'conflict'}<Alert.Message appearance="inline" variant="destructive">{m.conflict}</Alert.Message>{/if}
+			</div>
+			{#if !wrongIdentity && command && !pendingHere}<Button variant="link" href={i18n.href(orderCommandPath(command))}>{m.resumePending}</Button>{/if}
+			{#if failed}<Alert.Message appearance="inline" variant="destructive" role="alert">{m.detailUnavailable}</Alert.Message><Button type="button" variant="outline" onclick={load} disabled={loading}>{m.retry}</Button>{/if}
 			{#if loading && !detail}<span class="sr-only" role="status">{m.loading}</span><div class="space-y-4" aria-busy="true" aria-hidden="true"><Skeleton class="h-20 w-full" /><Skeleton class="h-20 w-full" /></div>
 			{:else if detail?.order}
 				{#if reviewLines.length}
@@ -285,8 +287,8 @@
 							<p class="text-sm text-muted-foreground" role="status">{cameraMessage()}</p>
 							{#if !['starting', 'scanning'].includes(cameraState)}<Button type="button" variant="outline" size="sm" onclick={startCamera}>{i18n.m.scanner.retryCamera}</Button>{/if}
 							<div aria-live="polite">
-								{#if scanResult === 'invalid'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.scanInvalid}</Alert.Message>
-								{:else if scanResult === 'missing'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.scanNotOrdered(scanCode!)}</Alert.Message>
+								{#if scanResult === 'invalid'}<Alert.Message appearance="inline" variant="destructive">{m.scanInvalid}</Alert.Message>
+								{:else if scanResult === 'missing'}<Alert.Message appearance="inline" variant="destructive">{m.scanNotOrdered(scanCode!)}</Alert.Message>
 								{:else if scanResult === 'match'}<span class="sr-only">{m.scanMatch(scanCode!)} {matchingLines.map((line) => m.lineNumber(line.lineNumber)).join(', ')}</span>{/if}
 								{#if scanResult !== 'idle'}<Button type="button" variant="ghost" size="sm" onclick={scanNext}>{m.scanNext}</Button>{/if}
 							</div>
@@ -302,7 +304,7 @@
 								<div class="flex flex-wrap items-center justify-between gap-2">
 									<Field.Field orientation="horizontal" class="min-w-0 flex-1 basis-56 gap-3">
 										<Checkbox id={`${id}-full-${line.id}`} checked={full(line)} onCheckedChange={(checked) => chooseFull(line, checked === true)} disabled={busy || Boolean(command)} />
-										<div class="min-w-0"><Field.Label for={`${id}-full-${line.id}`} class={['cursor-pointer', nameWrap]}><!-- One span: the label is a flex row, so loose text would become columns. --><span>{#if product}<span class={codeText}>{product.code}</span>: {productName(product, i18n.locale)}{:else}{line.productId}{/if}</span></Field.Label><Field.Description>{m.lineNumber(line.lineNumber)} · {m.outstanding} <span class="font-mono">{formatDecimal(line.outstandingQuantity, i18n.locale)} {unitLabel(product?.unit_code, i18n.locale, line.outstandingQuantity)}</span></Field.Description>{@render location(line.productId)}</div>
+										<div class="min-w-0"><Field.Label for={`${id}-full-${line.id}`} class={['cursor-pointer', nameWrap]}><!-- One span: the label is a flex row, so loose text would become columns. --><span>{#if product}<span class={codeText}>{product.code}</span>: {/if}{orderProductName(product, i18n.locale)}</span></Field.Label><Field.Description>{m.lineNumber(line.lineNumber)} · {m.outstanding} <span class="font-mono">{formatDecimal(line.outstandingQuantity, i18n.locale)} {unitLabel(product?.unit_code, i18n.locale, line.outstandingQuantity)}</span></Field.Description>{@render location(line.productId)}</div>
 									</Field.Field>
 									{#if !manual.has(line.id)}<Button type="button" variant="ghost" size="sm" onclick={() => override(line)} disabled={busy || Boolean(command)}>{m.differentQuantity}</Button>{/if}
 								</div>
@@ -317,7 +319,8 @@
 		</div>
 		{#if reviewLines.length}
 			<Dialog.Footer variant="sheet">
-				<Button type="submit" form={`${id}-form`} disabled={admin.status !== 'ready' || busy || loading || failed || !storageReady || wrongIdentity || Boolean(command && !pendingHere) || (!pendingHere && selectedCount === 0)}><ButtonLabel pending={busy} pendingLabel={m.working} label={pendingHere ? m.retrySame : m.confirmReceived} reserveLabels={[m.retrySame, m.confirmReceived]} /></Button>
+				<p id={`${id}-selection-hint`} class="text-sm text-muted-foreground">{m.receiptSelection}</p>
+				<Button aria-describedby={`${id}-selection-hint`} type="submit" form={`${id}-form`} disabled={admin.status !== 'ready' || busy || loading || failed || !storageReady || wrongIdentity || Boolean(command && !pendingHere) || (!pendingHere && selectedCount === 0)}><ButtonLabel pending={busy} pendingLabel={m.working} label={pendingHere ? m.retryReceipt : m.recordReceipt} reserveLabels={[m.retryReceipt, m.recordReceipt]} /></Button>
 			</Dialog.Footer>
 		{/if}
 	</Dialog.Content>

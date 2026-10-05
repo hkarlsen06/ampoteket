@@ -79,8 +79,8 @@
 		<AdminAccessGate>
 		<CameraFrame bind:video bind:canvas />
 		<p class="min-h-6 text-sm text-muted-foreground" role="status">{cameraState === 'starting' ? i18n.m.scanner.camera.starting : cameraState === 'scanning' ? '' : m.scanCameraUnavailable}</p>
-		{#if scanResult === 'invalid'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.scanInvalid}</Alert.Message>{/if}
-		{#if scanResult === 'missing'}<Alert.Message appearance="inline" variant="destructive" role="status">{m.scanMissing(scannedCode)}</Alert.Message>{/if}
+		{#if scanResult === 'invalid'}<Alert.Message appearance="inline" variant="destructive" role="alert">{m.scanInvalid}</Alert.Message>{/if}
+		{#if scanResult === 'missing'}<Alert.Message appearance="inline" variant="destructive" role="alert">{m.scanMissing(scannedCode)}</Alert.Message>{/if}
 		</AdminAccessGate>
 		</div>
 		{#if !['starting', 'scanning'].includes(cameraState) || scanResult !== 'idle'}

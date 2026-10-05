@@ -1,13 +1,16 @@
 import { ApiError } from './api';
 import { allStaffRows, staffRequest, type StaffSession } from './admin-api';
 import { addDecimals, compareDecimals, normalizeDecimal } from './decimal';
+import { formatDecimal } from './format';
+import type { Locale } from './i18n';
 import { identifier, object, text, type Fetcher } from './api';
 
 export type CountProduct = { id: string; code: string; name_nb: string; name_en: string; unit_code: string; stock_step: string };
 export type CountProductChoice = CountProduct & { bin_id: string | null; is_active: boolean };
 export type InventorySnapshot = { productId: string; quantity: string; revision: string; lastCountedAt: string | null };
 export type CountOwner = { id: string; name: string; active: boolean; authUserId: string | null };
-export type CountBatch = { id: string; ownerId: string; title: string; startedAt: string; finishedAt: string | null; finishedBy: string | null; finishReason: string | null };
+/** `productId` marks a single-product count; its `title` is then just the product code, worded by the page. */
+export type CountBatch = { id: string; ownerId: string; title: string; productId: string | null; startedAt: string; finishedAt: string | null; finishedBy: string | null; finishReason: string | null };
 export type CountObservation = { eventId: string; batchId: string; productId: string; expected: string; counted: string; revision: string; recordedAt: string; actorId: string; note: string | null };
 type CommandIdentity = { userId: string; requestId: string };
 export type CountCommand = CommandIdentity & (
@@ -47,6 +50,10 @@ export function validCountQuantity(input: string, step: string, locale: 'nb' | '
 export function countDifference(counted: string, expected: string): string {
 	return addDecimals(counted, expected.startsWith('-') ? expected.slice(1) : `-${expected}`);
 }
+/** A difference with an explicit sign, so a surplus and a shortage differ without colour. */
+export function formatSignedDifference(difference: string, locale: Locale): string {
+	return (compareDecimals(difference, '0') > 0 ? '+' : '') + formatDecimal(difference, locale);
+}
 export async function readCountInventory(session: StaffSession, productId: string, fetcher: Fetcher = fetch): Promise<InventorySnapshot> {
 	identifier(productId);
 	const values = await staffRequest(session, 'amp_inventory', { select: 'product_id,quantity,revision,last_counted_at', product_id: `eq.${productId}`, limit: '2' }, undefined, 'POST', fetcher);
@@ -61,9 +68,9 @@ function parseBatch(value: unknown): CountBatch {
 	const finishedBy = row.finished_by === null ? null : identifier(row.finished_by);
 	const finishReason = row.finish_reason === null ? null : text(row.finish_reason, 2000);
 	if ((finishedAt === null) !== (finishedBy === null) || (finishReason && !finishedAt)) throw new Error('Invalid batch closure');
-	return { id: identifier(row.id), ownerId: identifier(row.owner_id), title: text(row.title, 200), startedAt: timestamp(row.started_at), finishedAt, finishedBy, finishReason };
+	return { id: identifier(row.id), ownerId: identifier(row.owner_id), title: text(row.title, 200), productId: row.product_id === null ? null : identifier(row.product_id), startedAt: timestamp(row.started_at), finishedAt, finishedBy, finishReason };
 }
-const batchFields = 'id,owner_id,title,started_at,finished_at,finished_by,finish_reason';
+const batchFields = 'id,owner_id,title,product_id,started_at,finished_at,finished_by,finish_reason';
 function parseOwner(value: unknown): CountOwner {
 	const row = object(value);
 	if (typeof row.is_active !== 'boolean') throw new Error('Invalid count owner');
@@ -76,14 +83,14 @@ export async function readCountBatches(session: StaffSession, fetcher: Fetcher =
 	]);
 	const owners = ownerRows.map(parseOwner);
 	const batches = batchRows.map(parseBatch);
-	if (batches.some((batch) => !owners.some((owner) => owner.id === batch.ownerId) || (batch.finishedBy && !owners.some((owner) => owner.id === batch.finishedBy)))) throw new Error('Incomplete count owners');
 	return { batches: batches.sort((a, b) => b.startedAt.localeCompare(a.startedAt) || b.id.localeCompare(a.id)), owners };
 }
-export function countBatchAccess(batch: CountBatch, owner: CountOwner, currentStaffId: string): 'finished' | 'owner' | 'other' | 'abandoned' {
-	if (batch.ownerId !== owner.id) throw new Error('Invalid count owner binding');
+/** An owner row that cannot be read is never treated as abandoned: only a known, lost owner can be closed over. */
+export function countBatchAccess(batch: CountBatch, owner: CountOwner | undefined, currentStaffId: string): 'finished' | 'owner' | 'other' | 'abandoned' {
+	if (owner && batch.ownerId !== owner.id) throw new Error('Invalid count owner binding');
 	if (batch.finishedAt) return 'finished';
 	if (batch.ownerId === currentStaffId) return 'owner';
-	return !owner.active || !owner.authUserId ? 'abandoned' : 'other';
+	return owner && (!owner.active || !owner.authUserId) ? 'abandoned' : 'other';
 }
 export async function readCountHistory(session: StaffSession, batchId: string, fetcher: Fetcher = fetch): Promise<CountObservation[]> {
 	identifier(batchId);
@@ -133,8 +140,8 @@ export async function readCountDetail(session: StaffSession, batchId: string, cu
 			owners.push(owner);
 		}
 	}
-	if (owners.length !== ownerIds.length) throw new Error('Incomplete count owners');
-	const owner = owners.find(owner => owner.id === batch.ownerId)!;
+	// A row the reader cannot see degrades to a translated name on the page, not a blank page.
+	const owner = owners.find(owner => owner.id === batch.ownerId);
 	const productIds = [...new Set([...observations.map(entry => entry.productId), ...(options.productId ? [identifier(options.productId)] : [])])];
 	const filters: Record<string, string>[] = [];
 	if (countBatchAccess(batch, owner, currentStaffId) === 'owner') filters.push({});
@@ -151,8 +158,7 @@ export async function readCountDetail(session: StaffSession, batchId: string, cu
 				stock_step: step, bin_id: row.bin_id === null ? null : identifier(row.bin_id), is_active: row.is_active });
 		}
 	}
-	const found = new Set(products.map(product => product.id));
-	if (found.size !== products.length || productIds.some(id => !found.has(id))) throw new Error('Incomplete count products');
+	if (new Set(products.map(product => product.id)).size !== products.length) throw new Error('Duplicate count products');
 	return { batch, owners, products, observations };
 }
 

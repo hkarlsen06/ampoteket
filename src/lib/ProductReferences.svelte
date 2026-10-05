@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Separator } from '#lib/components/ui/separator/index.js';
-	import { codeText, formStatus, section, sectionHeading } from '#lib/ui.js';
+	import StateBadge from '#lib/StateBadge.svelte';
+	import { formStatus, section, sectionHeading } from '#lib/ui.js';
 	import { Button, ButtonLabel } from '#lib/components/ui/button/index.js';
 	import * as Item from '#lib/components/ui/item/index.js';
 	import * as Alert from '#lib/components/ui/alert/index.js';
@@ -97,17 +98,17 @@
 					<Item.Root variant="row" class="grid gap-1 py-1"><dt>{m.categoryName}</dt><dd>{category.name}</dd></Item.Root>
 				{:else if definition}
 					<Item.Root variant="row" class="grid gap-1 py-1"><dt>{m.definitionLabel}</dt><dd>{definition.label}</dd></Item.Root>
-					<Item.Root variant="row" class="grid gap-1 py-1"><dt>{m.definitionCode}</dt><dd class={codeText}>{definition.code}</dd></Item.Root>
 					<Item.Root variant="row" class="grid gap-1 py-1"><dt>{m.valueType}</dt><dd>{definition.value_type === 'number' ? m.numberType : definition.value_type === 'text' ? m.textType : m.booleanType}</dd></Item.Root>
-					{#if definition.canonical_unit}<Item.Root variant="row" class="grid gap-1 py-1"><dt>{m.canonicalUnit}</dt><dd>{definition.canonical_unit}</dd></Item.Root>{/if}
+					{#if definition.canonical_unit}<Item.Root variant="row" class="grid gap-1 py-1"><dt>{m.unit}</dt><dd>{definition.canonical_unit}</dd></Item.Root>{/if}
 				{/if}
 			</dl>
 			<Button variant="outline" disabled={busy || !storageReady} onclick={retry}><ButtonLabel pending={busy} pendingLabel={m.working} label={m.retrySave} /></Button>
 		{/if}
 		<div class={formStatus} aria-live="polite">
-			{#if wrongIdentity}<Alert.Message appearance="inline" variant="destructive" role="status">{m.wrongIdentity}</Alert.Message>
-			{:else if !storageReady}<Alert.Message appearance="inline" variant="destructive" role="status">{m.storage}</Alert.Message>
-			{:else if outcome !== 'idle' || pending}<Alert.Message appearance="inline" role="status" variant={outcome !== 'saved' && outcome !== 'idle' ? 'destructive' : 'default'}>{outcome === 'saved' ? m.referenceSaved : outcome === 'savedRefreshFailed' ? m.savedRefreshFailed : outcome === 'stale' ? m.referenceRecoveryStale : outcome === 'invalid' ? m.referenceRecoveryRejected : m.unknown}</Alert.Message>{/if}
+			{#if wrongIdentity}<Alert.Message appearance="inline" variant="destructive">{m.wrongIdentity}</Alert.Message>
+			{:else if !storageReady}<Alert.Message appearance="inline" variant="destructive">{m.storage}</Alert.Message>
+			{:else if outcome === 'saved'}<StateBadge tone="success">{m.referenceSaved}</StateBadge>
+			{:else if outcome !== 'idle' || pending}<Alert.Message appearance="inline" variant={outcome !== 'idle' ? 'destructive' : 'default'}>{outcome === 'savedRefreshFailed' ? m.savedRefreshFailed : outcome === 'stale' ? m.referenceRecoveryStale : outcome === 'invalid' ? m.referenceRecoveryRejected : m.unknown}</Alert.Message>{/if}
 		</div>
 	</section>
 {/if}

@@ -639,7 +639,7 @@
 						{#if discord === undefined}
 							<span class="text-sm text-muted-foreground">{m.who.discord.loading}</span>
 						{:else if discord === null}
-							<Alert.Message role="status" appearance="inline" variant="destructive">{m.who.discord.unavailable}</Alert.Message>
+							<Alert.Message role="alert" appearance="inline" variant="destructive">{m.who.discord.unavailable}</Alert.Message>
 							<Button variant="outline" size="sm" onclick={() => loadDiscord(true)}>{m.who.discord.retry}</Button>
 						{:else}
 							<StateBadge tone="success">{m.who.discord.online(discord.online)}</StateBadge>

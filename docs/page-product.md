@@ -12,7 +12,8 @@ A code identifies one interchangeable type; several types can share a drawer, an
 drawer's position is separate from that identity.
 
 At 360 px: identity line (catalog link, name, code, category, recorded balance); unit
-price; quantity form (stepper, Add, reserved result region showing any cart quantity);
+price (at least two decimals, with extra stored precision preserved); quantity form
+(stepper, Add, reserved result region showing any cart quantity);
 description; shelf map opened on the product's drawer, with its address in the header;
 specifications and datasheet link. Unknown values stay absent. Zero and negative
 balances explain that physically found parts can still be added.

@@ -11,20 +11,23 @@ filter), rendering `src/lib/labels/render.ts`, the P-touch driver
 The shelf diagram is the only selector. A cabinet's checkbox toggles all its drawers;
 tapping the cabinet zooms in. Partial cabinets show a mixed state. Shift-click or
 Shift+Space applies the new state to the range from the previous anchor in reading
-order (highest row first, left to right), within one cabinet for drawers. Keep a short
-Shift hint, since it is invisible.
+order (highest row first, left to right), within one cabinet for drawers. The short
+Shift hint appears only with a fine pointer.
 
 Cabinets retain enough width for their checkbox and coordinate. Dense walls pan
 inside a named, keyboard-accessible region without widening the page. Focus and
 returning from a cabinet reveal its controls within that region.
 
 - **Select all** includes every live drawer and products without a drawer.
-- Each saved product in a selected drawer gets exactly one label, including inactive
+- Each saved product in a selected drawer gets exactly one label, including unpublished
   products and zero or negative stock. Empty drawers and archived storage add nothing.
 - The page says unpublished products must be published before buyers can find them.
 - Reads are complete staff reads with the operator's JWT. A missing or failed page
   blocks export, never an empty result. Generation re-reads current data; the preview
   is the export snapshot.
+- Background revalidation keeps controls stable; generation waits for an ongoing
+  read before starting. One live region announces selection and generation results.
+  Once the PDF is ready, **Download A4 PDF** is the primary action.
 
 ## Label and sheet
 
@@ -50,7 +53,8 @@ older `https://` labels. Some phone cameras may show a scheme-less address as te
 
 **Print** in a saved product's editor prints its label on a Brother PT-P700 (USB
 `04f9:2061`) over WebUSB, only in desktop Chromium browsers over HTTPS or localhost;
-elsewhere it explains why. The first print opens the device picker. Creating a
+with a fine pointer; elsewhere the button is disabled with a visible reason. The first
+print opens the device picker. Creating a
 product with **Print label** checked prints its label as soon as it is saved. `prepareTapeLabel`
 in `render.ts` draws the label.
 

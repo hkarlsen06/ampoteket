@@ -4,7 +4,7 @@
 	import { cardLink, codeText, nameWrap } from '#lib/ui.js';
 	import { productName } from '#lib/catalog.js';
 	import { categoryBesideName, getI18n } from '#lib/i18n/index.js';
-	import { currency, formatDecimal, unitLabel } from '#lib/format.js';
+	import { formatMoney, unitLabel } from '#lib/format.js';
 	import CategoryGraphic from '#lib/CategoryGraphic.svelte';
 	import StockBadge from '#lib/StockBadge.svelte';
 	import LocationChips from '#lib/LocationChips.svelte';
@@ -38,7 +38,7 @@
 		<Card.Content class="grid content-start gap-2 p-0">
 			<div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
 				<p class="m-0 flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
-					<span class="font-mono text-xl font-semibold">{currency(formatDecimal(product.sale_unit_price_nok, i18n.locale), i18n.locale)}</span>
+					<span class="font-mono text-xl font-semibold">{formatMoney(product.sale_unit_price_nok, i18n.locale)}</span>
 					<span class="text-sm text-muted-foreground">{i18n.m.shop.perUnit(unitLabel(product.unit_code, i18n.locale, '1'))}</span>
 				</p>
 				{#if !product.is_active}<StateBadge tone="neutral">{i18n.m.adminProducts.inactive}</StateBadge>{/if}

@@ -2,7 +2,7 @@
 	import AdminAccessGate from '#lib/AdminAccessGate.svelte';
 	import { productName } from '#lib/catalog.js';
 	import { Separator } from '#lib/components/ui/separator/index.js';
-	import { codeText, formGrid, formLayout, formStatus, lede, nameWrap, pageHeader, pageHeading, section, sectionHeading, sheetBody } from '#lib/ui.js';
+	import { formActions, formGrid, formLayout, formStatus, lede, nameWrap, pageHeader, pageHeading, section, sectionHeading, sheetBody } from '#lib/ui.js';
 	import { controlStyles } from '#lib/components/ui/control.js';
 	import { cn } from '#lib/utils.js';
 	import { Button, ButtonLabel } from '#lib/components/ui/button/index.js';
@@ -32,16 +32,17 @@
 	import { goto } from '$app/navigation';
 	import { getI18n, categoryLabel, messagesFor } from '#lib/i18n/index.js';
 	import { getAdminContext } from '#lib/admin-context.svelte.js';
-	import { gridCell, gridRange, formatDecimal, formatCountedAt, nameMeasurement, tidyNameMeasurements, unitLabel } from '#lib/format.js';
+	import { gridCell, gridRange, currencySymbol, formatDecimal, formatMoney, formatCountedAt, nameMeasurement, tidyNameMeasurements, unitLabel } from '#lib/format.js';
 	import { compareDecimals, normalizeDecimal } from '#lib/decimal.js';
 	import { uuidPattern } from '#lib/api.js';
 	import { translateName } from '#lib/name-translation.js';
 	import type { StaffSession } from '#lib/admin-api.js';
 	import CountForm from '#lib/CountForm.svelte';
 	import StockBadge from '#lib/StockBadge.svelte';
+	import StateBadge from '#lib/StateBadge.svelte';
 	import ProductAttributes from '#lib/ProductAttributes.svelte';
-	import LabelPrintButton, { queueLabelPrint } from '#lib/LabelPrintButton.svelte';
-	import { choosePrinter, printerSupported } from '#lib/labels/ptouch.js';
+	import LabelPrintButton, { labelPrinterSupported, queueLabelPrint } from '#lib/LabelPrintButton.svelte';
+	import { choosePrinter } from '#lib/labels/ptouch.js';
 	import { clearCountCommand, readCountCommand, runCountCommand, saveCountCommand, updateCountStorage, validCountQuantity, type CountCommand } from '#lib/admin-counts.js';
 	import ProductSpecificationRecovery from '#lib/ProductSpecificationRecovery.svelte';
 	import { parseAttribute, ProductSpecificationsError, type ProductAttributeDraft } from '#lib/admin-products.js';
@@ -83,7 +84,7 @@
 	const openingCount = (step: string) => openingStock.trim() ? validCountQuantity(openingStock, step, i18n.locale) : null;
 	let proposedPlacement = $state<{ from: string | null; to: string } | null>(null);
 	let placementTrigger: HTMLElement | null = null;
-	let stockLoading = $state(false); let stockGeneration = 0;
+	let stockLoading = $state(false); let stockFailed = $state(false); let stockGeneration = 0;
 	let alive = true; let restoringCreation = $state(false);
 	const ownPending = $derived(Boolean(pending && (pending.payload.id === id || (id === 'new' && pending.revision === null))));
 	const wrongIdentity = $derived(Boolean(pending && pending.userId !== admin.session?.user.id));
@@ -139,7 +140,7 @@
 		placementOpen = false;
 	}
 	onMount(() => {
-		canPrint = printerSupported() && !oncreated;
+		canPrint = labelPrinterSupported() && !oncreated;
 		try { pending = readProductCommand(sessionStorage); restoringCreation = Boolean(pending && pending.revision === null && pending.payload.id === id); const probe = 'ampoteket:product-probe'; sessionStorage.setItem(probe, '1'); if (sessionStorage.getItem(probe) !== '1') throw new Error(); sessionStorage.removeItem(probe); storageReady = true; }
 		catch { storageReady = false; }
 		void load(); return () => { alive = false; if (id !== 'new') queueLabelPrint(null); };
@@ -151,8 +152,8 @@
 			const session = admin.credentials();
 			// Read together so the on-order badge never pops in after the balance.
 			const [next, outstanding] = await Promise.all([readProductStock(session, product.id), readOutstandingByProduct(session).catch(() => null)]);
-			if (alive && generation === stockGeneration && admin.session?.user.id === session.userId) { stock = next; onOrder = outstanding?.get(product.id) ?? null; } }
-		catch (error) { if (alive && generation === stockGeneration) stock = null; await admin.permissionFailure(error); }
+			if (alive && generation === stockGeneration && admin.session?.user.id === session.userId) { stock = next; stockFailed = false; onOrder = outstanding?.get(product.id) ?? null; } }
+		catch (error) { if (alive && generation === stockGeneration) stockFailed = true; await admin.permissionFailure(error); }
 		finally { if (alive && generation === stockGeneration) stockLoading = false; }
 	}
 	// The app owns freshness (design-system.md §4.2): the recorded balance
@@ -369,26 +370,25 @@
 		return standard ? m.typeNames[standard.prefix] : saved ? categoryLabel(saved.name, i18n.locale) : m.noCategory;
 	}
 	function comparable(row: ProductWrite) {
-		return [[m.nameNb, row.name_nb], [m.nameEn, row.name_en], [m.description, row.description ?? '–'], [m.category, categoryName(row.category_id)], [m.placement, binLabel(row.bin_id)], [m.locationNote, row.location_note ?? '–'], [m.saleStep, row.sale_step], [m.price, row.sale_unit_price_nok], [m.minimumStock, row.minimum_stock], [m.datasheet, row.datasheet_url ?? '–'], [m.purchaseUrl, row.purchase_url ?? '–'], [m.stateFilter, row.is_active ? m.active : m.inactive]];
+		return [[m.nameNb, row.name_nb], [m.nameEn, row.name_en], [m.description, row.description ?? m.unset], [m.category, categoryName(row.category_id)], [m.placement, binLabel(row.bin_id)], [m.locationNote, row.location_note ?? m.unset], [m.saleStep, `${formatDecimal(row.sale_step, i18n.locale)} ${unitLabel(row.unit_code, i18n.locale, row.sale_step)}`], [m.price, formatMoney(row.sale_unit_price_nok, i18n.locale)], [m.minimumStock, `${formatDecimal(row.minimum_stock, i18n.locale)} ${unitLabel(row.unit_code, i18n.locale, row.minimum_stock)}`], [m.datasheet, row.datasheet_url ?? m.unset], [m.purchaseUrl, row.purchase_url ?? m.unset], [m.stateFilter, row.is_active ? m.active : m.inactive]];
 	}
 </script>
-<svelte:head>{#if !oncreated}<title>{productCode ? `${productCode} | ${m.title}` : m.title}</title>{/if}</svelte:head>
+<svelte:head>{#if !oncreated}<title>{productCode ? `${productCode} | ${m.title}` : id === 'new' ? m.newTitle : m.title}</title>{/if}</svelte:head>
 <svelte:window onfocus={revalidateStock} ononline={revalidateStock} />
 <svelte:document onvisibilitychange={revalidateStock} />
 {#if !oncreated}
 <div class={[pageHeader, 'product-editor-heading grid-cols-[minmax(0,1fr)_auto] items-center']}>
-	<div class="row-span-2 grid min-w-0 justify-items-start gap-1">
+	<div class="grid min-w-0 justify-items-start gap-1">
 		<h1 class={pageHeading}>{productCode ?? (id === 'new' ? m.newProduct : m.editProduct)}</h1>
 		{#if product}<p class={[lede, nameWrap]}>{productName(product, i18n.locale)}</p>{/if}
-		{#if product?.is_active}<Button variant="link" size="sm" href={i18n.href(`/p/${product.code}`)}>{m.publicProduct}<Icon icon={ArrowUpRightIcon} data-icon="inline-end" /></Button>{/if}
 	</div>
 	<div class="w-16 justify-self-center lg:w-20"><CategoryGraphic category={productCategory} /></div>
-	{#if product && references}<LabelPrintButton {product} {references} />{/if}
+	{#if product && references}<div class={[formActions, 'col-span-full']}>{#if product.is_active}<Button variant="outline" size="sm" href={i18n.href(`/p/${product.code}`)}>{m.publicProduct}<Icon icon={ArrowUpRightIcon} data-icon="inline-end" /></Button>{/if}<LabelPrintButton {product} {references} /></div>{/if}
 </div>
 {/if}
 {#if pending && (!ownPending || wrongIdentity)}
 	<div class="mb-6 grid justify-items-start gap-1">
-		<Alert.Message appearance="inline" variant={wrongIdentity ? 'destructive' : 'default'} role="status">{wrongIdentity ? m.wrongIdentity : m.pending}</Alert.Message>
+		<Alert.Message appearance="inline" variant={wrongIdentity ? 'destructive' : 'default'} role={wrongIdentity ? 'alert' : undefined}>{wrongIdentity ? m.wrongIdentity : m.pending}</Alert.Message>
 		{#if !wrongIdentity}<Button variant="link" href={i18n.href(`/admin/products/${pending.payload.id}`)}>{m.resume}</Button>{/if}
 	</div>
 {/if}
@@ -396,8 +396,8 @@
 	<span class="sr-only" role="status">{m.loading}</span>
 	<div class="min-h-128 space-y-5" aria-busy="true"><Skeleton class="h-12 w-48" /><Skeleton class="h-24 w-full" /><Skeleton class="h-40 w-full" /></div>
 {:else if loadFailed}
-	<div class="grid min-h-128 content-start justify-items-start gap-2"><Alert.Message appearance="inline" variant="destructive" role="status">{m.unavailable}</Alert.Message><Button variant="outline" onclick={load}>{m.retry}</Button></div>
-{:else if !ready}<p>{m.missing}</p>
+	<div class="grid min-h-128 content-start justify-items-start gap-2"><Alert.Message appearance="inline" variant="destructive" role="alert">{m.unavailable}</Alert.Message><Button variant="outline" onclick={load}>{m.retry}</Button></div>
+{:else if !ready}<div class="space-y-4"><p>{m.missing}</p><Button variant="outline" href={i18n.href('/admin/products')}>{m.back}</Button></div>
 {:else if references && !wrongIdentity}
 	{#if product}
 		<div class="product-stock mb-6 flex min-h-20 flex-wrap items-center justify-between gap-4">
@@ -406,14 +406,15 @@
 					<p class="text-muted-foreground">{m.inventory}</p>
 					<p class="flex flex-wrap items-center gap-x-3 gap-y-1">
 						<span class={['font-mono text-2xl font-semibold', stockLevel === 'out' ? 'text-destructive' : stockLevel === 'low' ? 'rounded-md bg-warning px-1.5 text-on-warning' : 'text-foreground']}>{formatDecimal(stock.quantity, i18n.locale)} {unitLabel(product.unit_code, i18n.locale, stock.quantity)}</span>
-						<StockBadge quantity={stock.quantity} unit={unitLabel(product.unit_code, i18n.locale)} minimum={product.minimum_stock} showQuantity={false} />
+						<StockBadge quantity={stockFailed ? null : stock.quantity} unit={unitLabel(product.unit_code, i18n.locale)} minimum={product.minimum_stock} showQuantity={false} />
 					</p>
 					<p class="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">{stock.last_counted_at ? `${m.lastCount}: ${formatCountedAt(stock.last_counted_at, i18n.locale)}` : m.neverCounted}{#if onOrder}<Badge variant="outline">{m.onOrder(`${formatDecimal(onOrder, i18n.locale)} ${unitLabel(product.unit_code, i18n.locale, onOrder)}`)}</Badge>{/if}</p>
-				{:else if stockLoading}<span class="sr-only" role="status">{m.loading}</span><Skeleton class="h-16 w-40" />
-				{:else}<div class="grid justify-items-start gap-2"><Alert.Message appearance="inline" variant="destructive" role="status">{m.inventoryUnavailable}</Alert.Message><Button variant="outline" size="sm" onclick={refreshStock}>{m.retry}</Button></div>{/if}
+				{:else if stockLoading}<span class="sr-only">{m.loading}</span><Skeleton class="h-16 w-40" />
+				{/if}
 			</div>
 			<div class="grid shrink-0 justify-items-start gap-1 md:justify-items-end"><CountForm modal {product} onsaved={refreshStock} /><Button variant="link" size="sm" href={i18n.href(`/admin/stock?product=${product.id}`)}>{m.stockLedger}</Button></div>
 		</div>
+		{#if stockFailed}<div class="mb-6 grid justify-items-start gap-2"><Alert.Message appearance="inline" variant="destructive" role="alert">{m.inventoryUnavailable}</Alert.Message><Button variant="outline" size="sm" disabled={stockLoading} onclick={refreshStock}>{m.retry}</Button></div>{/if}
 	{/if}
 	<Tabs.Root value="details">
 		{#if product}
@@ -429,7 +430,7 @@
 					<div class={formGrid}>
 						{#if categoryCards}
 							<Field.Set class="col-span-full">
-								<Field.Legend id="product-category-label" variant="label">{m.category} <span aria-hidden="true" class="text-destructive">*</span></Field.Legend>
+								<Field.Legend id="product-category-label" variant="label"><Field.Label required>{m.category}</Field.Label></Field.Legend>
 								<RadioGroup.Root value={draft.category_id ?? ''} onValueChange={value => setCategory(value || null)} aria-labelledby="product-category-label" required disabled={blocked} class="grid-cols-2 md:grid-cols-4 lg:grid-cols-5">
 									{#each categories as category (category.id)}
 										{@const optionId = `product-category-${category.prefix.toLowerCase()}`}
@@ -535,7 +536,7 @@
 							<Field.Field><Field.Label for="product-select-4">{m.unit}</Field.Label><NativeSelect.Root id="product-select-4" bind:value={draft.unit_code} disabled={blocked || Boolean(product)}>{#each references.units as unit (unit.code)}<option value={unit.code}>{unitLabel(unit.code, i18n.locale)}</option>{/each}</NativeSelect.Root></Field.Field>
 							<Field.Field><Field.Label for="product-stock-step" required={!product}>{m.stockStep} <span class="sr-only">({unitLabel(draft.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id="product-stock-step" aria-invalid={invalidField === 'stock_step'} aria-describedby={invalidField === 'stock_step' ? 'product-stock-step-error' : undefined} type="text" inputmode="decimal" required bind:value={draft.stock_step} disabled={blocked || Boolean(product)} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(draft.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'stock_step'}<Field.Error id="product-stock-step-error">{errorMessage('stock_step')}</Field.Error>{/if}</Field.Field>
 							<Field.Field><Field.Label for="product-sale-step" required>{m.saleStep} <span class="sr-only">({unitLabel(draft.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id="product-sale-step" aria-invalid={invalidField === 'sale_step'} aria-describedby={invalidField === 'sale_step' ? 'product-sale-step-error' : undefined} type="text" inputmode="decimal" required bind:value={draft.sale_step} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(draft.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'sale_step'}<Field.Error id="product-sale-step-error">{errorMessage('sale_step')}</Field.Error>{/if}</Field.Field>
-							<Field.Field><Field.Label for="product-price" required>{m.price} <span class="sr-only">(NOK)</span></Field.Label><InputGroup.Root><InputGroup.Input id="product-price" aria-invalid={invalidField === 'sale_unit_price_nok'} aria-describedby={invalidField === 'sale_unit_price_nok' ? 'product-price-error' : undefined} type="text" inputmode="decimal" required bind:value={draft.sale_unit_price_nok} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>NOK</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'sale_unit_price_nok'}<Field.Error id="product-price-error">{errorMessage('sale_unit_price_nok')}</Field.Error>{/if}</Field.Field>
+							<Field.Field><Field.Label for="product-price" required>{m.price} <span class="sr-only">({currencySymbol(i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id="product-price" aria-invalid={invalidField === 'sale_unit_price_nok'} aria-describedby={invalidField === 'sale_unit_price_nok' ? 'product-price-error' : undefined} type="text" inputmode="decimal" required bind:value={draft.sale_unit_price_nok} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{currencySymbol(i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'sale_unit_price_nok'}<Field.Error id="product-price-error">{errorMessage('sale_unit_price_nok')}</Field.Error>{/if}</Field.Field>
 							<Field.Field><Field.Label for="product-minimum-stock" required>{m.minimumStock} <span class="sr-only">({unitLabel(draft.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id="product-minimum-stock" aria-invalid={invalidField === 'minimum_stock'} aria-describedby={invalidField === 'minimum_stock' ? 'product-minimum-stock-error product-minimum-stock-hint' : 'product-minimum-stock-hint'} type="text" inputmode="decimal" required bind:value={draft.minimum_stock} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(draft.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'minimum_stock'}<Field.Error id="product-minimum-stock-error">{errorMessage('minimum_stock')}</Field.Error>{/if}</Field.Field>
 							<Field.Description id="product-minimum-stock-hint" class="col-span-full">{m.minimumStockHint}</Field.Description>
 							{#if !product}<Field.Description class="col-span-full">{m.immutable}</Field.Description>{/if}
@@ -556,22 +557,21 @@
 					</Collapsible.Root>
 					<Field.Field orientation="horizontal" class="min-h-12"><Switch id="product-active" bind:checked={draft.is_active} disabled={blocked} aria-describedby="product-active-hint" /><Field.Content><Field.Label for="product-active">{m.activeLabel}</Field.Label><Field.Description id="product-active-hint">{m.activeHint}</Field.Description></Field.Content></Field.Field>
 					{#if id === 'new' && !product && canPrint}<Field.Field orientation="horizontal"><Checkbox id="product-print-label" bind:checked={printAfterSave} disabled={blocked} /><Field.Label for="product-print-label" class="cursor-pointer">{m.printLabelName}</Field.Label></Field.Field>{/if}
-					<Button type="submit" class="justify-self-start" disabled={busy || !storageReady || Boolean(pending && !ownPending) || outcome === 'stale'}><ButtonLabel pending={busy} pendingLabel={m.working} label={ownPending ? m.retrySave : m.save} reserveLabels={[m.retrySave, m.save]} /></Button>
+					<div class={formActions}><Button type="submit" disabled={busy || !storageReady || Boolean(pending && !ownPending) || outcome === 'stale'}><ButtonLabel pending={busy} pendingLabel={m.working} label={ownPending ? m.retrySave : m.save} reserveLabels={[m.retrySave, m.save]} /></Button></div>
 				{/if}
 			</form>
 			<div class={formStatus} aria-live="polite">
-				{#if !storageReady}<Alert.Message appearance="inline" role={undefined} variant="destructive">{m.storage}</Alert.Message>
-				{:else if outcome !== 'idle'}<Alert.Message appearance="inline" role={undefined} variant={outcome === 'saved' ? 'default' : 'destructive'}>{outcome === 'saved' ? m.saved : outcome === 'specificationsIncomplete' ? m.specificationsIncomplete : outcome === 'specificationsNotSaved' ? m.specificationsNotSaved : outcome === 'invalid' ? m.invalid : outcome === 'stale' ? m.stale : outcome === 'countPending' ? i18n.m.adminCounts.pendingElsewhere : outcome === 'openingNotCounted' ? m.openingNotCounted : outcome === 'unknown' ? m.unknown : outcome === 'storage' ? m.storage : m.failed}</Alert.Message>{/if}
+				{#if !storageReady}<Alert.Message appearance="inline" variant="destructive">{m.storage}</Alert.Message>
+				{:else if outcome === 'saved'}<StateBadge tone="success">{m.saved}</StateBadge>
+				{:else if outcome !== 'idle'}<Alert.Message appearance="inline" variant="destructive">{outcome === 'specificationsIncomplete' ? m.specificationsIncomplete : outcome === 'specificationsNotSaved' ? m.specificationsNotSaved : outcome === 'invalid' ? m.invalid : outcome === 'stale' ? m.stale : outcome === 'countPending' ? i18n.m.adminCounts.pendingElsewhere : outcome === 'openingNotCounted' ? m.openingNotCounted : outcome === 'unknown' ? m.unknown : outcome === 'storage' ? m.storage : m.failed}</Alert.Message>{/if}
 			</div>
-			{#if outcome === 'stale'}{#if reviewFailed}<Alert.Message appearance="inline" role="status" variant="destructive" class="mb-2">{m.unavailable}</Alert.Message>{/if}<Button variant="outline" disabled={busy} onclick={review}>{m.review}</Button>{/if}
+			{#if outcome === 'stale'}{#if reviewFailed}<Alert.Message appearance="inline" role="alert" variant="destructive" class="mb-2">{m.unavailable}</Alert.Message>{/if}<Button variant="outline" disabled={busy} onclick={review}>{m.review}</Button>{/if}
 			{#if current}
 				<section class={section({ spacing: 'divided' })}><Separator /><h2 class={sectionHeading}>{m.currentValues}</h2><dl class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">{#each comparable(current) as [label, value] (label)}<div class="min-w-0"><dt class="text-muted-foreground">{label}</dt><dd class="mt-1 break-words">{value}</dd></div>{/each}</dl><Button variant="outline" disabled={busy} onclick={useRevision}>{m.reviewed}</Button></section>
 			{/if}
 		</Tabs.Content>
 		{#if product}
 			<Tabs.Content value="statistics">
-				<h2 class={sectionHeading}>{productName(product, i18n.locale)}</h2>
-				<p class={[codeText, 'mb-4 text-muted-foreground']}>{product.code}</p>
 				<AdminStatistics productId={product.id} unit={unitLabel(product.unit_code, i18n.locale)} />
 			</Tabs.Content>
 		{/if}
