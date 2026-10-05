@@ -125,7 +125,9 @@ digits, the readable date in visually hidden text; the visible word is
 The emotional beat between what the room is and what is in it: two students' own
 words from the opening (Alexander Rosenkilde, Magnus Weden), each with tags naming
 what they build. Quotes are verbatim from the OsloMet story and captioned with the
-speaker's year *at the opening*, so they do not go stale; Weden's preamps and mixers
+speaker's year *at the opening*, so they do not go stale. Rosenkilde's caption adds
+his current role («nå verkstedssjef»), given by the owner on 2026-10-05, not the story;
+change it when the role changes. Weden's preamps and mixers
 are plans and must read as plans. Replace or add quotes only from a written source
 with the speaker's consent. Same surface as §2.3; no cards.
 

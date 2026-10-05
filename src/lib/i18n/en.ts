@@ -657,7 +657,7 @@ export const en: Messages = {
 			quotes: [
 				{
 					text: 'Having this workshop lets me develop projects I care about, test circuits and get a more practical understanding of what we learn.',
-					by: 'Alexander Rosenkilde, first-year electronics student, at the opening',
+					by: 'Alexander Rosenkilde, first-year student at the opening, now workshop manager',
 					tags: ['Circuits', '3D printing']
 				},
 				{

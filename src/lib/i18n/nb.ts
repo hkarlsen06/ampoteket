@@ -664,7 +664,7 @@ export const nb = {
 			quotes: [
 				{
 					text: 'Å ha dette verkstedet gjør at jeg kan utvikle prosjekter jeg brenner for, teste kretser og få mer praktisk forståelse av det vi lærer.',
-					by: 'Alexander Rosenkilde, førsteårsstudent i elektronikk, under åpningen',
+					by: 'Alexander Rosenkilde, førsteårsstudent under åpningen, nå verkstedssjef',
 					tags: ['Kretser', '3D-printing']
 				},
 				{
