@@ -444,27 +444,19 @@
 						</div>
 					{/each}
 				</dl>
-				<!-- Said at the opening that ends the timeline beside it; here it balances the
-				     columns and reads in the same style as the student quotes below. -->
-				<figure class="m-0 grid gap-3 border-l-2 border-primary pl-6">
-					<blockquote class="m-0"><p class="text-[clamp(1.25rem,1.1rem+0.6vw,1.5rem)] leading-snug font-light tracking-tight">{m.about.openingQuote}</p></blockquote>
-					<figcaption class="text-sm text-muted-foreground">{m.about.openingQuoteBy}</figcaption>
-				</figure>
 			</div>
-			<div class="grid content-start gap-8">
-				<h3 class={panelTitle}>{m.about.storyTitle}</h3>
-				<!-- How the room came to be, as a trace with a pad per step. Only the
-				     opening has a date in the source, so only it gets an LED cell. -->
-				<ol class="m-0 grid list-none gap-6 border-l-2 border-border p-0 pl-6">
-					{#each m.about.story as step (step)}
-						<li class={timelineStep}>{step}</li>
-					{/each}
-					<!-- The visible word is decoration; the cell's label reads the whole step. -->
-					<li class="{timelineStep} flex items-center gap-3">
-						<Led value={m.about.openedLed} label={m.about.opened} size="small" /><span aria-hidden="true">{m.about.openedStep}</span>
-					</li>
-				</ol>
-			</div>
+			<!-- How the room came to be, as a trace with a pad per step. The section heading
+			     names the column; the list's accessible name says what the steps are. Only
+			     the opening has a date in the source, so only it gets an LED cell. -->
+			<ol class="m-0 grid list-none gap-6 border-l-2 border-border p-0 pl-6" aria-label={m.about.storyTitle}>
+				{#each m.about.story as step (step)}
+					<li class={timelineStep}>{step}</li>
+				{/each}
+				<!-- The visible word is decoration; the cell's label reads the whole step. -->
+				<li class="{timelineStep} flex items-center gap-3">
+					<Led value={m.about.openedLed} label={m.about.opened} size="small" /><span aria-hidden="true">{m.about.openedStep}</span>
+				</li>
+			</ol>
 		</div>
 	</div>
 </section>

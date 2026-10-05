@@ -108,17 +108,16 @@ printers: there are two Bambu Lab P2S, never «a 3D printer».
 
 What the room is for, beside how students built it. The left column holds the lead
 with the link to the OsloMet story under it (it sources every quote and fact from the
-hero to §2.4), the facts (run by The Resistance (electronics engineering) and RoboMEK
-(robotics); department MEK at OsloMet, students in charge) and Silje Fekjær's quote
-from the opening, in the §2.4 quote style. The quote sits on the left so the two
-columns end level.
+hero to §2.4) and the facts: run by The Resistance (electronics engineering) and
+RoboMEK (robotics); department MEK at OsloMet, students in charge.
 
-The right column, «Bygget av studenter», is a timeline on a vertical trace with a pad
-per step: students found the room and convinced OsloMet, the 100 000 kroner grant,
-the volunteer refit with reused equipment, then «Åpnet» with the date 26 February 2026.
-Only the opening has a date in the source, so only it gets an LED cell (`aria-hidden`
-digits, the readable date in visually hidden text; the visible word is
-`aria-hidden` too). Never add dates or steps the story does not give.
+The right column is a timeline on a vertical trace with a pad per step, with no
+heading of its own (its accessible name is «Bygget av studenter»): students found the
+room and convinced OsloMet, the 100 000 kroner grant, the volunteer refit with reused
+equipment, then «Åpnet» with the date 26 February 2026. Only the opening has a date in
+the source, so only it gets an LED cell (`aria-hidden` digits, the readable date in
+visually hidden text; the visible word is `aria-hidden` too). Never add dates or steps
+the story does not give. Quotes belong in §2.4, not here.
 
 ### 2.4 «Bygg det du brenner for»
 

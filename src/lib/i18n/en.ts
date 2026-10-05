@@ -648,9 +648,7 @@ export const en: Messages = {
 			],
 			opened: 'Opened 26 February 2026',
 			openedStep: 'Opened',
-			openedLed: '26.02.2026',
-			openingQuote: 'Where I saw wires and chaos, the students saw possibilities and fun.',
-			openingQuoteBy: 'Silje Fekjær, Pro-Rector for Education, at the opening'
+			openedLed: '26.02.2026'
 		},
 		voices: {
 			title: 'Build what you care about',
