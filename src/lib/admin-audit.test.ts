@@ -85,6 +85,10 @@ test('audit diffs keep money and quantities exact, translate states and keep unr
 	expect(spec.subject).toBe('Produktspesifikasjon: RES-01 · Motstand · Resistans');
 	expect(spec.fields).toEqual([{ label: 'Verdi', before: '1 kΩ', after: '2 kΩ' }]);
 	expect(describeAudit(audit('help_contacts', { phone: '12345678' }, { phone: '87654321' }), 'en').fields).toEqual([{ label: 'Phone', before: '12345678', after: '87654321' }]);
+	// Created and deleted rows list only the fields they had; an update still shows a cleared field.
+	expect(describeAudit(audit('count_batches', null, { title: 'Friday count', finished_at: null }), 'en').fields).toEqual([{ label: 'Title', before: null, after: 'Friday count' }]);
+	expect(describeAudit(audit('count_batches', { title: 'Friday count', finished_at: null }, null), 'en').fields).toEqual([{ label: 'Title', before: 'Friday count', after: null }]);
+	expect(describeAudit(audit('help_contacts', { phone: '12345678' }, { phone: null }), 'en').fields).toEqual([{ label: 'Phone', before: '12345678', after: 'Not set' }]);
 });
 
 test('every audited table has a readable subject, including deletes and archived storage', () => {

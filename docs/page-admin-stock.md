@@ -13,12 +13,13 @@ authoritative.
 The shared sidebar's mobile/desktop render branch is a navigation-only exception to the
 one-DOM rule; resizing never replaces the mounted editor or its unsaved input.
 
-`/admin` leads with published products needing attention, then links to open stock
-counts and compact purchase and sales-value totals for 30 days, linking to Statistics.
+`/admin` leads with compact purchase and sales-value totals for 30 days, linking to
+Statistics, then published products needing attention, then links to open stock counts.
 Needing attention means zero or negative
 recorded stock, or below the product's own minimum; never invent a global threshold.
 The preview shows eight products (sold out, negative before zero, then lowest share of
-the minimum). The overview links to the five most recent open stock counts and to
+the minimum); when more need attention, a link names the total and opens the product list
+filtered to **Low stock**. The overview links to the five most recent open stock counts and to
 `/admin/counts` when more are open.
 «Start en bestilling» is always shown and opens the New order form at `/admin/orders?new`, which lists
 every product needing attention ([orders](page-admin-orders.md#orders)).
@@ -40,7 +41,8 @@ editor's unsaved input). Rules, with aggregation in
 `/admin/products` lists published and unpublished products, searching after complete keyset
 pagination and showing 50 cards at a time with **Show more**, as in the public catalog.
 An empty catalog offers **New product**; an unmatched search offers clearing search and filters.
-Default sort is needs attention (overview order), then other published, then
+The **Low stock** toggle narrows to the overview's needs-attention set and combines with
+the published filter and search. Default sort is needs attention (overview order), then other published, then
 unpublished; alternatives are least recently counted, code and name. There is no lowest-stock
 sort because unlike units do not compare. Search includes a hyphen-free code alias
 (`res00026` finds `RES-00026`), here and in the count picker. **Scan product** opens a

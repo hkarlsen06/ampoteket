@@ -179,6 +179,8 @@ export function describeAudit(entry: AuditEntry, locale: Locale, references: Aud
 	for (const [field, label] of Object.entries(m.fields)) {
 		if (field === 'code' && entry.table !== 'products') continue;
 		if (!(field in before || field in after) || JSON.stringify(before[field]) === JSON.stringify(after[field])) continue;
+		// A created or deleted row lists only the fields it actually had.
+		if ((!entry.before && after[field] == null) || (!entry.after && before[field] == null)) continue;
 		const old = entry.before ? value(field, before) : null;
 		const now = entry.after ? value(field, after) : null;
 		if (old === undefined || now === undefined || old === now) continue;

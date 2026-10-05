@@ -89,11 +89,12 @@
 					{#if description.fields.length}<Collapsible.Root class="min-w-0 max-w-full">
 						<DisclosureTrigger>{m.details}</DisclosureTrigger>
 						<Collapsible.Content>
-						<dl class="grid gap-4 pt-3 text-sm md:grid-cols-2">
+						<dl class="space-y-3 pt-3 text-sm md:space-y-2">
 							{#each description.fields as field, fieldIndex (fieldIndex)}
-								<div class="min-w-0"><dt class="font-semibold">{field.label}</dt><dd class="mt-1 space-y-1 wrap-anywhere">
-									{#if field.before !== null}<div><span class="text-muted-foreground">{m.before}: </span><del>{field.before}</del></div>{/if}
-									{#if field.after !== null}<div><span class="text-muted-foreground">{m.after}: </span><ins>{field.after}</ins></div>{/if}
+								<div class="grid min-w-0 gap-1 md:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] md:gap-6"><dt class="font-semibold">{field.label}</dt><dd class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1 wrap-anywhere">
+									{#if field.before !== null}<del class="rounded-xs bg-destructive/15 px-1 text-destructive"><span class="sr-only">{m.before}:&nbsp;</span>{field.before}</del>{/if}
+									{#if field.before !== null && field.after !== null}<span class="text-muted-foreground" aria-hidden="true">→</span>{/if}
+									{#if field.after !== null}<ins class="rounded-xs bg-success/20 px-1 no-underline"><span class="sr-only">{m.after}:&nbsp;</span>{field.after}</ins>{/if}
 								</dd></div>
 							{/each}
 						</dl>

@@ -11,6 +11,8 @@
 	import * as RadioGroup from '#lib/components/ui/radio-group/index.js';
 	import { untrack, onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
+	import { Toggle } from '#lib/components/ui/toggle/index.js';
 	import { getI18n } from '#lib/i18n/index.js';
 	import Icon from '#lib/Icon.svelte';
 	import SortAscendingIcon from 'phosphor-svelte/lib/SortAscendingIcon';
@@ -19,12 +21,12 @@
 	import { getAdminContext } from '#lib/admin-context.svelte.js';
 	import AdminProductCard from '#lib/AdminProductCard.svelte';
 	import AdminProductScanner from '#lib/AdminProductScanner.svelte';
-	import { compareAttention, readAdminProducts, readInventory, readProductCommand, readProductReferences, type AdminProduct, type ProductCommand, type ProductStock, type ProductReferences } from '#lib/admin-products.js';
+	import { compareAttention, stockRank, readAdminProducts, readInventory, readProductCommand, readProductReferences, type AdminProduct, type ProductCommand, type ProductStock, type ProductReferences } from '#lib/admin-products.js';
 	import ProductReferencesEditor from '#lib/ProductReferences.svelte';
 	import { readDraft, writeDraft } from '#lib/drafts.js';
 	const fieldId = $props.id();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.adminProducts);
-	let products = $state<AdminProduct[] | null>(null); let references = $state<ProductReferences | null>(null); let stock = $state<Map<string, ProductStock> | null>(null); let stockFailed = $state(false); let busy = $state(false); let failed = $state(false); let query = $state(''); let activity = $state('all'); let sort = $state<keyof typeof sorters>('attention'); let sortOpen = $state(false); let pending = $state<ProductCommand | null>(null); let alive = true;
+	let products = $state<AdminProduct[] | null>(null); let references = $state<ProductReferences | null>(null); let stock = $state<Map<string, ProductStock> | null>(null); let stockFailed = $state(false); let busy = $state(false); let failed = $state(false); let query = $state(''); let lowStock = $state(false); let activity = $state('all'); let sort = $state<keyof typeof sorters>('attention'); let sortOpen = $state(false); let pending = $state<ProductCommand | null>(null); let alive = true;
 	// Products load in code order and sorting is stable, so code breaks every tie.
 	const quantity = (p: AdminProduct) => stock?.get(p.id)?.quantity;
 	const sorters = {
@@ -40,18 +42,21 @@
 	let visibleCount = $state(50);
 	$effect(() => {
 		if (!viewLoaded) return;
-		writeDraft(admin.session?.user.id, 'products-view', query || activity !== 'all' || sort !== 'attention' || visibleCount > 50 ? { query, activity, sort, visibleCount } : null, 'session');
+		writeDraft(admin.session?.user.id, 'products-view', query || activity !== 'all' || lowStock || sort !== 'attention' || visibleCount > 50 ? { query, activity, lowStock, sort, visibleCount } : null, 'session');
 	});
-	const filtered = $derived((products ?? []).filter(p => (activity === 'all' || p.is_active === (activity === 'active')) && productSearchText(p).toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).sort(sorters[sort]));
+	// Low stock matches the overview's attention list: active and sold out or below minimum.
+	const filtered = $derived((products ?? []).filter(p => (activity === 'all' || p.is_active === (activity === 'active')) && (!lowStock || stockRank(p, quantity(p)) <= 1) && productSearchText(p).toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).sort(sorters[sort]));
 	let reading = $state(false);
 	let currentRead: Promise<void> | null = null;
 	onMount(() => {
 		try { pending = readProductCommand(sessionStorage); } catch { /* The editor reports blocked persistence before any write. */ }
 		const view = readDraft(admin.session?.user.id, 'products-view', 'session') as Record<string, unknown> | null;
 		if (typeof view?.query === 'string' && ['all', 'active', 'inactive'].includes(view.activity as string) && typeof view.sort === 'string' && Object.hasOwn(sorters, view.sort)) {
-			query = view.query; activity = view.activity as string; sort = view.sort as keyof typeof sorters;
+			query = view.query; activity = view.activity as string; sort = view.sort as keyof typeof sorters; lowStock = view.lowStock === true;
 			if (typeof view.visibleCount === 'number' && Number.isSafeInteger(view.visibleCount) && view.visibleCount >= 50) visibleCount = view.visibleCount;
 		}
+		// The overview links here for everything needing attention, not only its first eight.
+		if (page.url.searchParams.get('stock') === 'low') { query = ''; activity = 'all'; lowStock = true; sort = 'attention'; visibleCount = 50; }
 		viewLoaded = true;
 		void load();
 		return () => { alive = false; };
@@ -118,6 +123,7 @@
 			<ToggleGroup.Item value="inactive">{m.inactive}</ToggleGroup.Item>
 		</ToggleGroup.Root>
 	</Field.Set>
+	<Toggle variant="outline" class="self-end" pressed={lowStock} onPressedChange={(pressed) => { lowStock = pressed; visibleCount = 50; }}>{m.lowStock}</Toggle>
 	<Popover.Root bind:open={sortOpen}>
 		<Popover.Trigger>{#snippet child({ props })}<Button {...props} variant="outline" size="icon" class="ml-auto" aria-label={m.sortCurrent(m.sort[sort])}><Icon icon={SortAscendingIcon} class="size-5" /></Button>{/snippet}</Popover.Trigger>
 		<Popover.Content align="end" class="w-auto max-w-[calc(100vw-2rem)]">
@@ -144,7 +150,7 @@
 	{#if !products.length}
 		<Empty.Root><Empty.Description>{m.noProducts}</Empty.Description><Empty.Content><Button href={i18n.href('/admin/products/new')}>{m.newProduct}</Button></Empty.Content></Empty.Root>
 	{:else if !filtered.length}
-		<Empty.Root><Empty.Description>{m.empty}</Empty.Description><Empty.Content><Button variant="outline" onclick={() => { query = ''; activity = 'all'; visibleCount = 50; }}>{m.clearSearch}</Button></Empty.Content></Empty.Root>
+		<Empty.Root><Empty.Description>{m.empty}</Empty.Description><Empty.Content><Button variant="outline" onclick={() => { query = ''; activity = 'all'; lowStock = false; visibleCount = 50; }}>{m.clearSearch}</Button></Empty.Content></Empty.Root>
 	{:else}
 		<ul class={[cardGrid, 'products m-0 min-h-40']}>
 			{#each filtered.slice(0, visibleCount) as product (product.id)}<AdminProductCard {product} {references} quantity={failed || stockFailed ? null : quantity(product) ?? null} />{/each}

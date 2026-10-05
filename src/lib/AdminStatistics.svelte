@@ -59,6 +59,21 @@
 	{:else if loading && !data}<span class="sr-only">{m.loading}</span>{/if}
 </div>
 {#if failed}<Button variant="outline" class="mb-6" disabled={loading} onclick={load}><ButtonLabel pending={loading} pendingLabel={m.loading} label={m.retry} /></Button>{/if}
+<section class={['space-y-4', overview && 'mb-8']} aria-labelledby="statistics-period-title">
+<h2 id="statistics-period-title" class={sectionHeading}>{m.period}</h2>
+<dl class={['grid grid-cols-2 gap-x-6 gap-y-5', productId ? 'lg:grid-cols-3' : '']} aria-busy={loading}>
+	{#each metrics as metric (metric.label)}
+		<div class="min-w-0"><dt class="text-sm text-muted-foreground">{metric.label}</dt>
+			<dd class="mt-2 min-h-10 font-mono text-xl font-semibold wrap-anywhere md:text-2xl">
+				{#if metric.value !== null}{metric.value}
+				{:else if failed}<span class="text-base font-normal">{m.unknown}</span>
+				{:else}<Skeleton class="h-8 w-24 max-w-full" />{/if}
+			</dd>
+		</div>
+	{/each}
+</dl>
+{#if overview}<Button variant="link" href={i18n.href('/admin/statistics')}>{m.allStatistics}</Button>{/if}
+</section>
 {#if overview}
 	<section class={section()} aria-labelledby="stock-attention-title">
 		<h2 id="stock-attention-title" class={sectionHeading}>{m.attention}</h2>
@@ -74,7 +89,7 @@
 				</ul>
 			{/if}
 			{#if compareDecimals(overviewData.attention_count, String(overviewData.attention.length)) > 0}
-				<Button variant="link" href={i18n.href('/admin/products')}>{m.attentionList}</Button>
+				<Button variant="link" href={i18n.href('/admin/products?stock=low')}>{m.attentionList(formatDecimal(overviewData.attention_count, i18n.locale))}</Button>
 			{/if}
 		{:else if !failed}<Skeleton class="h-48 w-full" />{/if}
 	</section>
@@ -91,21 +106,6 @@
 		{:else if !failed}<Skeleton class="h-16 w-full" />{/if}
 	</section>
 {/if}
-<section class="space-y-4" aria-labelledby="statistics-period-title">
-<h2 id="statistics-period-title" class={sectionHeading}>{m.period}</h2>
-<dl class={['grid grid-cols-2 gap-x-6 gap-y-5', productId ? 'lg:grid-cols-3' : '']} aria-busy={loading}>
-	{#each metrics as metric (metric.label)}
-		<div class="min-w-0"><dt class="text-sm text-muted-foreground">{metric.label}</dt>
-			<dd class="mt-2 min-h-10 font-mono text-xl font-semibold wrap-anywhere md:text-2xl">
-				{#if metric.value !== null}{metric.value}
-				{:else if failed}<span class="text-base font-normal">{m.unknown}</span>
-				{:else}<Skeleton class="h-8 w-24 max-w-full" />{/if}
-			</dd>
-		</div>
-	{/each}
-</dl>
-{#if overview}<Button variant="link" href={i18n.href('/admin/statistics')}>{m.allStatistics}</Button>{/if}
-</section>
 {#if !overview}<p class="mt-4 mb-8 text-sm text-muted-foreground">{m.basis}</p>{/if}
 {#if data && !overview}
 	<div class="mt-8"><SalesChart days={data.days} product={productId !== null} {unit} /></div>
