@@ -304,6 +304,9 @@
 	const panelList = 'm-0 list-none p-0';
 	const panelItem = 'flex items-baseline gap-4 py-3';
 	const panelMarker = 'size-1.5 shrink-0 -translate-y-0.5 bg-primary';
+	// A pad centred on the timeline's trace (the list's 2px left border, 1.5rem away)
+	// and on the step's first line.
+	const timelineStep = 'relative before:absolute before:top-[calc(0.5lh-5px)] before:-left-[calc(1.5rem+6px)] before:size-2.5 before:rounded-full before:bg-border';
 	const leadText = 'text-[clamp(1.125rem,1rem+0.4vw,1.3125rem)] text-muted-foreground';
 	const stepTitle = 'text-[clamp(1.375rem,1.2rem+0.8vw,1.75rem)] font-light tracking-tight';
 	const modelStage = 'aspect-square w-full max-w-[28rem] justify-self-center';
@@ -407,49 +410,85 @@
 	<div class={pageContainer()}>
 		<h2 id="about-title" class={sectionTitle}>{m.about.title}</h2>
 		<Separator class={headingTrace} />
-		<!-- What the room is for, beside the facts; space separates the facts, not rules.
-		     The source link covers the quote above and the facts here. -->
+		<!-- What the room is for and who runs it, beside how students built it. The
+		     source link covers every quote and fact from the hero to «Bygg det du brenner for». -->
 		<div class="grid items-start gap-12 md:mt-8 md:grid-cols-2">
-			<div class="grid justify-items-start gap-6">
+			<div class="grid justify-items-start gap-8">
 				<p class={leadText}>{m.about.body2}</p>
+				<!-- A short spec table: label and value on one line, so it scans at a glance. -->
+				<dl class="m-0 grid gap-y-5">
+					{#each m.about.facts as fact (fact.term)}
+						<div class="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-3 md:gap-4">
+							<dt class="text-sm text-muted-foreground">{fact.term}</dt>
+							<dd class="m-0">
+								{#if fact.chips}
+									<!-- Two names read faster as two tags than as a sentence. -->
+									<ul class="m-0 flex list-none flex-wrap gap-2 p-0">
+										{#each fact.chips as chip (chip)}
+											<li>
+												{#if ASSOCIATION_SITES[chip]}
+													<Badge variant="outline" href={ASSOCIATION_SITES[chip]} target="_blank" rel="external noopener" class="min-h-11 h-auto px-2 py-1 font-normal text-foreground no-underline hover:bg-muted">{chip}<span class="sr-only"> {i18n.m.newTab}</span></Badge>
+												{:else}
+													<Badge variant="outline" class="min-h-11 h-auto px-2 py-1 font-normal text-foreground">{chip}</Badge>
+												{/if}
+											</li>
+										{/each}
+									</ul>
+								{:else}
+									{fact.value}
+								{/if}
+							</dd>
+						</div>
+					{/each}
+				</dl>
 				<a href={ARTICLE} target="_blank" rel="external noopener">{m.about.sourceText}<span class="sr-only"> {i18n.m.newTab}</span></a>
 			</div>
-			<!-- A short spec table: label and value on one line, so it scans at a glance. -->
-			<dl class="m-0 grid gap-y-5">
-				{#each m.about.facts as fact (fact.term)}
-					<div class="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-3 md:gap-4">
-						<dt class="text-sm text-muted-foreground">{fact.term}</dt>
-						<dd class="m-0">
-							{#if fact.led}
-								<!-- The one fact that is pure digits, set in the display face the
-								     sign in the window uses. The readable date stays in the
-								     accessibility tree; the cell is decoration over it. -->
-								<Led value={fact.led} label={fact.value} size="small" />
-							{:else if fact.chips}
-								<!-- Two names read faster as two tags than as a sentence. -->
-								<ul class="m-0 flex list-none flex-wrap gap-2 p-0">
-									{#each fact.chips as chip (chip)}
-										<li>
-											{#if ASSOCIATION_SITES[chip]}
-											<Badge variant="outline" href={ASSOCIATION_SITES[chip]} target="_blank" rel="external noopener" class="min-h-11 h-auto px-2 py-1 font-normal text-foreground no-underline hover:bg-muted">{chip}<span class="sr-only"> {i18n.m.newTab}</span></Badge>
-											{:else}
-												<Badge variant="outline" class="min-h-11 h-auto px-2 py-1 font-normal text-foreground">{chip}</Badge>
-											{/if}
-										</li>
-									{/each}
-								</ul>
-							{:else}
-								{fact.value}
-							{/if}
-						</dd>
-					</div>
-				{/each}
-			</dl>
+			<div class="grid content-start gap-8">
+				<h3 class={panelTitle}>{m.about.storyTitle}</h3>
+				<!-- How the room came to be, as a trace with a pad per step. Only the
+				     opening has a date in the source, so only it gets an LED cell. -->
+				<ol class="m-0 grid list-none gap-6 border-l-2 border-border p-0 pl-6">
+					{#each m.about.story as step (step)}
+						<li class={timelineStep}>{step}</li>
+					{/each}
+					<li class="{timelineStep} grid justify-items-start gap-4">
+						<Led value={m.about.openedLed} label={m.about.opened} size="small" />
+						<figure class="m-0 grid gap-2">
+							<blockquote class="m-0"><p class="text-[clamp(1.25rem,1.1rem+0.6vw,1.5rem)] leading-snug font-light tracking-tight">{m.about.openingQuote}</p></blockquote>
+							<figcaption class="text-sm text-muted-foreground">{m.about.openingQuoteBy}</figcaption>
+						</figure>
+					</li>
+				</ol>
+			</div>
 		</div>
 	</div>
 </section>
 
-<!-- Follows «Dette er Ampoteket» on the same surface, which already supplies the gap. -->
+<!-- What members make here, in their own words, before the tools they use for it.
+     Follows «Dette er Ampoteket» on the same surface, which already supplies the gap. -->
+<section class="pb-16 md:pb-24" aria-labelledby="voices-title">
+	<div class={pageContainer()}>
+		<h2 id="voices-title" class={sectionTitle}>{m.voices.title}</h2>
+		<Separator class={headingTrace} />
+		<div class="grid gap-12 md:mt-8 md:grid-cols-2">
+			{#each m.voices.quotes as quote (quote.by)}
+				<figure class="m-0 grid content-start gap-5 border-l-2 border-primary pl-6 md:pl-8">
+					<blockquote class="m-0"><p class="text-[clamp(1.375rem,1.2rem+0.8vw,1.75rem)] leading-snug font-light tracking-tight">{quote.text}</p></blockquote>
+					<figcaption class="grid justify-items-start gap-3">
+						<span class="text-sm text-muted-foreground">{quote.by}</span>
+						<ul class="m-0 flex list-none flex-wrap gap-2 p-0" aria-label={m.voices.tagsLabel}>
+							{#each quote.tags as tag (tag)}
+								<li><Badge variant="outline" class="h-auto px-2 py-1 font-normal text-foreground">{tag}</Badge></li>
+							{/each}
+						</ul>
+					</figcaption>
+				</figure>
+			{/each}
+		</div>
+	</div>
+</section>
+
+<!-- Follows «Bygg det du brenner for» on the same surface, which already supplies the gap. -->
 <section class="pb-16 md:pb-24" aria-labelledby="gear-title">
 	<!-- A night stage the width of the screen with the whole bench photograph in it,
 	     feathered into the black and switching on like a screen as it scrolls into

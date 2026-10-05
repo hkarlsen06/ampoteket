@@ -637,10 +637,35 @@ export const en: Messages = {
 			quoteBy: 'Eirik Holm, former head of Ampoteket',
 			sourceText: 'Read the story at OsloMet (Norwegian)',
 			facts: [
-				{ term: 'Opened', value: '26 February 2026', led: '26.02.2026' },
-				{ term: 'Run by', value: 'The Resistance and RoboMEK', led: '', chips: ['The Resistance', 'RoboMEK'] },
-				{ term: 'Department', value: 'MEK, OsloMet', led: '' }
-			]
+				{ term: 'Run by', value: 'The Resistance and RoboMEK', chips: ['The Resistance', 'RoboMEK'] },
+				{ term: 'Department', value: 'MEK, OsloMet' }
+			],
+			storyTitle: 'Built by students',
+			story: [
+				'Students found the room, mapped what it needed and convinced OsloMet',
+				'NOK 100,000 in strategic funding for teaching quality',
+				'New ceiling lights, a big workbench and reused equipment, set up by volunteers'
+			],
+			opened: 'Opened 26 February 2026',
+			openedLed: '26.02.2026',
+			openingQuote: 'Where I saw wires and chaos, the students saw possibilities and fun.',
+			openingQuoteBy: 'Silje Fekjær, Pro-Rector for Education, at the opening'
+		},
+		voices: {
+			title: 'Build what you care about',
+			quotes: [
+				{
+					text: 'Having this workshop lets me develop projects I care about, test circuits and get a more practical understanding of what we learn.',
+					by: 'Alexander Rosenkilde, first-year electronics student, at the opening',
+					tags: ['Circuits', '3D printing']
+				},
+				{
+					text: 'I have worked in music production, and want to use Ampoteket to build gear like preamps and mixers.',
+					by: 'Magnus Weden, third-year student, at the opening',
+					tags: ['Preamps', 'Mixers']
+				}
+			],
+			tagsLabel: 'Projects'
 		},
 		facilities: {
 			title: 'Equipment and activities',

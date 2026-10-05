@@ -28,7 +28,7 @@ Hard constraints:
   supabase-js only on admin routes or when a staff session is stored.
 - **Payment is never described as verified. Scanning never buys.** Static copy never
   contains a payment recipient or Vipps number; checkout is the only source.
-- **Facts must be sourced** from the OsloMet story linked on the page (§2.2, §2.3).
+- **Facts must be sourced** from the OsloMet story linked on the page (§2.2–§2.4).
   Never invent opening hours, membership rules, prices or equipment; if it is not in
   writing, say where to ask.
 - **Photographs are the owner's own** (`assets/photos/`, credited to Hjalmar Karlsen).
@@ -106,14 +106,28 @@ printers: there are two Bambu Lab P2S, never «a 3D printer».
 
 ### 2.3 «Dette er Ampoteket»
 
-Opened 26 February 2026, run by the student associations The Resistance (electronics
-engineering) and RoboMEK (robotics), supported by the Department of Mechanical,
-Electronic and Chemical Engineering (MEK) at OsloMet, students in charge. The section
-links the OsloMet story that sources the quote and facts. The opening date is an LED
-cell with `aria-hidden` digits and the readable date in visually hidden text, so
-reading never depends on the LED font.
+What the room is for, beside how students built it. The left column holds the lead,
+the facts (run by The Resistance (electronics engineering) and RoboMEK (robotics);
+department MEK at OsloMet, students in charge) and the link to the OsloMet story that
+sources the quotes and facts from the hero to §2.4.
 
-### 2.4 «Utstyr og aktiviteter»
+The right column, «Bygget av studenter», is a timeline on a vertical trace with a pad
+per step: students found the room and convinced OsloMet, the 100 000 kroner grant,
+the volunteer refit with reused equipment, then the opening on 26 February 2026 with
+Silje Fekjær's quote from that day. Only the opening has a date in the source, so
+only it gets an LED cell (`aria-hidden` digits, the readable date in visually hidden
+text). Never add dates or steps the story does not give.
+
+### 2.4 «Bygg det du brenner for»
+
+The emotional beat between what the room is and what is in it: two students' own
+words from the opening (Alexander Rosenkilde, Magnus Weden), each with tags naming
+what they build. Quotes are verbatim from the OsloMet story and captioned with the
+speaker's year *at the opening*, so they do not go stale; Weden's preamps and mixers
+are plans and must read as plans. Replace or add quotes only from a written source
+with the speaker's consent. Same surface as §2.3; no cards.
+
+### 2.5 «Utstyr og aktiviteter»
 
 A full-width night stage with the bench photograph and the heading over it. The whole
 photograph is always shown, never cropped. With scroll motion it switches on like a CRT
@@ -142,7 +156,7 @@ never tilts them. Sources and limits: [`assets/models/README.md`](../assets/mode
   the iron follows the mouse (≤ 25° / 12° around its tip), blended in so it never cuts
   through the holder. Rebuild: `blender -b --python assets/models/build-soldering-station.py`.
 
-### 2.5 «Delehylla»
+### 2.6 «Delehylla»
 
 The page's one `band` (design system §4.3), marked by full-width hairlines: the
 workshop, then the shelf. The
@@ -157,7 +171,7 @@ cut guides) for the real `RES-00026` part; the QR encodes `ampoteket.no/p/RES-00
 Regenerate them with the same helpers when the example or print layout changes; static
 SVGs keep the PDF and QR machinery off the homepage.
 
-### 2.6 «Slå opp en del»
+### 2.7 «Slå opp en del»
 
 One Card inside «Delehylla» holds the code form and a «Finn i hylla» button that opens
 the shelf picker. No scanner duplicate in the Card. Opening the picker never stretches
@@ -188,7 +202,7 @@ catalog read. Empty, unavailable topology and unavailable contents are distinct 
 with contextual retries. Reuse the shared map's refresh on focus, visibility and
 reconnect, selection preservation and stale-response rejection.
 
-### 2.7 «Hvem kan bruke Ampoteket?»
+### 2.8 «Hvem kan bruke Ampoteket?»
 
 Students (join The Resistance or RoboMEK to help run it) and volunteers. Access requires
 membership; there is no visitor option. One line gives OsloMet's building hours
@@ -217,7 +231,7 @@ in Discord (Server Settings, Engagement, Server Widget).
 
 - LED cells only for the step numbers, the opening date and the clock; never on the
   printed label or the shelf diagram, which would imply displays the cabinets lack.
-- The circuit-board motif is the heading traces only. New sections follow the
+- The circuit-board motif is the heading traces and the §2.3 timeline only. New sections follow the
   «Utstyr og aktiviteter» panel pattern. One example code: `RES-00026`.
 - One `h1`, an `h2` per section, `h3` inside. No «staff» in user-facing copy.
 - Check both languages at 320 × 568, 360 × 640, 768 and 1280, both schemes, and with

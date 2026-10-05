@@ -65,7 +65,7 @@ describe('localizeHref', () => {
 
 describe('localizeCurrentUrl', () => {
 	test('preserves the query string across a language switch', () => {
-		// The no-JS code lookup (`GET /p?code=AMP-00123`, docs/page-home.md §2.6)
+		// The no-JS code lookup (`GET /p?code=AMP-00123`, docs/page-home.md §2.7)
 		// must survive switching languages via the header picker. The path
 		// passed in is already the bare (unprefixed) path, exactly like the
 		// `bare` derived value the layout computes with stripLocale().

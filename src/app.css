@@ -202,7 +202,7 @@
   --focus-contrast: var(--night);
 }
 
-/* Landing-page photo motion (docs/page-home.md §2.2, §2.4). Everything below
+/* Landing-page photo motion (docs/page-home.md §2.2, §2.5). Everything below
    applies only through `scroll-motion:` or `walk-motion:`, so browsers without
    scroll-driven animations and reduced-motion visitors get the still layout.
    The hero section is the --walk timeline: while its stage is pinned, the

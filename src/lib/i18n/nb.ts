@@ -644,10 +644,35 @@ export const nb = {
 			quoteBy: 'Eirik Holm, tidligere leder for Ampoteket',
 			sourceText: 'Les saken hos OsloMet',
 			facts: [
-				{ term: 'Åpnet', value: '26. februar 2026', led: '26.02.2026' },
-				{ term: 'Drives av', value: 'The Resistance og RoboMEK', led: '', chips: ['The Resistance', 'RoboMEK'] },
-				{ term: 'Fagmiljø', value: 'MEK, OsloMet', led: '' }
-			]
+				{ term: 'Drives av', value: 'The Resistance og RoboMEK', chips: ['The Resistance', 'RoboMEK'] },
+				{ term: 'Fagmiljø', value: 'MEK, OsloMet' }
+			],
+			storyTitle: 'Bygget av studenter',
+			story: [
+				'Studentene fant rommet, kartla behovene og overbeviste OsloMet',
+				'100\u00a0000 kroner i strategimidler for utdanningskvalitet',
+				'Nytt taklys, et stort arbeidsbord og gjenbrukt utstyr, satt opp på dugnad'
+			],
+			opened: 'Åpnet 26. februar 2026',
+			openedLed: '26.02.2026',
+			openingQuote: 'Der jeg så ledninger og kaos, så studentene muligheter og moro.',
+			openingQuoteBy: 'Silje Fekjær, prorektor for utdanning, under åpningen'
+		},
+		voices: {
+			title: 'Bygg det du brenner for',
+			quotes: [
+				{
+					text: 'Å ha dette verkstedet gjør at jeg kan utvikle prosjekter jeg brenner for, teste kretser og få mer praktisk forståelse av det vi lærer.',
+					by: 'Alexander Rosenkilde, førsteårsstudent i elektronikk, under åpningen',
+					tags: ['Kretser', '3D-printing']
+				},
+				{
+					text: 'Jeg har jobbet med musikkproduksjon, og vil bruke Ampoteket til å lage utstyr som forforsterkere og miksere.',
+					by: 'Magnus Weden, tredjeårsstudent, under åpningen',
+					tags: ['Forforsterkere', 'Miksere']
+				}
+			],
+			tagsLabel: 'Prosjekter'
 		},
 		facilities: {
 			title: 'Utstyr og aktiviteter',
