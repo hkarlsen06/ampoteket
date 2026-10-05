@@ -248,14 +248,14 @@
   animation-timeline: --walk;
   animation-range: contain 58% contain 80%;
 }
-/* A dark photograph switches on like a CRT while its middle rises through
-   the lower half of the viewport:
-   a dot, a line, then the picture. Only the shape animates: the photograph
-   is colour graded, so no filter may touch its brightness. */
+/* A dark photograph switches on like a CRT, slowly, from the moment its middle
+   enters the viewport (cover 25% on a screen-tall photograph) until that middle
+   is just above the centre: a dot, a line, then the picture. Only the shape
+   animates: the photograph is colour graded, so no filter may touch its brightness. */
 @utility power-on {
   animation: power-on ease-out both;
   animation-timeline: view();
-  animation-range: cover 25% cover 45%;
+  animation-range: cover 25% cover 70%;
 }
 @keyframes walk-approach { 60% { opacity: 1; } to { scale: 2.6; opacity: 0; } }
 @keyframes walk-away { to { opacity: 0; translate: 0 -2.5rem; } }
