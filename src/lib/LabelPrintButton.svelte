@@ -19,7 +19,8 @@
 	import { readProductAttributes, type AdminProduct, type ProductReferences } from '#lib/admin-products.js';
 	import { labelSpecificationLines } from '#lib/labels/data.js';
 	import { printTapeLabel, PtouchError } from '#lib/labels/ptouch.js';
-	let { product, references }: { product: AdminProduct; references: ProductReferences } = $props();
+	// `describedby` names a shared unsupported notice, so a list of buttons shows it once.
+	let { product, references, describedby }: { product: AdminProduct; references: ProductReferences; describedby?: string } = $props();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.adminProducts); const uid = $props.id();
 	type Outcome = 'idle' | 'printed' | keyof typeof m.labelPrinter;
 	let busy = $state(false); let outcome = $state<Outcome>('idle');
@@ -49,10 +50,10 @@
 		if (supported && job?.productId === product.id && job.userId === admin.session?.user.id) void print();
 	});
 </script>
-<Button variant="outline" size="sm" aria-label={m.printLabelName} aria-describedby={!supported ? `${uid}-unsupported` : undefined} disabled={busy || !supported} onclick={print}>
+<Button variant="outline" size="sm" aria-label={m.printLabelName} aria-describedby={!supported ? describedby ?? `${uid}-unsupported` : undefined} disabled={busy || !supported} onclick={print}>
 	<Icon icon={QrCodeIcon} /><ButtonLabel pending={busy} pendingLabel={m.printingLabel} label={m.printLabel} />
 </Button>
-{#if !supported}<p id={`${uid}-unsupported`} class="basis-full text-sm text-muted-foreground">{m.labelPrinter.unsupported}</p>{/if}
+{#if !supported && !describedby}<p id={`${uid}-unsupported`} class="basis-full text-sm text-muted-foreground">{m.labelPrinter.unsupported}</p>{/if}
 <div class={[formStatus, 'basis-full text-sm']} aria-live="polite">
 	{#if outcome !== 'idle'}<Alert.Message appearance="inline" variant={outcome === 'printed' ? 'default' : 'destructive'}>{outcome === 'printed' ? m.labelPrinted : m.labelPrinter[outcome]}</Alert.Message>{/if}
 </div>

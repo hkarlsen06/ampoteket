@@ -165,7 +165,7 @@ cabinets and 492 drawers.
 | Product codes | Three-letter category prefix + five random hex digits, e.g. `RES-A3F09` |
 | Categories | One fixed, translated list including Miscellaneous; the category picks the code prefix |
 | Specifications | Standard suggestions plus custom types added in the product editor |
-| Labels | Select cabinets or drawers on the map and print A4 sheets; single labels can go to the P-touch printer |
+| Labels | A4: select cabinets or drawers on the map and print sheets. Brother: pick one drawer and print its products one by one on the P-touch printer |
 | Cart after checkout | One active cart and checkout at a time, locked across tabs |
 | Help when nobody is there | Buyer notes the amount and reference, then uses `/contact` |
 | Retention | Unconfirmed checkouts' contact strings are cleared after 90 days; checkouts, sales and history are never purged ([runbook](runbook-contact-retention.md)) |

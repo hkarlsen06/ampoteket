@@ -1,7 +1,10 @@
 # Product labels
 
-`/admin/products/labels` generates A4 PDF sheets of drawer labels. It is staff-only and
-read-only; printing never changes stock or publication. Selection is
+`/admin/products/labels` prints drawer labels two ways, chosen with the **A4 | Brother**
+tabs at the top (the choice and selections survive a reload in the tab). **A4**
+generates PDF sheets for many drawers at once; **Brother** prints one product at a
+time on the P-touch printer. It is staff-only and read-only; printing never changes
+stock or publication. Selection is
 `src/lib/LabelShelfSelection.svelte` (shared with the [catalog](page-catalog.md)
 filter), rendering `src/lib/labels/render.ts`, the P-touch driver
 `src/lib/labels/ptouch.ts`.
@@ -29,6 +32,15 @@ returning from a cabinet reveal its controls within that region.
   read before starting. One live region announces selection and generation results.
   Once the PDF is ready, **Download A4 PDF** is the primary action.
 
+## Brother mode
+
+One drawer at a time, picked on `ShelfPlacementPicker` (the shared single-choice
+wall → cabinet zoom). A **Without a drawer** toggle picks the products with no drawer
+instead. The chosen drawer lists every saved product in it by code, unpublished ones
+badged, each with the editor's **Print** button ([P-touch tape labels](#p-touch-tape-labels)).
+On a browser without WebUSB the reason is shown once above the map and every button
+is disabled.
+
 ## Label and sheet
 
 Each label is **code → QR → short specifications**. The QR encodes only
@@ -51,7 +63,7 @@ older `https://` labels. Some phone cameras may show a scheme-less address as te
 
 ## P-touch tape labels
 
-**Print** in a saved product's editor prints its label on a Brother PT-P700 (USB
+**Print** in a saved product's editor, or beside a product in Brother mode, prints its label on a Brother PT-P700 (USB
 `04f9:2061`) over WebUSB, only in desktop Chromium browsers over HTTPS or localhost;
 with a fine pointer; elsewhere the button is disabled with a visible reason. The first
 print opens the device picker. Creating a

@@ -6,6 +6,10 @@
 	import * as InputGroup from '#lib/components/ui/input-group/index.js';
 	import { Button, ButtonLabel } from '#lib/components/ui/button/index.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
+	import { Badge } from '#lib/components/ui/badge/index.js';
+	import { Toggle } from '#lib/components/ui/toggle/index.js';
+	import * as Tabs from '#lib/components/ui/tabs/index.js';
+	import * as Empty from '#lib/components/ui/empty/index.js';
 	import * as Field from '#lib/components/ui/field/index.js';
 	import { onMount, tick, untrack } from 'svelte';
 	import { normalizeDecimal } from '#lib/decimal.js';
@@ -13,7 +17,9 @@
 	import { getAdminContext } from '#lib/admin-context.svelte.js';
 	import { productName } from '#lib/catalog.js';
 	import LabelShelfSelection from '#lib/LabelShelfSelection.svelte';
-	import LabelPrintButton from '#lib/LabelPrintButton.svelte';
+	import LabelPrintButton, { labelPrinterSupported } from '#lib/LabelPrintButton.svelte';
+	import ShelfPlacementPicker from '#lib/ShelfPlacementPicker.svelte';
+	import { gridCell, gridRange } from '#lib/format.js';
 	import { readLabelData, selectedLabelProducts, labelSpecificationLines, type LabelData } from '#lib/labels/data.js';
 	import { proportionalLabelSettings } from '#lib/labels/settings.js';
 	import type { PreparedLabels } from '#lib/labels/render.js';
@@ -24,6 +30,10 @@
 	const m = $derived(i18n.m.adminLabels);
 	let data = $state<LabelData | null>(null), loading = $state(true), failed = $state(false), generating = $state(false);
 	let selected = $state<string[]>([]), includeUnplaced = $state(false);
+	// A4 batches drawers into a PDF; Brother prints one product at a time from one
+	// drawer (or the products without one) over WebUSB.
+	const unplacedDrawer = 'unplaced';
+	let mode = $state<'a4' | 'brother'>('a4'), drawer = $state<string | null>(null), printerSupported = $state(false);
 	// Millimetres from 32 to 81 in steps of 0.1, typed as text so either decimal mark works.
 	let widthText = $state('45'), widthChecked = $state(false);
 	const width = $derived.by(() => {
@@ -37,7 +47,8 @@
 	let selectionLoaded = $state(false);
 	$effect(() => {
 		if (!selectionLoaded) return;
-		writeDraft(admin.session?.user.id, 'labels', selected.length || includeUnplaced || widthText !== '45' ? { selected: $state.snapshot(selected), includeUnplaced, widthText } : null, 'session');
+		writeDraft(admin.session?.user.id, 'labels', selected.length || includeUnplaced || widthText !== '45' || mode !== 'a4' || drawer
+			? { selected: $state.snapshot(selected), includeUnplaced, widthText, mode, drawer } : null, 'session');
 	});
 	const dimensions = $derived(proportionalLabelSettings(width ?? NaN));
 	let prepared = $state<PreparedLabels | null>(null), downloadUrl = $state('');
@@ -49,6 +60,11 @@
 	const products = $derived(data ? selectedLabelProducts(data, selected, includeUnplaced) : []);
 	const unplaced = $derived(data?.products.filter(product => product.bin_id === null).length ?? 0);
 	const inactive = $derived(products.filter(product => !product.is_active).length);
+	// A drawer removed by a refresh simply stops matching; its products move with it.
+	const drawerBin = $derived(data?.references.shelf.bins.find(bin => bin.id === drawer));
+	const drawerCabinet = $derived(data?.references.shelf.cabinets.find(cabinet => cabinet.id === drawerBin?.cabinet_id));
+	const drawerProducts = $derived(data && (drawerBin || drawer === unplacedDrawer)
+		? data.products.filter(product => product.bin_id === (drawerBin?.id ?? null)).sort((a, b) => a.code.localeCompare(b.code)) : null);
 	// Any changed selection, width or language invalidates the
 	// prior file. A download always belongs to the visible configuration.
 	const configuration = $derived(JSON.stringify({ selected, includeUnplaced, width, locale: i18n.locale }));
@@ -61,7 +77,10 @@
 		const saved = readDraft(admin.session?.user.id, 'labels', 'session') as Record<string, unknown> | null;
 		if (Array.isArray(saved?.selected) && saved.selected.every(id => typeof id === 'string') && typeof saved.includeUnplaced === 'boolean' && typeof saved.widthText === 'string') {
 			selected = saved.selected; includeUnplaced = saved.includeUnplaced; widthText = saved.widthText;
+			if (saved.mode === 'brother') mode = 'brother';
+			if (typeof saved.drawer === 'string') drawer = saved.drawer;
 		}
+		printerSupported = labelPrinterSupported();
 		selectionLoaded = true;
 		void load(); return () => { alive = false; controller?.abort(); clearPreview(); }; });
 	let revalidateQueued = $state(false);
@@ -157,57 +176,75 @@
 <div class={pageHeader}><h1 class={pageHeading}>{m.heading}</h1></div>
 {#if failed}<Alert.Message appearance="inline" variant="destructive" role="alert">{m.unavailable}</Alert.Message><Button type="button" variant="outline" class="mb-6" onclick={() => load()} disabled={loading && !background}>{m.retry}</Button>{/if}
 {#if data}
-	<LabelShelfSelection topology={data.references.shelf} {selected} onselection={(ids) => { selected = ids; }}
-		onselectall={() => { includeUnplaced = true; }} onclear={() => { includeUnplaced = false; }} disabled={generating} />
-	{#if products.length}
-		<section class={section()} aria-labelledby="label-print-heading">
-			<h2 class={sectionHeading} id="label-print-heading">{m.printHeading}</h2>
-			<ul class="m-0 grid list-none gap-2 p-0">{#each products as product (product.id)}
-				<li class="flex flex-wrap items-center gap-2 border border-input bg-card p-3">
-					<span class="grid min-w-0 flex-1 gap-1"><span class={[itemTitle, nameWrap]}>{productName(product, i18n.locale)}</span><span class={[codeText, 'text-muted-foreground']}>{product.code}</span></span>
-					<LabelPrintButton {product} references={data.references} />
-				</li>
-			{/each}</ul>
-		</section>
-	{/if}
-	{#if unplaced}
-		<p>{m.unplaced(unplaced)}</p>
-		<Field.Field orientation="horizontal"><Checkbox id="checkbox-includeUnplaced" name="checkbox-includeUnplaced" bind:checked={includeUnplaced} disabled={generating} /><Field.Label for="checkbox-includeUnplaced" class="cursor-pointer">{m.includeUnplaced}</Field.Label></Field.Field>
-	{/if}
-	<form class={[formLayout, 'mt-6']} novalidate onsubmit={(event) => { event.preventDefault(); void generate(); }}>
-		<Field.Field data-invalid={widthChecked && width === undefined}>
-			<Field.Label for={`${fieldId}-width`}>{m.width} <span class="sr-only">(mm)</span></Field.Label>
-			<InputGroup.Root class="max-w-40"><InputGroup.Input id={`${fieldId}-width`} type="text" inputmode="decimal" autocomplete="off" enterkeyhint="done" required disabled={generating} bind:value={widthText}
-				aria-invalid={widthChecked && width === undefined} aria-describedby={widthChecked && width === undefined ? `${fieldId}-width-error ${fieldId}-width-hint` : `${fieldId}-width-hint`} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>mm</InputGroup.Text></InputGroup.Addon></InputGroup.Root>
-			<Field.Description id={`${fieldId}-width-hint`}>{m.dimensionsHint}</Field.Description>
-			{#if widthChecked && width === undefined}<Field.Error id={`${fieldId}-width-error`}>{m.widthInvalid}</Field.Error>{/if}
-		</Field.Field>
-		<div>
-			<p>{m.summary(products.length, inactive)}</p>
-			{#if inactive}<p class="text-sm">{m.inactiveHint}</p>{/if}
-		</div>
-		<div class={formActions}><Button type="submit" variant={prepared ? 'outline' : 'default'} disabled={generating || (loading && !background) || failed || !products.length}><ButtonLabel pending={generating} pendingLabel={m.generating} label={m.generate} /></Button>
-			<span class:invisible={!generating} inert={!generating} aria-hidden={!generating}><Button variant="ghost" type="button" onclick={() => controller?.abort()}>{m.cancel}</Button></span>
-		</div>
-	</form>
-	<div class={formStatus} aria-live="polite">
-		<span class="sr-only">{m.summary(products.length, inactive)}</span>
-		{#if error && !failed}<Alert.Message appearance="inline" variant="destructive">{error}</Alert.Message>{/if}
-		{#if prepared}<p>{m.ready(prepared.totalLabels, prepared.pages, prepared.columns, prepared.rows)}</p>{/if}
-	</div>
-	{#if prepared && downloadUrl}
-		<section class={section()} aria-labelledby="label-preview-heading">
-			<h2 class={sectionHeading} id="label-preview-heading">{m.previewHeading}</h2>
-			<Button variant="default" href={downloadUrl} disabled={failed} download="ampoteket-labels.pdf">{m.download}</Button>
-			<div class="mt-4 space-y-2 text-sm text-muted-foreground"><p>{m.printHint}</p><p>{m.previewHint}</p></div>
-			<div class="mt-6 flex flex-wrap items-start gap-6">{#each prepared.labels as label (label.id)}
-				<figure class="m-0 w-full min-w-0" style:max-width={`${width}mm`}>
-					<AspectRatio.Root ratio={(width ?? 45) / label.height}><img class="block h-full w-full bg-[var(--paper)] object-contain" src={label.svgUrl} alt={m.previewAlt(label.code, (previewLines[label.id] ?? []).join(', '))} width={(width ?? 45) * 4} height={label.height * 4} /></AspectRatio.Root>
-					<figcaption class="mt-2 text-sm wrap-break-word"><span class={codeText}>{label.code}</span>{#each data.products.filter(item => item.id === label.id) as product (product.id)}<br />{productName(product, i18n.locale)}{/each}</figcaption>
-				</figure>
-			{/each}</div>
-		</section>
-	{/if}
+	<Tabs.Root value={mode} onValueChange={(value) => { mode = value === 'brother' ? 'brother' : 'a4'; }}>
+		<Tabs.List aria-label={m.method} class="mb-6">
+			<Tabs.Trigger value="a4">{m.a4}</Tabs.Trigger>
+			<Tabs.Trigger value="brother">{m.brother}</Tabs.Trigger>
+		</Tabs.List>
+		<Tabs.Content value="a4">
+			<LabelShelfSelection topology={data.references.shelf} {selected} onselection={(ids) => { selected = ids; }}
+				onselectall={() => { includeUnplaced = true; }} onclear={() => { includeUnplaced = false; }} disabled={generating} />
+			{#if unplaced}
+				<p>{m.unplaced(unplaced)}</p>
+				<Field.Field orientation="horizontal"><Checkbox id="checkbox-includeUnplaced" name="checkbox-includeUnplaced" bind:checked={includeUnplaced} disabled={generating} /><Field.Label for="checkbox-includeUnplaced" class="cursor-pointer">{m.includeUnplaced}</Field.Label></Field.Field>
+			{/if}
+			<form class={[formLayout, 'mt-6']} novalidate onsubmit={(event) => { event.preventDefault(); void generate(); }}>
+				<Field.Field data-invalid={widthChecked && width === undefined}>
+					<Field.Label for={`${fieldId}-width`}>{m.width} <span class="sr-only">(mm)</span></Field.Label>
+					<InputGroup.Root class="max-w-40"><InputGroup.Input id={`${fieldId}-width`} type="text" inputmode="decimal" autocomplete="off" enterkeyhint="done" required disabled={generating} bind:value={widthText}
+						aria-invalid={widthChecked && width === undefined} aria-describedby={widthChecked && width === undefined ? `${fieldId}-width-error ${fieldId}-width-hint` : `${fieldId}-width-hint`} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>mm</InputGroup.Text></InputGroup.Addon></InputGroup.Root>
+					<Field.Description id={`${fieldId}-width-hint`}>{m.dimensionsHint}</Field.Description>
+					{#if widthChecked && width === undefined}<Field.Error id={`${fieldId}-width-error`}>{m.widthInvalid}</Field.Error>{/if}
+				</Field.Field>
+				<div>
+					<p>{m.summary(products.length, inactive)}</p>
+					{#if inactive}<p class="text-sm">{m.inactiveHint}</p>{/if}
+				</div>
+				<div class={formActions}><Button type="submit" variant={prepared ? 'outline' : 'default'} disabled={generating || (loading && !background) || failed || !products.length}><ButtonLabel pending={generating} pendingLabel={m.generating} label={m.generate} /></Button>
+					<span class:invisible={!generating} inert={!generating} aria-hidden={!generating}><Button variant="ghost" type="button" onclick={() => controller?.abort()}>{m.cancel}</Button></span>
+				</div>
+			</form>
+			<div class={formStatus} aria-live="polite">
+				<span class="sr-only">{m.summary(products.length, inactive)}</span>
+				{#if error && !failed}<Alert.Message appearance="inline" variant="destructive">{error}</Alert.Message>{/if}
+				{#if prepared}<p>{m.ready(prepared.totalLabels, prepared.pages, prepared.columns, prepared.rows)}</p>{/if}
+			</div>
+			{#if prepared && downloadUrl}
+				<section class={section()} aria-labelledby="label-preview-heading">
+					<h2 class={sectionHeading} id="label-preview-heading">{m.previewHeading}</h2>
+					<Button variant="default" href={downloadUrl} disabled={failed} download="ampoteket-labels.pdf">{m.download}</Button>
+					<div class="mt-4 space-y-2 text-sm text-muted-foreground"><p>{m.printHint}</p><p>{m.previewHint}</p></div>
+					<div class="mt-6 flex flex-wrap items-start gap-6">{#each prepared.labels as label (label.id)}
+						<figure class="m-0 w-full min-w-0" style:max-width={`${width}mm`}>
+							<AspectRatio.Root ratio={(width ?? 45) / label.height}><img class="block h-full w-full bg-[var(--paper)] object-contain" src={label.svgUrl} alt={m.previewAlt(label.code, (previewLines[label.id] ?? []).join(', '))} width={(width ?? 45) * 4} height={label.height * 4} /></AspectRatio.Root>
+							<figcaption class="mt-2 text-sm wrap-break-word"><span class={codeText}>{label.code}</span>{#each data.products.filter(item => item.id === label.id) as product (product.id)}<br />{productName(product, i18n.locale)}{/each}</figcaption>
+						</figure>
+					{/each}</div>
+				</section>
+			{/if}
+		</Tabs.Content>
+		<Tabs.Content value="brother">
+			{#if !printerSupported}<p id={`${fieldId}-unsupported`} class="mb-4 text-sm text-muted-foreground">{i18n.m.adminProducts.labelPrinter.unsupported}</p>{/if}
+			<div class="grid items-start gap-5">
+				<ShelfPlacementPicker topology={data.references.shelf} selected={drawerBin?.id ?? null} onselect={(id) => { drawer = id; }} />
+				{#if unplaced}<Toggle variant="outline" class="justify-self-start" pressed={drawer === unplacedDrawer} onPressedChange={(pressed) => { drawer = pressed ? unplacedDrawer : null; }}>{m.withoutDrawer(unplaced)}</Toggle>{/if}
+				{#if drawerProducts}
+					<section class="min-w-0 max-w-xl" aria-labelledby={`${fieldId}-drawer`}>
+						<h2 class={[sectionHeading, 'mb-3']} id={`${fieldId}-drawer`}>{drawerBin && drawerCabinet ? i18n.m.adminProducts.location(gridCell(drawerCabinet.outer_row, drawerCabinet.outer_col), gridRange(drawerBin.inner_row, drawerBin.inner_col, drawerBin.row_span, drawerBin.col_span)) : m.unplacedProducts}</h2>
+						{#if drawerProducts.length}
+							<ul class="m-0 grid list-none gap-2 p-0">{#each drawerProducts as product (product.id)}
+								<li class="flex flex-wrap items-center gap-x-3 border border-input bg-card p-3">
+									<span class="grid min-w-0 flex-1 gap-1"><span class={[itemTitle, nameWrap]}>{productName(product, i18n.locale)}</span>
+										<span class="flex flex-wrap items-center gap-2"><span class={[codeText, 'text-muted-foreground']}>{product.code}</span>{#if !product.is_active}<Badge variant="outline">{i18n.m.adminProducts.inactive}</Badge>{/if}</span></span>
+									<LabelPrintButton {product} references={data.references} describedby={printerSupported ? undefined : `${fieldId}-unsupported`} />
+								</li>
+							{/each}</ul>
+						{:else}<Empty.Root><Empty.Description>{i18n.m.shelfMap.noProducts}</Empty.Description></Empty.Root>{/if}
+					</section>
+				{/if}
+			</div>
+		</Tabs.Content>
+	</Tabs.Root>
 {:else if loading}
 	<span class="sr-only" role="status">{m.loading}</span>
 	<Skeleton class="min-h-80" aria-hidden="true" />

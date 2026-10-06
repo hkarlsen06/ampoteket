@@ -30,7 +30,7 @@ below are local runs, not CI claims.
 | `./scripts/test-web.sh --admins` | 2026-10-01 | PASS | Real Auth/Worker/Mailpit invitations in both locales, password setup/login, permissions and audit, replay/stale-resend safeguards, 360/1280 px in both locales/themes, retained drafts/focus on read failure, deactivation/reactivation |
 | `./scripts/test-web.sh --statistics` | 2026-10-01 | PASS | Localized responsive charts, retained data and focus after a failed background read |
 | `./scripts/test-web.sh --scanner` | 2026-10-01 | PASS | Firefox and WebKit with synthetic camera; named long-content scrolling keeps Add/Scan visible |
-| `./scripts/test-web.sh --labels` | 2026-10-01 | PASS | Decoded PDF QR payloads, geometry |
+| `./scripts/test-web.sh --labels` | 2026-10-06 | PASS | Decoded PDF QR payloads, geometry |
 | `./scripts/test-web.sh --shelf` | 2026-10-03 | PASS | Shelf UI: grid grips, drawer actions beside the selected drawer, drag/grip moves and swaps, archive guards, cabinet move to a vacant wall position |
 | `./scripts/test-web.sh --drafts` | 2026-10-03 | FAIL | Stops at its first step, the new-order draft: the order form now opens two lines, so the `Product` combobox locator is ambiguous. The shelf layout and catalog search steps passed when run on their own. Unsaved admin drafts survive reload, Back and sign-in round trips |
 | `./scripts/test-web.sh --orders` | 2026-10-02 | PASS | Field errors and first-invalid focus, receipt freshness with selection retained, access recovery inside a pending sheet, identical uncertain-write retry, exact stock changes, New order checklist of parts needing ordering adds and removes lines |
