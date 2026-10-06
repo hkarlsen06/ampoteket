@@ -148,7 +148,7 @@
 {/if}
 {#if products !== null}
 	{#if !products.length}
-		<Empty.Root><Empty.Description>{m.noProducts}</Empty.Description><Empty.Content><Button href={i18n.href('/admin/products/new')}>{m.newProduct}</Button></Empty.Content></Empty.Root>
+		<Empty.Root><Empty.Description>{m.noProducts}</Empty.Description></Empty.Root>
 	{:else if !filtered.length}
 		<Empty.Root><Empty.Description>{m.empty}</Empty.Description><Empty.Content><Button variant="outline" onclick={() => { query = ''; activity = 'all'; lowStock = false; visibleCount = 50; }}>{m.clearSearch}</Button></Empty.Content></Empty.Root>
 	{:else}
