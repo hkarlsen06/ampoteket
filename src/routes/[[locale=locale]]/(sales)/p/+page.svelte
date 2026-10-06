@@ -4,6 +4,7 @@
 	import MapPinIcon from 'phosphor-svelte/lib/MapPinIcon';
 	import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon';
 	import XIcon from 'phosphor-svelte/lib/XIcon';
+	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as InputGroup from '#lib/components/ui/input-group/index.js';
 	import { Separator } from '#lib/components/ui/separator/index.js';
@@ -303,6 +304,17 @@
 		}
 	}
 
+	// A shortcut shows only its category; tapping a selected one removes it. Either
+	// way the specification conditions, which belong to the old selection, go.
+	function categoryHref(name: string) {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local scratch query for a link.
+		const params = new URLSearchParams(data.queryString);
+		const selected = params.getAll('category');
+		for (const key of [...params.keys()]) if (key === 'category' || key === 'after' || /^(eq|min|max)\./.test(key)) params.delete(key);
+		for (const category of selected.includes(name) ? selected.filter(category => category !== name) : [name]) params.append('category', category);
+		return i18n.href('/p') + (params.size ? `?${params}` : '');
+	}
+
 	function pageHref(after = '') {
 		if (!submitted) return i18n.href('/p');
 		const params = serializeCatalogQuery({ ...submitted, after });
@@ -459,6 +471,18 @@
 		</Dialog.Root>
 		{#if filtered || queryError}<Button variant="link" href={i18n.href('/p')} data-sveltekit-reset={false}>{m.clearFilters}</Button>{/if}
 	</div>
+	{#if data.categories?.length}
+		<nav class="mt-3" aria-label={m.category}>
+			<ul class="m-0 flex list-none flex-wrap gap-2 p-0">
+				{#each data.categories as name (name)}
+					{@const selected = submitted?.categories.includes(name) ?? false}
+					<li class="max-w-full"><Button class="max-w-full wrap-anywhere" variant={selected ? 'default' : 'outline'} size="sm" href={categoryHref(name)} data-sveltekit-reset={false} aria-current={selected ? 'true' : undefined}>
+						{#if selected}<Icon icon={CheckIcon} aria-hidden="true" />{/if}{categoryLabel(name, i18n.locale)}
+					</Button></li>
+				{/each}
+			</ul>
+		</nav>
+	{/if}
 	{#if formError && !filtersOpen}<Field.Error class="mt-3" role="alert">{m.errors[formError]}</Field.Error>{/if}
 	<noscript><p class="mt-4">{m.noScript} <a href={i18n.href('/p')}>{m.browseUnfiltered}</a></p></noscript>
 

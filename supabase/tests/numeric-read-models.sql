@@ -102,20 +102,46 @@ INSERT INTO app.products(code,name_nb,name_en,bin_id,unit_code,stock_step,sale_s
 SELECT 'TEST-P'||lpad(i::text,4,'0'),'Paginering-fikstur','Pagination fixture',
   '75000000-0000-4000-8000-000000000001','pcs',1,1,0,true
 FROM generate_series(1,1103) i;
-CREATE TEMP TABLE seen_catalog(code text PRIMARY KEY);
+-- Sorted by a repeated primary value with gaps, so ties and missing values cross pages.
+INSERT INTO app.categories(id,name) VALUES('77000000-0000-4000-8000-000000000001','Sort fixtures');
+UPDATE app.products SET category_id='77000000-0000-4000-8000-000000000001' WHERE code LIKE 'TEST-P%';
+INSERT INTO app.product_attributes(product_id,attribute_id,number_value)
+SELECT id,'76000000-0000-4000-8000-000000000001',(substr(code,7)::integer%13)::numeric/10
+FROM app.products WHERE code LIKE 'TEST-P%' AND substr(code,7)::integer%2=1;
+CREATE TEMP TABLE seen_catalog(position serial,code text UNIQUE);
 DO $$
 DECLARE v_after text; v_rows integer; v_page integer := 0;
 BEGIN
   LOOP
-    WITH inserted AS (
-      INSERT INTO seen_catalog SELECT code FROM public.amp_catalog(NULL,v_after,37) RETURNING code
-    ) SELECT count(*),max(code) INTO v_rows,v_after FROM inserted;
+    WITH page AS (SELECT cat.code,cat.ordinality AS ord FROM public.amp_catalog(NULL,v_after,37,
+        p_sort=>'[["Other",null],["Sort fixtures","test_resistance"]]') WITH ORDINALITY cat),
+      inserted AS (INSERT INTO seen_catalog(code) SELECT code FROM page ORDER BY ord RETURNING code)
+    SELECT count(*),(SELECT code FROM page ORDER BY ord DESC LIMIT 1) INTO v_rows,v_after FROM inserted;
     EXIT WHEN v_rows=0;
     v_page:=v_page+1;
     IF v_page>100 THEN RAISE EXCEPTION 'Pagination did not advance'; END IF;
   END LOOP;
   PERFORM pg_temp.assert_true((SELECT count(*) FROM seen_catalog)=(SELECT count(*) FROM app.products WHERE is_active),
     'keyset pagination reads every active product beyond 1000 without duplicates');
+  PERFORM pg_temp.assert_true(NOT EXISTS (SELECT 1 FROM (
+      SELECT s.code,lag(s.code) OVER w AS previous_code,a.number_value,lag(a.number_value) OVER w AS previous_value,
+        lag(a.number_value IS NULL) OVER w AS previous_missing
+      FROM seen_catalog s JOIN app.products p ON p.code=s.code
+      LEFT JOIN app.product_attributes a ON a.product_id=p.id AND a.attribute_id='76000000-0000-4000-8000-000000000001'
+      WHERE s.code LIKE 'TEST-P%' WINDOW w AS (ORDER BY s.position)) o
+    WHERE o.previous_missing AND o.number_value IS NOT NULL
+      OR o.number_value<o.previous_value
+      OR (o.number_value=o.previous_value OR o.number_value IS NULL AND o.previous_missing) AND o.code<o.previous_code),
+    'catalog pages follow the primary specification value, then code, with missing values last');
+  PERFORM pg_temp.assert_true((SELECT max(position) FROM seen_catalog WHERE code LIKE 'TEST-P%')
+      <(SELECT min(position) FROM seen_catalog WHERE code IN ('TEST-R','TEST-C')),
+    'listed categories come before uncategorised products');
+  PERFORM pg_temp.expect_error($q$SELECT public.amp_catalog(p_sort=>'[["A","x"],["A",null]]')$q$,'INVALID_CATALOG_QUERY');
+  PERFORM pg_temp.expect_error($q$SELECT public.amp_catalog(p_sort=>'{"A":"x"}')$q$,'INVALID_CATALOG_QUERY');
+  PERFORM pg_temp.expect_error($q$SELECT public.amp_catalog(p_sort=>'[["A",1]]')$q$,'INVALID_CATALOG_QUERY');
+  PERFORM pg_temp.expect_error($q$SELECT public.amp_catalog(p_sort=>'"A"')$q$,'INVALID_CATALOG_QUERY');
+  PERFORM pg_temp.expect_error($q$SELECT public.amp_catalog(p_sort=>'["A"]')$q$,'INVALID_CATALOG_QUERY');
+  PERFORM pg_temp.expect_error($q$SELECT public.amp_catalog(p_sort=>'[["A"]]')$q$,'INVALID_CATALOG_QUERY');
   PERFORM pg_temp.assert_true((SELECT count(*)=1 FROM public.amp_catalog('TEST-P1103','ZZZZ',1)),
     'exact product lookup is independent of cursor and first-page position');
   PERFORM pg_temp.assert_true((SELECT count(*)=200 FROM public.amp_catalog()),'default catalog page is bounded');

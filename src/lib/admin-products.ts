@@ -3,7 +3,8 @@ import { allStaffRows, staffEquals, staffRequest, type StaffSession } from './ad
 import { compareDecimals, multiplyDecimals, normalizeDecimal, validQuantity } from './decimal';
 import { identifier, object, text, type Fetcher } from './api';
 import { readShelfTopology, type ShelfTopology } from './shelf-map';
-import { standardSpecifications } from './product-specifications';
+import { productFamilies, productTypes, standardSpecifications, type ProductFamily } from './product-specifications';
+export { productFamilies, productTypes, type ProductFamily } from './product-specifications';
 import { catalogSearchText } from './catalog-search';
 import type { CatalogAttribute } from './catalog';
 
@@ -15,26 +16,6 @@ export type AttributeDefinition = { id: string; code: string; label: string; val
 export type AttributeValue = { product_id: string; attribute_id: string; number_value: string | null; text_value: string | null; boolean_value: boolean | null };
 export type ProductReferences = { categories: Category[]; definitions: AttributeDefinition[]; units: { code: string; name: string; symbol: string; is_discrete: boolean }[]; shelf: ShelfTopology };
 export type ProductStock = { product_id: string; quantity: string; revision: string; last_counted_at: string | null };
-// Stable identities for categories first created through the standard picker.
-// Never change an ID when reordering or translating the choices.
-export const productTypes = [
-	{ prefix: 'RES', name: 'Resistors', id: '824dd61f-6781-49ae-8000-000000000001' },
-	{ prefix: 'CAP', name: 'Capacitors', id: '824dd61f-6781-49ae-8000-000000000002' },
-	{ prefix: 'DIO', name: 'Diodes', id: '824dd61f-6781-49ae-8000-000000000003' },
-	{ prefix: 'LED', name: 'LEDs', id: '824dd61f-6781-49ae-8000-000000000004' },
-	{ prefix: 'BJT', name: 'Bipolar transistors', id: '824dd61f-6781-49ae-8000-000000000005' },
-	{ prefix: 'MOS', name: 'MOSFETs', id: '824dd61f-6781-49ae-8000-000000000006' },
-	{ prefix: 'MCU', name: 'Controllers', id: '824dd61f-6781-49ae-8000-000000000007' },
-	{ prefix: 'SEN', name: 'Sensors', id: '824dd61f-6781-49ae-8000-000000000008' },
-	{ prefix: 'MOT', name: 'Motors', id: '824dd61f-6781-49ae-8000-000000000009' },
-	{ prefix: 'DRV', name: 'Motor drivers', id: '824dd61f-6781-49ae-8000-00000000000a' },
-	{ prefix: 'CON', name: 'Connectors', id: '824dd61f-6781-49ae-8000-00000000000b' },
-	{ prefix: 'BRD', name: 'Prototyping', id: '824dd61f-6781-49ae-8000-00000000000c' },
-	{ prefix: 'CAB', name: 'Cable', id: '824dd61f-6781-49ae-8000-00000000000d' },
-	{ prefix: 'MIS', name: 'Miscellaneous', id: '824dd61f-6781-49ae-8000-00000000000e' }
-] as const;
-export const productFamilies = productTypes.map(type => type.prefix);
-export type ProductFamily = typeof productFamilies[number];
 export function productCategoryOptions(categories: Category[]) {
 	return productTypes.map(type => ({ ...type, id: categories.find(category => category.name === type.name)?.id ?? type.id }));
 }

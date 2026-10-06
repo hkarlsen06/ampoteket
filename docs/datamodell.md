@@ -202,7 +202,7 @@ All RPCs are in `public`; helpers in `app` are not client APIs. Signatures are i
 
 | Function | Caller | Result |
 | --- | --- | --- |
-| `amp_catalog`, `amp_catalog_facets` | Public | Product pages and filter choices ([details](api-contract.md#catalog-and-topology)). |
+| `amp_catalog`, `amp_catalog_facets` | Public | Product pages, by category and primary specification, and filter choices ([details](api-contract.md#catalog-and-topology)). |
 | `amp_shelf_map` | Public | Complete live cabinets and bins with `has_products`. |
 | `amp_help_directory` | Public | Published support contacts. |
 | `amp_admin_statistics` | Staff | Sales summary and overview ([response](api-contract.md#staff-statistics)). |

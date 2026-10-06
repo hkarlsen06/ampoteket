@@ -10,6 +10,7 @@ import {
 	type CatalogConfig
 } from './catalog';
 import { CatalogQueryError, parseCatalogQuery } from './catalog-search';
+import { catalogSort } from './product-specifications';
 import { productCodeFromEntry } from './scanner/payload';
 
 const config: CatalogConfig = { url: 'https://catalog.example.invalid', publishableKey: 'sb_publishable_test' };
@@ -253,10 +254,12 @@ describe('catalog HTTP reads and completeness', () => {
 		} });
 		expect(products.map((product) => product.code)).toEqual(['RES-00001', 'RES-00002']);
 		expect(seen).toEqual([
-			{ p_after_code: null, p_limit: 200 },
-			{ p_after_code: 'RES-00001', p_limit: 200 },
-			{ p_after_code: 'RES-00002', p_limit: 200 }
+			{ p_after_code: null, p_limit: 200, p_sort: catalogSort },
+			{ p_after_code: 'RES-00001', p_limit: 200, p_sort: catalogSort },
+			{ p_after_code: 'RES-00002', p_limit: 200, p_sort: catalogSort }
 		]);
+		expect(catalogSort.slice(0, 2)).toEqual([['Resistors', 'resistance'], ['Capacitors', 'capacitance']]);
+		expect(catalogSort.at(-1)).toEqual(['Miscellaneous', null]);
 	});
 
 	test('rejects repeated cursors, cycles and duplicate identities rather than completing', async () => {

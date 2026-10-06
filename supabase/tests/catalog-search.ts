@@ -44,18 +44,20 @@ function rpc(search: string, limit = 50) {
 const cabinet = "'74000000-0000-4000-8000-000000000001'::uuid";
 const drawer = "'75000000-0000-4000-8000-000000000001'::uuid";
 const locationCases: [string, string[]][] = [
-	[`p_cabinet_ids=>ARRAY[${cabinet}],p_q=>'SEARCH',p_limit=>2`, ['SEARCH-A', 'SEARCH-D']],
-	["p_cabinet_ids=>ARRAY[md5('search-cab')::uuid]", ['SEARCH-B', 'SEARCH-C']],
+	// Without p_sort: category name, then name (C collation here), then code.
+	[`p_cabinet_ids=>ARRAY[${cabinet}],p_q=>'SEARCH',p_limit=>2`, ['SEARCH-G', 'SEARCH-E']],
+	["p_cabinet_ids=>ARRAY[md5('search-cab')::uuid]", ['SEARCH-C', 'SEARCH-B']],
 	["p_cabinet_ids=>ARRAY[md5('search-cab')::uuid],p_q=>'searchb controller'", ['SEARCH-B']],
-	["p_bin_ids=>ARRAY[md5('search-bin-b')::uuid,md5('search-bin-c')::uuid]", ['SEARCH-B', 'SEARCH-C']],
-	[`p_cabinet_ids=>ARRAY[${cabinet}],p_bin_ids=>ARRAY[md5('search-bin-b')::uuid],p_q=>'SEARCH'`, ['SEARCH-A', 'SEARCH-B', 'SEARCH-D', 'SEARCH-E', 'SEARCH-F', 'SEARCH-G']],
-	["p_cabinet_ids=>ARRAY[md5('search-cab')::uuid],p_bin_ids=>ARRAY[md5('search-bin-b')::uuid]", ['SEARCH-B', 'SEARCH-C']],
+	["p_bin_ids=>ARRAY[md5('search-bin-b')::uuid,md5('search-bin-c')::uuid]", ['SEARCH-C', 'SEARCH-B']],
+	[`p_cabinet_ids=>ARRAY[${cabinet}],p_bin_ids=>ARRAY[md5('search-bin-b')::uuid],p_q=>'SEARCH'`, ['SEARCH-G', 'SEARCH-E', 'SEARCH-A', 'SEARCH-D', 'SEARCH-B', 'SEARCH-F']],
+	["p_cabinet_ids=>ARRAY[md5('search-cab')::uuid],p_bin_ids=>ARRAY[md5('search-bin-b')::uuid]", ['SEARCH-C', 'SEARCH-B']],
 	["p_bin_ids=>ARRAY[md5('search-bin-c')::uuid],p_categories=>ARRAY['Capacitors'],p_q=>'1.25',p_conditions=>'{\"capacitance\":{\"eq\":\"0.00000001\"}}'", ['SEARCH-C']],
 	["p_bin_ids=>ARRAY[md5('search-bin-b')::uuid],p_categories=>ARRAY['Capacitors']", []],
 	[`p_cabinet_ids=>ARRAY[md5('search-cab')::uuid],p_bin_id=>${drawer}`, []],
+	// A cursor outside the filter still continues from where it sorts.
 	["p_cabinet_ids=>ARRAY[md5('search-cab')::uuid],p_after_code=>'SEARCH-A',p_limit=>1", ['SEARCH-B']],
-	["p_cabinet_ids=>ARRAY[md5('search-cab')::uuid],p_after_code=>'SEARCH-B',p_limit=>1", ['SEARCH-C']],
-	["p_cabinet_ids=>ARRAY[md5('search-cab')::uuid],p_after_code=>'SEARCH-C',p_limit=>1", []],
+	["p_cabinet_ids=>ARRAY[md5('search-cab')::uuid],p_after_code=>'SEARCH-C',p_limit=>1", ['SEARCH-B']],
+	["p_cabinet_ids=>ARRAY[md5('search-cab')::uuid],p_after_code=>'SEARCH-B',p_limit=>1", []],
 	["p_cabinet_ids=>ARRAY[md5('search-empty-cab')::uuid]", []],
 	["p_bin_ids=>ARRAY[md5('search-empty-bin')::uuid]", []]
 ];

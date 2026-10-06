@@ -17,14 +17,14 @@ below are local runs, not CI claims.
 | `bun test` | 2026-10-06 | PASS, 254 tests, 2,119 assertions | Unit tests, including CI/deploy failures, HTTPS headers, seed cleanup ownership, account-bound password changes, receipt retries and Discord deadlines/cooldowns |
 | `bun audit` | 2026-10-02 | PASS, no reported vulnerabilities | Resolved dependency tree |
 | `python3 scripts/test-check-clipped-ink.py`, `bun run check:ink` | 2026-10-02 | PASS | Checker regressions, static SVG checks |
-| `./scripts/test-database.sh` | 2026-10-06 | PASS | Ten migrations, rollback/retry, ACLs/RLS, acceptance, 12 stored-data corruption cases including drawer bounds/overlap, 42 concurrency scenarios including competing help-order writes, restore, schema/docs comparison, signed-JWT HTTP |
+| `./scripts/test-database.sh` | 2026-10-06 | PASS | Eleven migrations, catalog order by category and primary specification across 37-row pages, rollback/retry, ACLs/RLS, acceptance, 12 stored-data corruption cases including drawer bounds/overlap, 42 concurrency scenarios including competing help-order writes, restore, schema/docs comparison, signed-JWT HTTP |
 | GitHub Actions Validation | 2026-10-02 | PASS, all nine jobs on the deployed application revision `d2a5485` | Database and all eight browser modes; [release CI](https://github.com/hkarlsen06/ampoteket/actions/runs/36975296467) (scanner passed on rerun after a CI hang) |
 | GitHub Actions Deploy | 2026-10-02 | PASS, version `d1ffbf47-c54d-4f85-b555-b3c786f5883c` | First deploy from `.github/workflows/deploy.yml`: CI gate, reviewed vars/rate limits/secret names, HSTS, `/contact` and HTTP redirect checks by `deploy:production`; [run](https://github.com/hkarlsen06/ampoteket/actions/runs/36976781424) |
 | Hosted release verification | 2026-10-02 | PASS | Reviewed vars/rate limits/secret names; 25 HTTP checks across both locales, HTTP/www redirects, HSTS, private admin/checkout headers, closed sales; persisted error logs with query redaction and invocation logs off |
 | Actual-snapshot migration rehearsal | 2026-10-06 | PASS | Private hosted checkpoint (07:44 UTC) restored locally with owners/ACLs; the CLI applied `20261006000100` and `20261006000200`; only `app.units`, `app.audit_log` and `app.audit_log_id_seq` changed (declared), 49 other app/Auth tables and two sequences unchanged; prior eight history rows unchanged, two new rows; permissions, protections and invariants passed. Owned container removed. This is not the full hosted recovery drill |
 | Audit fix browser acceptance | 2026-10-02 | PASS | Real disposable Auth/PostgREST: active unplaced product in shelf/count picker; invitation password save and independent sign-in; cross-tab account switch removes password form and preserves both passwords; help reorder/focus, stale rejection and retry. No overflow at 360 px (password/help) or 1280 px (shelf/count). Owned seed and dev server removed after verification |
 | `./scripts/test-web.sh` | 2026-10-01 | PASS | Real local Auth, public/staff/Worker boundaries, exact decimal transport |
-| `./scripts/test-web.sh --shop` | 2026-10-01 | PASS | Lifecycle freshness, retained drafts, invalid saved quantities, removal focus, mobile drawer addresses |
+| `./scripts/test-web.sh --shop` | 2026-10-06 | PASS | Catalog order by category and primary specification matching the complete API traversal across 37-row pages, no-JavaScript category shortcuts, 100-character category without sideways scroll, lifecycle freshness, retained drafts, invalid saved quantities, removal focus, mobile drawer addresses |
 | `./scripts/test-web.sh --checkout` | 2026-10-01 | PASS | Remote staff recovery, pre-payment recheck and navigation during it, framing protection, Auth invitation/recovery emails in Mailpit |
 | `./scripts/test-web.sh --admin` | 2026-10-03 | PASS | Access recovery, retained cached content, partial-inventory retry, stock field validation, audit freshness with older pages retained, drawer resizing, specification error focus |
 | `./scripts/test-web.sh --admins` | 2026-10-01 | PASS | Real Auth/Worker/Mailpit invitations in both locales, password setup/login, permissions and audit, replay/stale-resend safeguards, 360/1280 px in both locales/themes, retained drafts/focus on read failure, deactivation/reactivation |
@@ -67,6 +67,8 @@ Update this section whenever a migration changes (`sha256sum supabase/migrations
   `2d48d9687355724cda060e9982f2953c249abef0537d19f98fe6b7f54b779013`
 - `20261006000200_catalog_compact_measurements.sql`: SHA-256
   `6ecb9d6548ba035c25196cc766decdaf6db5a0ab5f74184f33d4db245f06f2de`
+- `20261006000300_catalog_spec_order.sql`: SHA-256
+  `92f114fed52a0ea3cf45c62adade1444c8b268666e5dc8366ce773ea67058b5b`
 
 24 app tables, four exact numeric domains, 30 public RPCs, 29 staff views and five
 internal derived views. All views are security invoker; only `public` is exposed.

@@ -1,4 +1,25 @@
-import type { AttributeDefinition, ProductFamily } from './admin-products';
+import type { AttributeDefinition } from './admin-products';
+
+// Stable identities for categories first created through the standard picker.
+// Never change an ID when reordering or translating the choices.
+export const productTypes = [
+	{ prefix: 'RES', name: 'Resistors', id: '824dd61f-6781-49ae-8000-000000000001' },
+	{ prefix: 'CAP', name: 'Capacitors', id: '824dd61f-6781-49ae-8000-000000000002' },
+	{ prefix: 'DIO', name: 'Diodes', id: '824dd61f-6781-49ae-8000-000000000003' },
+	{ prefix: 'LED', name: 'LEDs', id: '824dd61f-6781-49ae-8000-000000000004' },
+	{ prefix: 'BJT', name: 'Bipolar transistors', id: '824dd61f-6781-49ae-8000-000000000005' },
+	{ prefix: 'MOS', name: 'MOSFETs', id: '824dd61f-6781-49ae-8000-000000000006' },
+	{ prefix: 'MCU', name: 'Controllers', id: '824dd61f-6781-49ae-8000-000000000007' },
+	{ prefix: 'SEN', name: 'Sensors', id: '824dd61f-6781-49ae-8000-000000000008' },
+	{ prefix: 'MOT', name: 'Motors', id: '824dd61f-6781-49ae-8000-000000000009' },
+	{ prefix: 'DRV', name: 'Motor drivers', id: '824dd61f-6781-49ae-8000-00000000000a' },
+	{ prefix: 'CON', name: 'Connectors', id: '824dd61f-6781-49ae-8000-00000000000b' },
+	{ prefix: 'BRD', name: 'Prototyping', id: '824dd61f-6781-49ae-8000-00000000000c' },
+	{ prefix: 'CAB', name: 'Cable', id: '824dd61f-6781-49ae-8000-00000000000d' },
+	{ prefix: 'MIS', name: 'Miscellaneous', id: '824dd61f-6781-49ae-8000-00000000000e' }
+] as const;
+export const productFamilies = productTypes.map(type => type.prefix);
+export type ProductFamily = typeof productFamilies[number];
 
 // Existing definitions are reused by code, type and unit. These IDs are only
 // used on first creation and must never change when the list is reordered.
@@ -36,6 +57,10 @@ export const categorySpecifications: Record<ProductFamily, readonly Specificatio
 	CAB: ['colour', 'voltage', 'current', 'model'],
 	MIS: standardSpecifications.map(definition => definition.code)
 };
+
+/** The public catalog lists categories in picker order, each sorted by its first
+ * suggested specification (Miscellaneous by name). amp_catalog's p_sort. */
+export const catalogSort: [string, string | null][] = productTypes.map(type => [type.name, type.prefix === 'MIS' ? null : categorySpecifications[type.prefix][0]]);
 
 export function standardSpecificationDefinitions(existing: AttributeDefinition[]): AttributeDefinition[] {
 	const standards = standardSpecifications.map(standard => {

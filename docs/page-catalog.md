@@ -17,7 +17,12 @@ opens that product (also without JavaScript). Searching by name or code and pick
 drawer are the two ways in, presented like a login screen's alternatives: below 64rem a
 hairline with «eller» / "or" separates the search form from a full-width «Hyllekart» /
 "Shelf map" button; from 64rem they share one row, `search · eller · Hyllekart`. The
-divider and button hide without JavaScript. «Filtre» sits below, since it narrows either way. The
+divider and button hide without JavaScript. «Filtre» sits below, since it narrows either way.
+Under it, a wrapping row of category shortcuts (`nav` of plain links, in catalog order)
+is the quick way to one family: an unselected shortcut opens `?category=<name>` alone,
+a selected one (filled, with a check and `aria-current`) removes its category. Both
+keep the text and location and drop specification conditions and the cursor. They
+work without JavaScript and are omitted when the server could not read the categories. The
 map button opens the shelf map in a `Dialog` sheet (`shelfPickerSheet`): a content-height
 bottom sheet within thumb reach below 48rem, a narrow right-hand panel from 48rem, sized
 so a whole cabinet fits without scrolling: tapping a cabinet zooms in, and tapping a drawer goes straight
@@ -37,7 +42,8 @@ asset and mapping when a new family needs one.
 ## 2. Loading and ownership
 
 The server validates the URL and fetches the first page with `readCatalogPage` (50
-rows). SQL filters before paging and stock aggregation, so search and exact lookup work
+rows), alongside `readCatalogFacets` for the category shortcuts, so they render with the
+page and never push the results down later. SQL filters before paging and stock aggregation, so search and exact lookup work
 without JavaScript or a full-catalog read.
 
 The browser reads `amp_catalog_facets` for category choices and the selected category's
@@ -87,7 +93,14 @@ works in both locales. Saved data is plain text; never interpret markup.
 in the code (with or without hyphens), either name, description, category (both
 languages) or a formatted specification. A measurement also matches without the space
 before its unit (`10k`, `10kΩ` and `100n` find `10 kΩ` and `100 nF`). Substring only:
-no fuzzy ranking, no guessing from model names. Results keep database code order.
+no fuzzy ranking, no guessing from model names. Results keep the catalog order.
+
+**Order.** Categories in the standard picker order (`productTypes`), then other
+categories by name, then products without a category. Within a category, products sort
+by its primary specification, the first entry of `categorySpecifications` (resistors by
+resistance, capacitors by capacitance, LEDs by colour; Miscellaneous has none), with
+products lacking that value after the rest; then by Norwegian name and code.
+`catalogSort` sends this list as `p_sort`; facet categories use the same order.
 Staff product search uses the same matcher (`catalogSearchText`).
 
 **Compact codes.** Manual lookup trims and ignores case and tries the exact code first.

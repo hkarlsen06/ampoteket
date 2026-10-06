@@ -1,8 +1,9 @@
 import { ApiError, isRecord, requestApiJson, type Fetcher } from './api';
 import type { Locale } from './i18n';
 import { formatMeasurementText } from './format';
-import { catalogSearchLabels, CatalogQueryError, type CatalogFacets, type CatalogQuery } from './catalog-search';
+import { catalogSearchLabels, CatalogQueryError, sortCatalogCategories, type CatalogFacets, type CatalogQuery } from './catalog-search';
 import { compareDecimals, normalizeDecimal } from './decimal';
+import { catalogSort } from './product-specifications';
 export type { CatalogFacets } from './catalog-search';
 
 /** Public configuration only. Never pass a server secret key to this module. */
@@ -316,6 +317,7 @@ export async function readCatalogPage(
 	const products = parseCatalogProducts(await requestCatalog(config, {
 		p_after_code: afterCode ?? null,
 		p_limit: limit,
+		p_sort: catalogSort,
 		...(options.binId === undefined ? {} : { p_bin_id: options.binId }),
 		...(options.query ? { p_q: options.query.q, p_categories: options.query.categories, p_conditions: options.query.conditions,
 			p_cabinet_ids: options.query.cabinetIds, p_bin_ids: options.query.binIds,
@@ -331,7 +333,7 @@ export async function readCatalogPage(
 
 /**
  * Publish complete matching rows (for example one drawer) only after the final empty page.
- * SQL's text collation owns code ordering: equality/seen checks catch repeated
+ * SQL owns the order (category, primary specification, name, code): equality/seen checks catch repeated
  * cursors and cycles without applying a different browser string ordering.
  * A failed or cancelled traversal rejects and never returns partial success.
  */
@@ -378,5 +380,5 @@ export async function readCatalogFacets(config: CatalogConfig,
 			|| (definition.value_type === 'number' && values.some((value, index) => index > 0 && compareDecimals(values[index - 1], value) >= 0))) invalid();
 		return { code, definition, values };
 	});
-	return { categories, attributes: facets };
+	return { categories: sortCatalogCategories(categories), attributes: facets };
 }

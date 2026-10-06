@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { mkdir } from 'node:fs/promises';
 import { fieldLabel, captureFailure, proofEnvironment, waitForHydration } from './web-proof/harness';
 import { generateSeedSql, seedProductId, seedProductCode, seedBinId } from './seed-test-data';
+import { readCompleteCatalog } from '../src/lib/catalog';
 import { en } from '../src/lib/i18n/en';
 import { nb } from '../src/lib/i18n/nb';
 
@@ -19,6 +20,15 @@ await sql(`UPDATE app.products SET name_nb='220 ohm motstand med et bevisst svæ
 const catalogCabinetId = await sql(`SELECT cabinet_id FROM app.bins WHERE id='${seedBinId(0)}'`);
 const emptyCabinetId = await sql('SELECT id FROM app.cabinets WHERE outer_row=2 AND outer_col=1');
 const topologyUrl = `${api.origin}/rest/v1/rpc/amp_shelf_map`;
+// The browser must show the API's complete traversal in order, with every row
+// once; supabase/tests own the sort rule (category, primary value, name, code).
+async function catalogCodes(indices?: number[]): Promise<string[]> {
+	const codes = (await readCompleteCatalog({ url: api.origin, publishableKey: publicKey })).map(product => product.code);
+	assert.equal(new Set(codes).size, codes.length, 'The API traversal repeats no part');
+	if (!indices) return codes;
+	const selected = new Set(indices.map(index => seedProductCode(index)));
+	return codes.filter(code => selected.has(code));
+}
 let context: BrowserContext | undefined;
 const { ready, close } = await startWorker(() => context);
 const artifacts = resolve('test-results/shop');
@@ -97,9 +107,9 @@ try {
 	await page.goBack();
 	await expect(cards).toHaveCount(74);
 	await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(returnScroll);
-	// These synthetic codes are ASCII; their deterministic fixture ordering also
-	// catches skipped or duplicated rows at every 37-row API boundary.
-	const expectedCodes = Array.from({ length: 1000 }, (_, index) => seedProductCode(index)).sort();
+	// Comparing every row catches skipped or duplicated rows at each 37-row API boundary.
+	const expectedCodes = await catalogCodes();
+	assert.equal(expectedCodes.length, 1000);
 	for (let count = 74; count < expectedCodes.length;) {
 		await page.evaluate(() => {
 			const pagination = document.querySelector('.pagination')!;
@@ -188,8 +198,7 @@ try {
 	await locationDialog.locator(`[data-item-id='${seedBinId(0)}']`).click();
 	await expect(locationDialog).toBeHidden();
 	await expect(page).toHaveURL(`${origin}/en/p?bin=${seedBinId(0)}`);
-	const drawerCodes = Array.from({ length: 1000 }, (_, index) => index)
-		.filter(index => index % 30 === 0).map(index => seedProductCode(index)).sort();
+	const drawerCodes = await catalogCodes(Array.from({ length: 1000 }, (_, index) => index).filter(index => index % 30 === 0));
 	await expect(cards).toHaveCount(drawerCodes.length);
 	assert.deepEqual(await cards.locator('.product-meta .font-mono').allTextContents(), drawerCodes);
 	await expect(page.locator('.location-toggle')).toHaveText(en.catalog.locationSelected(1));
@@ -328,8 +337,7 @@ try {
 	console.log('PASS: landscape and enlarged-text hero copy/actions remain reachable; motion eligibility returns after font restoration');
 	// The home picker has no current product. Its contents come from a complete
 	// drawer-scoped catalog read only after a visitor selects an assigned drawer.
-	const homeDrawerCodes = Array.from({ length: 1000 }, (_, index) => index)
-		.filter(index => index % 30 === 0).map(index => seedProductCode(index)).sort();
+	const homeDrawerCodes = await catalogCodes(Array.from({ length: 1000 }, (_, index) => index).filter(index => index % 30 === 0));
 	for (const locale of ['', '/en']) for (const colour of ['light', 'dark'] as const) for (const width of [360, 1280]) {
 		const messages = locale ? en : nb;
 		const height = width === 360 ? 640 : 900;
@@ -771,18 +779,24 @@ try {
 			await route.fulfill({ response }).catch(() => { /* The old product request was deliberately interrupted. */ });
 		} finally { oldFinished(); }
 	});
+	// The first catalog page part in another drawer than the one being left.
+	const catalog = await readCompleteCatalog({ url: api.origin, publishableKey: publicKey });
+	const start = catalog.find(product => product.code === seedProductCode(0))!;
+	const target = catalog.slice(0, 37).find(product => product.bin_code !== null && product.bin_code !== start.bin_code)!;
+	assert.ok(target?.bin_code !== null && target.inner_col <= 26, 'The first catalog page has a part in another drawer');
+	const targetDrawer = `${String.fromCharCode(64 + target.inner_col)}${target.inner_row}`;
 	try {
 		await navigationPage.goto(`${origin}/en/p/${seedProductCode(0)}`);
 		await waitForHydration(navigationPage);
 		await navigationPage.evaluate(() => window.dispatchEvent(new Event('online')));
 		await expect.poll(() => held).toBe(true);
 		await navigationPage.getByRole('link', { name: en.product.back }).click();
-		await navigationPage.locator(`a[href='/en/p/${seedProductCode(28)}']`).click();
-		await expect(navigationPage).toHaveURL(`${origin}/en/p/${seedProductCode(28)}`);
+		await navigationPage.locator(`a[href='/en/p/${target.code}']`).click();
+		await expect(navigationPage).toHaveURL(`${origin}/en/p/${target.code}`);
 		const current = navigationPage.locator('.shelf-map .stage [data-item-id][aria-current="true"]');
-		await expect(current).toHaveAttribute('aria-label', 'A8');
+		await expect(current).toHaveAttribute('aria-label', targetDrawer);
 		releaseOld(); await oldSettled;
-		await expect(current).toHaveAttribute('aria-label', 'A8');
+		await expect(current).toHaveAttribute('aria-label', targetDrawer);
 	} catch (error) { await captureFailure(navigationPage, artifacts, 'navigation'); throw error; }
 	finally { releaseOld(); await navigating.close(); }
 	console.log('PASS: failed topology retries independently of purchase controls; interrupted product navigation retains the new product location');
@@ -963,7 +977,15 @@ try {
 		await expect(plain).toHaveURL(`${origin}${locale}/p/${seedProductCode(999)}`);
 	}
 	await plain.goto(`${origin}/en/p?cabinet=${catalogCabinetId}`);
-	await expect(plain.locator(`a[href='/en/p/${seedProductCode(15)}']`)).toBeVisible();
+	// Category shortcuts are plain links: select one alone, tap again to remove it.
+	const shortcut = plain.getByRole('navigation', { name: en.catalog.category }).getByRole('link', { name: 'Capacitor', exact: true });
+	await shortcut.click();
+	await expect(plain).toHaveURL(`${origin}/en/p?cabinet=${catalogCabinetId}&category=Capacitors`);
+	await expect(shortcut).toHaveAttribute('aria-current', 'true');
+	await shortcut.click();
+	await expect(plain).toHaveURL(`${origin}/en/p?cabinet=${catalogCabinetId}`);
+	await expect(shortcut).not.toHaveAttribute('aria-current', 'true');
+	await expect(plain.locator(`a[href='/en/p/${expectedCodes[0]}']`)).toBeVisible();
 	await plain.getByRole('link', { name: en.catalog.next, exact: true }).click();
 	assert.ok(new URL(plain.url()).searchParams.has('after'));
 	assert.equal(new URL(plain.url()).searchParams.get('cabinet'), catalogCabinetId);

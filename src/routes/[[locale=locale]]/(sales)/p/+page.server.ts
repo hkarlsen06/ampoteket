@@ -1,5 +1,5 @@
 import { redirect } from '@sveltejs/kit';
-import { lookupCatalogProduct, readCatalogPage, type CatalogPage } from '#lib/catalog.js';
+import { lookupCatalogProduct, readCatalogFacets, readCatalogPage, type CatalogPage } from '#lib/catalog.js';
 import { CatalogQueryError, hasCatalogFilters, normalizeProductCode, parseCatalogQuery, sanitizeCatalogQuery, type CatalogQuery } from '#lib/catalog-search.js';
 import { localeFromPathname, localizeHref } from '#lib/i18n/index.js';
 import { getCatalogConfig } from '#lib/server/catalog-config.js';
@@ -41,6 +41,9 @@ export const load: PageServerLoad = async ({ url, request, fetch, setHeaders }) 
 	}
 	let initialPage: CatalogPage | null = null;
 	let unavailable = !config;
+	// Category shortcuts render with the first page, so nothing above the results
+	// moves in later; without them the «Filtre» dialog still offers every category.
+	const categories = config ? readCatalogFacets(config, { fetcher: fetch }).then(facets => facets.categories, () => null) : null;
 	if (config && !queryError) {
 		try { initialPage = await readCatalogPage(config, { fetcher: fetch, limit: 50, query: parsed! }); }
 		catch (error) {
@@ -48,5 +51,5 @@ export const load: PageServerLoad = async ({ url, request, fetch, setHeaders }) 
 			else unavailable = true;
 		}
 	}
-	return { config, initialPage, unavailable, queryString, queryError, code, codeError };
+	return { config, initialPage, unavailable, queryString, queryError, code, codeError, categories: await categories };
 };

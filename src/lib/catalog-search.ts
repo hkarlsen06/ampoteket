@@ -2,7 +2,7 @@ import type { CatalogAttribute, CatalogProduct } from './catalog';
 import { compareDecimals, normalizeDecimal, shiftDecimal } from './decimal';
 import { categoryLabel, specificationLabel, locales, messagesFor } from './i18n';
 import { engineeringUnits, formatMeasurement, formatMeasurementText } from './format';
-import { standardSpecifications } from './product-specifications';
+import { catalogSort, standardSpecifications } from './product-specifications';
 
 const codePattern = /^[A-Z0-9][A-Z0-9-]{0,39}$/;
 const attributePattern = /^(eq|min|max)\.([a-z][a-z0-9_]{0,63})$/;
@@ -92,7 +92,13 @@ export function hasCatalogFilters(query: CatalogQuery): boolean {
 }
 
 export function catalogCategories(products: CatalogProduct[]): string[] {
-	return [...new Set(products.flatMap((product) => product.category_name === null ? [] : [product.category_name]))];
+	return sortCatalogCategories([...new Set(products.flatMap((product) => product.category_name === null ? [] : [product.category_name]))]);
+}
+
+/** The order catalog rows group by: picker order, then unlisted categories by name. */
+export function sortCatalogCategories(names: string[]): string[] {
+	const rank = (name: string) => { const index = catalogSort.findIndex(([category]) => category === name); return index < 0 ? catalogSort.length : index; };
+	return [...names].sort((a, b) => rank(a) - rank(b) || (a < b ? -1 : a > b ? 1 : 0));
 }
 
 /** Numeric facet values are normalized, deduplicated and sorted ascending: the slider's tick positions. */

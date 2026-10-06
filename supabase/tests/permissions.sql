@@ -4,7 +4,7 @@ BEGIN;
 CREATE TEMP TABLE expected_functions(signature regprocedure PRIMARY KEY,allowed_roles name[]);
 INSERT INTO expected_functions VALUES
  ('app.is_staff()',ARRAY['authenticated']::name[]),
- ('public.amp_catalog(text,text,integer,text,text[],jsonb,uuid,jsonb,uuid[],uuid[])',ARRAY['anon','authenticated','service_role']::name[]),
+ ('public.amp_catalog(text,text,integer,text,text[],jsonb,uuid,jsonb,uuid[],uuid[],jsonb)',ARRAY['anon','authenticated','service_role']::name[]),
  ('public.amp_catalog_facets(text[])',ARRAY['anon','authenticated','service_role']::name[]),
  ('public.amp_help_directory(integer,uuid,integer)',ARRAY['anon','authenticated','service_role']::name[]),
  ('public.amp_shelf_map()',ARRAY['anon','authenticated','service_role']::name[]),

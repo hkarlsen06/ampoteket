@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { CatalogPlacement, CatalogProduct } from './catalog';
 import {
 	canonicalFilterNumber, catalogCategories, catalogFacets, CatalogQueryError, engineeringUnits, hasCatalogFilters, normalizeProductCode,
-	parseCatalogQuery, productSearchText, sanitizeCatalogQuery, searchCatalog, serializeCatalogQuery
+	parseCatalogQuery, productSearchText, sanitizeCatalogQuery, searchCatalog, serializeCatalogQuery, sortCatalogCategories
 } from './catalog-search';
 
 function product(index: number, changes: Partial<CatalogProduct & CatalogPlacement> = {}): CatalogProduct {
@@ -146,7 +146,9 @@ describe('catalog search and shareable conditions', () => {
 		const b = product(2, { category_name: 'Resistors', attributes: {
 			capacitance: { label: 'Tolerance', value_type: 'text', unit: null, value: '5%' }
 		} });
-		expect(catalogCategories([a, b])).toEqual(['Capacitors', 'Resistors']);
+		// Picker order (resistors first), not first appearance; unlisted names follow alphabetically.
+		expect(catalogCategories([a, b])).toEqual(['Resistors', 'Capacitors']);
+		expect(sortCatalogCategories(['Zeta', 'Miscellaneous', 'Alpha', 'Resistors'])).toEqual(['Resistors', 'Miscellaneous', 'Alpha', 'Zeta']);
 	});
 
 	test('round-trips only recognized fields and treats prototype-named attribute codes as data', () => {
