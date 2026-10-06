@@ -56,7 +56,7 @@ movement 1 ---- many later correction links
 
 ## 4. Units, quantities and rounding
 
-`products.unit_code` (`pcs` or `m`) is both the stock and the sale unit. There is no pack conversion: a pack of 100 resistors is 100 pieces.
+`products.unit_code` (`pcs`, `m` or `g`) is both the stock and the sale unit. Grams are for goods sold by weight, such as 3D printer filament. There is no pack conversion: a pack of 100 resistors is 100 pieces.
 
 Each product has a `stock_step` and a `sale_step` (for example cable stocked to 0.001 m, sold per 0.1 m). `sale_step` must be a whole multiple of `stock_step`; the database checks precision and step.
 

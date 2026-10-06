@@ -53,9 +53,14 @@ remain outside the scrolling region.
 
 - The form reads top to bottom in working order: *Category and name*,
   *Specifications*, *Placement*, *Sales and stock*, then *Description and links*,
-  always open. *Sales and stock* ranks by weight: unit price and opening stock are
-  large mono numerals, minimum stock follows at normal size, and the set-once unit
-  (a segmented group, counted units first) and steps close the section. A new product starts
+  always open. A saved product moves *Sales and stock* up to follow *Category and
+  name*, since its price changes far more often than its drawer. The section ranks by
+  weight: unit price reads as one phrase with the unit («2,50 kr per m», a segmented
+  group, counted units first), opening stock follows as large mono numerals, then
+  minimum stock and the steps at normal size. Choosing a unit sets the stock step it
+  can never change again (0,01 for metres, 1 otherwise); *Cable* starts in metres
+  while the unit is still the previous category's default. The drawer is picked on
+  the page with `ShelfPlacementPicker`. A new product starts
   with only the category cards (`CategoryGraphic` + name, one `RadioGroup`); the rest
   grows in below once one is chosen, and the cards stay put. A saved product changes
   category in a compact select. One page, never a wizard: editing jumps straight to

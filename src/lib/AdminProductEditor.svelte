@@ -1,10 +1,7 @@
 <script lang="ts">
-	import AdminAccessGate from '#lib/AdminAccessGate.svelte';
 	import { productName } from '#lib/catalog.js';
 	import { Separator } from '#lib/components/ui/separator/index.js';
-	import { formActions, formGrid, formLayout, formStatus, lede, nameWrap, pageHeader, pageHeading, section, sectionHeading, sheetBody } from '#lib/ui.js';
-	import { controlStyles } from '#lib/components/ui/control.js';
-	import { cn } from '#lib/utils.js';
+	import { formActions, formGrid, formLayout, formStatus, lede, nameWrap, pageHeader, pageHeading, section, sectionHeading } from '#lib/ui.js';
 	import { Button, ButtonLabel } from '#lib/components/ui/button/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Textarea } from '#lib/components/ui/textarea/index.js';
@@ -20,11 +17,8 @@
 	import AdminStatistics from '#lib/AdminStatistics.svelte';
 	import * as Alert from '#lib/components/ui/alert/index.js';
 	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
-	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import CategoryGraphic from '#lib/CategoryGraphic.svelte';
 	import Icon from '#lib/Icon.svelte';
-	import XIcon from 'phosphor-svelte/lib/XIcon';
-	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
 	import ArrowUpRightIcon from 'phosphor-svelte/lib/ArrowUpRightIcon';
 
 	import { untrack, onMount, tick } from 'svelte';
@@ -66,8 +60,6 @@
 	let loading = $state(true); let loadFailed = $state(false); let outcome = $state('idle'); let current = $state<AdminProduct | null>(null);
 	let invalidField = $state<keyof ProductWrite | null>(null); let reviewFailed = $state(false);
 	let moveOpen = $state(false);
-	let placementOpen = $state(false);
-	// Description and links are rarely filled in, so they stay folded until one has a value.
 	// The note field stays hidden until staff say the product has no drawer.
 	let offShelf = $state(false);
 	const showNote = $derived(!draft.bin_id && (offShelf || Boolean(draft.location_note)));
@@ -112,7 +104,7 @@
 	});
 	const fieldIds: Partial<Record<keyof ProductWrite, string>> = {
 		name_nb: 'product-name-nb', name_en: 'product-name-en', stock_step: 'product-stock-step',
-		sale_step: 'product-sale-step', sale_unit_price_nok: 'product-price', minimum_stock: 'product-minimum-stock', bin_id: 'product-placement-trigger', location_note: 'product-location-note', datasheet_url: 'product-datasheet', purchase_url: 'product-purchase'
+		sale_step: 'product-sale-step', sale_unit_price_nok: 'product-price', minimum_stock: 'product-minimum-stock', bin_id: 'product-placement', location_note: 'product-location-note', datasheet_url: 'product-datasheet', purchase_url: 'product-purchase'
 	};
 	function errorMessage(field: keyof ProductWrite): string {
 		return field === 'stock_step' ? m.invalidStockStep : field === 'sale_step' ? m.invalidSaleStep
@@ -126,7 +118,7 @@
 	function selectPlacement(binId: string, event: MouseEvent | KeyboardEvent) {
 		if (blocked) return;
 		const from = draft.bin_id ?? product?.bin_id ?? null;
-		if (!from || from === binId) { draft.bin_id = binId; placementOpen = false; return; }
+		if (!from || from === binId) { draft.bin_id = binId; return; }
 		proposedPlacement = { from, to: binId };
 		placementTrigger = event.currentTarget as HTMLElement;
 		moveOpen = true;
@@ -135,7 +127,6 @@
 		if (blocked || admin.status !== 'ready' || !proposedPlacement) return;
 		draft.bin_id = proposedPlacement.to;
 		moveOpen = false;
-		placementOpen = false;
 	}
 	onMount(() => {
 		canPrint = labelPrinterSupported() && !oncreated;
@@ -348,8 +339,17 @@
 		drafted[other] = translateName(rest, nameLocale(field), nameLocale(other));
 		setNameRest(other, drafted[other]);
 	}
+	// Measured units start with a fine stock step: it can never change, and the sale
+	// step must be a whole multiple of it, so 1 m would forbid selling 0,5 m later.
+	function setUnit(code: string) {
+		draft.unit_code = code;
+		draft.stock_step = code === 'm' ? (i18n.locale === 'nb' ? '0,01' : '0.01') : '1';
+	}
+	// Cables are sold by the metre. Only a unit nobody has chosen yet follows the category.
+	const categoryUnit = (categoryId: string | null) => categories.find(category => category.id === categoryId)?.prefix === 'CAB' ? 'm' : 'pcs';
 	function setCategory(categoryId: string | null) {
 		const rests = nameFields.map(({ field }) => draft[field].slice(lockedPrefix(field).length));
+		if (!product && draft.unit_code === categoryUnit(draft.category_id) && categoryUnit(categoryId) !== draft.unit_code) setUnit(categoryUnit(categoryId));
 		draft.category_id = categoryId;
 		nameFields.forEach(({ field, locale }, index) => draft[field] = rests[index] ? namePrefix(categoryId, locale) + rests[index] : '');
 	}
@@ -470,6 +470,8 @@
 					</div>
 				</section>
 				{#if !namesLocked}
+					<!-- A saved product changes price far more often than its specifications or drawer. -->
+					{#if product}{@render saleSection()}{/if}
 					{#if ownPending && pending?.attributes !== undefined}
 						<ProductSpecificationRecovery command={pending} bind:definitions={references.definitions} family={family} disabled={busy}
 							onreviewed={(command) => { pending = command; draft = { ...command.payload }; staged = command.attributes ?? []; void save(); }} />
@@ -479,76 +481,33 @@
 					<section class={section({ spacing: 'divided' })} aria-labelledby="product-placement-section-title">
 						<Separator />
 						<h2 class={sectionHeading} id="product-placement-section-title">{m.placementHeading}</h2>
-						<div class={formGrid}>
-							<Field.Field class="col-span-2">
-								<Field.Label id="product-placement-label" for="product-placement-trigger">{m.placement}</Field.Label>
-								<Dialog.Root bind:open={placementOpen}>
-									<Dialog.Trigger disabled={blocked}>
-										{#snippet child({ props })}<button {...props} type="button" id="product-placement-trigger" class={cn(controlStyles, 'relative min-h-12 py-2 pr-9 pl-3 text-left', invalidField === 'bin_id' && 'border-destructive ring-3 ring-destructive/20')} aria-labelledby="product-placement-label product-placement-trigger" aria-describedby={invalidField === 'bin_id' ? 'product-placement-error' : undefined}>{draft.bin_id ? binLabel(draft.bin_id) : m.chooseDrawer}<Icon icon={CaretDownIcon} class="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-muted-foreground" /></button>{/snippet}
-									</Dialog.Trigger>
-									<Dialog.Content variant="sheet" preventScroll={false} aria-describedby={undefined} class="placement-sheet">
-										<Dialog.Header layout="bar">
-											<Dialog.Title id="placement-sheet-title">{m.placement}</Dialog.Title>
-											<Dialog.Close>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm"><Icon icon={XIcon} class="size-5" /><span class="sr-only">{m.closeDrawer}</span></Button>{/snippet}</Dialog.Close>
-										</Dialog.Header>
-										<!-- svelte-ignore a11y_no_noninteractive_tabindex (Named sheet body supports native keyboard scrolling.) -->
-										<div class={['placement-sheet-body', sheetBody]} role="region" aria-labelledby="placement-sheet-title" tabindex="0">
-											<AdminAccessGate>
-											<Field.Set id="product-placement" class="gap-3" aria-invalid={invalidField === 'bin_id'} aria-describedby={invalidField === 'bin_id' ? 'product-placement-error' : undefined}>
-												<Field.Legend id="placement-title" class="sr-only">{m.placement}</Field.Legend>
-												<p class="flex flex-wrap items-center gap-x-4 gap-y-1" aria-live="polite"><strong>{binLabel(draft.bin_id)}</strong>{#if draft.bin_id}<Button variant="ghost" disabled={blocked} onclick={() => draft.bin_id = null}>{m.clearPlacement}</Button>{/if}</p>
-												<ShelfPlacementPicker topology={references.shelf} selected={draft.bin_id} disabled={blocked} onselect={selectPlacement} />
-												<p class="text-sm"><a href={i18n.href('/admin/shelf')}>{m.manageShelf}</a></p>
-											</Field.Set>
-											</AdminAccessGate>
-										</div>
-										<AlertDialog.Root bind:open={moveOpen}>
-											<AlertDialog.Content preventScroll={false} onCloseAutoFocus={(event) => { event.preventDefault(); (placementOpen ? placementTrigger : document.getElementById('product-placement-trigger'))?.focus({ preventScroll: true }); }}>
-												<AlertDialog.Header>
-													<AlertDialog.Title>{m.moveTitle}</AlertDialog.Title>
-													<AlertDialog.Description aria-label={m.moveTitle}>{proposedPlacement ? m.moveDescription(binLabel(proposedPlacement.from), binLabel(proposedPlacement.to)) : ''}</AlertDialog.Description>
-												</AlertDialog.Header>
-												<AlertDialog.Footer>
-													<AlertDialog.Cancel>{m.cancelMove}</AlertDialog.Cancel>
-													<AlertDialog.Action disabled={blocked || admin.status !== 'ready'} onclick={confirmPlacement}>{m.confirmMove}</AlertDialog.Action>
-												</AlertDialog.Footer>
-											</AlertDialog.Content>
-										</AlertDialog.Root>
-									</Dialog.Content>
-								</Dialog.Root>
-								{#if invalidField === 'bin_id'}<Field.Error id="product-placement-error">{errorMessage('bin_id')}</Field.Error>{/if}
-							</Field.Field>
-							<!-- Its own cell: beside the drawer field from 48rem, below it on phones. -->
-							{#if !draft.bin_id && !showNote}<Button variant="link" class="col-span-2 -mt-2 justify-self-start px-0" disabled={blocked} onclick={revealNote}>{m.notInDrawer}</Button>{/if}
+						<Field.Set id="product-placement" class="gap-3" aria-invalid={invalidField === 'bin_id'} aria-describedby={invalidField === 'bin_id' ? 'product-placement-error' : undefined}>
+							<Field.Legend class="sr-only">{m.placement}</Field.Legend>
+							<p class="flex min-h-12 flex-wrap items-center gap-x-4 gap-y-1" aria-live="polite"><strong>{binLabel(draft.bin_id)}</strong>{#if draft.bin_id}<Button variant="ghost" disabled={blocked} onclick={() => draft.bin_id = null}>{m.clearPlacement}</Button>{/if}</p>
+							<ShelfPlacementPicker topology={references.shelf} selected={draft.bin_id} disabled={blocked} onselect={selectPlacement} />
+							{#if invalidField === 'bin_id'}<Field.Error id="product-placement-error">{errorMessage('bin_id')}</Field.Error>{/if}
+							<div class="flex flex-wrap items-center gap-x-6 gap-y-2">
+								{#if !draft.bin_id && !showNote}<Button variant="link" class="px-0" disabled={blocked} onclick={revealNote}>{m.notInDrawer}</Button>{/if}
+								<a href={i18n.href('/admin/shelf')}>{m.manageShelf}</a>
+							</div>
 							{#if showNote}
-								<Field.Field class="col-span-full"><Field.Label for="product-location-note">{m.locationNote}</Field.Label><Input id="product-location-note" maxlength={200} bind:value={draft.location_note} aria-invalid={invalidField === 'location_note'} aria-describedby={invalidField === 'location_note' ? 'product-location-note-error product-location-note-hint' : 'product-location-note-hint'} disabled={blocked} /><Field.Description id="product-location-note-hint">{m.locationNoteHint}</Field.Description>{#if invalidField === 'location_note'}<Field.Error id="product-location-note-error">{m.invalid}</Field.Error>{/if}</Field.Field>
+								<Field.Field><Field.Label for="product-location-note">{m.locationNote}</Field.Label><Input id="product-location-note" maxlength={200} bind:value={draft.location_note} aria-invalid={invalidField === 'location_note'} aria-describedby={invalidField === 'location_note' ? 'product-location-note-error product-location-note-hint' : 'product-location-note-hint'} disabled={blocked} /><Field.Description id="product-location-note-hint">{m.locationNoteHint}</Field.Description>{#if invalidField === 'location_note'}<Field.Error id="product-location-note-error">{m.invalid}</Field.Error>{/if}</Field.Field>
 							{/if}
-						</div>
+						</Field.Set>
+							<AlertDialog.Root bind:open={moveOpen}>
+								<AlertDialog.Content preventScroll={false} onCloseAutoFocus={(event) => { event.preventDefault(); placementTrigger?.focus({ preventScroll: true }); }}>
+									<AlertDialog.Header>
+										<AlertDialog.Title>{m.moveTitle}</AlertDialog.Title>
+										<AlertDialog.Description aria-label={m.moveTitle}>{proposedPlacement ? m.moveDescription(binLabel(proposedPlacement.from), binLabel(proposedPlacement.to)) : ''}</AlertDialog.Description>
+									</AlertDialog.Header>
+									<AlertDialog.Footer>
+										<AlertDialog.Cancel>{m.cancelMove}</AlertDialog.Cancel>
+										<AlertDialog.Action disabled={blocked || admin.status !== 'ready'} onclick={confirmPlacement}>{m.confirmMove}</AlertDialog.Action>
+									</AlertDialog.Footer>
+								</AlertDialog.Content>
+							</AlertDialog.Root>
 					</section>
-					<section class={section({ spacing: 'divided' })} aria-labelledby="product-sale-title">
-						<Separator />
-						<h2 class={sectionHeading} id="product-sale-title">{m.saleAndStock}</h2>
-						<div class={[formGrid, 'items-start']}>
-							<Field.Field><Field.Label for="product-price" required>{m.price} <span class="sr-only">({currencySymbol(i18n.locale)})</span></Field.Label><InputGroup.Root class="h-16"><InputGroup.Input class="font-mono text-2xl font-semibold md:text-3xl" id="product-price" aria-invalid={invalidField === 'sale_unit_price_nok'} aria-describedby={invalidField === 'sale_unit_price_nok' ? 'product-price-error' : undefined} type="text" inputmode="decimal" required bind:value={draft.sale_unit_price_nok} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text class="text-lg">{currencySymbol(i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'sale_unit_price_nok'}<Field.Error id="product-price-error">{errorMessage('sale_unit_price_nok')}</Field.Error>{/if}</Field.Field>
-							{#if !product && !oncreated}
-								<Field.Field><Field.Label for="product-opening-stock">{m.openingStock} <span class="sr-only">({unitLabel(draft.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root class="h-16"><InputGroup.Input class="font-mono text-2xl font-semibold md:text-3xl" id="product-opening-stock" aria-invalid={openingInvalid} aria-describedby={openingInvalid ? 'product-opening-stock-error product-opening-stock-hint' : 'product-opening-stock-hint'} type="text" inputmode="decimal" autocomplete="off" bind:value={openingStock} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text class="text-lg">{unitLabel(draft.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if openingInvalid}<Field.Error id="product-opening-stock-error">{i18n.m.adminCounts.invalidQuantity(draft.stock_step)}</Field.Error>{/if}<Field.Description id="product-opening-stock-hint">{m.openingStockHint}</Field.Description></Field.Field>
-							{/if}
-						</div>
-						<div class={[formGrid, 'items-start']}>
-							<Field.Field><Field.Label for="product-minimum-stock" required>{m.minimumStock} <span class="sr-only">({unitLabel(draft.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id="product-minimum-stock" aria-invalid={invalidField === 'minimum_stock'} aria-describedby={invalidField === 'minimum_stock' ? 'product-minimum-stock-error product-minimum-stock-hint' : 'product-minimum-stock-hint'} type="text" inputmode="decimal" required bind:value={draft.minimum_stock} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(draft.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'minimum_stock'}<Field.Error id="product-minimum-stock-error">{errorMessage('minimum_stock')}</Field.Error>{/if}<Field.Description id="product-minimum-stock-hint">{m.minimumStockHint}</Field.Description></Field.Field>
-						</div>
-						<div class={formGrid}>
-							<Field.Set class="col-span-2 gap-2 md:col-span-1">
-								<Field.Legend variant="label">{m.unit}</Field.Legend>
-								<ToggleGroup.Root type="single" variant="outline" class="w-full" value={draft.unit_code} onValueChange={(value) => { if (value) draft.unit_code = value; }} disabled={blocked || Boolean(product)}>
-									{#each [...references.units].sort((a, b) => Number(b.is_discrete) - Number(a.is_discrete)) as unit (unit.code)}<ToggleGroup.Item value={unit.code} class="flex-1">{unitLabel(unit.code, i18n.locale)}</ToggleGroup.Item>{/each}
-								</ToggleGroup.Root>
-							</Field.Set>
-							<Field.Field><Field.Label for="product-stock-step" required={!product}>{m.stockStep} <span class="sr-only">({unitLabel(draft.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id="product-stock-step" aria-invalid={invalidField === 'stock_step'} aria-describedby={invalidField === 'stock_step' ? 'product-stock-step-error' : undefined} type="text" inputmode="decimal" required bind:value={draft.stock_step} disabled={blocked || Boolean(product)} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(draft.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'stock_step'}<Field.Error id="product-stock-step-error">{errorMessage('stock_step')}</Field.Error>{/if}</Field.Field>
-							<Field.Field><Field.Label for="product-sale-step" required>{m.saleStep} <span class="sr-only">({unitLabel(draft.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id="product-sale-step" aria-invalid={invalidField === 'sale_step'} aria-describedby={invalidField === 'sale_step' ? 'product-sale-step-error' : undefined} type="text" inputmode="decimal" required bind:value={draft.sale_step} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(draft.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'sale_step'}<Field.Error id="product-sale-step-error">{errorMessage('sale_step')}</Field.Error>{/if}</Field.Field>
-							{#if !product}<Field.Description class="col-span-full">{m.immutable}</Field.Description>{/if}
-						</div>
-					</section>
+					{#if !product}{@render saleSection()}{/if}
 					<section class={section({ spacing: 'divided' })} aria-labelledby="product-details-title">
 						<Separator />
 						<h2 class={sectionHeading} id="product-details-title">{m.descriptionAndLinks}</h2>
@@ -580,3 +539,34 @@
 		{/if}
 	</Tabs.Root>
 {/if}
+
+{#snippet saleSection()}
+<section class={section({ spacing: 'divided' })} aria-labelledby="product-sale-title">
+	<Separator />
+	<h2 class={sectionHeading} id="product-sale-title">{m.saleAndStock}</h2>
+	<!-- Reads as one phrase: «250 kr per m». The unit moves below the price on phones. -->
+	<div class={[formGrid, 'items-end']}>
+		<Field.Field><Field.Label for="product-price" required>{m.price} <span class="sr-only">({currencySymbol(i18n.locale)})</span></Field.Label><InputGroup.Root class="h-16"><InputGroup.Input class="font-mono text-2xl font-semibold md:text-3xl" id="product-price" aria-invalid={invalidField === 'sale_unit_price_nok'} aria-describedby={invalidField === 'sale_unit_price_nok' ? 'product-price-error' : undefined} type="text" inputmode="decimal" required bind:value={draft.sale_unit_price_nok} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text class="text-lg">{currencySymbol(i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'sale_unit_price_nok'}<Field.Error id="product-price-error">{errorMessage('sale_unit_price_nok')}</Field.Error>{/if}</Field.Field>
+		<Field.Set class="col-span-2 flex-row items-center gap-3 pb-2">
+			<Field.Legend class="sr-only">{m.unit}</Field.Legend>
+			<span class="text-lg text-muted-foreground" aria-hidden="true">{m.per}</span>
+			<ToggleGroup.Root type="single" variant="outline" value={draft.unit_code} onValueChange={(value) => { if (value) setUnit(value); }} disabled={blocked || Boolean(product)}>
+				{#each [...(references?.units ?? [])].sort((a, b) => Number(b.is_discrete) - Number(a.is_discrete)) as unit (unit.code)}<ToggleGroup.Item value={unit.code} class="min-w-14">{unitLabel(unit.code, i18n.locale)}</ToggleGroup.Item>{/each}
+			</ToggleGroup.Root>
+		</Field.Set>
+		{#if !product}<Field.Description class="col-span-full">{m.immutable}</Field.Description>{/if}
+	</div>
+	{#if !product && !oncreated}
+		<div class={[formGrid, 'items-start']}>
+			<Field.Field><Field.Label for="product-opening-stock">{m.openingStock} <span class="sr-only">({unitLabel(draft.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root class="h-16"><InputGroup.Input class="font-mono text-2xl font-semibold md:text-3xl" id="product-opening-stock" aria-invalid={openingInvalid} aria-describedby={openingInvalid ? 'product-opening-stock-error product-opening-stock-hint' : 'product-opening-stock-hint'} type="text" inputmode="decimal" autocomplete="off" bind:value={openingStock} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text class="text-lg">{unitLabel(draft.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if openingInvalid}<Field.Error id="product-opening-stock-error">{i18n.m.adminCounts.invalidQuantity(draft.stock_step)}</Field.Error>{/if}<Field.Description id="product-opening-stock-hint">{m.openingStockHint}</Field.Description></Field.Field>
+		</div>
+	{/if}
+	<div class={[formGrid, 'items-start']}>
+		<Field.Field><Field.Label for="product-minimum-stock" required>{m.minimumStock} <span class="sr-only">({unitLabel(draft.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id="product-minimum-stock" aria-invalid={invalidField === 'minimum_stock'} aria-describedby={invalidField === 'minimum_stock' ? 'product-minimum-stock-error product-minimum-stock-hint' : 'product-minimum-stock-hint'} type="text" inputmode="decimal" required bind:value={draft.minimum_stock} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(draft.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'minimum_stock'}<Field.Error id="product-minimum-stock-error">{errorMessage('minimum_stock')}</Field.Error>{/if}<Field.Description id="product-minimum-stock-hint">{m.minimumStockHint}</Field.Description></Field.Field>
+	</div>
+	<div class={formGrid}>
+		<Field.Field><Field.Label for="product-stock-step" required={!product}>{m.stockStep} <span class="sr-only">({unitLabel(draft.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id="product-stock-step" aria-invalid={invalidField === 'stock_step'} aria-describedby={invalidField === 'stock_step' ? 'product-stock-step-error' : undefined} type="text" inputmode="decimal" required bind:value={draft.stock_step} disabled={blocked || Boolean(product)} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(draft.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'stock_step'}<Field.Error id="product-stock-step-error">{errorMessage('stock_step')}</Field.Error>{/if}</Field.Field>
+		<Field.Field><Field.Label for="product-sale-step" required>{m.saleStep} <span class="sr-only">({unitLabel(draft.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id="product-sale-step" aria-invalid={invalidField === 'sale_step'} aria-describedby={invalidField === 'sale_step' ? 'product-sale-step-error' : undefined} type="text" inputmode="decimal" required bind:value={draft.sale_step} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(draft.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'sale_step'}<Field.Error id="product-sale-step-error">{errorMessage('sale_step')}</Field.Error>{/if}</Field.Field>
+	</div>
+</section>
+{/snippet}

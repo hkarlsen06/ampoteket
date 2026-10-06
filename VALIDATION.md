@@ -63,6 +63,8 @@ Update this section whenever a migration changes (`sha256sum supabase/migrations
   `884bc671e2ceec8c346a00121bf0168d346e716bdb0f7c4111b5bafde520d6dc`
 - `20261004000100_single_count_product.sql`: SHA-256
   `25904328be34292b3a959f27b62018c3ac06a6ee12b4413c45c3ed09621148a2`
+- `20261006000100_gram_unit.sql`: SHA-256
+  `2d48d9687355724cda060e9982f2953c249abef0537d19f98fe6b7f54b779013`
 
 24 app tables, four exact numeric domains, 30 public RPCs, 29 staff views and five
 internal derived views. All views are security invoker; only `public` is exposed.
