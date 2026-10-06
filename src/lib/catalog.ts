@@ -32,12 +32,16 @@ export type CatalogProduct = {
 	unit_code: string;
 	unit_symbol: string;
 	sale_step: string;
-	sale_unit_price_nok: string;
+	/** Null: borrow-only, never sold. */
+	sale_unit_price_nok: string | null;
 	quantity: string;
 	last_counted_at: string | null;
 	datasheet_url: string | null;
 	attributes: Record<string, CatalogAttribute>;
 } & (CatalogPlacement | CatalogOffShelf);
+/** Only these can go in the cart; staff alone change a borrow-only product's stock. */
+export type SaleProduct = CatalogProduct & { sale_unit_price_nok: string };
+export const forSale = (product: CatalogProduct): product is SaleProduct => product.sale_unit_price_nok !== null;
 
 /** A live drawer on the wall. Narrow with `product.bin_code !== null`. */
 export type CatalogPlacement = {
@@ -195,7 +199,7 @@ function product(value: unknown): CatalogProduct {
 		unit_code: matching(row.unit_code, unitCode),
 		unit_symbol: string(row.unit_symbol),
 		sale_step: exactDecimal(row.sale_step, 'step'),
-		sale_unit_price_nok: exactDecimal(row.sale_unit_price_nok, 'price'),
+		sale_unit_price_nok: row.sale_unit_price_nok === null ? null : exactDecimal(row.sale_unit_price_nok, 'price'),
 		quantity: exactDecimal(row.quantity, 'balance'),
 		last_counted_at: timestamp(row.last_counted_at),
 		datasheet_url: datasheet(row.datasheet_url),

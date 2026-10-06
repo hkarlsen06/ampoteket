@@ -12,7 +12,7 @@
 	import { onMount, tick } from 'svelte';
 	import { beforeNavigate } from '$app/navigation';
 	import { getI18n } from '#lib/i18n/index.js';
-	import { lookupCatalogProduct, productName, type CatalogConfig, type CatalogProduct } from '#lib/catalog.js';
+	import { forSale, lookupCatalogProduct, productName, type CatalogConfig, type CatalogProduct } from '#lib/catalog.js';
 	import { productCodeFromEntry, productCodeFromQr } from '#lib/scanner/payload.js';
 	import type { CameraSession, CameraState } from '#lib/scanner/session.js';
 	import ProductIdentity from '#lib/ProductIdentity.svelte';
@@ -207,10 +207,17 @@
 			</div>
 			{#if product}
 				<Dialog.Footer variant="sheet" class="block px-4 py-3">
-					<ProductPurchase {product} compact showCartNotice={false}
-						onpending={(pending) => { if (open && product) workflow = pending ? 'adding' : 'product'; }}
-						onadded={(returnFocus) => { if (open && product) { resume(returnFocus); added = true; } }}
-						onscan={() => resume()} />
+					{#if forSale(product)}
+						<ProductPurchase {product} compact showCartNotice={false}
+							onpending={(pending) => { if (open && product) workflow = pending ? 'adding' : 'product'; }}
+							onadded={(returnFocus) => { if (open && product) { resume(returnFocus); added = true; } }}
+							onscan={() => resume()} />
+					{:else}
+						<div class="grid gap-2">
+							<p class="m-0 text-sm">{i18n.m.product.borrowNote}</p>
+							<div class={formActions}><Button variant="outline" class="flex-auto" type="button" onclick={() => resume()}><Icon icon={QrCodeIcon} />{i18n.m.scanner.action}</Button></div>
+						</div>
+					{/if}
 				</Dialog.Footer>
 			{/if}
 		</Dialog.Content>

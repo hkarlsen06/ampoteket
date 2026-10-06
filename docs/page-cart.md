@@ -37,8 +37,8 @@ metadata before enabling changes.
   while checking; unavailable facts block proceeding and offer contextual retry.
 - Validate saved data: string quantities, one line per product, at most 200 lines.
   Invalid data is a visible recovery state, never an empty cart.
-- A failed read stays unavailable. A product no longer returned must be reviewed or
-  removed; never substitute a similar one.
+- A failed read stays unavailable. A product no longer returned, or now borrow-only,
+  is no longer for sale and must be removed; never substitute a similar one.
 - Proceed is unavailable while a line has an invalid or unsaved draft or unavailable
   product facts. The Worker and database repeat all validation.
 

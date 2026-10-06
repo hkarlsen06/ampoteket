@@ -9,7 +9,7 @@ import { catalogSearchText } from './catalog-search';
 import type { CatalogAttribute } from './catalog';
 
 export const productSelect = 'id,code,name_nb,name_en,description,category_id,bin_id,location_note,unit_code,stock_step,sale_step,sale_unit_price_nok,minimum_stock,datasheet_url,purchase_url,is_active,metadata_revision';
-export type ProductWrite = { id: string; code: string; name_nb: string; name_en: string; description: string | null; category_id: string | null; bin_id: string | null; location_note: string | null; unit_code: string; stock_step: string; sale_step: string; sale_unit_price_nok: string; minimum_stock: string; datasheet_url: string | null; purchase_url: string | null; is_active: boolean };
+export type ProductWrite = { id: string; code: string; name_nb: string; name_en: string; description: string | null; category_id: string | null; bin_id: string | null; location_note: string | null; unit_code: string; stock_step: string; sale_step: string; sale_unit_price_nok: string | null; minimum_stock: string; datasheet_url: string | null; purchase_url: string | null; is_active: boolean };
 export type AdminProduct = ProductWrite & { metadata_revision: string };
 export type Category = { id: string; name: string };
 export type AttributeDefinition = { id: string; code: string; label: string; value_type: 'number' | 'text' | 'boolean'; canonical_unit: string | null };
@@ -82,7 +82,8 @@ export function parseProductWrite(value: unknown): ProductWrite {
 		// Drafts saved before this field existed have no key.
 		const purchase_url = webLink(r.purchase_url ?? null);
 		field = 'sale_unit_price_nok';
-		const sale_unit_price_nok = boundedDecimal(r.sale_unit_price_nok);
+		// Null: borrow-only, listed with stock but never sold.
+		const sale_unit_price_nok = r.sale_unit_price_nok === null ? null : boundedDecimal(r.sale_unit_price_nok);
 		field = 'name_nb';
 		const name_nb = text(r.name_nb, 200);
 		field = 'name_en';

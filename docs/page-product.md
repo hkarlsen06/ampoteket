@@ -18,6 +18,11 @@ description; shelf map opened on the product's drawer, with its address in the h
 specifications and datasheet link. Unknown values stay absent. Zero and negative
 balances explain that physically found parts can still be added.
 
+A borrow-only product (no price, [datamodell.md](datamodell.md#products)) shows a
+«Kun utlån» badge where the price would be and a one-line note that it is not for sale
+and should be put back, instead of the quantity form. The scanner shows the same badge
+and note, with only «Skann» in its footer.
+
 Below 48rem, description and map are `Collapsible`s that start closed; the map's
 compact placement address remains visible beside its heading. From 48rem and
 without JavaScript both are open. The content is force-mounted and CSS switches the

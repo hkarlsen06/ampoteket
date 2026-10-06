@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { ApiError, parseApiJson } from './api';
 import {
 	CatalogResponseError,
+	forSale,
 	lookupCatalogProduct,
 	parseCatalogProducts,
 	readCatalogPage,
@@ -93,6 +94,13 @@ describe('catalog response boundary', () => {
 		expect(noted.location_note).toBe('Filamenthylla');
 		expect(unnoted.location_note).toBeNull();
 		expect(() => decode([{ ...fixture(), ...offShelf, inner_row: 1 }])).toThrow(CatalogResponseError);
+	});
+
+	test('a borrow-only product has no price and is not for sale', () => {
+		const [product] = decode([{ ...fixture(), sale_unit_price_nok: null }]);
+		expect(product.sale_unit_price_nok).toBeNull();
+		expect(forSale(product)).toBe(false);
+		expect(forSale(decode([fixture()])[0])).toBe(true);
 	});
 
 	test('follows numeric value precision rather than rejecting harmless trailing zeros', () => {

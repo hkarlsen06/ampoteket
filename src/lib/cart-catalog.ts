@@ -1,8 +1,9 @@
-import { lookupCatalogProduct, readCompleteCatalog, type CatalogConfig, type CatalogProduct } from './catalog';
+import { forSale, lookupCatalogProduct, readCompleteCatalog, type CatalogConfig, type CatalogProduct, type SaleProduct } from './catalog';
 import type { CartLine } from './cart';
 
 export type CartProductFact =
-	| { kind: 'ready'; product: CatalogProduct }
+	| { kind: 'ready'; product: SaleProduct }
+	// Deactivated, deleted or borrow-only: no longer for sale.
 	| { kind: 'missing' }
 	| { kind: 'unavailable'; product?: CatalogProduct };
 
@@ -20,7 +21,7 @@ export async function readCartProducts(
 			const products = new Map((await readCompleteCatalog(config, { signal })).map((product) => [product.product_id, product]));
 			for (const line of lines) {
 				const product = products.get(line.product_id);
-				facts[line.product_id] = product ? { kind: 'ready', product } : { kind: 'missing' };
+				facts[line.product_id] = product && forSale(product) ? { kind: 'ready', product } : { kind: 'missing' };
 			}
 		} catch {
 			for (const line of lines) facts[line.product_id] = { kind: 'unavailable' };
@@ -33,7 +34,7 @@ export async function readCartProducts(
 			const line = lines[next++];
 			try {
 				const product = await lookupCatalogProduct(config, line.code!, { signal });
-				facts[line.product_id] = !product ? { kind: 'missing' }
+				facts[line.product_id] = !product || !forSale(product) ? { kind: 'missing' }
 					: product.product_id === line.product_id ? { kind: 'ready', product } : { kind: 'unavailable' };
 			} catch { facts[line.product_id] = { kind: 'unavailable' }; }
 		}

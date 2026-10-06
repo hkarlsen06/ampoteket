@@ -1,5 +1,5 @@
 import { strict as assert } from 'node:assert';
-import { readCompleteCatalog, lookupCatalogProduct, type CatalogAttribute } from '../src/lib/catalog';
+import { forSale, readCompleteCatalog, lookupCatalogProduct, type CatalogAttribute } from '../src/lib/catalog';
 import { generateSeedSql, seedProductId, seedProductCode, SEED_AUTH_ID, SEED_STAFF_ID, DEMO_PARTS } from './seed-test-data';
 import { WORKSHOP_PARTS } from './seed-workshop-data';
 import { readShelfTopology, locateProduct } from '../src/lib/shelf-map';
@@ -126,7 +126,7 @@ if (count !== 0) {
 		for (let index = 0; index < count; index++) {
 			const part = parts[index % parts.length];
 			const product = byId.get(seedProductId(index));
-			assert.ok(product);
+			assert.ok(product && forSale(product), 'Seeded products are for sale');
 			assert.equal(product.code, seedProductCode(index, parts));
 			assert.equal(normalizeDecimal(product.sale_unit_price_nok), normalizeDecimal(part.price));
 			assert.equal(product.unit_code, part.unit ?? 'pcs');

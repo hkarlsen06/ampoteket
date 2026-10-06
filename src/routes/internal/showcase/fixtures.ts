@@ -1,6 +1,6 @@
 // Sample data for the meeting showcase, shaped exactly like the API's so the real
 // components render it. Values follow the workshop seed (scripts/seed-workshop-data.ts).
-import type { CatalogProduct } from '#lib/catalog.js';
+import type { SaleProduct } from '#lib/catalog.js';
 import type { CartLine } from '#lib/cart.js';
 import type { ShelfBin, ShelfCabinet } from '#lib/shelf-map.js';
 
@@ -9,7 +9,7 @@ const placed = (cabinet_code: string, outer_row: number, outer_col: number, inne
 	bin_label: null, inner_row, inner_col, row_span: 1, col_span: 1, location_note: null
 });
 let ids = 0;
-function product(code: string, name: string, category: string, price: string, quantity: string, place: ReturnType<typeof placed>): CatalogProduct {
+function product(code: string, name: string, category: string, price: string, quantity: string, place: ReturnType<typeof placed>): SaleProduct {
 	return { product_id: `00000000-0000-4000-8000-${String(++ids).padStart(12, '0')}`, code, name_nb: name, name_en: name,
 		description: null, category_name: category, unit_code: 'pcs', unit_symbol: 'stk', sale_step: '1', sale_unit_price_nok: price,
 		quantity, last_counted_at: '2026-09-30T16:00:00Z', datasheet_url: null, attributes: {}, ...place };

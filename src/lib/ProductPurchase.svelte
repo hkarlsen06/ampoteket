@@ -6,7 +6,7 @@
 	import * as Field from '#lib/components/ui/field/index.js';
 	import { formActions, formStatus } from '#lib/ui.js';
 	import { getI18n } from '#lib/i18n/index.js';
-	import { productName, type CatalogProduct } from '#lib/catalog.js';
+	import { productName, type SaleProduct } from '#lib/catalog.js';
 	import { CartError, getCartContext, type CartErrorCode } from '#lib/cart.js';
 	import { addDecimals, lineTotal, normalizeDecimal, validQuantity } from '#lib/decimal.js';
 	import { formatDecimal, formatMoney, unitLabel } from '#lib/format.js';
@@ -16,7 +16,7 @@
 	// Shared by product details and scanner confirmation. The scanner owns only
 	// camera lifecycle; quantity validation, cart writes and feedback live here.
 	let { product, compact = false, unavailable = false, showCartNotice = true, onscan, onpending, onadded }: {
-		product: CatalogProduct;
+		product: SaleProduct;
 		compact?: boolean;
 		unavailable?: boolean;
 		showCartNotice?: boolean;

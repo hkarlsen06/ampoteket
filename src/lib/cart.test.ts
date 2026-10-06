@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { get } from 'svelte/store';
 import { createCartStore, parseCart, parseActiveAttempt, CartError, type ActiveAttempt, type CartEnvironment } from './cart';
-import type { CatalogProduct } from './catalog';
+import type { SaleProduct } from './catalog';
 
 const id = '10000000-0000-4000-8000-000000000001';
-const product = { product_id: id, code: 'RES-A0001', name_nb: 'Testmotstand', name_en: 'Test resistor', unit_symbol: 'pcs', sale_step: '0.25' } as CatalogProduct;
+const product = { product_id: id, code: 'RES-A0001', name_nb: 'Testmotstand', name_en: 'Test resistor', unit_symbol: 'pcs', sale_step: '0.25' } as SaleProduct;
 const attempt: ActiveAttempt = {
 	requestId: '20000000-0000-4000-8000-000000000001', fingerprint: 'a'.repeat(64), version: 1,
 	createdAt: '2026-09-19T12:00:00.000Z', state: 'preparing'

@@ -33,7 +33,7 @@ dismissing it discards the draft and returns focus. No match-count or refresh to
 retry appears only on failure.
 
 Each card is one link with name, code, category (omitted when the name starts with it),
-price and unit, coordinates and recorded quantity with a status icon. Long text wraps,
+price and unit (or the «Kun utlån» badge for a borrow-only product), coordinates and recorded quantity with a status icon. Long text wraps,
 never truncates. One, two (48rem) or three (64rem) columns, same DOM order; controls
 stay above the results. Updates never move scroll or focus. Category images come from
 `src/lib/CategoryGraphic.svelte` ([sources](../assets/components/README.md)); add an

@@ -176,6 +176,22 @@ DO $$ BEGIN
   END;
 END $$;
 
+-- A product without a price is borrow-only: public with its stock, never sold.
+DO $$ BEGIN
+  BEGIN
+    INSERT INTO app.products(id,code,name_nb,name_en,location_note,unit_code,stock_step,sale_step,is_active)
+    VALUES ('73000000-0000-4000-8000-0000000000f2','BRD-LOAN1','Koblingsbrett','Breadboard','Utlånshylla','pcs',1,1,true);
+    PERFORM public.amp_adjust_stock(gen_random_uuid(),'[{"product_id":"73000000-0000-4000-8000-0000000000f2","quantity_delta":"4"}]','Opening stock');
+    PERFORM pg_temp.assert_true((SELECT sale_unit_price_nok IS NULL AND quantity='4' FROM public.amp_catalog('BRD-LOAN1')),
+      'borrow-only product is public with its stock and no price');
+    PERFORM pg_temp.expect_error(format('SELECT public.amp_prepare_checkout(%L,%L,%L::jsonb)',gen_random_uuid(),repeat('cd',32),
+      '[{"product_id":"73000000-0000-4000-8000-0000000000f2","quantity":"1"}]'),'PRODUCT_NOT_FOR_SALE');
+    RAISE EXCEPTION 'ROLLBACK_BORROW_ONLY';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'ROLLBACK_BORROW_ONLY' THEN RAISE; END IF;
+  END;
+END $$;
+
 -- These blocks exercise actual application roles, not just auth.uid().
 SET LOCAL ROLE anon;
 DO $$ BEGIN

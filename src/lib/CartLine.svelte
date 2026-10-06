@@ -26,7 +26,7 @@
 	const name = $derived(product ? productName(product, i18n.locale)
 		: formatMeasurementText((i18n.locale === 'nb' ? line.name_nb ?? line.name_en : line.name_en ?? line.name_nb) ?? line.code ?? m.unknown, i18n.locale));
 	const total = $derived.by(() => {
-		if (!product) return null;
+		if (product?.sale_unit_price_nok == null) return null;
 		try { return lineTotal(line.quantity, product.sale_unit_price_nok); } catch { return null; }
 	});
 	let draft = $state('');

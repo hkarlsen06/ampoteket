@@ -124,7 +124,7 @@ Latest purchase is one line per product: newest `placed_at`, then recorded time,
 
 The guest protocol and retries are owned by [checkout-recovery.md](checkout-recovery.md). Database rules:
 
-- Proceeding to payment freezes one line per product, priced from the database under product locks. Show the returned snapshot before sending the buyer to Vipps.
+- Proceeding to payment freezes one line per product, priced from the database under product locks. An inactive or borrow-only product raises `PRODUCT_NOT_FOR_SALE`. Show the returned snapshot before sending the buyer to Vipps.
 - A checkout reserves no stock and never expires. Checkouts and retry records are kept forever. A `sales` row means registered (by staff when `recovered_by` and `recovery_reason` are set). No row means **unconfirmed**, not "unpaid".
 - Confirmation writes all movements and the sale in one transaction and returns the existing result on repeat. It does not re-read prices, reject deactivated products, require stock or verify payment. A zero-total checkout registers without a payment claim.
 - Payment is outside the transaction. Never tell a buyer to pay again because registration failed.
@@ -404,7 +404,7 @@ CREATE TABLE app.products (
   unit_code text NOT NULL REFERENCES app.units(code),
   stock_step app.quantity NOT NULL CHECK (stock_step > 0),
   sale_step app.quantity NOT NULL CHECK (sale_step > 0),
-  sale_unit_price_nok app.unit_price NOT NULL,
+  sale_unit_price_nok app.unit_price,
   minimum_stock app.quantity NOT NULL DEFAULT 0 CHECK (minimum_stock >= 0),
   datasheet_url text CHECK (datasheet_url IS NULL OR datasheet_url ~ '^https?://'),
   purchase_url text CHECK (purchase_url IS NULL OR purchase_url ~ '^https?://'),
@@ -418,6 +418,7 @@ CREATE TABLE app.products (
 );
 ```
 
+- `sale_unit_price_nok`: null makes the product **borrow-only** (a breadboard the workshop lends, never sells). It is public with its stock and drawer, but checkout rejects it (`PRODUCT_NOT_FOR_SALE`), so only staff counts, receipts, withdrawals and adjustments change its stock. `sale_step` is kept but unused.
 - `minimum_stock`: staff-only restock level. An active product with positive stock below it needs attention; `0` means only sold out does. Never public.
 - `location_note`: public finding hint for a product with no drawer, shown instead of coordinates. Without a note, the buyer asks staff.
 - `purchase_url`: staff-only standing reorder link, so opening stock needs no invented orders. Order lines keep their own URL, and `latest_purchase` still derives from history.

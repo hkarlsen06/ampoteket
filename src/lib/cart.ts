@@ -1,7 +1,7 @@
 import { getContext, setContext } from 'svelte';
 import { writable, type Readable } from 'svelte/store';
 import { isRecord } from './api';
-import type { CatalogProduct } from './catalog';
+import type { SaleProduct } from './catalog';
 import { addDecimals, validQuantity } from './decimal';
 import type { Locale } from './i18n';
 
@@ -180,7 +180,7 @@ function browserEnvironment(): CartEnvironment {
 export type CartStore = Readable<CartState> & {
 	start(): () => void;
 	refresh(): Promise<void>;
-	add(product: CatalogProduct, quantity: string, locale?: Locale): Promise<void>;
+	add(product: SaleProduct, quantity: string, locale?: Locale): Promise<void>;
 	setQuantity(productId: string, quantity: string, saleStep: string, locale?: Locale, expectedQuantity?: string): Promise<void>;
 	remove(productId: string, expectedQuantity?: string): Promise<void>;
 	resetInvalid(): Promise<void>;

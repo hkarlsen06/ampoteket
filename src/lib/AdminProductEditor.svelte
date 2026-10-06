@@ -77,6 +77,12 @@
 	// A new product's stock is its first count, posted right after creation; empty means
 	// not counted. Its label can print as the editor opens on the product's route.
 	let openingStock = $state(''); let openingInvalid = $state(false);
+	// Borrow-only means no price. Switching back offers the price typed before, else the saved one.
+	let previousPrice: string | null = null;
+	function setBorrowOnly(borrowOnly: boolean) {
+		if (borrowOnly) { previousPrice = draft.sale_unit_price_nok; draft.sale_unit_price_nok = null; }
+		else draft.sale_unit_price_nok = previousPrice ?? product?.sale_unit_price_nok ?? '';
+	}
 	let printAfterSave = $state(true); let canPrint = $state(false);
 	const openingCount = (step: string) => openingStock.trim() ? validCountQuantity(openingStock, step, i18n.locale) : null;
 	let proposedPlacement = $state<{ from: string | null; to: string } | null>(null);
@@ -176,9 +182,9 @@
 			if (pending && ownPending && !wrongIdentity) { draft = { ...pending.payload }; staged = pending.attributes ?? []; openingStock = pending.opening ?? ''; }
 			else {
 				if (item) draft = { ...item };
-				// Names, drawer, price, specifications and links differ from part to part; the rest carries over.
+				// Names, drawer, price, specifications and links differ from part to part; the rest, borrow-only included, carries over.
 				else if (source) {
-					start = { ...blank, category_id: source.category_id, unit_code: source.unit_code, stock_step: source.stock_step, sale_step: source.sale_step, minimum_stock: source.minimum_stock };
+					start = { ...blank, category_id: source.category_id, unit_code: source.unit_code, stock_step: source.stock_step, sale_step: source.sale_step, minimum_stock: source.minimum_stock, ...(source.sale_unit_price_nok === null ? { sale_unit_price_nok: null } : {}) };
 					draft = { ...start }; copied = true;
 					void tick().then(() => document.getElementById('product-name-nb')?.focus({ preventScroll: true }));
 				}
@@ -187,6 +193,8 @@
 				if (saved && saved.revision === (item?.metadata_revision ?? null)) {
 					if (!item && typeof saved.opening === 'string') openingStock = saved.opening;
 					draft = { ...draft, ...draftFields(blank, saved.fields) };
+					// The blank form has a price, so draftFields only restores a string.
+					if ((saved.fields as Partial<ProductWrite> | null)?.sale_unit_price_nok === null) draft.sale_unit_price_nok = null;
 					if (!item && Array.isArray(saved.staged)) try {
 						staged = saved.staged.map(row => { const { product_id, ...value } = parseAttribute({ ...row, product_id: blankId }); return value; });
 					} catch { /* A malformed row leaves the specifications unrestored. */ }
@@ -228,9 +236,11 @@
 			if (!pending) {
 				let payload: ProductWrite;
 				try {
-					const decimals = { stock_step: '', sale_step: '', sale_unit_price_nok: '', minimum_stock: '' };
+					const decimals: Pick<ProductWrite, 'stock_step' | 'sale_step' | 'sale_unit_price_nok' | 'minimum_stock'> = { stock_step: '', sale_step: '', sale_unit_price_nok: null, minimum_stock: '' };
 					for (const field of ['stock_step', 'sale_step', 'sale_unit_price_nok', 'minimum_stock'] as const) {
-						try { decimals[field] = normalizeDecimal(draft[field], i18n.locale); }
+						const value = draft[field];
+						if (value === null) continue;
+						try { decimals[field] = normalizeDecimal(value, i18n.locale); }
 						catch { throw new ProductFieldError(field); }
 					}
 					payload = parseProductWrite({ ...draft, ...decimals,
@@ -381,7 +391,7 @@
 		return standard ? m.typeNames[standard.prefix] : saved ? categoryLabel(saved.name, i18n.locale) : m.noCategory;
 	}
 	function comparable(row: ProductWrite) {
-		return [[m.nameNb, row.name_nb], [m.nameEn, row.name_en], [m.description, row.description ?? m.unset], [m.category, categoryName(row.category_id)], [m.placement, binLabel(row.bin_id)], [m.locationNote, row.location_note ?? m.unset], [m.saleStep, `${formatDecimal(row.sale_step, i18n.locale)} ${unitLabel(row.unit_code, i18n.locale, row.sale_step)}`], [m.price, formatMoney(row.sale_unit_price_nok, i18n.locale)], [m.minimumStock, `${formatDecimal(row.minimum_stock, i18n.locale)} ${unitLabel(row.unit_code, i18n.locale, row.minimum_stock)}`], [m.datasheet, row.datasheet_url ?? m.unset], [m.purchaseUrl, row.purchase_url ?? m.unset], [m.stateFilter, row.is_active ? m.active : m.inactive]];
+		return [[m.nameNb, row.name_nb], [m.nameEn, row.name_en], [m.description, row.description ?? m.unset], [m.category, categoryName(row.category_id)], [m.placement, binLabel(row.bin_id)], [m.locationNote, row.location_note ?? m.unset], [m.saleStep, `${formatDecimal(row.sale_step, i18n.locale)} ${unitLabel(row.unit_code, i18n.locale, row.sale_step)}`], [m.price, row.sale_unit_price_nok === null ? m.borrowOnlyLabel : formatMoney(row.sale_unit_price_nok, i18n.locale)], [m.minimumStock, `${formatDecimal(row.minimum_stock, i18n.locale)} ${unitLabel(row.unit_code, i18n.locale, row.minimum_stock)}`], [m.datasheet, row.datasheet_url ?? m.unset], [m.purchaseUrl, row.purchase_url ?? m.unset], [m.stateFilter, row.is_active ? m.active : m.inactive]];
 	}
 </script>
 <svelte:head>{#if !oncreated}<title>{productCode ? `${productCode} | ${m.title}` : id === 'new' ? m.newTitle : m.title}</title>{/if}</svelte:head>
@@ -560,12 +570,13 @@
 <section class={section({ spacing: 'divided' })} aria-labelledby="product-sale-title">
 	<Separator />
 	<h2 class={sectionHeading} id="product-sale-title">{m.saleAndStock}</h2>
+	<Field.Field orientation="horizontal" class="min-h-12"><Switch id="product-borrow-only" bind:checked={() => draft.sale_unit_price_nok === null, setBorrowOnly} disabled={blocked} aria-describedby="product-borrow-only-hint" /><Field.Content><Field.Label for="product-borrow-only">{m.borrowOnlyLabel}</Field.Label><Field.Description id="product-borrow-only-hint">{m.borrowOnlyHint}</Field.Description></Field.Content></Field.Field>
 	<!-- Reads as one phrase: «250 kr per m». The unit moves below the price on phones. -->
 	<div class={[formGrid, 'items-end']}>
-		<Field.Field><Field.Label for="product-price" required>{m.price} <span class="sr-only">({currencySymbol(i18n.locale)})</span></Field.Label><InputGroup.Root class="h-16"><InputGroup.Input class="font-mono text-2xl font-semibold md:text-3xl" id="product-price" aria-invalid={invalidField === 'sale_unit_price_nok'} aria-describedby={invalidField === 'sale_unit_price_nok' ? 'product-price-error' : undefined} type="text" inputmode="decimal" required bind:value={draft.sale_unit_price_nok} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text class="text-lg">{currencySymbol(i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'sale_unit_price_nok'}<Field.Error id="product-price-error">{errorMessage('sale_unit_price_nok')}</Field.Error>{/if}</Field.Field>
+		{#if draft.sale_unit_price_nok !== null}<Field.Field><Field.Label for="product-price" required>{m.price} <span class="sr-only">({currencySymbol(i18n.locale)})</span></Field.Label><InputGroup.Root class="h-16"><InputGroup.Input class="font-mono text-2xl font-semibold md:text-3xl" id="product-price" aria-invalid={invalidField === 'sale_unit_price_nok'} aria-describedby={invalidField === 'sale_unit_price_nok' ? 'product-price-error' : undefined} type="text" inputmode="decimal" required bind:value={draft.sale_unit_price_nok} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text class="text-lg">{currencySymbol(i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'sale_unit_price_nok'}<Field.Error id="product-price-error">{errorMessage('sale_unit_price_nok')}</Field.Error>{/if}</Field.Field>{/if}
 		<Field.Set class="col-span-2 flex-row items-center gap-3 pb-2">
-			<Field.Legend class="sr-only">{m.unit}</Field.Legend>
-			<span class="text-lg text-muted-foreground" aria-hidden="true">{m.per}</span>
+			<Field.Legend variant="label" class={draft.sale_unit_price_nok === null ? undefined : 'sr-only'}>{m.unit}</Field.Legend>
+			{#if draft.sale_unit_price_nok !== null}<span class="text-lg text-muted-foreground" aria-hidden="true">{m.per}</span>{/if}
 			<ToggleGroup.Root type="single" variant="outline" value={draft.unit_code} onValueChange={(value) => { if (value) setUnit(value); }} disabled={blocked || Boolean(product)}>
 				{#each [...(references?.units ?? [])].sort((a, b) => Number(b.is_discrete) - Number(a.is_discrete)) as unit (unit.code)}<ToggleGroup.Item value={unit.code} class="min-w-14">{unitLabel(unit.code, i18n.locale)}</ToggleGroup.Item>{/each}
 			</ToggleGroup.Root>
@@ -582,7 +593,7 @@
 	</div>
 	<div class={formGrid}>
 		<Field.Field><Field.Label for="product-stock-step" required={!product}>{m.stockStep} <span class="sr-only">({unitLabel(draft.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id="product-stock-step" aria-invalid={invalidField === 'stock_step'} aria-describedby={invalidField === 'stock_step' ? 'product-stock-step-error' : undefined} type="text" inputmode="decimal" required bind:value={draft.stock_step} disabled={blocked || Boolean(product)} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(draft.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'stock_step'}<Field.Error id="product-stock-step-error">{errorMessage('stock_step')}</Field.Error>{/if}</Field.Field>
-		<Field.Field><Field.Label for="product-sale-step" required>{m.saleStep} <span class="sr-only">({unitLabel(draft.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id="product-sale-step" aria-invalid={invalidField === 'sale_step'} aria-describedby={invalidField === 'sale_step' ? 'product-sale-step-error' : undefined} type="text" inputmode="decimal" required bind:value={draft.sale_step} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(draft.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'sale_step'}<Field.Error id="product-sale-step-error">{errorMessage('sale_step')}</Field.Error>{/if}</Field.Field>
+		{#if draft.sale_unit_price_nok !== null}<Field.Field><Field.Label for="product-sale-step" required>{m.saleStep} <span class="sr-only">({unitLabel(draft.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id="product-sale-step" aria-invalid={invalidField === 'sale_step'} aria-describedby={invalidField === 'sale_step' ? 'product-sale-step-error' : undefined} type="text" inputmode="decimal" required bind:value={draft.sale_step} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(draft.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'sale_step'}<Field.Error id="product-sale-step-error">{errorMessage('sale_step')}</Field.Error>{/if}</Field.Field>{/if}
 	</div>
 </section>
 {/snippet}

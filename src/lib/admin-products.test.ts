@@ -11,7 +11,7 @@ const payload: ProductWrite = { id, code: 'RES-A3F09', name_nb: 'Motstand', name
 const product = { ...payload, metadata_revision: '9007199254740993' };
 test('unit price display pads to two decimals and preserves sub-øre precision in both languages', () => {
 	for (const [stored, nb, en] of [['1.5', '1,50 kr', '1.50 NOK'], ['0.275', '0,275 kr', '0.275 NOK'], ['0', '0,00 kr', '0.00 NOK']]) {
-		const price = parseProductWrite({ ...payload, sale_unit_price_nok: stored }).sale_unit_price_nok;
+		const price = parseProductWrite({ ...payload, sale_unit_price_nok: stored }).sale_unit_price_nok!;
 		expect(formatMoney(price, 'nb')).toBe(nb);
 		expect(formatMoney(price, 'en')).toBe(en);
 	}
@@ -22,6 +22,7 @@ test('product boundary keeps exact prices and opaque revisions and enforces step
 	expect(parseProductWrite({ ...payload, unit_code: 'm', stock_step: '0.001', sale_step: '0.1' }).sale_step).toBe('0.1');
 	expect(parseProductWrite({ ...payload, bin_id: null, is_active: false }).bin_id).toBeNull();
 	expect(parseProductWrite({ ...payload, minimum_stock: '25' }).minimum_stock).toBe('25');
+	expect(parseProductWrite({ ...payload, sale_unit_price_nok: null }).sale_unit_price_nok).toBeNull();
 	expect(generateProductCode('CAP', { getRandomValues: <T extends ArrayBufferView>(array: T) => { new Uint8Array(array.buffer).set([0xab, 0xcd, 0xef]); return array; } })).toBe('CAP-ABCDE');
 });
 test('complete admin products and composite attribute reads traverse short pages to empty', async () => {

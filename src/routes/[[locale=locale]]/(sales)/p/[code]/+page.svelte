@@ -10,7 +10,7 @@
 	import { codeText, pageContainer, pageHeader, pageHeading, sectionHeading } from '#lib/ui.js';
 	import { specificationLabel, getI18n } from '#lib/i18n/index.js';
 	import { onDestroy, untrack } from 'svelte';
-	import { lookupCatalogProduct, productName } from '#lib/catalog.js';
+	import { forSale, lookupCatalogProduct, productName } from '#lib/catalog.js';
 	import { formatMeasurement } from '#lib/format.js';
 	import { compareDecimals } from '#lib/decimal.js';
 	import ProductIdentity from '#lib/ProductIdentity.svelte';
@@ -91,13 +91,16 @@ JavaScript, always show the content with a plain heading. -->
 					<div class="w-16 self-start pt-1 lg:w-20"><CategoryGraphic category={product.category_name} /></div>
 				</div>
 				<ProductPrice {product} prominent />
-				{#if balanceState !== null && balanceState <= 0}<p class="mt-3 text-sm text-muted-foreground">{m.stockNote}</p>{/if}
-				{#key product.product_id}<ProductPurchase {product} unavailable={unavailable || refreshing} />{/key}
+				{#if !forSale(product)}<p class="mt-3">{m.borrowNote}</p>
+				{:else}
+					{#if balanceState !== null && balanceState <= 0}<p class="mt-3 text-sm text-muted-foreground">{m.stockNote}</p>{/if}
+					{#key product.product_id}<ProductPurchase {product} unavailable={unavailable || refreshing} />{/key}
+				{/if}
 				{#if unavailable}
 					<Alert.Message appearance="inline" variant="destructive" role="alert">{m.unavailable}</Alert.Message>
 					<Button variant="outline" class="mt-3" disabled={refreshing} onclick={refreshProduct}>{m.retry}</Button>
 				{/if}
-				<noscript><p class="text-sm text-muted-foreground">{m.noJavascript}</p></noscript>
+				{#if forSale(product)}<noscript><p class="text-sm text-muted-foreground">{m.noJavascript}</p></noscript>{/if}
 			</div>
 			{#if product.description}
 				{#snippet description()}<p class="whitespace-pre-line">{product?.description}</p>{/snippet}
