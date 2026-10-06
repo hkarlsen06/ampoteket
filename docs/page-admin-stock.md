@@ -216,6 +216,8 @@ layout, a cabinet by adding one.
 observation immediately; finishing posts no stock again and is confirmed. Another admin
 may close an abandoned batch only if its owner is inactive or has no Auth identity,
 with a required reason.
+The list holds only these batches; single-product counts (opening stock and counts
+from the product page) appear in that product's stock history instead.
 
 - A batch can limit the product choice to one drawer picked on the shelf graphic;
   the drawer's products are then listed for one-tap choice, marked **Counted** once
@@ -233,7 +235,8 @@ with a required reason.
 
 `/admin/stock`, «Beholdningsendringer» / "Stock changes", selects any product
 (combobox or [scanner](scanner.md)) and shows its full history. Movements are identified
-by kind, date and quantity, never database row numbers. Its stock badge uses the same
+by kind, date and quantity, never database row numbers. A count and its deviation are one
+entry: expected, counted and difference, with **Correct** acting on the deviation. Its stock badge uses the same
 minimum as the list and editor. A failed read keeps previous content unavailable,
 never an empty ledger. Background reads keep controls stable; submission waits for
 an ongoing read before validating the draft against fresh history.

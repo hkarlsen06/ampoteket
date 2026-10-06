@@ -42,6 +42,16 @@
 	const original = $derived(detail?.movements.find(item => item.id === movementId));
 	const recount = $derived(command ? command.counted !== null : Boolean(detail && movementId && needsRecount(detail, movementId)));
 	const earlier = $derived(detail?.movements.filter(item => item.corrects === movementId) ?? []);
+	// A count's deviation is a movement of the same event: show both as one entry that keeps its Correct action.
+	const history = $derived.by(() => {
+		if (!detail) return [];
+		const counted = new Set(detail.counts.map(entry => entry.eventId));
+		const deviation = new Map(detail.movements.filter(entry => counted.has(entry.eventId)).map(entry => [entry.eventId, entry]));
+		return [
+			...detail.movements.filter(entry => !counted.has(entry.eventId)).map(entry => ({ at: entry.at, id: entry.id, movement: entry, count: null })),
+			...detail.counts.map(entry => ({ at: entry.at, id: entry.eventId, movement: deviation.get(entry.eventId) ?? null, count: entry }))
+		].sort((a, b) => b.at.localeCompare(a.at) || b.id.localeCompare(a.id));
+	});
 	const wrongIdentity = $derived(Boolean(command && command.userId !== admin.session?.user.id));
 	const otherProduct = $derived(Boolean(command && command.productId !== selected));
 	function movementLabel(id: string) {
@@ -262,11 +272,11 @@
 	<section class={section({ spacing: 'divided' })} aria-labelledby="stock-history-title">
 		<Separator /><h2 id="stock-history-title" class={sectionHeading}>{m.history}</h2>
 		<Item.Group>
-			{#each [...detail.movements.map(entry => ({ at: entry.at, id: entry.id, movement: entry, count: null })), ...detail.counts.map(entry => ({ at: entry.at, id: entry.eventId, movement: null, count: entry }))].sort((a, b) => b.at.localeCompare(a.at) || b.id.localeCompare(a.id)) as row, index (row.id)}
+			{#each history as row, index (row.id)}
 				{#if index > 0}<Item.Separator />{/if}
 				<Item.Root variant="row" role="listitem">
 					<Item.Content class="min-w-0 basis-72">
-						{#if row.movement}
+						{#if row.movement && !row.count}
 							<Item.Title class={itemTitle}>{m.kindLabels[row.movement.kind as keyof typeof m.kindLabels]} <span class="font-mono">{formatDecimal(row.movement.delta, i18n.locale)} {unitLabel(product.unit_code, i18n.locale, row.movement.delta)}</span></Item.Title>
 							<Item.Description>
 								{formatCountedAt(row.at, i18n.locale)}{#if row.movement.actor}&nbsp;· {i18n.m.adminOrders.recordedBy(row.movement.actor)}{/if}{#if row.movement.corrects}&nbsp;· {m.corrects(movementLabel(row.movement.corrects))}{/if}{#if row.movement.orderId}&nbsp;· <a href={i18n.href(`/admin/orders/${row.movement.orderId}`)}>{i18n.m.adminOrders.detailHeading}</a>{/if}
