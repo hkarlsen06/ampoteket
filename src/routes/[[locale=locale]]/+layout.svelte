@@ -2,7 +2,7 @@
 	import Icon from '#lib/Icon.svelte';
 	import ShoppingCartIcon from 'phosphor-svelte/lib/ShoppingCartIcon';
 	import ListIcon from 'phosphor-svelte/lib/ListIcon';
-	import CpuIcon from 'phosphor-svelte/lib/CpuIcon';
+	import StorefrontIcon from 'phosphor-svelte/lib/StorefrontIcon';
 	import WrenchIcon from 'phosphor-svelte/lib/WrenchIcon';
 	import TranslateIcon from 'phosphor-svelte/lib/TranslateIcon';
 	import XIcon from 'phosphor-svelte/lib/XIcon';
@@ -83,24 +83,46 @@
 		document.documentElement.lang = htmlLang[localeFromPathname(page.url.pathname)];
 	});
 
-	// Closed sales (SALES_OPEN) hide every way into the catalog, cart and scanner.
-	const nav = $derived(data.salesOpen ? [
-		{ href: '/p', label: m.header.parts, icon: CpuIcon },
-		{ href: '/cart', label: m.header.cart, icon: ShoppingCartIcon }
-	] : []);
-	const adminLink = $derived({ href: '/admin', label: m.header.admin, icon: WrenchIcon });
-	// Admin comes last in the phone menu and first in the desktop header row, so a
-	// session check never moves the catalog link.
-	const catalogLink = $derived(nav.slice(0, 1));
-	const menuLinks = $derived(admin.status === 'ready' ? [...catalogLink, adminLink] : catalogLink);
-	const headerLinks = $derived(adminPage ? [] : admin.status === 'ready' ? [adminLink, ...catalogLink] : catalogLink);
+	type NavLink = {
+		href: string;
+		label: string;
+		icon: typeof StorefrontIcon;
+		external?: boolean;
+		/** Accessible name when it says more than the label. */
+		name?: string;
+		badge?: string;
+	};
+	// Closed sales (SALES_OPEN) hide every way into the catalog, cart and scanner;
+	// `showAdmin` waits for an active membership check.
+	const showAdmin = $derived(admin.status === 'ready');
+	const links = $derived({
+		admin: { href: '/admin', label: m.header.admin, icon: WrenchIcon },
+		catalog: { href: '/p', label: m.header.parts, icon: StorefrontIcon },
+		cart: {
+			href: '/cart',
+			label: m.header.cart,
+			icon: ShoppingCartIcon,
+			name: m.header.cart + (cartCount !== null ? m.header.cartLines(cartCount)
+				: $cart.status === 'initializing' ? m.header.cartLoading : m.header.cartUnavailable),
+			// A neutral count, only when there is something to count; red means error or empty stock.
+			badge: $cart.status !== 'initializing' && cartCount !== 0 ? String(cartCount ?? '?') : undefined
+		},
+		discord: { href: DISCORD_INVITE, label: m.header.discord, icon: DiscordLogo, external: true },
+		instagram: { href: INSTAGRAM, label: m.header.instagram, icon: InstagramLogoIcon, external: true },
+		contact: { href: '/contact', label: m.header.contact, icon: ChatsIcon }
+	} satisfies Record<string, NavLink>);
 
 	function isCurrent(href: string) {
 		return bare === href || bare.startsWith(href + '/');
 	}
+	function linkAttrs(link: NavLink) {
+		return link.external
+			? { href: link.href, target: '_blank', rel: 'external noopener' }
+			: { href: i18n.href(link.href), 'aria-current': isCurrent(link.href) ? ('page' as const) : undefined };
+	}
 
-	// Above 40rem the header row holds the wordmark, catalog/admin/cart icons (with text
-	// labels from 48rem) and the menu button; the menu holds Contact, the scanner and the language picker. On phones the
+	// Above 40rem the header row holds the wordmark, then icon links grouped as Admin,
+	// social and shop, then the menu button; the menu holds Contact, the scanner and the language picker. On phones the
 	// destinations move into the menu and the scanner floats (Scanner.svelte).
 	// Pure enhancement: `html.no-js` (src/app.html) hides the button and leaves
 	// the menu open, so the links are reachable without JavaScript.
@@ -173,82 +195,53 @@
 
 <a class="absolute -top-25 left-[var(--gutter)] z-100 rounded-md bg-warning px-4 py-3 font-bold text-on-warning no-underline focus:top-3" href="#main">{m.header.skip}</a>
 
-<!-- Discord sits left of the catalog at every width (the catalog link is phone:hidden),
-     except on cart and checkout; Admin, once confirmed, enters at the far left so nothing else moves.
-     Instagram follows it from 40rem and moves into the menu on phones. -->
-{#snippet instagramRow()}
-	<li class="hidden phone:block">
-		<Button href={INSTAGRAM} target="_blank" rel="external noopener" variant="ghost" class="w-full justify-start px-3"><Icon icon={InstagramLogoIcon} class="size-5" aria-hidden="true" />{m.header.instagram}<span class="sr-only"> {m.newTab}</span></Button>
+<!-- Every header destination is a NavLink drawn by one of two snippets: an icon button with a
+     tooltip in the header row, or a full-width row in the menu. The current page is marked by
+     shape, never colour alone: a 2 px bar under the icon, or an underlined label as in the language picker. -->
+{#snippet iconLink(link: NavLink, className = '')}
+	<Tooltip.Root>
+		<Tooltip.Trigger>
+			{#snippet child({ props })}
+				<Button {...props} {...linkAttrs(link)} variant="ghost" size="icon-sm"
+					class="shrink-0 after:absolute after:inset-x-3 after:bottom-1 after:h-0.5 aria-[current=page]:after:bg-current {className}"
+					aria-label={link.name ?? (link.external ? `${link.label} ${m.newTab}` : link.label)}>
+					<span class="relative inline-flex" aria-hidden="true">
+						<Icon icon={link.icon} class="size-5" />
+						{#if link.badge}<Badge class="absolute -top-2.5 -right-3.5 h-6 min-w-6 border-2 border-card bg-foreground px-1 font-mono text-background">{link.badge}</Badge>{/if}
+					</span>
+				</Button>
+			{/snippet}
+		</Tooltip.Trigger>
+		<Tooltip.Content side="bottom">{link.label}</Tooltip.Content>
+	</Tooltip.Root>
+{/snippet}
+
+{#snippet menuLink(link: NavLink, phoneOnly = false)}
+	<li class={phoneOnly ? 'hidden phone:block' : undefined}>
+		<Button {...linkAttrs(link)} variant="ghost" class="w-full justify-start px-3 decoration-2 underline-offset-4 aria-[current=page]:underline">
+			<Icon icon={link.icon} class="size-5" />{link.label}{#if link.external}<span class="sr-only"> {m.newTab}</span>{/if}
+		</Button>
 	</li>
 {/snippet}
 
-{#snippet socialLinks()}
-	<Tooltip.Root>
-		<Tooltip.Trigger>
-			{#snippet child({ props })}
-				<Button {...props} href={DISCORD_INVITE} target="_blank" rel="external noopener" variant="ghost" size="icon-sm" class="shrink-0" aria-label={`${m.header.discord} ${m.newTab}`}><DiscordLogo class="size-5" /></Button>
-			{/snippet}
-		</Tooltip.Trigger>
-		<Tooltip.Content side="bottom">{m.header.discord}</Tooltip.Content>
-	</Tooltip.Root>
-	<Tooltip.Root>
-		<Tooltip.Trigger>
-			{#snippet child({ props })}
-				<Button {...props} href={INSTAGRAM} target="_blank" rel="external noopener" variant="ghost" size="icon-sm" class="shrink-0 phone:hidden" aria-label={`${m.header.instagram} ${m.newTab}`}><Icon icon={InstagramLogoIcon} class="size-5" aria-hidden="true" /></Button>
-			{/snippet}
-		</Tooltip.Trigger>
-		<Tooltip.Content side="bottom">{m.header.instagram}</Tooltip.Content>
-	</Tooltip.Root>
-{/snippet}
-
 <header class="site-header sticky top-0 z-40 bg-card" bind:this={headerEl}>
-	<div class={pageContainer({ class: "max-w-none px-5 flex min-h-[var(--header-h)] items-center gap-4 py-2 phone:gap-3 phone:py-1 no-js:flex-wrap" })}>
+	<div class={pageContainer({ class: "max-w-none px-5 flex min-h-[var(--header-h)] items-center gap-6 py-2 phone:gap-3 phone:py-1 no-js:flex-wrap" })}>
 		<a class="mr-auto inline-flex min-h-11 min-w-0 items-center rounded-md font-extrabold text-foreground no-underline" href={i18n.href('/')} aria-label={m.header.home}>
 			<picture>
 				<source media="(prefers-color-scheme: light)" srcset="/brand/wordmark-light.svg" />
 				<img class="h-auto w-44 phone:w-36" src="/brand/wordmark.svg" alt="Ampoteket" width="756" height="139" />
 			</picture>
 		</a>
+		<!-- Groups, each with no gap inside: Admin, then Discord and Instagram (off cart and checkout),
+		     then catalog and cart. Admin enters on the left once confirmed, so nothing else moves. On
+		     phones only Discord and the cart stay; the rest are menu rows. -->
+		{#if !adminPage}
 		<Tooltip.Provider>
-			{#each headerLinks as item (item.href)}
-				{#if item.href === '/p' && showSocial}{@render socialLinks()}{/if}
-				<Tooltip.Root>
-					<Tooltip.Trigger>
-						{#snippet child({ props })}
-							<Button {...props} href={i18n.href(item.href)} variant={isCurrent(item.href) ? 'secondary' : 'ghost'} size="icon-sm"
-								class="shrink-0 aria-[current=page]:border-current phone:hidden md:w-auto md:gap-2 md:px-3"
-								aria-label={item.label}
-								aria-current={isCurrent(item.href) ? 'page' : undefined}><Icon icon={item.icon} class="size-5" aria-hidden="true" /><span class="hidden md:inline" aria-hidden="true">{item.label}</span></Button>
-						{/snippet}
-					</Tooltip.Trigger>
-					<Tooltip.Content side="bottom" class="md:hidden">{item.label}</Tooltip.Content>
-				</Tooltip.Root>
-			{/each}
-			{#if !adminPage}
-			{#if !data.salesOpen}{@render socialLinks()}{:else}
-			<Tooltip.Root>
-				<Tooltip.Trigger>
-					{#snippet child({ props })}
-						<Button {...props} href={i18n.href('/cart')} variant={isCurrent('/cart') ? 'secondary' : 'ghost'} size="icon-sm"
-							class="header-cart shrink-0 aria-[current=page]:border-current md:w-auto md:gap-2 md:px-3"
-							aria-current={isCurrent('/cart') ? 'page' : undefined}>
-							<span class="relative inline-flex" aria-hidden="true">
-								<Icon icon={ShoppingCartIcon} class="size-5" />
-								<!-- A neutral count, only when there is something to count; red means error or empty stock. -->
-								{#if $cart.status !== 'initializing' && cartCount !== 0}<Badge class="absolute -top-2.5 -right-3.5 h-6 min-w-6 border-2 border-card bg-foreground px-1 font-mono text-background">{cartCount ?? '?'}</Badge>{/if}
-							</span>
-							<span class="hidden md:ms-2 md:inline" aria-hidden="true">{m.header.cart}</span>
-							<span class="sr-only">{m.header.cart}{cartCount !== null
-								? m.header.cartLines(cartCount)
-								: $cart.status === 'initializing' ? m.header.cartLoading : m.header.cartUnavailable}</span>
-						</Button>
-					{/snippet}
-				</Tooltip.Trigger>
-				<Tooltip.Content side="bottom" class="md:hidden">{m.header.cart}</Tooltip.Content>
-			</Tooltip.Root>
-			{/if}
-			{/if}
+			{#if showAdmin}{@render iconLink(links.admin, 'phone:hidden')}{/if}
+			{#if showSocial}<div class="flex">{@render iconLink(links.discord)}{@render iconLink(links.instagram, 'phone:hidden')}</div>{/if}
+			{#if data.salesOpen}<div class="flex">{@render iconLink(links.catalog, 'phone:hidden')}{@render iconLink(links.cart)}</div>{/if}
 		</Tooltip.Provider>
+		{/if}
 		{#if buyerScanPage}<Scanner bind:this={scanner} config={data.adminConfig} />{/if}
 		<!-- Desktop: a floating panel hanging from the header under the button. Phone: a full-width panel under the header bar. -->
 		<Collapsible.Root bind:open={menuOpen} class="relative flex phone:static no-js:contents">
@@ -263,28 +256,12 @@
 			<Separator class="absolute inset-x-0 top-0 hidden no-js:block" />
 			<!-- Phone: catalog, Instagram and Admin, which desktop has in the header row; then Contact at every width. -->
 			{#if !adminPage}
-			<nav class="site-nav" aria-label={m.header.menu}>
+			<nav aria-label={m.header.menu}>
 				<ul class="m-0 flex list-none flex-col p-0">
-					{#if !catalogLink.length && showSocial}{@render instagramRow()}{/if}
-					{#each menuLinks as item (item.href)}
-						<li class="hidden phone:block">
-							<Button
-								href={i18n.href(item.href)}
-								variant={isCurrent(item.href) ? 'secondary' : 'ghost'}
-								class="w-full justify-start px-3 aria-[current=page]:border-current"
-								aria-current={isCurrent(item.href) ? 'page' : undefined}
-							><Icon icon={item.icon} class="size-5" />{item.label}</Button>
-						</li>
-						{#if item.href === '/p' && showSocial}{@render instagramRow()}{/if}
-					{/each}
-					<li>
-						<Button
-							href={i18n.href('/contact')}
-							variant={isCurrent('/contact') ? 'secondary' : 'ghost'}
-							class="w-full justify-start px-3 aria-[current=page]:border-current"
-							aria-current={isCurrent('/contact') ? 'page' : undefined}
-						><Icon icon={ChatsIcon} class="size-5" />{m.header.contact}</Button>
-					</li>
+					{#if data.salesOpen}{@render menuLink(links.catalog, true)}{/if}
+					{#if showSocial}{@render menuLink(links.instagram, true)}{/if}
+					{#if showAdmin}{@render menuLink(links.admin, true)}{/if}
+					{@render menuLink(links.contact)}
 				</ul>
 			</nav>
 			{/if}
@@ -337,7 +314,7 @@
 		<p class="m-0 min-w-0">{m.footer.about}</p>
 		<nav class="md:ml-auto" aria-label={m.footer.links}>
 			<ul class="m-0 flex list-none flex-wrap gap-x-5 p-0 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:items-center [&_a]:text-foreground">
-				{#each nav as item (item.href)}
+				{#each data.salesOpen ? [links.catalog, links.cart] : [] as item (item.href)}
 					<li><a href={i18n.href(item.href)}>{item.label}</a></li>
 				{/each}
 				<li><a href={i18n.href('/contact')}>{m.footer.help}</a></li>
