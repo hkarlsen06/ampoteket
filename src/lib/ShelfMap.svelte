@@ -18,9 +18,9 @@
 	import ShelfDiagram from '#lib/ShelfDiagram.svelte';
 	import ShelfZoom from '#lib/ShelfZoom.svelte';
 	// One stage shows the wall or, zoomed in, one cabinet's drawers; contents grow
-	// below it. `stacked` expands the diagrams instead of bounding them.
-	let { config, product, title, labelledby, onreveal, headingLevel = 2, initialTopology = null, stacked = false, collapsible = false }: {
-		config: CatalogConfig | null; product?: CatalogProduct; title?: string; labelledby?: string; headingLevel?: 2 | 3; initialTopology?: ShelfTopology | null; stacked?: boolean;
+	// below it. Diagrams stay height-bounded, so a whole cabinet never scrolls.
+	let { config, product, title, labelledby, onreveal, headingLevel = 2, initialTopology = null, collapsible = false }: {
+		config: CatalogConfig | null; product?: CatalogProduct; title?: string; labelledby?: string; headingLevel?: 2 | 3; initialTopology?: ShelfTopology | null;
 		collapsible?: boolean;
 		onreveal?: (section: HTMLElement) => void;
 	} = $props();
@@ -37,6 +37,11 @@
 	let cabinetId = $state<string | null>(initialLocation?.cabinet.id ?? null), binId = $state<string | null>(initialLocation?.bin.id ?? null);
 	let showContents = $state(Boolean(initialLocation)), generation = 0;
 	let stageSection = $state<HTMLElement>(), contentsSection = $state<HTMLElement>();
+	// Within one cabinet the contents only grow: a shorter list or the loading row
+	// would shorten a page scrolled to its end, and the browser would then pull
+	// everything above, including the drawer just tapped, down under the finger.
+	let contentsHeight = $state(0), contentsFloor = $state(0);
+	$effect(() => { if (contentsHeight > contentsFloor) contentsFloor = contentsHeight; });
 	let pendingReveal = $state<'drawers' | 'contents' | null>(null);
 	let controller: AbortController | undefined, catalogController: AbortController | undefined;
 	// Parts stored outside the drawer wall keep the browsable map without a highlight.
@@ -121,7 +126,7 @@
 		finally { clearTimeout(timeout); if (request === generation) refreshing = false; }
 	}
 	function openLevel(id: string | null) {
-		catalogController?.abort(); cabinetId = id; binId = null; showContents = false;
+		catalogController?.abort(); cabinetId = id; binId = null; showContents = false; contentsFloor = 0;
 		products = []; catalogState = 'idle';
 		if (id && onreveal) pendingReveal = 'drawers';
 		// Back in the product's cabinet, its outlined drawer shows its parts again, as on arrival.
@@ -173,7 +178,7 @@
 			title={cabinetEntry ? m.cabinet(gridCell(cabinetEntry.outer_row, cabinetEntry.outer_col)) : mapState === 'loading' && placed ? m.cabinet(gridCell(placed.outer_row, placed.outer_col)) : m.wall}>
 			{#snippet cabinet()}{#if cabinetEntry}
 				<div class="max-w-xs">
-					<ShelfDiagram responsive expand={stacked} cabinet rows={cabinetEntry.inner_rows} cols={cabinetEntry.inner_cols} selected={binId} current={location?.bin.id}
+					<ShelfDiagram responsive cabinet rows={cabinetEntry.inner_rows} cols={cabinetEntry.inner_cols} selected={binId} current={location?.bin.id}
 						label={m.cabinet(gridCell(cabinetEntry.outer_row, cabinetEntry.outer_col))} emptyLabel={m.emptyDrawer} onselect={selectBin}
 						items={bins.map((entry) => ({ id: entry.id, row: entry.inner_row, col: entry.inner_col,
 							rowSpan: entry.row_span, colSpan: entry.col_span, empty: !entry.has_products, label: gridRange(entry.inner_row, entry.inner_col, entry.row_span, entry.col_span) }))} />
@@ -181,10 +186,10 @@
 			{/if}{/snippet}
 			{#snippet wall(zoomTo)}
 				{#if topology && cabinets.length}
-					<ShelfDiagram responsive expand={stacked} rows={wallRows} cols={wallCols} selected={null} current={location?.cabinet.id}
+					<ShelfDiagram responsive rows={wallRows} cols={wallCols} selected={null} current={location?.cabinet.id}
 						label={m.wall} onselect={zoomTo} items={cabinets.map((entry) => ({ id: entry.id,
 							row: entry.outer_row, col: entry.outer_col, label: gridCell(entry.outer_row, entry.outer_col), inner: cabinetInner(entry, topology?.bins ?? []) }))} />
-				{:else if mapState === 'loading' && placed}<div class="max-w-xs" style:max-width={stacked ? undefined : `min(20rem, (min(32rem, 70dvh) - 0.5rem) * ${raaco.width / raaco.height} + 0.5rem)`}><AspectRatio ratio={raaco.width / raaco.height}><Skeleton class="cabinet-placeholder h-full w-full rounded-none" /></AspectRatio></div>
+				{:else if mapState === 'loading' && placed}<div class="max-w-xs" style:max-width={`min(20rem, (min(32rem, 70dvh) - 0.5rem) * ${raaco.width / raaco.height} + 0.5rem)`}><AspectRatio ratio={raaco.width / raaco.height}><Skeleton class="cabinet-placeholder h-full w-full rounded-none" /></AspectRatio></div>
 				{:else}<AspectRatio ratio={installedWall}>
 						{#if mapState === 'ready'}<Empty.Root class="wall-placeholder h-full rounded-none bg-muted p-2"><Empty.Description>{m.empty}</Empty.Description></Empty.Root>
 						{:else}<Skeleton class="wall-placeholder h-full rounded-none" />{/if}
@@ -192,7 +197,7 @@
 			{/snippet}
 		</ShelfZoom>
 		{#if showContents && bin}
-			<section bind:this={contentsSection} class="drawer-contents min-w-0" aria-labelledby={`${uid}-contents`}>
+			<section bind:this={contentsSection} bind:offsetHeight={contentsHeight} style:min-height={contentsFloor ? `${contentsFloor}px` : undefined} class="drawer-contents min-w-0" aria-labelledby={`${uid}-contents`}>
 				<svelte:element this={`h${headingLevel + 1}`} class={[itemTitle, "mb-2"]} id={`${uid}-contents`} tabindex={onreveal ? -1 : undefined}>{m.contents(gridRange(bin.inner_row, bin.inner_col, bin.row_span, bin.col_span))}</svelte:element>
 				<div class="contents-status my-2 text-sm" role="status">
 					{#if !bin.has_products}<Empty.Root><Empty.Description>{m.noProducts}</Empty.Description></Empty.Root>

@@ -87,6 +87,9 @@ unavailable, with a retry. Cancel reads and listeners when leaving.
 - Never read the whole catalog: load the product's drawer, and other assigned drawers
   when selected. Unassigned drawers are empty from topology; failed reads never mean
   empty. Inactive-only drawers can be flagged assigned with no public contents.
+- Within one cabinet the drawer contents never shrink: a shorter list or the loading
+  row keeps the tallest height so far, so a page scrolled to its end does not pull the
+  tapped drawer down. Changing cabinet or zooming out resets it.
 - Cells share one Tab stop; arrows move spatially, Home/End reach the ends,
   Enter/Space selects. Cells are at least 24 CSS px; dense grids pan in the named shelf
   viewport (design system §4.2).

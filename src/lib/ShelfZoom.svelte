@@ -80,9 +80,10 @@
 
 <!-- Finish the zoom before focused descendants measure their visible scroll region. -->
 <div bind:this={element} class={["min-w-0", className]} onfocuscapture={() => settle?.()}>
-	<div class="mb-2 flex min-h-11 items-center justify-between gap-3">
+	<!-- Zoom-out sits beside the title it changes, not at the far edge of a wide stage. -->
+	<div class="mb-2 flex min-h-11 flex-wrap items-center gap-x-3 gap-y-2">
 		<svelte:element this={headingLevel ? `h${headingLevel}` : 'p'} class={itemTitle} id={`${uid}-title`} tabindex="-1">{title}</svelte:element>
-		{#if open}<Button variant="outline" size="sm" type="button" {disabled} onclick={() => open && zoom(open, null)}><Icon icon={MagnifyingGlassMinusIcon} class="size-4" />{i18n.m.shelfMap.showWall}</Button>{/if}
+		{#if open}<Button variant="ghost" size="sm" type="button" {disabled} onclick={() => open && zoom(open, null)}><Icon icon={MagnifyingGlassMinusIcon} class="size-4" />{i18n.m.shelfMap.showWall}</Button>{/if}
 	</div>
 	<div bind:this={stage} class="relative">
 		<div bind:this={level} class="relative">{#if open}{@render cabinet()}{:else}{@render wall((id) => zoom(id, id))}{/if}</div>

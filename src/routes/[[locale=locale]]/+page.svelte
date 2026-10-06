@@ -21,7 +21,7 @@
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import Brackets from '#lib/Brackets.svelte';
 	import type { PageData } from './$types';
-	import { pageContainer, formActions, sheetBody } from '#lib/ui.js';
+	import { pageContainer, formActions, sheetBody, shelfPickerSheet } from '#lib/ui.js';
 	// The page renders without API reads, so nothing delays its first byte; the shelf
 	// picker loads live topology and drawer contents in the browser when opened.
 	import { goto } from '$app/navigation';
@@ -620,7 +620,7 @@
 							</Dialog.Trigger>
 							{#if shelfMounted}
 								<Dialog.Content variant="sheet" forceMount preventScroll={false} aria-describedby={undefined}
-									class="shelf-picker data-closed:hidden md:max-w-md">
+									class={['shelf-picker data-closed:hidden', shelfPickerSheet]}>
 									<Dialog.Header layout="bar">
 										<Dialog.Title id="home-shelf-title">{m.find.shelfTitle}</Dialog.Title>
 										<Dialog.Close>
@@ -630,7 +630,7 @@
 									<!-- svelte-ignore a11y_no_noninteractive_tabindex (Named scroll region supports native keyboard scrolling.) -->
 									<div bind:this={shelfBody} class={["shelf-picker-body", sheetBody]} role="region" aria-labelledby="home-shelf-title" tabindex="0">
 										<!-- Loaded on first open: the picker is most of this page's own script. -->
-										{#await import('#lib/ShelfMap.svelte') then { default: ShelfMap }}<ShelfMap stacked config={data.adminConfig} labelledby="home-shelf-title" onreveal={shelfOpen ? revealShelfSection : undefined} />{/await}
+										{#await import('#lib/ShelfMap.svelte') then { default: ShelfMap }}<ShelfMap config={data.adminConfig} labelledby="home-shelf-title" onreveal={shelfOpen ? revealShelfSection : undefined} />{/await}
 									</div>
 								</Dialog.Content>
 							{/if}

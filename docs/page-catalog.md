@@ -11,10 +11,19 @@ open its [product page](page-product.md). Cards have no quick-add: quantities ar
 chosen on the product page or in the [scanner](scanner.md) confirmation. Scanning alone
 never changes a basket.
 
-At 360 px: heading; one search field with a submit button; reserved error feedback;
+At 360 px: heading; one search field with its «Søk» button inside (`InputGroup`); reserved error feedback;
 product cards; «Vis flere» / "Show more". A query that is exactly one existing code
-opens that product (also without JavaScript). A «Filtre» button opens a shared
-`Dialog` with category, specification and location controls;
+opens that product (also without JavaScript). Searching by name or code and picking a
+drawer are the two ways in, presented like a login screen's alternatives: below 64rem a
+hairline with «eller» / "or" separates the search form from a full-width «Hyllekart» /
+"Shelf map" button; from 64rem they share one row, `search · eller · Hyllekart`. The
+divider and button hide without JavaScript. «Filtre» sits below, since it narrows either way. The
+map button opens the shelf map in a `Dialog` sheet (`shelfPickerSheet`): a content-height
+bottom sheet within thumb reach below 48rem, a narrow right-hand panel from 48rem, sized
+so a whole cabinet fits without scrolling: tapping a cabinet zooms in, and tapping a drawer goes straight
+to `/p?bin=<id>`, a new search by placement, with no apply step. With a location
+selected the map opens on its cabinet, and «Fjern utvalg» in its header clears the
+location while keeping the rest of the search. «Filtre» opens a `Dialog` with category and specification controls;
 dismissing it discards the draft and returns focus. No match-count or refresh toolbar;
 retry appears only on failure.
 
@@ -37,12 +46,11 @@ dialog, and late responses never replace a draft. Main search changes only `q` a
 the submitted filters. Search text typed but not submitted survives reload and Back
 (a SvelteKit `snapshot`).
 
-Opening the dialog reads `amp_shelf_map`. Location uses `LabelShelfSelection`, shared
-with [label printing](page-labels.md). Locations combine with OR; none means no
-constraint. Whole cabinets serialize as cabinet IDs, partial ones as drawer IDs, so a
-cabinet filter follows its current drawers and a drawer filter follows a moved drawer.
-A saved location that no longer exists stays an error until cleared, never silently
-broadening results.
+Opening the shelf map reads `amp_shelf_map`. The map is `LabelShelfSelection` in its
+single-drawer pick mode, shared with [label printing](page-labels.md). Shared links may
+still carry several `cabinet`/`bin` IDs: locations combine with OR, a cabinet filter
+follows its current drawers and a drawer filter follows a moved drawer. A location that
+no longer exists stays an error until cleared, never silently broadening results.
 
 **Paging.** Within 300 px of the end, or on "Show more", fetch the page after the last
 code; keep cards, focus and scroll. Only an empty page proves the end (a short page may

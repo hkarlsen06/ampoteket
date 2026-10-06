@@ -158,14 +158,8 @@ try {
 	await expect(page).toHaveURL(`${origin}/en/p?category=Capacitors&eq.capacitance=0.000000000005`);
 	await page.setViewportSize({ width: 1280, height: 900 });
 	console.log('PASS: short phone filters keep actions visible, scroll by keyboard, announce exact slider values and restore cancelled drafts/focus');
-	await page.goto(`${origin}/en/p`);
-	await page.locator('.filter-toggle').click();
-	const cabinetChoice = filterDialog.getByRole('checkbox', { name: en.adminLabels.selectCabinet('A1'), exact: true });
-	await expect(cabinetChoice).toBeEnabled();
-	await cabinetChoice.press('Space');
-	await expect(cabinetChoice).toBeChecked();
-	await filterDialog.getByRole('button', { name: en.catalog.applyFilters, exact: true }).click();
-	await expect(page).toHaveURL(`${origin}/en/p?cabinet=${catalogCabinetId}`);
+	// A shared cabinet link still pages and restores through Back.
+	await page.goto(`${origin}/en/p?cabinet=${catalogCabinetId}`);
 	await expect(cards).toHaveCount(37);
 	await page.evaluate(() => {
 		const pagination = document.querySelector('.pagination')!;
@@ -179,63 +173,56 @@ try {
 	await page.goBack();
 	await expect(page).toHaveURL(`${origin}/en/p?cabinet=${catalogCabinetId}`);
 	await expect(cards).toHaveCount(74);
-	await page.locator('.filter-toggle').click();
-	await expect(cabinetChoice).toBeChecked();
-	await filterDialog.getByRole('button', { name: en.adminLabels.clearSelection, exact: true }).click();
+	// Tapping a drawer is a new search by placement: no checkboxes, no apply step.
+	await page.goto(`${origin}/en/p?q=transistor&category=Resistors`);
+	const locationDialog = page.getByRole('dialog', { name: en.catalog.location, exact: true });
+	await page.locator('.location-toggle').click();
+	await expect(locationDialog.getByRole('button', { name: en.catalog.applyFilters, exact: true })).toHaveCount(0);
+	await expect(locationDialog.getByRole('checkbox')).toHaveCount(0);
+	await expect(locationDialog.getByRole('button', { name: en.adminLabels.clearSelection, exact: true })).toHaveCount(0);
 	await page.keyboard.press('Escape');
-	await expect(page.locator('.filter-toggle')).toBeFocused();
-	await page.locator('.filter-toggle').click();
-	await expect(cabinetChoice).toBeChecked();
-	await filterDialog.getByRole('button', { name: en.adminLabels.clearSelection, exact: true }).click();
-	await filterDialog.getByRole('button', { name: en.adminLabels.cabinet('A1'), exact: true }).click();
-	const drawerChoice = filterDialog.locator(`[data-item-id='${seedBinId(0)}']`);
-	await drawerChoice.press('Space');
-	await expect(drawerChoice).toHaveAttribute('aria-pressed', 'true');
-	await filterDialog.getByRole('button', { name: en.shelfMap.showWall, exact: true }).click();
-	await expect(cabinetChoice).toHaveAttribute('aria-checked', 'mixed');
-	await filterDialog.getByRole('checkbox', { name: en.adminLabels.selectCabinet('A2'), exact: true }).press('Space');
-	await filterDialog.getByRole('checkbox', { name: 'Resistor', exact: true }).check();
-	await filterDialog.getByRole('button', { name: en.catalog.applyFilters, exact: true }).click();
-	await expect(page).toHaveURL(url => url.searchParams.get('cabinet') === emptyCabinetId
-		&& url.searchParams.get('bin') === seedBinId(0) && url.searchParams.get('category') === 'Resistors');
+	await expect(locationDialog).toBeHidden();
+	await expect(page.locator('.location-toggle')).toBeFocused();
+	await page.locator('.location-toggle').click();
+	await locationDialog.getByRole('button', { name: en.adminLabels.cabinet('A1'), exact: true }).click();
+	await locationDialog.locator(`[data-item-id='${seedBinId(0)}']`).click();
+	await expect(locationDialog).toBeHidden();
+	await expect(page).toHaveURL(`${origin}/en/p?bin=${seedBinId(0)}`);
 	const drawerCodes = Array.from({ length: 1000 }, (_, index) => index)
 		.filter(index => index % 30 === 0).map(index => seedProductCode(index)).sort();
 	await expect(cards).toHaveCount(drawerCodes.length);
 	assert.deepEqual(await cards.locator('.product-meta .font-mono').allTextContents(), drawerCodes);
+	await expect(page.locator('.location-toggle')).toHaveText(en.catalog.locationSelected(1));
 	await page.getByLabel(fieldLabel(en.catalog.searchLabel)).fill('220 ohm');
 	await page.getByRole('button', { name: en.catalog.search, exact: true }).click();
-	await expect(page).toHaveURL(url => url.searchParams.get('q') === '220 ohm'
-		&& url.searchParams.get('cabinet') === emptyCabinetId && url.searchParams.get('bin') === seedBinId(0)
-		&& url.searchParams.get('category') === 'Resistors');
+	await expect(page).toHaveURL(url => url.searchParams.get('q') === '220 ohm' && url.searchParams.get('bin') === seedBinId(0));
 	await expect(cards).toHaveCount(drawerCodes.length);
 	await page.locator('.menu-toggle').click();
 	await page.locator('header a[hreflang=nb]').click();
-	await expect(page).toHaveURL(url => url.pathname === '/p' && url.searchParams.get('bin') === seedBinId(0)
-		&& url.searchParams.get('cabinet') === emptyCabinetId && url.searchParams.get('q') === '220 ohm');
+	await expect(page).toHaveURL(url => url.pathname === '/p' && url.searchParams.get('bin') === seedBinId(0) && url.searchParams.get('q') === '220 ohm');
+	await page.goto(`${origin}/en/p?bin=${seedBinId(0)}&q=220%20ohm`);
+	// The map reopens on the drawer's cabinet; clearing keeps the text search.
+	await page.locator('.location-toggle').click();
+	await expect(locationDialog.locator(`[data-item-id='${seedBinId(0)}']`)).toHaveAttribute('aria-pressed', 'true');
+	await locationDialog.getByRole('button', { name: en.adminLabels.clearSelection, exact: true }).click();
+	await expect(locationDialog).toBeHidden();
+	await expect(page).toHaveURL(`${origin}/en/p?q=220+ohm`);
 	await page.goto(`${origin}/en/p?bin=${seedBinId(0)}&category=Capacitors`);
 	await expect(page.getByText(en.catalog.noMatches, { exact: true })).toBeVisible();
 	await page.goto(`${origin}/en/p?cabinet=${emptyCabinetId}&q=${seedProductCode(0)}`);
 	await expect(page.getByText(en.catalog.noMatches, { exact: true })).toBeVisible();
 	await expect(page).toHaveURL(url => url.pathname === '/en/p' && url.searchParams.get('cabinet') === emptyCabinetId);
 	await page.goto(`${origin}/en/p?bin=ffffffff-ffff-4fff-8fff-ffffffffffff`);
-	await page.locator('.filter-toggle').click();
-	await expect(filterDialog.getByText(en.catalog.locationsChanged, { exact: true })).toBeVisible();
-	await expect(filterDialog.getByRole('button', { name: en.catalog.applyFilters, exact: true })).toBeDisabled();
 	await expect(page.getByText(en.catalog.noMatches, { exact: true })).toHaveCount(0);
-	await filterDialog.getByRole('button', { name: en.adminLabels.clearSelection, exact: true }).click();
-	await filterDialog.getByRole('button', { name: en.catalog.applyFilters, exact: true }).click();
-	await expect(page).toHaveURL(`${origin}/en/p`);
-	await expect(cards).toHaveCount(37);
+	await page.goto(`${origin}/en/p`);
 	await page.route(topologyUrl, route => route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }));
-	await page.locator('.filter-toggle').click();
-	await expect(filterDialog.getByText(en.shelfMap.unavailable, { exact: true })).toBeVisible();
-	await expect(filterDialog.getByRole('button', { name: en.catalog.applyFilters, exact: true })).toBeDisabled();
+	await page.locator('.location-toggle').click();
+	await expect(locationDialog.getByText(en.shelfMap.unavailable, { exact: true })).toBeVisible();
 	await page.unroute(topologyUrl);
-	await filterDialog.getByRole('button', { name: en.catalog.retry, exact: true }).click();
-	await expect(cabinetChoice).toBeEnabled();
-	await expect(filterDialog.getByRole('button', { name: en.catalog.applyFilters, exact: true })).toBeEnabled();
-	await filterDialog.getByRole('button', { name: en.catalog.cancel, exact: true }).click();
-	console.log('PASS: cabinet/drawer filters use real topology, page and restore via Back, combine locations with OR and category/text with AND, preserve search/locale, discard drafts, and recover from stale IDs or failed topology reads');
+	await locationDialog.getByRole('button', { name: en.catalog.retry, exact: true }).click();
+	await expect(locationDialog.getByRole('button', { name: en.adminLabels.cabinet('A1'), exact: true })).toBeEnabled();
+	await page.keyboard.press('Escape');
+	console.log('PASS: a tapped drawer opens its parts as a new search; shared cabinet links page and restore via Back; the map reopens on the drawer, clears without losing text, keeps locale, and recovers from failed topology reads');
 	await page.goto(`${origin}/en/p?code=${seedProductCode(0).toLowerCase()}`);
 	await expect(page).toHaveURL(`${origin}/en/p/${seedProductCode(0)}`);
 	// Unified search: a query that is exactly one existing part code opens the
@@ -832,30 +819,48 @@ try {
 				const applyBox = await dialog.getByRole('button', { name: locale ? 'Show results' : 'Vis resultater', exact: true }).boundingBox();
 				const viewportHeight = page.viewportSize()!.height;
 				assert.ok(applyBox && applyBox.y >= 0 && applyBox.y + applyBox.height <= viewportHeight, 'Filter actions stay in the viewport outside the scrolling options');
-				if (width === 360 || width === 1280) {
-					const messages = locale ? en : nb;
-					const selection = dialog.locator('.label-shelf-selection');
-					await expect(selection.getByRole('heading', { name: messages.catalog.locations, exact: true })).toBeVisible();
-					const cabinet = selection.getByRole('checkbox', { name: messages.adminLabels.selectCabinet('A1'), exact: true });
-					await expect(cabinet).toBeEnabled();
-					assert.ok(await selection.locator('.wall-diagram').evaluate(element => element.scrollWidth <= element.clientWidth),
-						'Cabinet buttons fit their wall grid inside the narrow filter dialog');
-					await cabinet.press('Space');
-					await expect(cabinet).toBeChecked();
-					await selection.getByRole('button', { name: messages.adminLabels.cabinet('A1'), exact: true }).press('Enter');
-					const drawer = selection.locator(`[data-item-id='${seedBinId(0)}']`);
-					await drawer.press('Space');
-					await expect(drawer).toBeFocused();
-					await expect(drawer).toHaveAttribute('aria-pressed', 'false');
-					await selection.getByRole('button', { name: messages.shelfMap.showWall, exact: true }).press('Enter');
-					await expect(cabinet).toHaveAttribute('aria-checked', 'mixed');
-					assert.deepEqual(await dialog.getByRole('button', { name: messages.catalog.applyFilters, exact: true }).boundingBox(), applyBox,
-						'Opening and selecting drawers keeps filter actions fixed');
-					await fits(page);
-				}
 				await dialog.getByRole('button', { name: locale ? 'Close filters' : 'Lukk filtre', exact: true }).press('Enter');
 				await expect(dialog).toBeHidden();
 				await expect(filters).toBeFocused();
+				if (width === 360 || width === 1280) {
+					const messages = locale ? en : nb;
+					const locations = page.getByRole('button', { name: messages.catalog.location, exact: true });
+					await expect(locations).toHaveAttribute('aria-controls', 'catalog-locations');
+					const locationsBox = await locations.boundingBox();
+					await locations.press('Enter');
+					const locationDialog = page.getByRole('dialog', { name: messages.catalog.location, exact: true });
+					await expect(locationDialog).toBeVisible();
+					assert.deepEqual(await locations.boundingBox(), locationsBox, 'Opening location keeps its button in place');
+					await locationDialog.evaluate(async (element) => { await Promise.all(element.getAnimations().map((animation) => animation.finished)); });
+					const close = locationDialog.getByRole('button', { name: messages.catalog.closeLocations, exact: true });
+					assert.ok(((await close.boundingBox())?.y ?? -1) >= 0, 'The location dialog header stays in the viewport');
+					// Phones get a bottom sheet anchored at the thumb; wider screens a fixed side panel.
+					const settled = () => locationDialog.evaluate(async (element) => { await Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished.catch(() => {}))); });
+					const anchor = async () => {
+						await settled();
+						const box = width < 768 ? await locationDialog.evaluate(element => ({ y: element.getBoundingClientRect().bottom })) : await close.boundingBox();
+						return box && Object.fromEntries(Object.entries(box).map(([key, value]) => [key, Math.round(value)]));
+					};
+					const anchorBefore = await anchor();
+					if (width < 768) assert.equal(anchorBefore?.y, viewportHeight, 'The phone shelf map is a bottom sheet');
+					const selection = locationDialog.locator('.label-shelf-selection');
+					const cabinet = selection.getByRole('button', { name: messages.adminLabels.cabinet('A1'), exact: true });
+					await expect(cabinet).toBeEnabled();
+					assert.ok(await selection.locator('.wall-viewport').evaluate(element => element.scrollWidth <= element.clientWidth),
+						'The installed wall fits the shelf map sheet without sideways scrolling');
+					await cabinet.press('Enter');
+					await expect(selection.locator(`[data-item-id='${seedBinId(0)}']`)).toBeVisible();
+					await settled();
+					assert.ok(await locationDialog.getByRole('region', { name: messages.catalog.location, exact: true }).evaluate(element => element.scrollHeight <= element.clientHeight), 'A whole cabinet fits without scrolling');
+					assert.deepEqual(await anchor(), anchorBefore, 'Zooming into a cabinet keeps the sheet anchored');
+					await fits(page);
+					await selection.getByRole('button', { name: messages.shelfMap.showWall, exact: true }).press('Enter');
+					assert.deepEqual(await anchor(), anchorBefore, 'Returning to the wall keeps the sheet anchored');
+					await fits(page);
+					await locationDialog.getByRole('button', { name: messages.catalog.closeLocations, exact: true }).press('Enter');
+					await expect(locationDialog).toBeHidden();
+					await expect(locations).toBeFocused();
+				}
 			}
 			if (route.startsWith('/p/')) {
 				const messages = locale ? en : nb;
@@ -1131,7 +1136,7 @@ try {
 	}
 	console.log('PASS: product/cart refresh retains focused drafts and old facts on failure; changed sale steps get visible line errors; removal preserves keyboard focus; mobile placement stays visible');
 	// Valid long metadata and sparse wide topology must remain usable inside the
-	// phone filter dialog, where the page container cannot supply text wrapping.
+	// phone filter and location dialogs, where the page container cannot supply text wrapping.
 	const longCategory = 'W'.repeat(100);
 	await sql(`UPDATE app.categories SET name='${longCategory}' WHERE name='Resistors'; UPDATE app.cabinets SET outer_col=16 WHERE id='${catalogCabinetId}';`);
 	try {
@@ -1146,7 +1151,10 @@ try {
 		await expect(label).toBeInViewport({ ratio: 1 });
 		assert.ok(await label.evaluate(element => element.scrollWidth <= element.clientWidth), 'A 100-character category fits its label');
 		assert.ok(await filters.locator('.filter-dialog-body').evaluate(element => element.scrollWidth <= element.clientWidth), 'Long metadata does not cause sideways filter scrolling');
-		const selection = filters.locator('.label-shelf-selection');
+		await filters.getByRole('button', { name: en.catalog.closeFilters, exact: true }).click();
+		await page.getByRole('button', { name: en.catalog.location, exact: true }).click();
+		const locations = page.getByRole('dialog', { name: en.catalog.location, exact: true });
+		const selection = locations.locator('.label-shelf-selection');
 		const wall = selection.getByRole('group', { name: en.adminLabels.wall, exact: true });
 		const wallViewport = selection.getByRole('region', { name: en.adminLabels.wall, exact: true });
 		await wallViewport.scrollIntoViewIfNeeded();
@@ -1156,12 +1164,12 @@ try {
 			assert.ok(box.width >= 24 && box.height >= 24, 'Dense label walls preserve cabinet touch targets');
 		}
 		assert.ok(await wallViewport.evaluate(element => element.scrollWidth > element.clientWidth), 'A 16-column wall pans inside its named viewport');
-		const lastCabinet = wall.getByRole('checkbox', { name: en.adminLabels.selectCabinet('P1'), exact: true });
+		const lastCabinet = wall.getByRole('button', { name: en.adminLabels.cabinet('P1'), exact: true });
 		await lastCabinet.focus();
 		await expect.poll(() => wallViewport.evaluate(element => element.scrollLeft)).toBeGreaterThan(0);
 		await expect(lastCabinet).toBeInViewport({ ratio: 1 });
 		await fits(page);
-		await filters.getByRole('button', { name: en.catalog.closeFilters, exact: true }).click();
+		await locations.getByRole('button', { name: en.catalog.closeLocations, exact: true }).click();
 	} finally {
 		await sql(`UPDATE app.categories SET name='Resistors' WHERE name='${longCategory}'; UPDATE app.cabinets SET outer_col=1 WHERE id='${catalogCabinetId}';`);
 	}

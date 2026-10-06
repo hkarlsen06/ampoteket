@@ -1,5 +1,4 @@
 import type { CatalogAttribute, CatalogProduct } from './catalog';
-import type { ShelfTopology } from './shelf-map';
 import { compareDecimals, normalizeDecimal, shiftDecimal } from './decimal';
 import { categoryLabel, specificationLabel, locales, messagesFor } from './i18n';
 import { engineeringUnits, formatMeasurement, formatMeasurementText } from './format';
@@ -90,17 +89,6 @@ export function serializeCatalogQuery(query: CatalogQuery): URLSearchParams {
 
 export function hasCatalogFilters(query: CatalogQuery): boolean {
 	return Boolean(query.q || query.categories.length || query.cabinetIds.length || query.binIds.length || Object.keys(query.conditions).length);
-}
-
-/** Whole cabinets stay compact in shared URLs; partial selections keep stable drawer IDs. */
-export function catalogLocations(topology: ShelfTopology, selected: string[]): CatalogLocations {
-	const chosen = new Set(selected);
-	const cabinetIds = topology.cabinets.filter((cabinet) => {
-		const bins = topology.bins.filter((bin) => bin.cabinet_id === cabinet.id);
-		return bins.length && bins.every((bin) => chosen.has(bin.id));
-	}).map((cabinet) => cabinet.id);
-	const covered = new Set(topology.bins.filter((bin) => cabinetIds.includes(bin.cabinet_id)).map((bin) => bin.id));
-	return { cabinetIds, binIds: selected.filter((id) => !covered.has(id)) };
 }
 
 export function catalogCategories(products: CatalogProduct[]): string[] {

@@ -6,7 +6,7 @@ generates PDF sheets for many drawers at once; **Brother** prints one product at
 time on the P-touch printer. It is staff-only and read-only; printing never changes
 stock or publication. Selection is
 `src/lib/LabelShelfSelection.svelte` (shared with the [catalog](page-catalog.md)
-filter), rendering `src/lib/labels/render.ts`, the P-touch driver
+and admin product location filters), rendering `src/lib/labels/render.ts`, the P-touch driver
 `src/lib/labels/ptouch.ts`.
 
 ## Selection and data

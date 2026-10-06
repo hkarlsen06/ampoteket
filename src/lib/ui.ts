@@ -52,6 +52,10 @@ export const section = tv({
 });
 // Scrolling body of a `Dialog.Content variant="sheet"` (a named interior scroll region).
 export const sheetBody = 'min-h-0 overflow-y-auto overscroll-contain px-4 py-5 md:px-6';
+// Shelf map sheets (homepage, catalog, admin products): a content-height bottom sheet
+// below 48rem, so the map is within thumb reach, and a narrow right-hand panel from
+// 48rem (Dialog variant="sheet").
+export const shelfPickerSheet = 'max-md:top-auto max-md:bottom-0 max-md:h-auto max-md:max-h-[calc(100dvh-2rem)] max-md:rounded-t-xl md:max-w-sm';
 // A card whose heading link stretches over the whole card (catalog and admin grids).
 export const cardLink = 'relative row-span-2 grid min-w-0 grid-rows-subgrid gap-4 overflow-visible p-4 md:p-5 hover:ring-muted-foreground has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ring has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--focus-contrast)]';
 // Product names can be long single words (Norwegian compounds): hyphenate, never split mid-syllable.

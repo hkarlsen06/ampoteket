@@ -42,7 +42,8 @@ editor's unsaved input). Rules, with aggregation in
 pagination and showing 50 cards at a time with **Show more**, as in the public catalog.
 An empty catalog offers **New product**; an unmatched search offers clearing search and filters.
 The **Low stock** toggle narrows to the overview's needs-attention set and combines with
-the published filter and search. Default sort is needs attention (overview order), then other published, then
+the published filter and search. **Shelf map** beside search opens the shelf map; tapping a drawer narrows
+the list to its products and closes the map. The drawer stays with the saved view. Default sort is needs attention (overview order), then other published, then
 unpublished; alternatives are least recently counted, code and name. There is no lowest-stock
 sort because unlike units do not compare. Search matches as in the
 [public catalog](page-catalog.md#3-url-and-matching-rules), specifications included.

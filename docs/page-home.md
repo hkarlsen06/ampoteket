@@ -184,8 +184,10 @@ the page or moves code entry.
 `autocapitalize="characters"`, placeholder `RES-00026`). Without JS: `GET /p?code=…`.
 With JS: trim, uppercase and go to `/p/[code]` in the current language.
 
-**Sheet.** The shared `Dialog` (right side on desktop, full width on phones) with a
-localized close control; the named `shelf-picker-body` scrolls natively with
+**Sheet.** The shared `Dialog` sheet with `shelfPickerSheet` (a content-height bottom
+sheet within thumb reach on phones, a narrow right-hand panel from 48rem) and a
+localized close control. The map's diagrams stay height-bounded, so a whole cabinet
+fits; only a long drawer list scrolls the body; the named `shelf-picker-body` scrolls natively with
 `overscroll-behavior: contain`. Keep `preventScroll={false}`, focus containment, Escape
 and focus return. Mount the map on first opening and keep it while hidden, so reopening
 preserves the selection and loaded contents. Without JavaScript, hide the sheet and

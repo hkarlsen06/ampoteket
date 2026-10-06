@@ -1,8 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { CatalogPlacement, CatalogProduct } from './catalog';
-import type { ShelfTopology } from './shelf-map';
 import {
-	canonicalFilterNumber, catalogCategories, catalogFacets, catalogLocations, CatalogQueryError, engineeringUnits, hasCatalogFilters, normalizeProductCode,
+	canonicalFilterNumber, catalogCategories, catalogFacets, CatalogQueryError, engineeringUnits, hasCatalogFilters, normalizeProductCode,
 	parseCatalogQuery, productSearchText, sanitizeCatalogQuery, searchCatalog, serializeCatalogQuery
 } from './catalog-search';
 
@@ -35,17 +34,10 @@ describe('catalog search and shareable conditions', () => {
 		expect(searchCatalog([part], query('q=SOT23')).products).toEqual([]);
 	});
 
-	test('round-trips location scopes and compacts complete cabinets without dropping unknown drawers', () => {
+	test('round-trips location scopes', () => {
 		const cabinet = '00000000-0000-4000-8000-000000000001';
 		const first = '00000000-0000-4000-8000-000000000002';
-		const second = '00000000-0000-4000-8000-000000000003';
 		const elsewhere = '00000000-0000-4000-8000-000000000004';
-		const topology = { cabinets: [{ id: cabinet }, { id: 'empty' }], bins: [
-			{ id: first, cabinet_id: cabinet }, { id: second, cabinet_id: cabinet }
-		] } as ShelfTopology;
-		expect(catalogLocations(topology, [])).toEqual({ cabinetIds: [], binIds: [] });
-		expect(catalogLocations(topology, [first])).toEqual({ cabinetIds: [], binIds: [first] });
-		expect(catalogLocations(topology, [first, second, elsewhere])).toEqual({ cabinetIds: [cabinet], binIds: [elsewhere] });
 		const params = `category=Capacitors&cabinet=${cabinet}&bin=${elsewhere}&after=CAP-00001`;
 		const selected = query(params);
 		expect(selected.cabinetIds).toEqual([cabinet]);

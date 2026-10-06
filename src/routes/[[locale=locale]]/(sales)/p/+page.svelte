@@ -1,9 +1,11 @@
 <script lang="ts">
 	import Icon from '#lib/Icon.svelte';
 	import SlidersHorizontalIcon from 'phosphor-svelte/lib/SlidersHorizontalIcon';
+	import MapPinIcon from 'phosphor-svelte/lib/MapPinIcon';
+	import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon';
 	import XIcon from 'phosphor-svelte/lib/XIcon';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import { Input } from '#lib/components/ui/input/index.js';
+	import * as InputGroup from '#lib/components/ui/input-group/index.js';
 	import { Separator } from '#lib/components/ui/separator/index.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
 	import * as NativeSelect from '#lib/components/ui/native-select/index.js';
@@ -12,13 +14,13 @@
 	import * as Card from '#lib/components/ui/card/index.js';
 	import * as Alert from '#lib/components/ui/alert/index.js';
 	import * as Empty from '#lib/components/ui/empty/index.js';
-	import { cardLink, pageContainer, pageHeader, pageHeading, formActions, formStatus, sheetBody } from '#lib/ui.js';
+	import { cardLink, pageContainer, pageHeader, pageHeading, formActions, formStatus, sheetBody, shelfPickerSheet } from '#lib/ui.js';
 	import { goto, refreshAll, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import { untrack } from 'svelte';
 	import { readCatalogPage, readCatalogFacets, type CatalogProduct } from '#lib/catalog.js';
 	import {
-		canonicalFilterNumber, catalogLocations, CatalogQueryError, hasCatalogFilters,
+		canonicalFilterNumber, CatalogQueryError, hasCatalogFilters,
 		parseCatalogQuery, serializeCatalogQuery,
 		type CatalogFacet, type CatalogConditions, type CatalogQueryIssue
 	} from '#lib/catalog-search.js';
@@ -63,13 +65,14 @@
 	let expandedProducts = $state<CatalogProduct[] | null>(null);
 	let pagination = $state<HTMLElement>();
 	let filtersOpen = $state(false);
+	let locationsOpen = $state(false);
 	let q = $state(initialDraft.q);
 	let categories = $state(initialDraft.categories);
 	let cabinetIds = $state(initialDraft.cabinetIds);
 	let binIds = $state(initialDraft.binIds);
 	let conditions = $state<CatalogConditions>(initialDraft.conditions);
 	let filterSnapshot = $state<{
-		categories: string[]; conditions: CatalogConditions; cabinetIds: string[]; binIds: string[];
+		categories: string[]; conditions: CatalogConditions;
 		formError: CatalogQueryIssue | null; invalidField: string | null;
 	} | null>(null);
 	let formError = $state<CatalogQueryIssue | null>(null);
@@ -85,9 +88,7 @@
 	const queryFields = $derived([...new URLSearchParams(data.queryString)]
 		.filter(([key]) => ['category', 'cabinet', 'bin'].includes(key) || /^(eq|min|max)\./.test(key)));
 	const selectedBins = $derived(topology?.bins.filter((bin) => cabinetIds.includes(bin.cabinet_id) || binIds.includes(bin.id)).map((bin) => bin.id) ?? []);
-	const missingLocations = $derived(Boolean(topology && (cabinetIds.some((id) => !topology?.cabinets.some((cabinet) => cabinet.id === id))
-		|| binIds.some((id) => !topology?.bins.some((bin) => bin.id === id)))));
-	const selectionCount = $derived(categories.length + cabinetIds.length + binIds.length);
+	const locationCount = $derived(cabinetIds.length + binIds.length);
 	const filtered = $derived(submitted ? hasCatalogFilters(submitted) : false);
 	const ready = $derived(Boolean(data.initialPage) && !data.queryError);
 	const categoryChoices = $derived(facets.categories);
@@ -135,7 +136,7 @@
 
 	$effect(() => {
 		void configKey; void topologyCycle;
-		if (!filtersOpen) return;
+		if (!locationsOpen) return;
 		const config = untrack(() => data.config);
 		if (!config) return;
 		const controller = new AbortController();
@@ -148,12 +149,14 @@
 		return () => controller.abort();
 	});
 
-	function selectLocations(ids: string[]) {
-		if (!topology) return;
-		const locations = catalogLocations(topology, ids);
-		// A stale saved selection must stay an error until explicitly cleared.
-		cabinetIds = [...cabinetIds.filter((id) => !topology!.cabinets.some((cabinet) => cabinet.id === id)), ...locations.cabinetIds];
-		binIds = [...binIds.filter((id) => !topology!.bins.some((bin) => bin.id === id)), ...locations.binIds];
+	// Picking a drawer is a new search by placement; clearing keeps the rest of the search.
+	async function showLocation(binId: string | null) {
+		locationsOpen = false; resetExpanded();
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local scratch query for goto().
+		const params = binId ? new URLSearchParams({ bin: binId }) : new URLSearchParams(data.queryString);
+		params.delete('cabinet'); params.delete('after');
+		if (!binId) params.delete('bin');
+		await goto(i18n.href('/p') + (params.size ? `?${params}` : ''), { reset: false });
 	}
 
 	async function showMore() {
@@ -231,7 +234,6 @@
 	function openFilters() {
 		filterSnapshot = {
 			categories: [...categories],
-			cabinetIds: [...cabinetIds], binIds: [...binIds],
 			conditions: structuredClone($state.snapshot(conditions)),
 			formError,
 			invalidField
@@ -251,7 +253,6 @@
 	function cancelFilters() {
 		if (filterSnapshot) {
 			categories = [...filterSnapshot.categories];
-			cabinetIds = [...filterSnapshot.cabinetIds]; binIds = [...filterSnapshot.binIds];
 			conditions = structuredClone($state.snapshot(filterSnapshot.conditions));
 			formError = filterSnapshot.formError;
 			invalidField = filterSnapshot.invalidField;
@@ -261,7 +262,7 @@
 
 	async function submitSearch(event: SubmitEvent, applyFilters = false) {
 		event.preventDefault();
-		if (!data.config || (applyFilters && (facetsLoading || facetsFailed || topologyLoading || topologyFailed || missingLocations))) return;
+		if (!data.config || (applyFilters && (facetsLoading || facetsFailed))) return;
 		invalidField = null;
 		const canonical: CatalogConditions = Object.create(null);
 		try {
@@ -326,28 +327,74 @@
 		<h1 class={pageHeading}>{m.heading}</h1>
 	</div>
 
-	<form class="grid max-w-152 gap-3" method="GET" action={i18n.href('/p')} onsubmit={submitSearch}>
-		{#each queryFields as [name, value], index (index)}<input type="hidden" {name} {value} />{/each}
-		<Field.Field>
-			<Field.Label for="catalog-search">{m.searchLabel}</Field.Label>
-			<div class={formActions}>
-				<Input id="catalog-search" class="min-w-0 flex-[1_1_12rem]" name="q" type="search" inputmode="search" autocomplete="off" autocapitalize="none" enterkeyhint="search" maxlength={200} placeholder={m.searchPlaceholder} bind:value={q} />
-				<Button class="search-submit min-w-28" type="submit" disabled={!data.config}>{m.search}</Button>
-			</div>
-		</Field.Field>
-		{#if data.codeError}<Field.Error role="alert">{m.invalidCode}</Field.Error>{/if}
-	</form>
+	<!-- Two ways in, like a login screen's alternatives: search, or pick a drawer.
+	A hairline carries «eller» where the row is too narrow; Filtre narrows either. -->
+	<div class="grid max-w-152 gap-3 lg:flex lg:max-w-none lg:items-end lg:gap-4">
+		<form class="grid gap-3 lg:w-152 lg:min-w-0" method="GET" action={i18n.href('/p')} onsubmit={submitSearch}>
+			{#each queryFields as [name, value], index (index)}<input type="hidden" {name} {value} />{/each}
+			<Field.Field>
+				<Field.Label for="catalog-search">{m.searchLabel}</Field.Label>
+				<!-- Submit lives inside the field, so the two can never wrap apart. -->
+				<InputGroup.Root>
+					<InputGroup.Input id="catalog-search" class="min-w-0" name="q" type="search" inputmode="search" autocomplete="off" autocapitalize="none" enterkeyhint="search" maxlength={200} placeholder={m.searchPlaceholder} bind:value={q} />
+					<InputGroup.Addon align="inline-end">
+						<InputGroup.Button class="search-submit" type="submit" disabled={!data.config}><Icon icon={MagnifyingGlassIcon} aria-hidden="true" />{m.search}</InputGroup.Button>
+					</InputGroup.Addon>
+				</InputGroup.Root>
+			</Field.Field>
+			{#if data.codeError}<Field.Error role="alert">{m.invalidCode}</Field.Error>{/if}
+		</form>
+		<div class="no-js:hidden flex items-center gap-3 text-sm text-muted-foreground lg:min-h-12">
+			<Separator class="flex-1 lg:hidden" /><span>{m.or}</span><Separator class="flex-1 lg:hidden" />
+		</div>
+		<Dialog.Root bind:open={locationsOpen}>
+			<Dialog.Trigger disabled={!data.config}>
+				{#snippet child({ props })}
+					<Button {...props} variant="outline" class="location-toggle no-js:hidden w-full lg:w-auto" aria-controls="catalog-locations" disabled={!data.config}>
+						<Icon icon={MapPinIcon} aria-hidden="true" />
+						{locationCount ? m.locationSelected(locationCount) : m.location}
+					</Button>
+				{/snippet}
+			</Dialog.Trigger>
+			<!-- A bottom sheet on phones, a right-hand panel from 48rem; the map never scrolls. -->
+			<Dialog.Content id="catalog-locations" variant="sheet" preventScroll={false} showCloseButton={false} class={shelfPickerSheet} aria-describedby={undefined}>
+				<Dialog.Header layout="bar">
+					<Dialog.Title>{m.location}</Dialog.Title>
+					<div class="flex shrink-0 items-center gap-1">
+						{#if locationCount}<Button variant="ghost" size="sm" onclick={() => showLocation(null)}>{i18n.m.adminLabels.clearSelection}</Button>{/if}
+						<Dialog.Close>
+							{#snippet child({ props })}<Button {...props} variant="ghost" size="icon" aria-label={m.closeLocations}><Icon icon={XIcon} class="size-5" aria-hidden="true" /></Button>{/snippet}
+						</Dialog.Close>
+					</div>
+				</Dialog.Header>
+				<!-- svelte-ignore a11y_no_noninteractive_tabindex (the named scroll region must be keyboard-scrollable) -->
+				<div class={[sheetBody, 'grid content-start gap-5']} role="region" tabindex="0" aria-label={m.location}>
+					{#if topologyLoading && !topology}<p role="status" class="sr-only">{i18n.m.shelfMap.loading}</p>{/if}
+					{#if topologyFailed}
+						<div class="grid justify-items-start gap-3">
+							<Alert.Message role="alert" appearance="inline" variant="destructive">{i18n.m.shelfMap.unavailable}</Alert.Message>
+							<Button variant="outline" onclick={() => topologyCycle++}>{m.retry}</Button>
+						</div>
+					{/if}
+					{#if topology}
+						<LabelShelfSelection {topology} heading={null} selected={selectedBins} onpick={(id) => showLocation(id)} disabled={topologyLoading || topologyFailed} />
+					{/if}
+				</div>
+			</Dialog.Content>
+		</Dialog.Root>
+	</div>
 	<div class={[formActions, "mt-3"]}>
 		<Dialog.Root open={filtersOpen} onOpenChange={(open) => { if (open) openFilters(); else cancelFilters(); }}>
 			<Dialog.Trigger disabled={!data.config}>
 				{#snippet child({ props })}
 					<Button {...props} variant="outline" class="filter-toggle no-js:hidden" aria-controls="catalog-filters" disabled={!data.config}>
 						<Icon icon={SlidersHorizontalIcon} aria-hidden="true" />
-						{selectionCount ? m.filtersSelected(selectionCount) : m.filters}
+						{categories.length ? m.filtersSelected(categories.length) : m.filters}
 					</Button>
 				{/snippet}
 			</Dialog.Trigger>
-			<Dialog.Content id="catalog-filters" preventScroll={false} showCloseButton={false} class="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-2xl gap-0 p-0 md:max-w-2xl" aria-describedby={undefined}>
+			<!-- A bottom sheet on phones like Hyllekart beside it, so «Vis resultater» is at the thumb; centred from 48rem. -->
+			<Dialog.Content id="catalog-filters" preventScroll={false} showCloseButton={false} class="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-2xl gap-0 p-0 md:max-w-2xl max-md:top-auto max-md:bottom-0 max-md:w-full max-md:max-w-full max-md:translate-y-0 max-md:rounded-b-none" aria-describedby={undefined}>
 				<form class="grid max-h-[calc(100dvh-2rem)] min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]" onsubmit={(event) => submitSearch(event, true)}>
 					<Dialog.Header layout="bar">
 						<Dialog.Title>{m.filterTitle}</Dialog.Title>
@@ -401,23 +448,11 @@
 					{/each}
 					{:else if categories.length > 1}<p class="text-sm text-muted-foreground">{m.singleCategoryForSpecifications}</p>
 					{:else}<p class="text-sm text-muted-foreground">{m.chooseCategory}</p>{/if}
-					{#if topologyLoading && !topology}<p role="status" class="sr-only">{i18n.m.shelfMap.loading}</p>{/if}
-					{#if topologyFailed}
-						<div class="grid justify-items-start gap-3">
-							<Alert.Message role="alert" appearance="inline" variant="destructive">{i18n.m.shelfMap.unavailable}</Alert.Message>
-							<Button variant="outline" onclick={() => topologyCycle++}>{m.retry}</Button>
-						</div>
-					{/if}
-					{#if topology}
-						<LabelShelfSelection {topology} heading={m.locations} selected={selectedBins} onselection={selectLocations}
-							onclear={() => { cabinetIds = []; binIds = []; }} disabled={topologyLoading || topologyFailed} />
-						{#if missingLocations}<Field.Error role="alert">{m.locationsChanged}</Field.Error>{/if}
-					{/if}
 						{#if formError}<Field.Error id="filter-error" role="alert">{m.errors[formError]}</Field.Error>{/if}
 					</div>
 					<Dialog.Footer variant="sheet">
 						<Button variant="ghost" onclick={cancelFilters}>{m.cancel}</Button>
-						<Button type="submit" disabled={facetsLoading || facetsFailed || topologyLoading || topologyFailed || missingLocations}>{m.applyFilters}</Button>
+						<Button type="submit" disabled={facetsLoading || facetsFailed}>{m.applyFilters}</Button>
 					</Dialog.Footer>
 				</form>
 			</Dialog.Content>

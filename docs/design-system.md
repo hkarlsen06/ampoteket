@@ -258,6 +258,7 @@ Prefer shared variants to repeated class overrides:
 | `Empty.Root` | Empty state with any recovery action; no icon |
 | `Dialog.Header layout="bar"` | Title/close bar with a localized icon-only close |
 | `Dialog.Content/Footer variant="sheet"` + `sheetBody` | Side sheet, its action row and named scrolling body |
+| `shelfPickerSheet` on a `sheet` | Shelf maps: bottom sheet sized to content below 48rem, narrow side panel above |
 | `Badge variant="success\|warning"`, `StateBadge` | Operational states: word + icon + colour |
 | `DisclosureTrigger` | The one inline-disclosure trigger inside `Collapsible.Root` |
 
