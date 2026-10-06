@@ -11,6 +11,7 @@ const locationPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-
 export type CatalogConditions = Record<string, { eq?: string; min?: string; max?: string }>;
 export type CatalogLocations = { cabinetIds: string[]; binIds: string[] };
 export type CatalogQuery = CatalogLocations & { q: string; categories: string[]; after: string; conditions: CatalogConditions };
+export type SearchableProduct = Pick<CatalogProduct, 'code' | 'name_nb' | 'name_en' | 'description' | 'category_name' | 'attributes'>;
 export type CatalogQueryIssue = 'invalidQuery' | 'unknownCategory' | 'unknownAttribute' | 'invalidFilter' | 'missingCursor';
 export class CatalogQueryError extends Error {
 	constructor(readonly issue: CatalogQueryIssue) { super(issue); this.name = 'CatalogQueryError'; }
@@ -152,6 +153,27 @@ function folded(text: string): string {
 	return text.normalize('NFKC').toLowerCase().replaceAll('ß', 'ss').replaceAll('ς', 'σ');
 }
 
+/** Every term must occur in the code, names, description, category or a specification.
+ * Mirrors app.catalog_matches; "10 kΩ" also reads as "10kΩ" so "10k" matches. */
+export function catalogSearchText(product: SearchableProduct): string {
+	const text = folded([productSearchText(product), product.description, product.category_name,
+		formatMeasurementText(product.name_nb, 'nb'), formatMeasurementText(product.name_en, 'en'),
+		...locales.map((locale) => product.category_name ? categoryLabel(product.category_name, locale) : null),
+		...Object.entries(product.attributes).map(([code, attribute]) => [attribute.label, ...locales.map(locale => specificationLabel(code, attribute, locale)),
+			attribute.value_type === 'boolean' ? (attribute.value ? 'true yes ja' : 'false no nei') : attribute.value,
+			...(attribute.value_type === 'number' ? locales.map((locale) => formatMeasurement(attribute.value, attribute.unit, locale)) : []),
+			attribute.unit].filter((part) => part !== null).join(' '))].filter((part) => part !== null).join(' '));
+	return `${text} ${text.replace(/([0-9])\s+(?=[\p{L}ωμ])/gu, '$1')}`;
+}
+
+export function searchTerms(q: string): string[] {
+	return folded(q).split(/\s+/).filter(Boolean);
+}
+
+export function matchesSearch(text: string, terms: string[]): boolean {
+	return terms.every((term) => text.includes(term));
+}
+
 /** Validate every supplied condition before matching, including on an empty result set. */
 export function searchCatalog(products: CatalogProduct[], query: CatalogQuery, limit = 50): {
 	products: CatalogProduct[]; total: number; nextAfterCode: string | null;
@@ -177,18 +199,11 @@ export function searchCatalog(products: CatalogProduct[], query: CatalogQuery, l
 	}
 	const cursor = query.after ? products.findIndex((product) => product.code === query.after) : -1;
 	if (query.after && cursor === -1) throw new CatalogQueryError('missingCursor');
-	const terms = folded(query.q).split(/\s+/).filter(Boolean);
+	const terms = searchTerms(query.q);
 	const matches: { product: CatalogProduct; index: number }[] = [];
 	for (const [index, product] of products.entries()) {
 		if (query.categories.length && (product.category_name === null || !query.categories.includes(product.category_name))) continue;
-		const searchable = folded([productSearchText(product), product.description, product.category_name,
-			formatMeasurementText(product.name_nb, 'nb'), formatMeasurementText(product.name_en, 'en'),
-			...locales.map((locale) => product.category_name ? categoryLabel(product.category_name, locale) : null),
-			...Object.entries(product.attributes).map(([code, attribute]) => [attribute.label, ...locales.map(locale => specificationLabel(code, attribute, locale)),
-				attribute.value_type === 'boolean' ? (attribute.value ? 'true yes ja' : 'false no nei') : attribute.value,
-				...(attribute.value_type === 'number' ? locales.map((locale) => formatMeasurement(attribute.value, attribute.unit, locale)) : []),
-				attribute.unit].filter((part) => part !== null).join(' '))].filter((part) => part !== null).join(' '));
-		if (!terms.every((term) => searchable.includes(term))) continue;
+		if (!matchesSearch(catalogSearchText(product), terms)) continue;
 		if (!Object.entries(query.conditions).every(([code, condition]) => {
 			const attribute = product.attributes[code];
 			if (!attribute) return false;

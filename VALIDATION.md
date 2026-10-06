@@ -12,12 +12,12 @@ below are local runs, not CI claims.
 
 | Check | Last run | Result | Covers |
 | --- | --- | --- | --- |
-| `bun run check`, `bun run check:scripts`, `bun run lint` | 2026-10-05 | PASS, 0 errors/warnings | Types, scripts, lint |
+| `bun run check`, `bun run check:scripts`, `bun run lint` | 2026-10-06 | PASS, 0 errors/warnings | Types, scripts, lint |
 | `bun run build` | 2026-10-05 | PASS | Production SvelteKit/Cloudflare bundle with the admin professionalism fixes |
-| `bun test` | 2026-10-05 | PASS, 253 tests, 2,104 assertions | Unit tests, including CI/deploy failures, HTTPS headers, seed cleanup ownership, account-bound password changes, receipt retries and Discord deadlines/cooldowns |
+| `bun test` | 2026-10-06 | PASS, 254 tests, 2,119 assertions | Unit tests, including CI/deploy failures, HTTPS headers, seed cleanup ownership, account-bound password changes, receipt retries and Discord deadlines/cooldowns |
 | `bun audit` | 2026-10-02 | PASS, no reported vulnerabilities | Resolved dependency tree |
 | `python3 scripts/test-check-clipped-ink.py`, `bun run check:ink` | 2026-10-02 | PASS | Checker regressions, static SVG checks |
-| `./scripts/test-database.sh` | 2026-10-06 | PASS | Nine migrations, rollback/retry, ACLs/RLS, acceptance, 12 stored-data corruption cases including drawer bounds/overlap, 42 concurrency scenarios including competing help-order writes, restore, schema/docs comparison, signed-JWT HTTP |
+| `./scripts/test-database.sh` | 2026-10-06 | PASS | Ten migrations, rollback/retry, ACLs/RLS, acceptance, 12 stored-data corruption cases including drawer bounds/overlap, 42 concurrency scenarios including competing help-order writes, restore, schema/docs comparison, signed-JWT HTTP |
 | GitHub Actions Validation | 2026-10-02 | PASS, all nine jobs on the deployed application revision `d2a5485` | Database and all eight browser modes; [release CI](https://github.com/hkarlsen06/ampoteket/actions/runs/36975296467) (scanner passed on rerun after a CI hang) |
 | GitHub Actions Deploy | 2026-10-02 | PASS, version `d1ffbf47-c54d-4f85-b555-b3c786f5883c` | First deploy from `.github/workflows/deploy.yml`: CI gate, reviewed vars/rate limits/secret names, HSTS, `/contact` and HTTP redirect checks by `deploy:production`; [run](https://github.com/hkarlsen06/ampoteket/actions/runs/36976781424) |
 | Hosted release verification | 2026-10-02 | PASS | Reviewed vars/rate limits/secret names; 25 HTTP checks across both locales, HTTP/www redirects, HSTS, private admin/checkout headers, closed sales; persisted error logs with query redaction and invocation logs off |
@@ -65,6 +65,8 @@ Update this section whenever a migration changes (`sha256sum supabase/migrations
   `25904328be34292b3a959f27b62018c3ac06a6ee12b4413c45c3ed09621148a2`
 - `20261006000100_gram_unit.sql`: SHA-256
   `2d48d9687355724cda060e9982f2953c249abef0537d19f98fe6b7f54b779013`
+- `20261006000200_catalog_compact_measurements.sql`: SHA-256
+  `6ecb9d6548ba035c25196cc766decdaf6db5a0ab5f74184f33d4db245f06f2de`
 
 24 app tables, four exact numeric domains, 30 public RPCs, 29 staff views and five
 internal derived views. All views are security invoker; only `public` is exposed.

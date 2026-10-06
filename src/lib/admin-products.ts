@@ -4,6 +4,8 @@ import { compareDecimals, multiplyDecimals, normalizeDecimal, validQuantity } fr
 import { identifier, object, text, type Fetcher } from './api';
 import { readShelfTopology, type ShelfTopology } from './shelf-map';
 import { standardSpecifications } from './product-specifications';
+import { catalogSearchText } from './catalog-search';
+import type { CatalogAttribute } from './catalog';
 
 export const productSelect = 'id,code,name_nb,name_en,description,category_id,bin_id,location_note,unit_code,stock_step,sale_step,sale_unit_price_nok,minimum_stock,datasheet_url,purchase_url,is_active,metadata_revision';
 export type ProductWrite = { id: string; code: string; name_nb: string; name_en: string; description: string | null; category_id: string | null; bin_id: string | null; location_note: string | null; unit_code: string; stock_step: string; sale_step: string; sale_unit_price_nok: string; minimum_stock: string; datasheet_url: string | null; purchase_url: string | null; is_active: boolean };
@@ -172,6 +174,26 @@ export async function readProductAttributes(session: StaffSession, id: string, f
 	identifier(id);
 	return (await allStaffRows(session, 'amp_product_attributes', 'product_id,attribute_id,number_value,text_value,boolean_value', 'attribute_id', { product_id: `eq.${id}` }, fetcher)).map(value => { const v = parseAttribute(value); if (v.product_id !== id) throw new Error('Invalid attribute binding'); return v; });
 }
+/** Attributes have a composite key: paging on either UUID alone loses rows. */
+export async function readAllProductAttributes(session: StaffSession, fetcher: Fetcher = fetch): Promise<AttributeValue[]> {
+	const result: AttributeValue[] = [];
+	let after: AttributeValue | undefined;
+	for (;;) {
+		const raw = await staffRequest(session, 'amp_product_attributes', {
+			select: 'product_id,attribute_id,number_value,text_value,boolean_value',
+			order: 'product_id.asc,attribute_id.asc', limit: '200',
+			...(after ? { or: `(product_id.gt.${after.product_id},and(product_id.eq.${after.product_id},attribute_id.gt.${after.attribute_id}))` } : {})
+		}, undefined, 'GET', fetcher);
+		if (!Array.isArray(raw) || raw.length > 200) throw new Error('Invalid attribute page');
+		if (!raw.length) return result;
+		for (const value of raw) {
+			const row = parseAttribute(value);
+			if (after && (row.product_id < after.product_id || row.product_id === after.product_id && row.attribute_id <= after.attribute_id)) throw new Error('Non-advancing attribute page');
+			result.push(row); after = row;
+		}
+	}
+}
+
 export async function readProductReferences(session: StaffSession, fetcher: Fetcher = fetch): Promise<ProductReferences> {
 	const [categories, definitions, shelf] = await Promise.all([
 		allStaffRows(session, 'amp_categories', 'id,name', 'id', {}, fetcher),
@@ -389,4 +411,19 @@ export async function executeDetailCommand(session: StaffSession, command: Detai
 	if (!Array.isArray(saved) || saved.length > 1) throw new Error('Invalid detail acknowledgement');
 	if (!saved.length) throw new StaleProductError();
 	if (!sameDetail(parse(saved[0]), c.after ?? c.before)) throw new Error('Detail acknowledgement differs');
+}
+/** Staff search reads the same fields as the shop catalog, unpublished products included. */
+export function adminSearchTexts(products: AdminProduct[], references: ProductReferences, values: AttributeValue[]): Map<string, string> {
+	const categories = new Map(references.categories.map(category => [category.id, category.name]));
+	const definitions = new Map(references.definitions.map(definition => [definition.id, definition]));
+	const attributes = new Map<string, Record<string, CatalogAttribute>>();
+	for (const value of values) {
+		const d = definitions.get(value.attribute_id); if (!d) continue;
+		const attribute = (d.value_type === 'number' ? { label: d.label, unit: d.canonical_unit, value_type: 'number', value: value.number_value }
+			: d.value_type === 'text' ? { label: d.label, unit: null, value_type: 'text', value: value.text_value }
+			: { label: d.label, unit: null, value_type: 'boolean', value: value.boolean_value }) as CatalogAttribute;
+		if (attribute.value === null) continue;
+		attributes.set(value.product_id, { ...attributes.get(value.product_id), [d.code]: attribute });
+	}
+	return new Map(products.map(p => [p.id, catalogSearchText({ ...p, category_name: p.category_id === null ? null : categories.get(p.category_id) ?? null, attributes: attributes.get(p.id) ?? {} })]));
 }

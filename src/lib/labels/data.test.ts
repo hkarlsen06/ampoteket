@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
-import { readLabelAttributes, selectedLabelProducts, labelSpecificationLines, type LabelData } from './data';
-import { productTypes, type AdminProduct } from '../admin-products';
+import { selectedLabelProducts, labelSpecificationLines, type LabelData } from './data';
+import { productTypes, readAllProductAttributes, type AdminProduct } from '../admin-products';
 const id = (n: number) => `00000000-0000-4000-8000-${n.toString().padStart(12, '0')}`;
 const session = { userId: id(99), token: 'staff-test', config: { url: 'https://fixture.invalid', publishableKey: 'public-test' } };
 const attribute = (product: number, definition: number) => ({ product_id: id(product), attribute_id: id(definition), number_value: '0.000000000005', text_value: null, boolean_value: null });
@@ -8,7 +8,7 @@ const attribute = (product: number, definition: number) => ({ product_id: id(pro
 test('label attributes traverse a capped composite key without losing same-product or same-definition rows', async () => {
 	const pages = [[attribute(1, 10), attribute(1, 11)], [attribute(2, 10)], []];
 	const queries: URLSearchParams[] = [];
-	const values = await readLabelAttributes(session, async (input, init) => {
+	const values = await readAllProductAttributes(session, async (input, init) => {
 		queries.push(new URL(String(input)).searchParams);
 		expect(init?.method).toBe('GET'); expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer staff-test');
 		return new Response(JSON.stringify(pages.shift()).replaceAll('"0.000000000005"', '0.000000000005'));
@@ -18,9 +18,9 @@ test('label attributes traverse a capped composite key without losing same-produ
 	expect(queries[2].get('or')).toBe(`(product_id.gt.${id(2)},and(product_id.eq.${id(2)},attribute_id.gt.${id(10)}))`);
 });
 test('attribute pagination rejects duplicates and failed later pages rather than exporting partial specifications', async () => {
-	await expect(readLabelAttributes(session, async () => Response.json([attribute(1, 10)]))).rejects.toThrow('Non-advancing');
+	await expect(readAllProductAttributes(session, async () => Response.json([attribute(1, 10)]))).rejects.toThrow('Non-advancing');
 	let calls = 0;
-	await expect(readLabelAttributes(session, async () => calls++ ? new Response('unavailable', { status: 503 }) : Response.json([attribute(1, 10)]))).rejects.toThrow();
+	await expect(readAllProductAttributes(session, async () => calls++ ? new Response('unavailable', { status: 503 }) : Response.json([attribute(1, 10)]))).rejects.toThrow();
 });
 
 function fixture(): LabelData {

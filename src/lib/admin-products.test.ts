@@ -2,7 +2,8 @@ import { expect, test } from 'bun:test';
 import { memory } from './test-storage';
 import { ApiError } from './api';
 import { formatMoney } from './format';
-import { readProductSpecificationReview, replaceReviewedProductCommand, clearProductCommand, definitiveProductFailure, ProductSpecificationsError, executeDetailCommand, executeProductCommand, generateCategoryProductCode, generateProductCode, isProductCodeCollision, parseAdminProduct, parseAttribute, parseProductWrite, persistProductCommand, ProductFieldError, productCategoryOptions, productTypes, readAdminProducts, readProductAttributes, readProductCommand, StaleProductError, type ProductCommand, type ProductWrite } from './admin-products';
+import { matchesSearch, searchTerms } from './catalog-search';
+import { adminSearchTexts, readProductSpecificationReview, replaceReviewedProductCommand, clearProductCommand, definitiveProductFailure, ProductSpecificationsError, executeDetailCommand, executeProductCommand, generateCategoryProductCode, generateProductCode, isProductCodeCollision, parseAdminProduct, parseAttribute, parseProductWrite, persistProductCommand, ProductFieldError, productCategoryOptions, productTypes, readAdminProducts, readProductAttributes, readProductCommand, StaleProductError, type ProductCommand, type ProductReferences, type ProductWrite } from './admin-products';
 const actor = '11111111-1111-4111-8111-111111111111'; const id = '22222222-2222-4222-8222-222222222222'; const bin = '33333333-3333-4333-8333-333333333333';
 const attribute = '44444444-4444-4444-8444-444444444444';
 const session = { userId: actor, token: 'staff-jwt', config: { url: 'https://fixture.invalid', publishableKey: 'sb_publishable_fixture' } };
@@ -324,4 +325,15 @@ test('reviewed specification removal deletes only its guarded saved value and re
 		return Response.json([{ ...product, name_en: 'Changed since review' }]);
 	})).rejects.toBeInstanceOf(ProductSpecificationsError);
 	expect(readProductCommand(storage)).toEqual(replacement);
+});
+
+test('staff search matches unpublished products by category, specification and compact measurement', () => {
+	const category = '55555555-5555-4555-8555-555555555555', pkg = '66666666-6666-4666-8666-666666666666';
+	const references = { categories: [{ id: category, name: 'Resistors' }], units: [], shelf: { cabinets: [], bins: [] },
+		definitions: [{ id: attribute, code: 'resistance', label: 'Resistance', value_type: 'number', canonical_unit: 'ohm' }, { id: pkg, code: 'package', label: 'Package', value_type: 'text', canonical_unit: null }] } as unknown as ProductReferences;
+	const text = adminSearchTexts([{ ...product, name_nb: 'Del', name_en: 'Part', category_id: category, is_active: false }], references, [
+		{ product_id: id, attribute_id: attribute, number_value: '10000', text_value: null, boolean_value: null },
+		{ product_id: id, attribute_id: pkg, number_value: null, text_value: '0603', boolean_value: null }]).get(id)!;
+	for (const q of ['motstand 10k 0603', '10 kΩ', 'res-a3f09', 'resa3f']) expect(matchesSearch(text, searchTerms(q))).toBe(true);
+	expect(matchesSearch(text, searchTerms('capacitor'))).toBe(false);
 });

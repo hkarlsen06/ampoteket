@@ -16,17 +16,17 @@
 	import { getI18n } from '#lib/i18n/index.js';
 	import Icon from '#lib/Icon.svelte';
 	import SortAscendingIcon from 'phosphor-svelte/lib/SortAscendingIcon';
-	import { productSearchText } from '#lib/catalog-search.js';
+	import { matchesSearch, searchTerms } from '#lib/catalog-search.js';
 	import { productName } from '#lib/catalog.js';
 	import { getAdminContext } from '#lib/admin-context.svelte.js';
 	import AdminProductCard from '#lib/AdminProductCard.svelte';
 	import AdminProductScanner from '#lib/AdminProductScanner.svelte';
-	import { compareAttention, stockRank, readAdminProducts, readInventory, readProductCommand, readProductReferences, type AdminProduct, type ProductCommand, type ProductStock, type ProductReferences } from '#lib/admin-products.js';
+	import { adminSearchTexts, compareAttention, stockRank, readAdminProducts, readAllProductAttributes, readInventory, readProductCommand, readProductReferences, type AdminProduct, type ProductCommand, type ProductStock, type ProductReferences } from '#lib/admin-products.js';
 	import ProductReferencesEditor from '#lib/ProductReferences.svelte';
 	import { readDraft, writeDraft } from '#lib/drafts.js';
 	const fieldId = $props.id();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.adminProducts);
-	let products = $state<AdminProduct[] | null>(null); let references = $state<ProductReferences | null>(null); let stock = $state<Map<string, ProductStock> | null>(null); let stockFailed = $state(false); let busy = $state(false); let failed = $state(false); let query = $state(''); let lowStock = $state(false); let activity = $state('all'); let sort = $state<keyof typeof sorters>('attention'); let sortOpen = $state(false); let pending = $state<ProductCommand | null>(null); let alive = true;
+	let products = $state<AdminProduct[] | null>(null); let references = $state<ProductReferences | null>(null); let searchTexts = new Map<string, string>(); let stock = $state<Map<string, ProductStock> | null>(null); let stockFailed = $state(false); let busy = $state(false); let failed = $state(false); let query = $state(''); let lowStock = $state(false); let activity = $state('all'); let sort = $state<keyof typeof sorters>('attention'); let sortOpen = $state(false); let pending = $state<ProductCommand | null>(null); let alive = true;
 	// Products load in code order and sorting is stable, so code breaks every tie.
 	const quantity = (p: AdminProduct) => stock?.get(p.id)?.quantity;
 	const sorters = {
@@ -45,7 +45,8 @@
 		writeDraft(admin.session?.user.id, 'products-view', query || activity !== 'all' || lowStock || sort !== 'attention' || visibleCount > 50 ? { query, activity, lowStock, sort, visibleCount } : null, 'session');
 	});
 	// Low stock matches the overview's attention list: active and sold out or below minimum.
-	const filtered = $derived((products ?? []).filter(p => (activity === 'all' || p.is_active === (activity === 'active')) && (!lowStock || stockRank(p, quantity(p)) <= 1) && productSearchText(p).toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).sort(sorters[sort]));
+	const terms = $derived(searchTerms(query));
+	const filtered = $derived((products ?? []).filter(p => (activity === 'all' || p.is_active === (activity === 'active')) && (!lowStock || stockRank(p, quantity(p)) <= 1) && matchesSearch(searchTexts.get(p.id) ?? '', terms)).sort(sorters[sort]));
 	let reading = $state(false);
 	let currentRead: Promise<void> | null = null;
 	onMount(() => {
@@ -70,7 +71,7 @@
 	}
 	async function loadProducts() {
 		// A failed stock read shows as unavailable per card instead of hiding the product list.
-		try { const session = admin.credentials(); const [items, refs, inventory] = await Promise.all([readAdminProducts(session), readProductReferences(session), readInventory(session).catch(error => { void admin.permissionFailure(error); return null; })]); if (alive && session.userId === admin.session?.user.id) { products = items.sort((a, b) => a.code.localeCompare(b.code)); references = refs; if (inventory) stock = new Map(inventory.map(s => [s.product_id, s])); stockFailed = inventory === null; failed = false; } }
+		try { const session = admin.credentials(); const [items, refs, attributes, inventory] = await Promise.all([readAdminProducts(session), readProductReferences(session), readAllProductAttributes(session), readInventory(session).catch(error => { void admin.permissionFailure(error); return null; })]); if (alive && session.userId === admin.session?.user.id) { searchTexts = adminSearchTexts(items, refs, attributes); products = items.sort((a, b) => a.code.localeCompare(b.code)); references = refs; if (inventory) stock = new Map(inventory.map(s => [s.product_id, s])); stockFailed = inventory === null; failed = false; } }
 		catch (error) { if (alive) failed = true; await admin.permissionFailure(error); } finally { if (alive) { busy = false; reading = false; } }
 	}
 	function retryInventory() {

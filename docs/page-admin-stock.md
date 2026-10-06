@@ -44,8 +44,9 @@ An empty catalog offers **New product**; an unmatched search offers clearing sea
 The **Low stock** toggle narrows to the overview's needs-attention set and combines with
 the published filter and search. Default sort is needs attention (overview order), then other published, then
 unpublished; alternatives are least recently counted, code and name. There is no lowest-stock
-sort because unlike units do not compare. Search includes a hyphen-free code alias
-(`res00026` finds `RES-00026`), here and in the count picker. **Scan product** opens a
+sort because unlike units do not compare. Search matches as in the
+[public catalog](page-catalog.md#3-url-and-matching-rules), specifications included.
+The hyphen-free code alias (`res00026` finds `RES-00026`) also works in the count picker. **Scan product** opens a
 label's editor for any loaded product; unknown labels stay in the dialog. This scan
 never changes stock or the basket.
 Its camera/status body scrolls in short viewports while Close and retry actions

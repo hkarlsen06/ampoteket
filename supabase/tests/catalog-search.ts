@@ -20,7 +20,7 @@ const compactSearches: Record<string, string[]> = {
 	'q=searcha&category=Capacitors': [], 'q=sot23': []
 };
 const searches = ['', 'q=1+kΩ', 'q=1000+ohm', 'q=1,25+µF', 'q=1.25+µF', 'q=STRASSE+μ', 'q=åæø+σ',
-	'q=motstander', 'q=resistors', 'q=kapasitans', 'q=5+pF', 'q=false+nei', 'q=SoT-23', 'q=SEARCH-A',
+	'q=motstander', 'q=resistors', 'q=kapasitans', 'q=5+pF', 'q=5pf', 'q=1k', 'q=1kΩ', 'q=1,25µ', 'q=false+nei', 'q=SoT-23', 'q=SEARCH-A',
 	'q=not-present', 'category=Resistors&category=Capacitors', 'eq.package=0603', 'eq.package=sot-23',
 	'eq.package=', 'eq.polarised=false', 'min.capacitance=0.000000000005&max.capacitance=0.000000000005',
 	'eq.value=9007199254740993.000000000001', 'min.value=9007199254740993.000000000002',

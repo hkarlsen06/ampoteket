@@ -82,7 +82,7 @@ describe('catalog search and shareable conditions', () => {
 	test('matches both saved and SI-formatted measurement text', () => {
 		const part = product(1, { name_nb: '1000 ohm motstand', name_en: '1000 ohm resistor',
 			category_name: 'Resistors', attributes: { resistance: { label: 'Resistance', value_type: 'number', unit: 'ohm', value: '1000' } } });
-		for (const term of ['1000 ohm', '1 kΩ']) {
+		for (const term of ['1000 ohm', '1 kΩ', '1k', '1kΩ']) {
 			expect(searchCatalog([part], query(`q=${encodeURIComponent(term)}`)).products).toEqual([part]);
 		}
 		const unnamed = { ...part, name_nb: 'Del 1', name_en: 'Part 1' };

@@ -1,5 +1,5 @@
-import { staffRequest, type StaffSession } from '../admin-api';
-import { parseAttribute, readAdminProducts, readProductReferences, productTypes,
+import type { StaffSession } from '../admin-api';
+import { readAdminProducts, readAllProductAttributes, readProductReferences, productTypes,
 	type AdminProduct, type AttributeValue, type ProductReferences } from '../admin-products';
 import { categorySpecifications } from '../product-specifications';
 import { formatMeasurement, formatMeasurementText } from '../format';
@@ -8,29 +8,9 @@ import type { Fetcher } from '../api';
 
 export type LabelData = { products: AdminProduct[]; references: ProductReferences; attributes: AttributeValue[] };
 
-/** Attributes have a composite key: paging on either UUID alone loses rows. */
-export async function readLabelAttributes(session: StaffSession, fetcher: Fetcher = fetch): Promise<AttributeValue[]> {
-	const result: AttributeValue[] = [];
-	let after: AttributeValue | undefined;
-	for (;;) {
-		const raw = await staffRequest(session, 'amp_product_attributes', {
-			select: 'product_id,attribute_id,number_value,text_value,boolean_value',
-			order: 'product_id.asc,attribute_id.asc', limit: '200',
-			...(after ? { or: `(product_id.gt.${after.product_id},and(product_id.eq.${after.product_id},attribute_id.gt.${after.attribute_id}))` } : {})
-		}, undefined, 'GET', fetcher);
-		if (!Array.isArray(raw) || raw.length > 200) throw new Error('Invalid label attribute page');
-		if (!raw.length) return result;
-		for (const value of raw) {
-			const row = parseAttribute(value);
-			if (after && (row.product_id < after.product_id || row.product_id === after.product_id && row.attribute_id <= after.attribute_id)) throw new Error('Non-advancing label attribute page');
-			result.push(row); after = row;
-		}
-	}
-}
-
 export async function readLabelData(session: StaffSession, fetcher: Fetcher = fetch): Promise<LabelData> {
 	const [products, references, attributes] = await Promise.all([
-		readAdminProducts(session, fetcher), readProductReferences(session, fetcher), readLabelAttributes(session, fetcher)
+		readAdminProducts(session, fetcher), readProductReferences(session, fetcher), readAllProductAttributes(session, fetcher)
 	]);
 	const bins = new Set(references.shelf.bins.map(bin => bin.id));
 	const productIds = new Set(products.map(product => product.id));

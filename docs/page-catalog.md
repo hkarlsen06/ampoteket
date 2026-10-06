@@ -77,8 +77,10 @@ works in both locales. Saved data is plain text; never interpret markup.
 
 **Search** splits `q` on whitespace, normalizes and case-folds, and requires every term
 in the code (with or without hyphens), either name, description, category (both
-languages) or a formatted specification. Substring only: no fuzzy ranking, no guessing
-from model names. Results keep database code order.
+languages) or a formatted specification. A measurement also matches without the space
+before its unit (`10k`, `10kΩ` and `100n` find `10 kΩ` and `100 nF`). Substring only:
+no fuzzy ranking, no guessing from model names. Results keep database code order.
+Staff product search uses the same matcher (`catalogSearchText`).
 
 **Compact codes.** Manual lookup trims and ignores case and tries the exact code first.
 Only a valid empty response permits retrying eight characters as three letters, hyphen,
