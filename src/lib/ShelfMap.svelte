@@ -6,8 +6,6 @@
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
 	import * as Alert from '#lib/components/ui/alert/index.js';
 	import * as Empty from '#lib/components/ui/empty/index.js';
-	import * as Collapsible from '#lib/components/ui/collapsible/index.js';
-	import DisclosureTrigger from '#lib/DisclosureTrigger.svelte';
 	import { codeText, itemTitle, nameWrap, sectionHeading } from '#lib/ui.js';
 	import { onMount, onDestroy, untrack } from 'svelte';
 	import { getI18n } from '#lib/i18n/index.js';
@@ -19,23 +17,22 @@
 	import ShelfZoom from '#lib/ShelfZoom.svelte';
 	// One stage shows the wall or, zoomed in, one cabinet's drawers; contents grow
 	// below it. Diagrams stay height-bounded, so a whole cabinet never scrolls.
-	let { config, product, title, labelledby, onreveal, headingLevel = 2, initialTopology = null, collapsible = false }: {
+	// A product's map opens on the wall with its drawer filled on its cabinet's face.
+	let { config, product, title, labelledby, onreveal, headingLevel = 2, initialTopology = null }: {
 		config: CatalogConfig | null; product?: CatalogProduct; title?: string; labelledby?: string; headingLevel?: 2 | 3; initialTopology?: ShelfTopology | null;
-		collapsible?: boolean;
 		onreveal?: (section: HTMLElement) => void;
 	} = $props();
 	const i18n = getI18n();
 	const m = $derived(i18n.m.shelfMap);
 	const uid = $props.id();
 	const initial = untrack(() => initialTopology);
-	const initialLocation = untrack(() => initial && product ? locateProduct(initial, product) : null);
 	let topology = $state<ShelfTopology | null>(initial);
 	let mapState = $state<'loading' | 'ready' | 'error'>(initial ? 'ready' : 'loading');
 	let refreshing = $state(false);
-	let catalogState = $state<'idle' | 'loading' | 'ready' | 'error'>(initialLocation?.bin.has_products ? 'loading' : 'idle');
+	let catalogState = $state<'idle' | 'loading' | 'ready' | 'error'>('idle');
 	let products = $state<CatalogProduct[]>([]);
-	let cabinetId = $state<string | null>(initialLocation?.cabinet.id ?? null), binId = $state<string | null>(initialLocation?.bin.id ?? null);
-	let showContents = $state(Boolean(initialLocation)), generation = 0;
+	let cabinetId = $state<string | null>(null), binId = $state<string | null>(null);
+	let showContents = $state(false), generation = 0;
 	let stageSection = $state<HTMLElement>(), contentsSection = $state<HTMLElement>();
 	// Within one cabinet the contents only grow: a shorter list or the loading row
 	// would shorten a page scrolled to its end, and the browser would then pull
@@ -47,6 +44,7 @@
 	// Parts stored outside the drawer wall keep the browsable map without a highlight.
 	const placed = $derived(product?.bin_code === null ? null : product);
 	const location = $derived(topology && placed ? locateProduct(topology, placed) : null);
+	const marked = $derived(location && { row: location.bin.inner_row, col: location.bin.inner_col, rowSpan: location.bin.row_span, colSpan: location.bin.col_span });
 	const cabinets = $derived([...(topology?.cabinets ?? [])].sort((a, b) => b.outer_row - a.outer_row || a.outer_col - b.outer_col));
 	const cabinetEntry = $derived(topology?.cabinets.find((entry) => entry.id === cabinetId));
 	const bins = $derived([...(topology?.bins.filter((entry) => entry.cabinet_id === cabinetId) ?? [])]
@@ -73,7 +71,7 @@
 	});
 
 	function cancelReads() { generation++; controller?.abort(); catalogController?.abort(); }
-	onMount(() => { if (!initial) void load(); else if (initialLocation?.bin.has_products) void loadProducts(); });
+	onMount(() => { if (!initial) void load(); });
 	onDestroy(cancelReads);
 	function refreshWhenVisible() {
 		if (document.visibilityState === 'visible') void load();
@@ -105,15 +103,11 @@
 		try {
 			const result = await readShelfTopology(config, { signal: own.signal });
 			if (request !== generation) return;
-			const found = product ? locateProduct(result, product) : null;
 			// Keep the visitor's selection by identity, including drawers moved to
 			// another cabinet. Only fall back when the selected storage is gone.
 			const selected = result.bins.find((entry) => entry.id === binId);
 			if (selected) cabinetId = selected.cabinet_id;
-			else if (!topology) {
-				cabinetId = found?.cabinet.id ?? null; binId = found?.bin.id ?? null;
-				showContents = Boolean(found && product);
-			} else {
+			else {
 				// A vanished cabinet falls back to the wall; the visitor's level is kept otherwise.
 				if (!result.cabinets.some((entry) => entry.id === cabinetId)) cabinetId = null;
 				binId = null; showContents = false;
@@ -147,18 +141,13 @@
 <svelte:window onfocus={refreshWhenVisible} ononline={refreshWhenVisible} />
 <svelte:document onvisibilitychange={refreshWhenVisible} />
 
-<Collapsible.Root class="shelf-map min-w-0 wrap-break-word" role="region" aria-labelledby={labelledby ?? `${uid}-title`}>
-	{#if !labelledby || collapsible}<svelte:element this={`h${headingLevel}`} class={[sectionHeading, "mb-2"]} id={labelledby ?? `${uid}-title`}>
-		{#if collapsible}
-			<DisclosureTrigger class="text-[length:inherit] font-[inherit] md:hidden no-js:hidden">{title ?? m.title}</DisclosureTrigger>
-			<span class="hidden md:inline no-js:inline">{title ?? m.title}</span>
-		{:else}{title ?? m.title}{/if}
-	</svelte:element>{/if}
+<section class="shelf-map min-w-0 wrap-break-word" aria-labelledby={labelledby ?? `${uid}-title`}>
+	{#if !labelledby}<svelte:element this={`h${headingLevel}`} class={[sectionHeading, "mb-2"]} id={`${uid}-title`}>{title ?? m.title}</svelte:element>{/if}
+	<!-- The filled drawer shows the address; its text stays for screen readers and when the map cannot place it. -->
 	{#if product?.bin_code === null}<LocationChips plain note={product.location_note ?? i18n.m.shop.askStaff} />
-	{:else if product}<LocationChips plain outerRow={location?.cabinet.outer_row ?? product.outer_row} outerCol={location?.cabinet.outer_col ?? product.outer_col}
+	{:else if product}<div class={location ? 'sr-only' : undefined}><LocationChips plain outerRow={location?.cabinet.outer_row ?? product.outer_row} outerCol={location?.cabinet.outer_col ?? product.outer_col}
 		innerRow={location?.bin.inner_row ?? product.inner_row} innerCol={location?.bin.inner_col ?? product.inner_col}
-		rowSpan={location?.bin.row_span ?? product.row_span} colSpan={location?.bin.col_span ?? product.col_span} />{/if}
-	<Collapsible.Content forceMount class={collapsible ? 'hidden data-[state=open]:block md:block no-js:block' : 'block'}>
+		rowSpan={location?.bin.row_span ?? product.row_span} colSpan={location?.bin.col_span ?? product.col_span} /></div>{/if}
 	<noscript><p class="text-sm text-muted-foreground">{m.noJavascript}</p></noscript>
 	<div class="map-status text-sm" role="status">
 		{#if mapState === 'error'}<Alert.Message appearance="inline" variant="destructive" class="my-3">{topology ? m.previousRead : m.unavailable}</Alert.Message>
@@ -175,7 +164,7 @@
 	<p class="sr-only">{m.keyboardHint}</p>
 	<div class="levels mt-4 grid max-w-sm items-start gap-5">
 		<ShelfZoom bind:element={stageSection} class="stage" open={cabinetEntry ? cabinetId : null} headingLevel={(headingLevel + 1) as 3 | 4} onchange={openLevel}
-			title={cabinetEntry ? m.cabinet(gridCell(cabinetEntry.outer_row, cabinetEntry.outer_col)) : mapState === 'loading' && placed ? m.cabinet(gridCell(placed.outer_row, placed.outer_col)) : m.wall}>
+			title={cabinetEntry ? m.cabinet(gridCell(cabinetEntry.outer_row, cabinetEntry.outer_col)) : m.wall}>
 			{#snippet cabinet()}{#if cabinetEntry}
 				<div class="max-w-xs">
 					<ShelfDiagram responsive cabinet rows={cabinetEntry.inner_rows} cols={cabinetEntry.inner_cols} selected={binId} current={location?.bin.id}
@@ -188,8 +177,8 @@
 				{#if topology && cabinets.length}
 					<ShelfDiagram responsive rows={wallRows} cols={wallCols} selected={null} current={location?.cabinet.id}
 						label={m.wall} onselect={zoomTo} items={cabinets.map((entry) => ({ id: entry.id,
-							row: entry.outer_row, col: entry.outer_col, label: gridCell(entry.outer_row, entry.outer_col), inner: cabinetInner(entry, topology?.bins ?? []) }))} />
-				{:else if mapState === 'loading' && placed}<div class="max-w-xs" style:max-width={`min(20rem, (min(32rem, 70dvh) - 0.5rem) * ${raaco.width / raaco.height} + 0.5rem)`}><AspectRatio ratio={raaco.width / raaco.height}><Skeleton class="cabinet-placeholder h-full w-full rounded-none" /></AspectRatio></div>
+							row: entry.outer_row, col: entry.outer_col, label: gridCell(entry.outer_row, entry.outer_col),
+							inner: { ...cabinetInner(entry, topology?.bins ?? []), marked: entry.id === location?.cabinet.id ? marked ?? undefined : undefined } }))} />
 				{:else}<AspectRatio ratio={installedWall}>
 						{#if mapState === 'ready'}<Empty.Root class="wall-placeholder h-full rounded-none bg-muted p-2"><Empty.Description>{m.empty}</Empty.Description></Empty.Root>
 						{:else}<Skeleton class="wall-placeholder h-full rounded-none" />{/if}
@@ -226,5 +215,4 @@
 			</section>
 		{/if}
 	</div>
-	</Collapsible.Content>
-</Collapsible.Root>
+</section>

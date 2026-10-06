@@ -13,8 +13,9 @@
 	<svg aria-hidden="true" class="pointer-events-none absolute inset-0 size-full" viewBox="0 0 {raaco.width} {raaco.height}" preserveAspectRatio="none">
 		{#each inner.drawers as drawer, index (index)}
 			{@const front = drawerFront(inner.rows, inner.cols, drawer.row, drawer.col, drawer.rowSpan, drawer.colSpan)}
-			<rect class="fill-drawer" x={front.x * raaco.width} y={front.y * raaco.height} width={front.width * raaco.width} height={front.height * raaco.height} />
+			{@const marked = inner.marked?.row === drawer.row && inner.marked.col === drawer.col}
+			<rect class={marked ? 'marked-drawer fill-warning' : 'fill-drawer'} x={front.x * raaco.width} y={front.y * raaco.height} width={front.width * raaco.width} height={front.height * raaco.height} />
 		{/each}
 	</svg>
 {/if}
-<span class="relative rounded-xs border border-steel-seam bg-card px-[0.4em] leading-normal text-foreground">{label}</span>
+{#if !inner?.marked}<span class="relative rounded-xs border border-steel-seam bg-card px-[0.4em] leading-normal text-foreground">{label}</span>{/if}

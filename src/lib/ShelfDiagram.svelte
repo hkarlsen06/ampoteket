@@ -208,7 +208,7 @@
 							     real drawers carry one; unassigned drawers and vacant positions
 							     are hollow with a dashed edge, a cue that needs no colour.
 							     Wall cabinets are steel faces. -->
-							<span class={cn('drawer absolute flex flex-col items-center justify-center gap-[0.25em] rounded-xs border transition-colors group-hover/cell:border-foreground', cabinet ? 'border-drawer-edge bg-drawer' : 'rounded-none border-steel-seam bg-steel', item.empty && 'border-dashed bg-transparent text-muted-foreground', active && 'border-2 border-foreground', partial && 'border-2 border-dashed border-foreground', current === item.id && 'border-2 border-warning ring-2 ring-[var(--focus-contrast)]', drag?.id === item.id && drag.moved && 'invisible', drag?.target === item.id && 'outline-3 outline-dashed outline-foreground outline-offset-2')}
+							<span class={cn('drawer absolute flex flex-col items-center justify-center gap-[0.25em] rounded-xs border transition-colors group-hover/cell:border-foreground', cabinet ? 'border-drawer-edge bg-drawer' : 'rounded-none border-steel-seam bg-steel', item.empty && 'border-dashed bg-transparent text-muted-foreground', active && 'border-2 border-foreground', partial && 'border-2 border-dashed border-foreground', current === item.id && !item.inner?.marked && 'border-2 border-warning ring-2 ring-[var(--focus-contrast)]', drag?.id === item.id && drag.moved && 'invisible', drag?.target === item.id && 'outline-3 outline-dashed outline-foreground outline-offset-2')}
 								aria-hidden="true" data-zoom-face={item.id}
 								style:inset-block={`${inset / box.height * 100}%`}
 								style:inset-inline={`${inset / box.width * 100}%`}

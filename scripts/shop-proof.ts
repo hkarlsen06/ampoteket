@@ -42,15 +42,6 @@ async function documentBox(locator: Locator) {
 		return { x: round(box.x), y: round(box.y + window.scrollY), width: round(box.width), height: round(box.height) };
 	});
 }
-/** Below 48rem the product page starts with its shelf map closed under a disclosure. */
-async function openShelfMap(page: Page) {
-	if ((page.viewportSize()?.width ?? 1280) >= 768) return;
-	// The server renders the disclosure before its client handler is attached.
-	await expect(page.locator('#quantity-to-add')).toBeEnabled();
-	const trigger = page.locator('#map-title button');
-	if (await trigger.getAttribute('aria-expanded') === 'false') await trigger.click();
-	await expect(trigger).toHaveAttribute('aria-expanded', 'true');
-}
 
 async function fits(page: Page) {
 	const size = await page.evaluate(() => ({ viewport: document.documentElement.clientWidth, content: document.documentElement.scrollWidth }));
@@ -618,8 +609,6 @@ try {
 			await delayedPage.evaluate(() => document.fonts.ready);
 			const quantity = delayedPage.getByLabel(fieldLabel(en.product.quantity));
 			const add = delayedPage.getByRole('button', { name: 'Add to cart', exact: true });
-			// Below 48rem the product page starts with its shelf map closed under a disclosure.
-			await openShelfMap(delayedPage);
 			const quantityBefore = await documentBox(quantity), addBefore = await documentBox(add);
 			await expect(delayedPage.locator('.shelf-map .stage .shelf-diagram')).toBeVisible();
 			const stageBefore = await documentBox(delayedPage.locator('.shelf-map .stage'));
@@ -641,16 +630,21 @@ try {
 	const drawerCatalogRequests: string[] = [];
 	mapPage.on('request', request => { if (request.url() === `${api.origin}/rest/v1/rpc/amp_catalog`) drawerCatalogRequests.push(request.url()); });
 	await mapPage.goto(`${origin}/en/p/${seedProductCode(0)}`);
-	await openShelfMap(mapPage);
 	const publicMap = mapPage.locator('.shelf-map');
 	const wall = publicMap.getByRole('group', { name: mapMessages.wall, exact: true });
 	const showWall = publicMap.getByRole('button', { name: mapMessages.showWall, exact: true });
-	// The product page opens zoomed into the product's cabinet; the wall is one tap out.
-	await expect(publicMap.getByRole('group', { name: mapMessages.cabinet('A1'), exact: true })).toBeVisible();
-	await expect(wall).toHaveCount(0);
+	// The product page opens on the wall with its drawer filled on its cabinet's face.
+	await expect(wall.getByRole('button')).toHaveCount(12);
 	await expect(publicMap.locator('.coordinate-list, .levels button[aria-expanded]')).toHaveCount(0);
-	await expect(publicMap.locator('button:not([data-item-id]):not([aria-expanded])')).toHaveCount(1);
-	await expect(publicMap.locator('.stage button[data-item-id][tabindex="0"]')).toHaveCount(1);
+	await expect(publicMap.locator('button:not([data-item-id])')).toHaveCount(0);
+	await expect(wall.locator('button[data-item-id][tabindex="0"]')).toHaveCount(1);
+	await expect(wall.getByRole('button', { name: 'A1', exact: true })).toHaveAttribute('aria-current', 'true');
+	await expect(wall.getByRole('button', { name: 'A1', exact: true }).locator('.marked-drawer')).toHaveCount(1);
+	await expect(publicMap.locator('.marked-drawer')).toHaveCount(1);
+	await expect(publicMap.locator('.drawer-contents')).toHaveCount(0);
+	// Zooming into the product's cabinet selects its drawer and lists its parts.
+	await wall.getByRole('button', { name: 'A1', exact: true }).tap();
+	await publicMap.evaluate(async (element) => { await Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished)); });
 	await expect(publicMap.locator('.stage [data-item-id][aria-current="true"]')).toHaveAttribute('aria-label', 'A1');
 	await expect(publicMap.getByRole('heading', { name: mapMessages.contents('A1') })).toBeVisible();
 	const currentPart = publicMap.locator('.product-list [aria-current="page"]');
@@ -658,11 +652,8 @@ try {
 	await expect(currentPart.locator('svg')).toHaveCount(0);
 	await expect(publicMap.locator(`.product-list a[href='/en/p/${seedProductCode(0)}']`)).toHaveCount(0);
 	const initialDrawerReads = drawerCatalogRequests.length;
-	assert.ok(initialDrawerReads > 0, 'The current drawer loads on product-page entry');
+	assert.ok(initialDrawerReads > 0, 'The current drawer loads when its cabinet opens');
 	await showWall.tap();
-	await expect(wall.getByRole('button')).toHaveCount(12);
-	await expect(wall.locator('button[data-item-id][tabindex="0"]')).toHaveCount(1);
-	await expect(wall.getByRole('button', { name: 'A1', exact: true })).toHaveAttribute('aria-current', 'true');
 	await expect(publicMap.locator('.drawer-contents')).toHaveCount(0);
 	await wall.getByRole('button', { name: 'A2', exact: true }).tap();
 	const emptyCabinet = publicMap.getByRole('group', { name: mapMessages.cabinet('A2'), exact: true });
@@ -784,7 +775,7 @@ try {
 	const start = catalog.find(product => product.code === seedProductCode(0))!;
 	const target = catalog.slice(0, 37).find(product => product.bin_code !== null && product.bin_code !== start.bin_code)!;
 	assert.ok(target?.bin_code !== null && target.inner_col <= 26, 'The first catalog page has a part in another drawer');
-	const targetDrawer = `${String.fromCharCode(64 + target.inner_col)}${target.inner_row}`;
+	const targetCabinet = `${String.fromCharCode(64 + target.outer_col)}${target.outer_row}`;
 	try {
 		await navigationPage.goto(`${origin}/en/p/${seedProductCode(0)}`);
 		await waitForHydration(navigationPage);
@@ -794,9 +785,9 @@ try {
 		await navigationPage.locator(`a[href='/en/p/${target.code}']`).click();
 		await expect(navigationPage).toHaveURL(`${origin}/en/p/${target.code}`);
 		const current = navigationPage.locator('.shelf-map .stage [data-item-id][aria-current="true"]');
-		await expect(current).toHaveAttribute('aria-label', targetDrawer);
+		await expect(current).toHaveAttribute('aria-label', targetCabinet);
 		releaseOld(); await oldSettled;
-		await expect(current).toHaveAttribute('aria-label', targetDrawer);
+		await expect(current).toHaveAttribute('aria-label', targetCabinet);
 	} catch (error) { await captureFailure(navigationPage, artifacts, 'navigation'); throw error; }
 	finally { releaseOld(); await navigating.close(); }
 	console.log('PASS: failed topology retries independently of purchase controls; interrupted product navigation retains the new product location');
@@ -878,19 +869,16 @@ try {
 			}
 			if (route.startsWith('/p/')) {
 				const messages = locale ? en : nb;
-				if (width < 768) {
-					await expect(page.locator('#map-title button')).toHaveAttribute('aria-expanded', 'false');
-					await expect(page.locator('.shelf-map > .loc')).toBeVisible();
-					await expect(page.locator('.shelf-map > .loc')).toContainText(messages.shop.drawer);
-				}
-				await openShelfMap(page);
 				const shelf = page.locator('.shelf-map');
-				await expect(shelf.getByRole('group', { name: messages.shelfMap.cabinet('A1'), exact: true })).toBeVisible();
+				await expect(shelf.getByRole('group', { name: messages.shelfMap.wall, exact: true })).toBeVisible();
+				await expect(shelf.locator('.loc')).toContainText(messages.shop.drawer);
+				assert.ok(await shelf.locator('.loc').evaluate(element => element.getBoundingClientRect().width <= 1), 'The address is screen-reader text when the map shows the drawer');
+				await expect(shelf.locator('.marked-drawer')).toHaveCount(1);
 				await expect(shelf.locator('.coordinate-list, .levels button[aria-expanded]')).toHaveCount(0);
 				const hitboxes = await shelf.locator('.cell-hit').evaluateAll(elements => elements.map(element => {
 					const box = element.getBoundingClientRect(); return { width: box.width, height: box.height };
 				}));
-				assert.equal(hitboxes.length, 48, 'The zoomed-in current cabinet shows its forty-eight drawers as direct targets');
+				assert.equal(hitboxes.length, 12, 'The product page opens on the twelve wall cabinets as direct targets');
 				for (const box of hitboxes) {
 					assert.ok(box.width >= 24 && box.height >= 24, `Map hit target is at least 24px at ${width}px: ${JSON.stringify(box)}`);
 				}

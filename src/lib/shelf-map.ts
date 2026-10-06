@@ -130,7 +130,9 @@ export function drawerFront(rows: number, cols: number, row: number, col: number
 		width: (box.width * cellWidth - raaco.gap) / raaco.width, height: (box.height * cellHeight - raaco.gap) / raaco.height };
 }
 
-export type CabinetInner = { rows: number; cols: number; drawers: { row: number; col: number; rowSpan: number; colSpan: number }[] };
+type DrawerSpan = { row: number; col: number; rowSpan: number; colSpan: number };
+/** `marked` is the drawer a product page points at; the face fills it instead of showing its address. */
+export type CabinetInner = { rows: number; cols: number; drawers: DrawerSpan[]; marked?: DrawerSpan };
 /** A wall cabinet's drawer layout, so its face shows the real drawers. Unplaced drawers are skipped. */
 export function cabinetInner(cabinet: { id: string; inner_rows: number; inner_cols: number },
 	bins: { cabinet_id: string | null; inner_row: number | null; inner_col: number | null; row_span: number; col_span: number }[]): CabinetInner {

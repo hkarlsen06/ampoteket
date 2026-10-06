@@ -107,7 +107,7 @@ JavaScript, always show the content with a plain heading. -->
 				{@render disclosure('description-title', m.description, description)}
 			{/if}
 			<div class="product-location min-w-0 md:col-start-2 md:row-span-3 md:row-start-1">
-				{#key product.product_id}<ShelfMap collapsible labelledby="map-title" initialTopology={data.shelfTopology} config={data.catalogConfig} {product} />{/key}
+				{#key product.product_id}<ShelfMap initialTopology={data.shelfTopology} config={data.catalogConfig} {product} />{/key}
 			</div>
 			<div class="details grid min-w-0 gap-6 md:col-start-1">
 				{#if Object.keys(product.attributes).length}

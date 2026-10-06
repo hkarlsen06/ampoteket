@@ -14,7 +14,8 @@ drawer's position is separate from that identity.
 At 360 px: identity line (catalog link, name, code, category, recorded balance); unit
 price (at least two decimals, with extra stored precision preserved); quantity form
 (stepper, Add, reserved result region showing any cart quantity);
-description; shelf map opened on the product's drawer, with its address in the header;
+description; shelf map, always shown, opened on the wall with the product's drawer filled in
+yellow on its cabinet's face;
 specifications and datasheet link. Unknown values stay absent. Zero and negative
 balances explain that physically found parts can still be added.
 
@@ -23,10 +24,9 @@ A borrow-only product (no price, [datamodell.md](datamodell.md#products)) shows 
 and should be put back, instead of the quantity form. The scanner shows the same badge
 and note, with only «Skann» in its footer.
 
-Below 48rem, description and map are `Collapsible`s that start closed; the map's
-compact placement address remains visible beside its heading. From 48rem and
-without JavaScript both are open. The content is force-mounted and CSS switches the
-presentation. From 48rem the map forms the right column. Actions stay in document flow:
+Below 48rem the description is a `Collapsible` that starts closed; from 48rem and
+without JavaScript it is open. Its content is force-mounted and CSS switches the
+presentation. The map is always open; from 48rem it forms the right column. Actions stay in document flow:
 no fixed purchase bar or nested panel.
 
 ## 2. Route and public data
@@ -82,9 +82,11 @@ shift. Revalidate on focus, visibility and reconnect (no refresh button or polli
 keeping the map, selection, contents and focus. A failed read keeps the old map marked
 unavailable, with a retry. Cancel reads and listeners when leaving.
 
-- Match `cabinet_code`/`bin_code` to the topology. Highlight with outline, label and a
-  non-colour cue, plus a plain-text address. A1 is bottom-left
-  ([website-guide.md](website-guide.md) §7).
+- Match `cabinet_code`/`bin_code` to the topology. The wall fills the matched drawer on
+  its cabinet's face in place of that cabinet's address tag; the cabinet carries
+  `aria-current`. The plain-text address is screen-reader text while the map places
+  the drawer and visible when it cannot. Tapping the cabinet zooms in with the drawer
+  outlined and its parts listed. A1 is bottom-left ([website-guide.md](website-guide.md) §7).
 - Empty cells come from topology, never from a missing product.
 - If catalog and topology disagree, use the topology for both map and address. If the
   bin cannot be matched, show location unavailable and offer a product reload; never

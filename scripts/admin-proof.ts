@@ -914,16 +914,13 @@ try {
     await fits(geometry);
     await geometry.getByRole('dialog').screenshot({ path: `${artifacts}/single-count-${suffix}.png` });
     await geometry.goto(`${origin}${prefix}/p/${createdBody.code}`);
-    // Phones start with the product page's specifications and shelf map closed.
-    if (width < 768) for (const id of ['specifications-title', 'map-title']) await geometry.locator(`#${id} button[aria-expanded="false"]`).click();
+    // Phones start with the product page's specifications closed.
+    if (width < 768) await geometry.locator('#specifications-title button[aria-expanded="false"]').click();
     await expect(geometry.getByText(messages.specificationLabels.polarised, { exact: true })).toBeVisible();
     await expect(geometry.getByText(messages.specificationLabels.package, { exact: true })).toBeVisible();
     const publicMap = geometry.locator('.shelf-map');
     await expect(publicMap.locator('.coordinate-list')).toHaveCount(0);
-    const currentDrawer = publicMap.locator('.stage [data-item-id][aria-current="true"]');
-    await expect(currentDrawer).toHaveCount(1);
-    await expect(currentDrawer).not.toHaveClass(/empty/);
-    await publicMap.getByRole('button', { name: messages.shelfMap.showWall, exact: true }).click();
+    await expect(publicMap.locator('.stage [data-item-id][aria-current="true"] .marked-drawer')).toHaveCount(1);
     await publicMap.getByRole('group', { name: messages.shelfMap.wall, exact: true }).getByRole('button', { name: 'A2', exact: true }).click();
     const emptyCabinet = publicMap.getByRole('group', { name: messages.shelfMap.cabinet('A2'), exact: true });
     await expect(emptyCabinet.locator('[data-item-id].empty')).toHaveCount(24);
