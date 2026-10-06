@@ -53,7 +53,9 @@ remain outside the scrolling region.
 
 - The form reads top to bottom in working order: *Category and name*,
   *Specifications*, *Placement*, *Sales and stock*, then *Description and links*,
-  folded while all three are empty (opened for an invalid link). A new product starts
+  always open. *Sales and stock* ranks by weight: unit price and opening stock are
+  large mono numerals, minimum stock follows at normal size, and the set-once unit
+  (a segmented group, counted units first) and steps close the section. A new product starts
   with only the category cards (`CategoryGraphic` + name, one `RadioGroup`); the rest
   grows in below once one is chosen, and the cards stay put. A saved product changes
   category in a compact select. One page, never a wizard: editing jumps straight to

@@ -442,7 +442,6 @@ try {
 	await page.setViewportSize({ width: 1280, height: 900 });
 	await fits(page);
 	await page.screenshot({ path: `${artifacts}/new-product-sheet-en-1280.png` });
-	await productSheet.getByRole('button', { name: en.adminProducts.descriptionAndLinks }).click();
 	await productSheet.getByLabel(fieldLabel(en.adminProducts.purchaseUrl)).fill('https://example.test/new-item');
 	await productSheet.getByRole('button', { name: en.adminProducts.save, exact: true }).click();
 	// Saving closes the sheet, selects the product on the line and keeps the order draft.

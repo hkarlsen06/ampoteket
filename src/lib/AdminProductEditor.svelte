@@ -12,12 +12,11 @@
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
 	import { Skeleton } from '#lib/components/ui/skeleton/index.js';
 	import * as Field from '#lib/components/ui/field/index.js';
+	import * as ToggleGroup from '#lib/components/ui/toggle-group/index.js';
 	import * as NativeSelect from '#lib/components/ui/native-select/index.js';
 	import * as InputGroup from '#lib/components/ui/input-group/index.js';
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import * as RadioGroup from '#lib/components/ui/radio-group/index.js';
-	import * as Collapsible from '#lib/components/ui/collapsible/index.js';
-	import DisclosureTrigger from '#lib/DisclosureTrigger.svelte';
 	import AdminStatistics from '#lib/AdminStatistics.svelte';
 	import * as Alert from '#lib/components/ui/alert/index.js';
 	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
@@ -69,7 +68,6 @@
 	let moveOpen = $state(false);
 	let placementOpen = $state(false);
 	// Description and links are rarely filled in, so they stay folded until one has a value.
-	let detailsOpen = $state(false);
 	// The note field stays hidden until staff say the product has no drawer.
 	let offShelf = $state(false);
 	const showNote = $derived(!draft.bin_id && (offShelf || Boolean(draft.location_note)));
@@ -190,7 +188,6 @@
 				}
 			}
 			draftLoaded = true;
-			detailsOpen = Boolean(draft.description || draft.datasheet_url || draft.purchase_url);
 			if (product) void refreshStock();
 		} catch (error) { if (alive) loadFailed = true; await admin.permissionFailure(error); }
 		finally { if (alive) loading = false; }
@@ -240,7 +237,6 @@
 					outcome = 'invalid';
 					if (error instanceof ProductFieldError) {
 						invalidField = error.field;
-						if (error.field === 'datasheet_url' || error.field === 'purchase_url') detailsOpen = true;
 						void tick().then(() => {
 							const id = fieldIds[error.field];
 							const element = id ? document.getElementById(id) : null;
@@ -533,28 +529,35 @@
 						<Separator />
 						<h2 class={sectionHeading} id="product-sale-title">{m.saleAndStock}</h2>
 						<div class={[formGrid, 'items-start']}>
-							<Field.Field><Field.Label for="product-select-4">{m.unit}</Field.Label><NativeSelect.Root id="product-select-4" bind:value={draft.unit_code} disabled={blocked || Boolean(product)}>{#each references.units as unit (unit.code)}<option value={unit.code}>{unitLabel(unit.code, i18n.locale)}</option>{/each}</NativeSelect.Root></Field.Field>
-							<Field.Field><Field.Label for="product-price" required>{m.price} <span class="sr-only">({currencySymbol(i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id="product-price" aria-invalid={invalidField === 'sale_unit_price_nok'} aria-describedby={invalidField === 'sale_unit_price_nok' ? 'product-price-error' : undefined} type="text" inputmode="decimal" required bind:value={draft.sale_unit_price_nok} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{currencySymbol(i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'sale_unit_price_nok'}<Field.Error id="product-price-error">{errorMessage('sale_unit_price_nok')}</Field.Error>{/if}</Field.Field>
+							<Field.Field><Field.Label for="product-price" required>{m.price} <span class="sr-only">({currencySymbol(i18n.locale)})</span></Field.Label><InputGroup.Root class="h-16"><InputGroup.Input class="font-mono text-2xl font-semibold md:text-3xl" id="product-price" aria-invalid={invalidField === 'sale_unit_price_nok'} aria-describedby={invalidField === 'sale_unit_price_nok' ? 'product-price-error' : undefined} type="text" inputmode="decimal" required bind:value={draft.sale_unit_price_nok} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text class="text-lg">{currencySymbol(i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'sale_unit_price_nok'}<Field.Error id="product-price-error">{errorMessage('sale_unit_price_nok')}</Field.Error>{/if}</Field.Field>
 							{#if !product && !oncreated}
-								<Field.Field><Field.Label for="product-opening-stock">{m.openingStock} <span class="sr-only">({unitLabel(draft.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id="product-opening-stock" aria-invalid={openingInvalid} aria-describedby={openingInvalid ? 'product-opening-stock-error product-opening-stock-hint' : 'product-opening-stock-hint'} type="text" inputmode="decimal" autocomplete="off" bind:value={openingStock} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(draft.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if openingInvalid}<Field.Error id="product-opening-stock-error">{i18n.m.adminCounts.invalidQuantity(draft.stock_step)}</Field.Error>{/if}<Field.Description id="product-opening-stock-hint">{m.openingStockHint}</Field.Description></Field.Field>
+								<Field.Field><Field.Label for="product-opening-stock">{m.openingStock} <span class="sr-only">({unitLabel(draft.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root class="h-16"><InputGroup.Input class="font-mono text-2xl font-semibold md:text-3xl" id="product-opening-stock" aria-invalid={openingInvalid} aria-describedby={openingInvalid ? 'product-opening-stock-error product-opening-stock-hint' : 'product-opening-stock-hint'} type="text" inputmode="decimal" autocomplete="off" bind:value={openingStock} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text class="text-lg">{unitLabel(draft.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if openingInvalid}<Field.Error id="product-opening-stock-error">{i18n.m.adminCounts.invalidQuantity(draft.stock_step)}</Field.Error>{/if}<Field.Description id="product-opening-stock-hint">{m.openingStockHint}</Field.Description></Field.Field>
 							{/if}
+						</div>
+						<div class={[formGrid, 'items-start']}>
 							<Field.Field><Field.Label for="product-minimum-stock" required>{m.minimumStock} <span class="sr-only">({unitLabel(draft.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id="product-minimum-stock" aria-invalid={invalidField === 'minimum_stock'} aria-describedby={invalidField === 'minimum_stock' ? 'product-minimum-stock-error product-minimum-stock-hint' : 'product-minimum-stock-hint'} type="text" inputmode="decimal" required bind:value={draft.minimum_stock} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(draft.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'minimum_stock'}<Field.Error id="product-minimum-stock-error">{errorMessage('minimum_stock')}</Field.Error>{/if}<Field.Description id="product-minimum-stock-hint">{m.minimumStockHint}</Field.Description></Field.Field>
 						</div>
 						<div class={formGrid}>
+							<Field.Set class="col-span-2 gap-2 md:col-span-1">
+								<Field.Legend variant="label">{m.unit}</Field.Legend>
+								<ToggleGroup.Root type="single" variant="outline" value={draft.unit_code} onValueChange={(value) => { if (value) draft.unit_code = value; }} disabled={blocked || Boolean(product)}>
+									{#each [...references.units].sort((a, b) => Number(b.is_discrete) - Number(a.is_discrete)) as unit (unit.code)}<ToggleGroup.Item value={unit.code}>{unitLabel(unit.code, i18n.locale)}</ToggleGroup.Item>{/each}
+								</ToggleGroup.Root>
+							</Field.Set>
 							<Field.Field><Field.Label for="product-stock-step" required={!product}>{m.stockStep} <span class="sr-only">({unitLabel(draft.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id="product-stock-step" aria-invalid={invalidField === 'stock_step'} aria-describedby={invalidField === 'stock_step' ? 'product-stock-step-error' : undefined} type="text" inputmode="decimal" required bind:value={draft.stock_step} disabled={blocked || Boolean(product)} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(draft.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'stock_step'}<Field.Error id="product-stock-step-error">{errorMessage('stock_step')}</Field.Error>{/if}</Field.Field>
 							<Field.Field><Field.Label for="product-sale-step" required>{m.saleStep} <span class="sr-only">({unitLabel(draft.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id="product-sale-step" aria-invalid={invalidField === 'sale_step'} aria-describedby={invalidField === 'sale_step' ? 'product-sale-step-error' : undefined} type="text" inputmode="decimal" required bind:value={draft.sale_step} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(draft.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'sale_step'}<Field.Error id="product-sale-step-error">{errorMessage('sale_step')}</Field.Error>{/if}</Field.Field>
 							{#if !product}<Field.Description class="col-span-full">{m.immutable}</Field.Description>{/if}
 						</div>
 					</section>
-					<Collapsible.Root bind:open={detailsOpen} class={section({ spacing: 'divided' })}>
+					<section class={section({ spacing: 'divided' })} aria-labelledby="product-details-title">
 						<Separator />
-						<DisclosureTrigger>{m.descriptionAndLinks}</DisclosureTrigger>
-						<Collapsible.Content class={formGrid}>
+						<h2 class={sectionHeading} id="product-details-title">{m.descriptionAndLinks}</h2>
+						<div class={formGrid}>
 							<Field.Field class="col-span-full"><Field.Label for="product-description">{m.description}</Field.Label><Textarea id="product-description" rows={3} bind:value={draft.description} disabled={blocked} /></Field.Field>
-							<Field.Field class="col-span-full"><Field.Label for="product-datasheet">{m.datasheet}</Field.Label><Input id="product-datasheet" aria-invalid={invalidField === 'datasheet_url'} aria-describedby={invalidField === 'datasheet_url' ? 'product-datasheet-error' : undefined} type="url" autocapitalize="none" enterkeyhint="go" bind:value={draft.datasheet_url} disabled={blocked} />{#if invalidField === 'datasheet_url'}<Field.Error id="product-datasheet-error">{errorMessage('datasheet_url')}</Field.Error>{/if}</Field.Field>
-							<Field.Field class="col-span-full"><Field.Label for="product-purchase">{m.purchaseUrl}</Field.Label><Input id="product-purchase" aria-invalid={invalidField === 'purchase_url'} aria-describedby={invalidField === 'purchase_url' ? 'product-purchase-error' : undefined} type="url" autocapitalize="none" enterkeyhint="go" bind:value={draft.purchase_url} disabled={blocked} />{#if invalidField === 'purchase_url'}<Field.Error id="product-purchase-error">{errorMessage('purchase_url')}</Field.Error>{/if}</Field.Field>
-						</Collapsible.Content>
-					</Collapsible.Root>
+							<Field.Field class="col-span-2"><Field.Label for="product-datasheet">{m.datasheet}</Field.Label><Input id="product-datasheet" aria-invalid={invalidField === 'datasheet_url'} aria-describedby={invalidField === 'datasheet_url' ? 'product-datasheet-error' : undefined} type="url" autocapitalize="none" enterkeyhint="go" bind:value={draft.datasheet_url} disabled={blocked} />{#if invalidField === 'datasheet_url'}<Field.Error id="product-datasheet-error">{errorMessage('datasheet_url')}</Field.Error>{/if}</Field.Field>
+							<Field.Field class="col-span-2"><Field.Label for="product-purchase">{m.purchaseUrl}</Field.Label><Input id="product-purchase" aria-invalid={invalidField === 'purchase_url'} aria-describedby={invalidField === 'purchase_url' ? 'product-purchase-error' : undefined} type="url" autocapitalize="none" enterkeyhint="go" bind:value={draft.purchase_url} disabled={blocked} />{#if invalidField === 'purchase_url'}<Field.Error id="product-purchase-error">{errorMessage('purchase_url')}</Field.Error>{/if}</Field.Field>
+						</div>
+					</section>
 					<Field.Field orientation="horizontal" class="min-h-12"><Switch id="product-active" bind:checked={draft.is_active} disabled={blocked} aria-describedby="product-active-hint" /><Field.Content><Field.Label for="product-active">{m.activeLabel}</Field.Label><Field.Description id="product-active-hint">{m.activeHint}</Field.Description></Field.Content></Field.Field>
 					{#if id === 'new' && !product && canPrint}<Field.Field orientation="horizontal"><Checkbox id="product-print-label" bind:checked={printAfterSave} disabled={blocked} /><Field.Label for="product-print-label" class="cursor-pointer">{m.printLabelName}</Field.Label></Field.Field>{/if}
 					<div class={formActions}><Button type="submit" disabled={busy || !storageReady || Boolean(pending && !ownPending) || outcome === 'stale'}><ButtonLabel pending={busy} pendingLabel={m.working} label={ownPending ? m.retrySave : m.save} reserveLabels={[m.retrySave, m.save]} /></Button></div>

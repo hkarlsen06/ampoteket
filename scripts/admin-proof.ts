@@ -192,7 +192,7 @@ try {
   await page.goto(`${origin}/en/admin/products/${resumedId}`);
   await page.getByRole('button', { name: m.retrySave, exact: true }).click();
   await expect(page.getByText(m.failed, { exact: true })).toBeVisible();
-  await page.getByRole('combobox', { name: m.unit, exact: true }).selectOption('pcs');
+  await page.getByRole('group', { name: m.unit, exact: true }).getByRole('radio', { name: 'pcs', exact: true }).click();
   await categoryCard(m.typeNames.MIS).click();
   await page.getByRole('button', { name: m.save, exact: true }).click();
   await expect(page.getByText(m.saved, { exact: true })).toBeVisible();
@@ -249,8 +249,9 @@ try {
 
   await page.goto(`${origin}/en/admin/products/${productId}`);
   await expect(page.getByLabel(fieldLabel(`${m.price} (NOK)`))).toHaveValue('999999999998.999999');
-  await expect(page.getByRole('combobox', { name: m.unit, exact: true })).toBeDisabled();
-  const savedUnit = await page.getByRole('combobox', { name: m.unit, exact: true }).inputValue();
+  const savedUnitItem = page.getByRole('group', { name: m.unit, exact: true }).getByRole('radio', { checked: true });
+  await expect(savedUnitItem).toBeDisabled();
+  const savedUnit = (await savedUnitItem.textContent())!.trim();
   await expect(page.getByLabel(fieldLabel(`${m.stockStep} (${savedUnit})`))).toBeDisabled();
 
   await expect(page.getByRole('heading', { level: 1, name: createdBody.code, exact: true })).toBeVisible();
