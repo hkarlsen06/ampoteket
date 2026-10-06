@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { codeText, formActions, formLayout, formStatus, pageHeader, pageHeading, section, sectionHeading } from '#lib/ui.js';
+	import { codeText, itemTitle, nameWrap, formActions, formLayout, formStatus, pageHeader, pageHeading, section, sectionHeading } from '#lib/ui.js';
 	import * as Alert from '#lib/components/ui/alert/index.js';
 	import * as AspectRatio from '#lib/components/ui/aspect-ratio/index.js';
 	import { Skeleton } from '#lib/components/ui/skeleton/index.js';
@@ -13,6 +13,7 @@
 	import { getAdminContext } from '#lib/admin-context.svelte.js';
 	import { productName } from '#lib/catalog.js';
 	import LabelShelfSelection from '#lib/LabelShelfSelection.svelte';
+	import LabelPrintButton from '#lib/LabelPrintButton.svelte';
 	import { readLabelData, selectedLabelProducts, labelSpecificationLines, type LabelData } from '#lib/labels/data.js';
 	import { proportionalLabelSettings } from '#lib/labels/settings.js';
 	import type { PreparedLabels } from '#lib/labels/render.js';
@@ -158,6 +159,17 @@
 {#if data}
 	<LabelShelfSelection topology={data.references.shelf} {selected} onselection={(ids) => { selected = ids; }}
 		onselectall={() => { includeUnplaced = true; }} onclear={() => { includeUnplaced = false; }} disabled={generating} />
+	{#if products.length}
+		<section class={section()} aria-labelledby="label-print-heading">
+			<h2 class={sectionHeading} id="label-print-heading">{m.printHeading}</h2>
+			<ul class="m-0 grid list-none gap-2 p-0">{#each products as product (product.id)}
+				<li class="flex flex-wrap items-center gap-2 border border-input bg-card p-3">
+					<span class="grid min-w-0 flex-1 gap-1"><span class={[itemTitle, nameWrap]}>{productName(product, i18n.locale)}</span><span class={[codeText, 'text-muted-foreground']}>{product.code}</span></span>
+					<LabelPrintButton {product} references={data.references} />
+				</li>
+			{/each}</ul>
+		</section>
+	{/if}
 	{#if unplaced}
 		<p>{m.unplaced(unplaced)}</p>
 		<Field.Field orientation="horizontal"><Checkbox id="checkbox-includeUnplaced" name="checkbox-includeUnplaced" bind:checked={includeUnplaced} disabled={generating} /><Field.Label for="checkbox-includeUnplaced" class="cursor-pointer">{m.includeUnplaced}</Field.Label></Field.Field>

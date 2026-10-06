@@ -119,7 +119,7 @@ export const nb = {
 	},
 	adminLabels: {
 		title: 'Produktetiketter | Admin | Ampoteket', heading: 'Produktetiketter',
-		selectionHeading: 'Velg fra hyllekartet',
+		selectionHeading: 'Velg fra hyllekartet', printHeading: 'Skriv ut på etikettskriveren',
 		selectAll: 'Velg alle', clearSelection: 'Fjern utvalg', selectedDrawers: (count: number) => count === 1 ? '1 skuff valgt' : `${count} skuffer valgt`,
 		wall: 'Kabinetter på veggen', emptyShelf: 'Ingen kabinetter ennå.', emptyCabinet: 'Dette kabinettet har ingen skuffer.',
 		cabinet: (position: string) => `Kabinett ${position}`, selectCabinet: (position: string) => `Velg kabinett ${position}`, emptyDrawer: 'Tom',

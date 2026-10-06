@@ -119,7 +119,7 @@ export const en: Messages = {
 	},
 	adminLabels: {
 		title: 'Product labels | Admin | Ampoteket', heading: 'Product labels',
-		selectionHeading: 'Choose from the shelf map',
+		selectionHeading: 'Choose from the shelf map', printHeading: 'Print on the label printer',
 		selectAll: 'Select all', clearSelection: 'Clear selection', selectedDrawers: (count: number) => count === 1 ? '1 drawer selected' : `${count} drawers selected`,
 		wall: 'Cabinets on the wall', emptyShelf: 'No cabinets yet.', emptyCabinet: 'This cabinet has no drawers.',
 		cabinet: (position: string) => `Cabinet ${position}`, selectCabinet: (position: string) => `Select cabinet ${position}`, emptyDrawer: 'Empty',
