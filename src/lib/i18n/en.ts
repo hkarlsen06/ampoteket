@@ -9,13 +9,13 @@ export const en: Messages = {
 		title: 'Scan or find a part', action: 'Scan', open: 'Scan QR code', close: 'Close scanner',
 		contents: 'Scanning and product details',
 		entry: 'Part code', find: 'Find part', preview: 'Camera preview for scanning labels',
-		paused: 'Scanning paused.',
+		paused: 'Scanning is paused.',
 		moveAway: 'Move the label out of the frame before scanning it again.', again: 'Scan same label again',
 		retryCamera: 'Retry camera', retryLookup: 'Search again', cancel: 'Cancel',
 		resolving: 'Looking up the part …', invalid: "This isn't an Ampoteket label. Enter the part code instead.",
 		missing: 'No part found for this code.', unavailable: "Couldn't load the part.",
 		found: (name: string) => `Part found: ${name}.`,
-		reviewBasket: "We couldn't confirm that the part was added. Check your cart before adding it again.",
+		reviewBasket: "We don't know if the part was added. Check your cart before adding it again.",
 		camera: {
 			closed: 'Closed', starting: 'Starting the camera …', scanning: 'Scanning…',
 			denied: 'Camera access is blocked. Allow it in your browser and try again, or enter the code.',
@@ -75,14 +75,14 @@ export const en: Messages = {
 		wallHint: 'Check that the map matches the wall.',
 		movePreview: (first: string, second: string) => `${first} → ${second}`,
 		swapHeading: 'Swap positions', chooseSwap: 'Choose another position', swap: 'Swap',
-		swapHint: 'Sizes stay the same, so both must fit in their new position. Check that the map matches reality before swapping.',
+		swapHint: 'Sizes stay the same, so both must fit in their new position.',
 		swapPreview: (first: string, second: string) => `${first} ↔ ${second}`,
 		saved: 'Saved', stale: 'The placement changed after you started. Check the new placement and try again.',
 		occupied: 'That position is taken. Choose a free position, or swap.',
 		fit: 'Drawers would overlap. Check position and size.',
 		notEmpty: "The cabinet or drawer isn't empty. Move its products or drawers out first.",
 		invalid: 'Check the fields. Row and column must be whole numbers within the grid.',
-		unknown: "We couldn't confirm that the change was saved. Try again to finish it.",
+		unknown: "We don't know if the change was saved. Try again to finish it.",
 		finishChange: 'Finish the change', pendingHeading: 'Unfinished change',
 		pendingCreate: (position: string) => `Create: ${position}`,
 		pendingChange: (first: string, second: string) => `Change: ${first} → ${second}`,
@@ -167,12 +167,12 @@ export const en: Messages = {
 		},
 		savedRefreshFailed: "The change is saved, but current details couldn't be loaded.",
 		newTitle: 'New product | Admin | Ampoteket', noProducts: 'No products yet.', clearSearch: 'Clear search and filters', unknownSpecification: 'Unknown specification', attributeRejected: 'This value was rejected. Check it and try again.', title: 'Products | Admin | Ampoteket', heading: 'Products',
-		newProduct: 'New product', scanProduct: 'Scan product', scanAgain: 'Scan again', scanInvalid: "This isn't a product label.", scanMissing: (code: string) => `Product code ${code} doesn't exist.`, scanCameraUnavailable: 'Camera unavailable. Allow camera access and try again, or search for the product instead.', editProduct: 'Edit product', onOrder: (value: string) => `${value} on order`, stockLedger: 'Stock changes', back: 'Back to products', search: 'Search by name or product code', stateFilter: 'Status', all: 'All', active: 'Published', inactive: 'Unpublished', lowStock: 'Low stock', sortBy: 'Sort by', sortCurrent: (order: string) => `Sort: ${order}`, sort: { attention: 'Needs attention', counted: 'Least recently counted', code: 'Product code', name: 'Name' }, empty: 'No products match this search.', loading: 'Loading …', unavailable: "Products couldn't be loaded.", missing: "This product doesn't exist.", retry: 'Try again', working: 'Saving …', save: 'Save product', saveAndAddAnother: 'Save and add another', duplicate: 'Duplicate', saved: 'Saved',
+		newProduct: 'New product', scanProduct: 'Scan product', scanAgain: 'Scan again', scanInvalid: "This isn't a product label.", scanMissing: (code: string) => `Product code ${code} doesn't exist.`, scanCameraUnavailable: "The camera isn't available. Allow camera access and try again, or search for the product instead.", editProduct: 'Edit product', onOrder: (value: string) => `${value} on order`, stockLedger: 'Stock changes', back: 'Back to products', search: 'Search by name or product code', stateFilter: 'Status', all: 'All', active: 'Published', inactive: 'Unpublished', lowStock: 'Low stock', sortBy: 'Sort by', sortCurrent: (order: string) => `Sort: ${order}`, sort: { attention: 'Needs attention', counted: 'Least recently counted', code: 'Product code', name: 'Name' }, empty: 'No products match this search.', loading: 'Loading …', unavailable: "Products couldn't be loaded.", missing: "This product doesn't exist.", retry: 'Try again', working: 'Saving …', save: 'Save product', saveAndAddAnother: 'Save and add another', duplicate: 'Duplicate', saved: 'Saved',
 		moveTitle: 'Move this product?', confirmMove: 'Move', cancelMove: 'Cancel',
 		moveDescription: (from: string, to: string) => `From ${from} to ${to}. The move is saved when you choose “Save product”.`,
-		nameHint: 'Measurement units are formatted when you leave the field: 100 uF becomes 100 µF. For resistors and capacitors, 4k7 and 4p7 are enough.', nameNb: 'Norwegian name', nameEn: 'English name', description: 'Description', category: 'Category', noCategory: 'No category', chooseCategory: 'Choose category', identity: 'Category and name', placementHeading: 'Placement', descriptionAndLinks: 'Description and links', unit: 'Unit', stockStep: 'Smallest stock increment', saleStep: 'Smallest sale increment', price: 'Unit price', minimumStock: 'Minimum stock', minimumStockHint: 'Warns when stock is at or below this.', datasheet: 'Datasheet link', purchaseUrl: 'Purchase link', placement: 'Drawer', unplaced: 'No drawer', clearPlacement: 'Remove from drawer', activeLabel: 'Publish in the catalog', activeHint: 'Unpublishing deletes nothing.', borrowOnlyLabel: 'Borrow only', borrowOnlyHint: "Listed in the catalog with its stock, but can't be bought. Only admins change the stock.", notInDrawer: 'Not in a drawer', locationNote: 'Location without a drawer', locationNoteHint: 'Shown to buyers, e.g. “Filament rack by the 3D printer”. Left empty, it says “Ask a volunteer”.', immutable: "The unit and smallest stock increment can't be changed later.", inventory: 'Stock', inventoryUnavailable: "Stock couldn't be loaded.", neverCounted: 'Never counted', openingStock: 'In stock', openingStockHint: 'The first count. Leave empty if not counted.', openingNotCounted: "The product is saved, but its stock wasn't recorded. Count the product.", lastCount: 'Last counted', publicProduct: 'View in catalog', manageShelf: 'Edit cabinets and drawers',
-		invalid: 'Check the fields and try again.', failed: 'The change was rejected. Your edits are kept. Check the fields and try again.', unknown: "We don't know if the save went through. Try again. It won't be saved twice.", stale: 'Someone else changed this product while you were editing. Your edits are kept. Review the changes before saving.', review: 'Show changes', reviewed: 'Continue with my edits', currentValues: 'Currently saved', pending: "An earlier change hasn't finished. Finish it before saving another product.", resume: 'Finish the change', storage: "This browser blocks site data, so you can't save here. Allow site data, or use another browser.", wrongIdentity: 'An unfinished change belongs to another account. Sign in with that account to finish it.', retrySave: 'Save again',
-		printLabel: 'Print', printLabelName: 'Print label', printingLabel: 'Printing …', labelPrinted: 'The label has been printed. It comes out when you print the next one, or press the cut button on the printer.',
+		nameHint: 'Measurement units are formatted when you leave the field: 100 uF becomes 100 µF. For resistors and capacitors, 4k7 and 4p7 are enough.', nameNb: 'Norwegian name', nameEn: 'English name', description: 'Description', category: 'Category', noCategory: 'No category', chooseCategory: 'Choose category', identity: 'Category and name', placementHeading: 'Placement', descriptionAndLinks: 'Description and links', unit: 'Unit', stockStep: 'Smallest stock increment', saleStep: 'Smallest sale increment', price: 'Unit price', minimumStock: 'Minimum stock', minimumStockHint: 'The product shows under “Needs attention” when stock is below this.', datasheet: 'Datasheet link', purchaseUrl: 'Purchase link', placement: 'Drawer', unplaced: 'No drawer', clearPlacement: 'Remove from drawer', activeLabel: 'Publish in the catalog', activeHint: 'Unpublished products are hidden from the catalog, but nothing is deleted.', borrowOnlyLabel: 'Borrow only', borrowOnlyHint: "Listed in the catalog with its stock, but can't be bought. Only admins change the stock.", notInDrawer: 'Not in a drawer', locationNote: 'Location without a drawer', locationNoteHint: 'Shown to buyers, e.g. “Filament rack by the 3D printer”. Left empty, it says “Ask a volunteer”.', immutable: "The unit and smallest stock increment can't be changed later.", inventory: 'Stock', inventoryUnavailable: "Stock couldn't be loaded.", neverCounted: 'Never counted', openingStock: 'In stock', openingStockHint: "Recorded as the first count. Leave it empty if you haven't counted.", openingNotCounted: "The product is saved, but its stock wasn't recorded. Count the product.", lastCount: 'Last counted', publicProduct: 'View in catalog', manageShelf: 'Edit cabinets and drawers',
+		invalid: 'Check the fields and try again.', failed: 'The change was rejected. Check the fields and try again.', unknown: "We don't know if the save went through. Trying again won't save it twice.", stale: 'Someone else changed this product while you were editing. Review the changes before saving.', review: 'Show changes', reviewed: 'Continue with my edits', currentValues: 'Currently saved', pending: "An earlier change hasn't finished. Finish it before saving another product.", resume: 'Finish the change', storage: "This browser blocks site data, so you can't save here. Allow site data, or use another browser.", wrongIdentity: 'An unfinished change belongs to another account. Sign in with that account to finish it.', retrySave: 'Save again',
+		printLabel: 'Print', printLabelName: 'Print label', printingLabel: 'Printing …', labelPrinted: 'The label comes out with the next print, or when you press the cut button.',
 		labelPrinter: { unsupported: 'The label printer only works from Chrome or Edge on a computer.', busy: "Couldn't reach the label printer. Check that it is connected and switched on, and that no other program or tab is using it.", cover: 'The label printer cover is open. Close it and try again.', tape: "The label printer has no tape, or tape it can't use. Insert 18 or 24 mm TZe tape.", fit: "The label doesn't fit on the loaded tape. Use 18 or 24 mm tape.", unconfirmed: "The printer didn't confirm the print. Check for the label before trying again.", failed: "The label wasn't printed. Try again." },
 		saleAndStock: 'Sales and stock', per: 'per', attributes: 'Specifications', attributesHint: 'SI prefixes are accepted: 27p, 4.7k, 4k7.', chooseAttribute: 'Choose specification', yes: 'Yes', no: 'No', noAttributes: 'No specifications are saved.', newDefinition: 'New specification', categoryName: 'Category name', definitionLabel: 'Name', valueType: 'Type', numberType: 'Number', textType: 'Text', booleanType: 'Yes/no', canonicalUnit: 'Base unit (optional)', saveReference: 'Add', referenceSaved: 'Saved', referenceInvalid: 'Check the name and type, then try again.', cancel: 'Close', location: (cabinet: string, drawer: string) => `Cabinet ${cabinet} · drawer ${drawer}`
 	},
@@ -189,13 +189,13 @@ export const en: Messages = {
 		allNeeded: (count: number) => `All ${count}`, closeNeeded: 'Close', doneNeeded: 'Done', needsOrdering: 'Needs ordering', selectAll: 'Select all', onOrder: (value: string) => `${value} on order`, removeLine: 'Remove line', recordOrder: 'Save order', recordReceipt: 'Record the receipt', openReceipt: 'Record receipt', closeReceipt: 'Close receipt',
 		receiptSelection: 'Select at least one line or enter a received quantity.',
 		scanProduct: 'Scan product', scanNext: 'Scan next', scanInvalid: "This isn't a product label.", scanNotOrdered: (code: string) => `${code} isn't on this order, or has already been received.`, scanMatch: (code: string) => `Product code ${code} is on this order. Check the quantity before recording.`, noOutstanding: 'Everything on this order has been received or cancelled.', differentQuantity: 'Change quantity', receivedQuantity: 'Quantity received',
-		cameraDenied: 'Camera blocked. Allow camera access and try again, or tick the lines below.', cameraInterrupted: 'The camera stopped. Try again, or tick the lines below.', cameraUnavailable: 'Camera unavailable. Try again, or tick the lines below.',
+		cameraDenied: 'Camera access is blocked. Allow it and try again, or tick the lines below.', cameraInterrupted: 'The camera stopped. Try again, or tick the lines below.', cameraUnavailable: "The camera isn't available. Try again, or tick the lines below.",
 		sourceNote: 'Source, such as a donor', working: 'Recording …', saving: 'Saving …', storageUnavailable: "This browser blocks site data, so you can't save here. Allow site data, or use another browser.",
-		wrongIdentity: 'An unfinished change belongs to another account. Sign in with that account to finish it.', invalidDate: "Enter a valid date and time. It can't be in the future.", ambiguousDate: 'This time happened twice because the clocks went back. Choose which one you mean.', offset: 'Before or after the clocks went back?', chooseOffset: 'Choose', beforeClockChange: 'Before', afterClockChange: 'After',
-		unknown: "We don't know if it was recorded. Try again. It won't be recorded twice.", invalid: 'Check the fields and try again.',
+		wrongIdentity: 'An unfinished change belongs to another account. Sign in with that account to finish it.', invalidDate: "Enter a valid date and time that isn't in the future.", ambiguousDate: 'This time happened twice because the clocks went back. Choose which one you mean.', offset: 'Before or after the clocks went back?', chooseOffset: 'Choose', beforeClockChange: 'Before', afterClockChange: 'After',
+		unknown: "We don't know if it was recorded. Trying again won't record it twice.", invalid: 'Check the fields and try again.',
 		pendingElsewhere: "An earlier change hasn't finished.", resumePending: 'Finish the change', retryReceipt: 'Record the receipt again', retryOrder: 'Save the order again', retryCancel: 'Cancel again', retryReverse: 'Undo the cancellation again', conflict: 'Something changed in the meantime, so nothing was recorded. Review and try again.',
 		ordered: 'Ordered', received: 'Received', cancelled: 'Cancelled', outstanding: 'Outstanding',
-		cancelHeading: "Cancel what's outstanding", cancelSelected: 'Cancel selected quantity', cancelConfirm: "The quantity is no longer expected. Stock doesn't change, and the cancellation can be undone once.", cancel: 'Cancel', reverseCancellation: 'Undo cancellation', reverseConfirm: "The quantity will be expected again. Stock doesn't change. This cancellation can only be undone once, and this action can't be undone.", reason: 'Reason', cancelReason: 'Reason for cancellation',
+		cancelHeading: "Cancel what's outstanding", cancelSelected: 'Cancel selected quantity', cancelConfirm: "The quantity is no longer expected, but stock doesn't change. You can undo this once.", cancel: 'Cancel', reverseCancellation: 'Undo cancellation', reverseConfirm: "The quantity will be expected again, without changing stock. A cancellation can only be undone once, so this is final.", reason: 'Reason', cancelReason: 'Reason for cancellation',
 		receiptHistory: 'Receipt history', cancellationHistory: 'Cancellations', receivedAt: 'Received',
 		editMetadata: 'Edit details', editLineMetadata: (name: string, line: number) => `Edit details for ${name}, line ${line}`, supplierName: 'Supplier name', saveOrderMetadata: 'Save changes', saveLineMetadata: 'Save line',
 		invalidMetadata: 'Check the details and try again.', metadataUnknown: "We don't know if the change was saved. Check the order before trying again.", metadataSaved: 'Saved',
@@ -216,10 +216,10 @@ export const en: Messages = {
 		kindLabels: { receipt: 'Receipt', sale: 'Registered purchase', count: 'Count', adjustment: 'Adjustment', withdrawal: 'Withdrawal' },
 		load: 'Loading stock history …', unavailable: "Stock history couldn't be loaded.", noProducts: 'No products yet.', retry: 'Try again', invalid: "Check the quantity and the reason. The quantity must match the product's step size.",
 		working: 'Recording …', save: 'Record', retrySame: 'Record again', saved: 'Recorded',
-		unknown: "We don't know if the change was recorded. Try again. It won't be recorded twice.", stale: 'Stock has changed in the meantime. Check the history before correcting.',
+		unknown: "We don't know if the change was recorded. Trying again won't record it twice.", stale: 'Stock has changed in the meantime. Check the history before correcting.',
 		recountRequired: 'This product was counted after the movement. Count it again before correcting.',
 		storage: "This browser blocks site data, so you can't save here. Allow site data, or use another browser.", wrongIdentity: 'An unfinished change belongs to another account. Sign in with that account to finish it.',
-		pendingElsewhere: 'Finish the unfinished change on another product first.', noteHint: "Don't include personal information. The reason stays in the history."
+		pendingElsewhere: 'Finish the unfinished change on another product first.', noteHint: "The reason stays in the history, so don't include personal information."
 	},
 	adminCounts: {
 		closeCount: 'Close count',
@@ -232,9 +232,9 @@ export const en: Messages = {
 		storageUnavailable: "This browser blocks site data, so you can't save here. Allow site data, or use another browser.",
 		wrongIdentity: "An unfinished change belongs to another admin. Sign in as that admin to finish it.",
 		pendingElsewhere: "An earlier change hasn't finished.", resumePending: 'Finish the change',
-		unknownStart: "We couldn't confirm that the stock count started. Try again. It won't create a second one.",
-		unknownFinish: "We couldn't confirm that the stock count was finished. Try again.",
-		unknown: "We couldn't confirm that the count was recorded. Try again. It won't be recorded twice.",
+		unknownStart: "We don't know if the stock count started. Trying again won't start a second one.",
+		unknownFinish: "We don't know if the stock count was finished. Try again.",
+		unknown: "We don't know if the count was recorded. Trying again won't record it twice.",
 		owner: 'Owner', you: '(you)', unknownAdmin: 'Unknown admin', unknownProduct: 'Unknown product',
 		batchStates: { owner: 'Open', other: 'Open', abandoned: 'Abandoned', finished: 'Finished' },
 		singleCount: (code: string) => `Count of ${code}`,
@@ -244,10 +244,10 @@ export const en: Messages = {
 		countProduct: 'Count this product', beginCount: 'Begin counting',
 		countPrerequisite: 'Record any known receipts, withdrawals and purchases first. The count updates stock right away.',
 		recorded: 'Recorded stock', lastCount: (time: string) => `Last counted ${time}`,
-		observed: 'Counted quantity', expected: 'Expected quantity', quantityHint: (step: string, unit: string) => `In steps of ${step} ${unit}. Enter 0 if there are none left.`,
+		observed: 'Counted quantity', expected: 'Expected quantity', quantityHint: (step: string, unit: string) => `Enter the quantity in steps of ${step} ${unit}, or 0 if there are none left.`,
 		invalidQuantity: (step: string) => `Enter 0 or more, in steps of ${step}.`,
-		difference: 'Difference', enterQuantity: 'Enter the counted quantity', note: 'Note (optional)', noteHint: "Don't include personal information. The note stays in the history.",
-		differenceNote: 'Consider explaining the difference.', pauseConfirmed: 'The drawer was left alone while I counted.', saveCount: 'Record count', retryCount: 'Record the count again',
+		difference: 'Difference', enterQuantity: 'Enter the counted quantity', note: 'Note (optional)', noteHint: "The note stays in the history, so don't include personal information.",
+		pauseConfirmed: 'The drawer was left alone while I counted.', saveCount: 'Record count', retryCount: 'Record the count again',
 		savedBadge: 'Recorded', savedDetail: (quantity: string, difference: string) => `${quantity}, difference ${difference}`,
 		stale: "Stock changed while you were counting, so the count wasn't recorded. Count again.",
 		rejectedObservation: (quantity: string, unit: string) => `Not recorded: ${quantity} ${unit}.`,
@@ -258,7 +258,7 @@ export const en: Messages = {
 		drawerFilter: 'Limit to a drawer', allProducts: 'Show all products', drawerProducts: 'Products in the drawer', countedHere: 'Counted',
 		finish: 'Finish stock count', closeAbandoned: 'Close abandoned stock count', finishExplanation: "Finishing doesn't change stock.",
 		abandonedExplanation: "The owner no longer has access. Closing doesn't change stock or the counts already made. To keep counting, start your own stock count.",
-		closureReason: 'Reason for closing', closureReasonHint: "The reason stays in the history. Don't include personal information.",
+		closureReason: 'Reason for closing', closureReasonHint: "The reason stays in the history, so don't include personal information.",
 		finishDialog: "You can't record more counts once the stock count is finished. Stock doesn't change.",
 		closeDialog: "The stock count is closed and your reason stays in the history. Stock and the counts already made don't change.",
 		retryFinish: 'Finish the count again',
@@ -313,19 +313,19 @@ export const en: Messages = {
 		confirmDeactivate: 'Deactivate', close: 'Close',
 		unavailable: "Admins couldn't be loaded.",
 		feedback: {
-			invited: 'Invitation sent. The recipient can follow the email link to set their password.',
+			invited: 'The invitation has been sent.',
 			existing_account: 'Admin access is active. This person already has an account and can sign in with it.',
-			deactivated: 'Admin access has been deactivated. The history is preserved.',
+			deactivated: 'Admin access has been deactivated.',
 			deactivationSuperseded: 'The deactivation was recorded, but another admin has since reactivated this account.',
-			emailFailed: 'Admin access is saved, but the invitation could not be sent. Try again, or close and resend from the account list later.',
-			unknown: 'We could not confirm whether the change completed. Try the same request again.',
+			emailFailed: "Admin access is saved, but the invitation couldn't be sent. Try again, or close and resend from the account list later.",
+			unknown: "We don't know if the change went through. Try again.",
 			invalidInput: 'Check the name and email address.',
 			notFound: "Couldn't find this admin. The account may have been removed.",
-			conflict: "This request doesn't match an earlier one. Try again.",
+			conflict: 'The form has changed since the last attempt. Try again.',
 			superseded: 'This account or its access has changed. Review the current account details before inviting again.',
 			rateLimited: 'Too many invitations in a short time. Wait a little and try again.',
-			failed: 'The change could not be sent. Try again.',
-			self: 'You cannot deactivate your own admin access.'
+			failed: "The change couldn't be sent. Try again.",
+			self: "You can't deactivate your own admin access."
 		}
 	},
 	admin: {
@@ -358,8 +358,8 @@ export const en: Messages = {
 		operationFailed: 'Something went wrong. Try again.', savedCheckout: 'Purchase',
 		created: 'Created', quantity: 'Quantity', unitPrice: 'Unit price', total: 'Total',
 		registered: 'Registered', unregistered: 'Not registered',
-		paymentUnverified: 'Vipps payments are not verified.',
-		recoverAction: 'Register the original purchase', identificationWarning: "Check that the reference, products, amount and time match what the buyer tells you. If you're unsure, stop and look into it. Don't create a new purchase or a manual withdrawal.",
+		paymentUnverified: "Vipps payments aren't verified.",
+		recoverAction: 'Register the original purchase', identificationWarning: "Check that the reference, products, amount and time match what the buyer tells you, and stop if you're unsure. Never create a new purchase or a manual withdrawal instead.",
 		countWarning: 'If the products were taken before a count, that count is now wrong. The drawer must then be recounted after you register.',
 		countSteps: ["Register the purchase first. Don't adjust stock by hand or change the old count.", 'Stop anyone taking from or restocking the drawer. Register any other purchases you know are waiting.', "Recount the drawer and register the count before it's used again."],
 		reason: 'Reason', reasonHint: 'A short explanation, without personal details.',
@@ -368,17 +368,17 @@ export const en: Messages = {
 		storageUnavailable: "This browser blocks site data, so you can't save here. Allow site data, or use another browser.",
 		commandIdentity: 'Another account has an unfinished change in this browser. Sign in with that account to finish it.',
 		buyerContact: 'Buyer contact detail', contactWarning: "Only show it when you need it. The buyer wrote this themselves, so it doesn't prove payment or who the purchase belongs to.",
-		showContact: 'Show contact detail', noContact: 'No contact detail is saved.', confirmClear: 'The contact detail is erased for good. The purchase is kept.', clearContact: 'Erase contact detail', contactErased: 'Erased',
+		showContact: 'Show contact detail', noContact: 'No contact detail is saved.', confirmClear: 'The contact detail is erased for good, but the purchase is kept.', clearContact: 'Erase contact detail', contactErased: 'Erased',
 		directoryTitle: 'Contact page | Admin | Ampoteket', directoryHeading: 'Contact page',
 		directoryConsent: 'Only publish contact details the person has agreed to show on the contact page. Earlier versions stay in the history.',
 		newContact: 'New contact', viewPublic: 'View contact page', noDirectoryContacts: 'No contacts have been added.', published: 'Published', unpublished: 'Unpublished',
 		edit: 'Edit', editHeading: 'Edit contact', contactName: 'Display name', contactEmail: 'Email (optional)', contactPhone: 'Phone (optional)', contactUrl: 'Contact link (optional)', contactResponsibility: 'Responsibility (optional)', contactDiscord: 'Discord username (optional)',
 		publishContact: 'Show this contact on the public contact page', atLeastOneContact: 'A published contact needs a Discord username, email, phone number or link.',
 		saveContact: 'Save contact', retrySave: 'Save again', directoryUnavailable: "Contacts couldn't be loaded.", contactInvalid: 'Check the fields. Email, phone and link must be valid, the Discord username is lowercase letters, digits, _ and ., and the link must start with https://.',
-		reviewContact: 'Show the latest version', reviewedContact: 'Continue with my changes', contactStale: 'Someone else changed this contact while you were editing. Your changes are still in the form. Look at the latest version before saving.', contactUnknown: "We don't know if the contact was saved. Try saving again.",
+		reviewContact: 'Show the latest version', reviewedContact: 'Continue with my changes', contactStale: 'Someone else changed this contact while you were editing. Look at the latest version before saving.', contactUnknown: "We don't know if the contact was saved. Try saving again.",
 		moveContactUp: (name: string) => `Move ${name} up`, moveContactDown: (name: string) => `Move ${name} down`,
 		contactMoved: (name: string, position: number, total: number) => `${name} is number ${position} of ${total}.`,
-		orderStale: 'Someone else changed the list. It is up to date now, so try the move again.'
+		orderStale: 'Someone else changed the list, so try the move again.'
 	},
 
 	specificationLabels: {
@@ -414,7 +414,7 @@ export const en: Messages = {
 		loadingSearch: 'Loading more parts …',
 		loadingFilters: 'Loading filters …', filtersUnavailable: 'Filters are unavailable. Try again.',
 		unavailable: 'The catalog is unavailable. Try again.',
-		previousRead: 'The catalog could not be updated. What you see may be out of date.',
+		previousRead: "The catalog couldn't be updated. What you see may be out of date.",
 		retry: 'Try again', clearFilters: 'Clear all filters',
 		results: 'Parts', noMatches: 'No parts match your search.',
 		emptyCatalog: 'No parts in the catalog yet.', endOfBrowse: 'You have reached the end of the catalog.',
@@ -479,7 +479,7 @@ export const en: Messages = {
 		title: (name: string) => `${name} | Ampoteket`,
 		back: 'Back to the catalog',
 		unavailableTitle: 'Part unavailable',
-		unavailable: 'We could not load this part’s information. Try again.',
+		unavailable: "We couldn't load this part’s information. Try again.",
 		retry: 'Try again',
 		step: (value: string, unit: string) => `Sold in multiples of ${value} ${unit}.`,
 		quantity: 'Quantity',
@@ -493,7 +493,7 @@ export const en: Messages = {
 		datasheet: 'Open datasheet',
 		stockNote: "Stock may differ from what's in the drawer. If you found the part, you can still add it to your cart.",
 		noJavascript: 'Enable JavaScript to add parts to the cart.',
-		borrowNote: "This isn't for sale. Borrow it and put it back when you're done."
+		borrowNote: "This isn't for sale, but you can borrow it and put it back when you're done."
 	},
 	cart: {
 		title: 'Cart | Ampoteket',
@@ -503,7 +503,7 @@ export const en: Messages = {
 		browse: 'Find more parts',
 		empty: 'The cart is empty.',
 		storage: "The cart can't be saved in this browser. Allow cookies and site data for this site, then try again.",
-		invalid: "The cart can't be read. If you may have paid for or taken any parts, don't clear it. Ask a volunteer.",
+		invalid: "The cart can't be read. If you may have paid for or taken any parts, ask a volunteer before clearing it.",
 		reset: 'Clear the cart',
 		resetQuestion: "Only clear it if you haven't paid for or taken any of the parts.",
 		resetConfirm: 'Nothing paid or taken, clear',
@@ -527,7 +527,7 @@ export const en: Messages = {
 		factsUnavailable: 'Part details are unavailable. Try again to change the quantity.',
 		missing: 'This part is no longer for sale. Remove it from the cart.',
 		unknown: 'Saved part',
-		stockNote: 'Stock levels are approximate. Parts are not reserved.',
+		stockNote: "Stock levels are approximate, and parts aren't reserved.",
 		lineTotal: 'Subtotal',
 		total: 'Total',
 		totalUnavailable: 'Unavailable',
@@ -550,7 +550,7 @@ export const en: Messages = {
 		confirming: "We don't know yet whether the purchase was registered. Don't pay again.",
 		registered: 'Purchase registered.',
 		needsAttention: "Your purchase isn't finished.",
-		registeredNote: "Payment isn't checked here. We trust you.",
+		registeredNote: "We trust you and don't check the payment.",
 		contact: 'Phone number or email (optional)',
 		reviewNeeded: 'Check the parts in your cart before you continue.',
 		proceed: 'Go to checkout',
@@ -573,7 +573,7 @@ export const en: Messages = {
 		free: 'Complete purchase',
 		pending: 'Registering purchase …',
 		help: 'Contact a volunteer',
-		helpInstructions: "Take a screenshot of this page so a volunteer can find the purchase. If you've paid, note the amount and don't pay again.",
+		helpInstructions: "Take a screenshot of this page so a volunteer can find the purchase. If you've paid, don't pay again.",
 		setAside: 'Change cart',
 		setAsideQuestion: "Only do this if you haven't paid for or taken any of the parts.",
 		setAsideConfirm: 'Nothing paid or taken, change cart',
@@ -593,7 +593,7 @@ export const en: Messages = {
 		errors: {
 			storage: "Your browser couldn't save the purchase. Try again, or ask a volunteer for help.",
 			missing: "This purchase isn't in this browser. Open it in the browser where you started it, or ask a volunteer.",
-			credentials: "This purchase can't be opened in this browser. Don't start a new purchase for the same parts. Show the reference to a volunteer.",
+			credentials: "This purchase can't be opened in this browser. Show the reference to a volunteer instead of starting a new purchase for the same parts.",
 			payload: 'This purchase can only be saved from the tab where you started it. Go back there, or ask a volunteer.',
 			unavailable: 'The purchase is unavailable right now. Try again in a moment.',
 			conflict: 'The purchase changed in another tab. Try again to see where it stands.',
@@ -633,7 +633,7 @@ export const en: Messages = {
 		about: {
 			title: 'What Ampoteket is',
 			body2:
-				'Work on your own projects, use equipment you do not have at home, and hang out with people building the same kind of thing.',
+				"Work on your own projects, use equipment you don't have at home, and hang out with people building the same kind of thing.",
 			quote:
 				'Instead of waiting weeks for parts, you can often find what you need here and get going in minutes.',
 			quoteBy: 'Eirik Holm, former head of Ampoteket',
@@ -711,7 +711,7 @@ export const en: Messages = {
 			],
 			stepLabel: (n: string) => `Step ${n}`,
 			retryStrong: 'Lost your connection after paying?',
-			retry: "Open your cart and continue the purchase from there. Don't pay again. Ask a volunteer if it doesn't work."
+			retry: "Continue the purchase from your cart without paying again, and ask a volunteer if that doesn't work."
 		},
 		find: {
 			codeLabel: 'Part code',
@@ -748,17 +748,17 @@ export const en: Messages = {
 	notFound: {
 		title: 'Page not found | Ampoteket',
 		heading: 'Page not found',
-		body: "Looking for a part? Check that the code is right.",
+		body: "If you're looking for a part, check that the code is right.",
 		catalog: 'Open the parts catalog',
 		home: 'Back to the front page',
-		errorTitle: 'The page could not be loaded | Ampoteket',
-		errorHeading: 'The page could not be loaded',
-		errorBody: 'The fault is on our side. Your cart is saved in this browser, so nothing is lost.',
+		errorTitle: "The page couldn't be loaded | Ampoteket",
+		errorHeading: "The page couldn't be loaded",
+		errorBody: 'The fault is on our side, but your cart is still saved in this browser.',
 		retry: 'Try again',
 		help: 'Get help',
 		soonTitle: 'The shop opens soon | Ampoteket',
 		soonHeading: 'The shop opens soon',
-		soonBody: 'The parts catalog, cart and checkout are not open yet.'
+		soonBody: "The parts catalog, cart and checkout aren't open yet."
 	},
 	receipt: {
 		subject: 'Receipt from Ampoteket',
@@ -766,7 +766,7 @@ export const en: Messages = {
 		heading: 'Receipt from Ampoteket',
 		lead: (date: string) => `Your purchase was registered ${date}.`,
 		total: 'Total',
-		note: 'We do not check payments. This is a receipt for the registration, not for the payment.',
+		note: "This is a receipt for the registration, not for the payment, which we don't check.",
 		reference: 'Support reference',
 		referenceHelp: 'If you need help with the purchase, show the reference to a volunteer.',
 		help: 'Help with your purchase',
@@ -789,13 +789,13 @@ export const en: Messages = {
 				title: 'Contact details at checkout',
 				paragraphs: [
 					'A phone number or email is optional. We use it only to find your purchase if something goes wrong, and only signed-in volunteers can see it.',
-					'It is stored apart from the stock history. If you have not registered the purchase, it is deleted after 90 days. After registration it stays until you ask for it to be deleted.'
+					"It's stored apart from the stock history. If you haven't registered the purchase, it's deleted after 90 days. After registration it stays until you ask for it to be deleted."
 				]
 			},
 			{
 				title: 'Receipt by email',
 				paragraphs: [
-					'If you ask for a receipt, we send it with the service Resend. The address is used for that one message and is not stored by us.'
+					"If you ask for a receipt, we send it with the service Resend. The address is used for that one message and isn't stored by us."
 				]
 			},
 			{

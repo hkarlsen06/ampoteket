@@ -1080,7 +1080,7 @@ try {
 	await silentPage.goto(`${origin}/en/p/${seedProductCode(0)}`);
 	await expect(silentPage.getByRole('button', { name: 'Add to cart', exact: true })).toBeEnabled();
 	await silentPage.getByRole('button', { name: 'Add to cart', exact: true }).click();
-	await expect(silentPage.locator('#quantity-result')).toHaveText('Added to the cart.');
+	await expect(silentPage.locator('#quantity-result')).toContainText('Added to the cart.');
 	await expect(silentPage.locator('.header-cart [data-slot=badge]')).toHaveText('1');
 	assert.equal(await silentPage.evaluate(() => JSON.parse(localStorage.getItem('ampoteket:cart') ?? '[]')[0]?.quantity), '1');
 	await silent.close();

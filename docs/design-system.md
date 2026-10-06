@@ -440,8 +440,8 @@ needs verified rights for every use and crop; a credit alone is not enough.
   «bekreftet av Vipps», never a green check on payment. Success is neutral:
   «Kjøpet er registrert».
 - Stock: numbers are «registrert saldo». Errors read «Ukjent», never «0».
-- Network failure after paying: «Prøv registreringen på nytt med samme kasse. Betal
-  aldri to ganger.»
+- Network failure after paying: «Fortsett kjøpet fra handlekurven uten å betale på
+  nytt.» Join the warning to the recovery step instead of a separate «Ikke betal på nytt.»
 - Codes always in mono. A page uses **one** example code throughout (the landing
   page uses `RES-00026`). Prices only in catalog and checkout, always the exact
   database string, with «kr» / “NOK” via `currency()` / `formatMoney`, mono semibold.

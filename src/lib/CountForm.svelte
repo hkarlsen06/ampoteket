@@ -130,7 +130,7 @@
 				<Field.Description id={`${id}-quantity-hint`}>{m.quantityHint(formatDecimal(product.stock_step, i18n.locale), unitLabel(product.unit_code, i18n.locale, product.stock_step))}</Field.Description>
 				{#if status === 'invalid'}<Field.Error id={`${id}-quantity-error`}>{m.invalidQuantity(formatDecimal(product.stock_step, i18n.locale))}</Field.Error>{/if}
 				<Field.Field width="grow"><Field.Label for={`${id}-2`}>{m.note}</Field.Label><Textarea id={`${id}-2`} rows={3} maxlength={2000} bind:value={note} disabled={busy || Boolean(command)} aria-describedby={`${id}-note-hint`}></Textarea></Field.Field>
-				<Field.Description id={`${id}-note-hint`}>{difference !== null && compareDecimals(difference, '0') !== 0 ? m.differenceNote : m.noteHint}</Field.Description>
+				<Field.Description id={`${id}-note-hint`}>{m.noteHint}</Field.Description>
 				<Field.Field orientation="horizontal"><Checkbox id={`${id}-paused`} name={`${id}-paused`} required bind:checked={paused} disabled={busy || Boolean(command)} /><Field.Label for={`${id}-paused`} class="cursor-pointer">{m.pauseConfirmed}</Field.Label></Field.Field>
 				{#if !modal}{@render countActions()}{/if}
 			</form>

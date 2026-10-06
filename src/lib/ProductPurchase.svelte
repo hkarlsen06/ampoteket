@@ -109,7 +109,7 @@
 	</div>
 	<div id={resultId} class={['basket-error', compact ? 'text-sm [&:not(:has(*))]:hidden' : formStatus]} role={error ? 'alert' : 'status'}>
 		{#if error}<Field.Error role={undefined}>{error === 'storage' ? i18n.m.scanner.reviewBasket : i18n.m.cart.errors[error]}{#if error === 'quantity'}{` ${m.step(formatDecimal(product.sale_step, i18n.locale), unitLabel(product.unit_symbol, i18n.locale, product.sale_step))}`}{/if}</Field.Error>
-		{:else if added}<p class="text-muted-foreground">{m.added}</p>{:else if already}<p class="text-muted-foreground">{m.already(formatDecimal(already, i18n.locale), unitLabel(product.unit_symbol, i18n.locale, already))}</p>{/if}
+		{:else}{#if added}<p class="sr-only">{m.added}</p>{/if}{#if already}<p class="text-muted-foreground">{m.already(formatDecimal(already, i18n.locale), unitLabel(product.unit_symbol, i18n.locale, already))}</p>{/if}{/if}
 	</div>
 	{#if error === 'storage'}<a href={i18n.href('/cart')}>{m.cart}</a>{/if}
 </form>

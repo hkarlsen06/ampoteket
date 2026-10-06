@@ -151,8 +151,8 @@ const html = `<!doctype html>
 
 	<footer>
 		<p><strong>${warnIcon}Mistet nettet etter at du betalte?</strong>
-			Ikke betal på nytt. Åpne handlekurven og fortsett kjøpet der.
-			<span class="en">Lost your connection after paying? Don’t pay again. Open the cart and continue the purchase there.</span></p>
+			Fortsett kjøpet fra handlekurven uten å betale på nytt.
+			<span class="en">Lost your connection after paying? Continue the purchase from your cart without paying again.</span></p>
 		<p><strong>Trenger du hjelp?</strong>
 			Spør en frivillig, eller se <span class="mono">ampoteket.no/contact</span>.
 			<span class="en">Need help? Ask a volunteer, or see ampoteket.no/contact.</span></p>
