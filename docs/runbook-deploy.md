@@ -92,8 +92,10 @@ python3 scripts/rehearse-migration.py test-results/rehearsal/checkpoint.dump
 The script restores the checkpoint into a private local container, applies the
 migrations its history lacks with the CLI, and requires unchanged rows, sequences
 and earlier history, then passing permissions, protections and invariants. A
-migration that changes rows on purpose names those tables with
-`--expect-changed app.a,app.b`. This is not the hosted restore drill.
+migration that changes rows on purpose names exactly those tables and sequences
+with `--expect-changed`; an audited insert into `app.units` is
+`app.units,app.audit_log,app.audit_log_id_seq`. Its log and summary go next to the
+checkpoint. This is not the hosted restore drill.
 
 A migration that old clients survive (new functions, guarded replacements,
 additive columns) needs no global barrier: apply it, then push its frontend

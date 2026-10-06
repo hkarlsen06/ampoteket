@@ -6,10 +6,11 @@ Usage: python3 scripts/rehearse-migration.py CHECKPOINT.dump [--expect-changed a
 The checkpoint is a custom-format pg_dump of the hosted project
 (docs/runbook-deploy.md §3). The migrations in supabase/migrations that its
 history lacks are applied with the Supabase CLI. Passes when history gains
-exactly those versions, earlier history rows, sequences and every table outside
---expect-changed keep their row hashes, and permissions, protections and
-invariants hold. Output, including the private log, goes to
-test-results/rehearsal/ (gitignored); the container is always removed.
+exactly those versions, every table and sequence outside --expect-changed keeps
+its state (an audited insert names app.audit_log and app.audit_log_id_seq),
+earlier history rows are unchanged, and permissions, protections and invariants
+hold. Output, including the private log, goes next to the checkpoint (under the
+gitignored test-results/); the container is always removed.
 """
 import argparse
 import json
@@ -26,17 +27,17 @@ os.umask(0o077)
 # A plain kill must still remove the container, which holds hosted Auth and contact data.
 signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / 'test-results/rehearsal'
 NAME = 'ampoteket-rehearsal-' + uuid.uuid4().hex[:12]
 IMAGE = 'supabase/postgres:17.6.1.136'
 HISTORY = 'supabase_migrations.schema_migrations'
 
 parser = argparse.ArgumentParser()
 parser.add_argument('checkpoint', type=Path)
-parser.add_argument('--expect-changed', default='', help='comma-separated tables whose rows the migration may change')
+parser.add_argument('--expect-changed', default='', help='comma-separated tables and sequences the migration may change')
 args = parser.parse_args()
 expected_changes = {name for name in args.expect_changed.split(',') if name}
 checkpoint = args.checkpoint.resolve()
+OUT = checkpoint.parent
 OUT.mkdir(parents=True, exist_ok=True)
 log_path = OUT / 'rehearsal.log'
 env = {k: v for k, v in os.environ.items() if not k.startswith('PG')}
@@ -96,16 +97,15 @@ with log_path.open('w') as log:
         after, new_history = manifest(), history()
         assert set(new_history) - set(old_history) == set(pending), 'History did not gain exactly the pending versions'
         assert all(new_history[k] == v for k, v in old_history.items()), 'Earlier history rows changed'
-        assert before['sequences'] == after['sequences'], 'Sequence state changed'
-        changed = sorted(name for name in before['tables'].keys() | after['tables'].keys()
-                         if name != HISTORY and before['tables'].get(name) != after['tables'].get(name))
-        summary['changed_tables'] = changed
-        assert set(changed) == expected_changes, f'Changed tables {changed}, expected {sorted(expected_changes)}'
+        changed = sorted(name for kind in ('tables', 'sequences') for name in before[kind].keys() | after[kind].keys()
+                         if name != HISTORY and before[kind].get(name) != after[kind].get(name))
+        summary['changed'] = changed
+        assert set(changed) == expected_changes, f'Changed {changed}, expected {sorted(expected_changes)}'
         for check in ('permissions.sql', 'protections.sql', 'v1-invariants.sql'):
             run(psql + ['-f', f'supabase/tests/{check}'])
         assert manifest() == after, 'Post-apply checks changed stored rows'
-        summary.update(result='PASS', unchanged_tables=len(before['tables']) - 1 - len(changed),
-                       sequences=len(before['sequences']))
+        summary.update(result='PASS', unchanged_tables=len(set(before['tables']) - {HISTORY} - set(changed)),
+                       unchanged_sequences=len(set(before['sequences']) - set(changed)))
     finally:
         summary['container_removed'] = subprocess.run(['docker', 'rm', '-f', NAME], capture_output=True).returncode == 0
         (OUT / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')

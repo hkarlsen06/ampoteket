@@ -21,7 +21,7 @@ below are local runs, not CI claims.
 | GitHub Actions Validation | 2026-10-02 | PASS, all nine jobs on the deployed application revision `d2a5485` | Database and all eight browser modes; [release CI](https://github.com/hkarlsen06/ampoteket/actions/runs/36975296467) (scanner passed on rerun after a CI hang) |
 | GitHub Actions Deploy | 2026-10-02 | PASS, version `d1ffbf47-c54d-4f85-b555-b3c786f5883c` | First deploy from `.github/workflows/deploy.yml`: CI gate, reviewed vars/rate limits/secret names, HSTS, `/contact` and HTTP redirect checks by `deploy:production`; [run](https://github.com/hkarlsen06/ampoteket/actions/runs/36976781424) |
 | Hosted release verification | 2026-10-02 | PASS | Reviewed vars/rate limits/secret names; 25 HTTP checks across both locales, HTTP/www redirects, HSTS, private admin/checkout headers, closed sales; persisted error logs with query redaction and invocation logs off |
-| Actual-snapshot migration rehearsal | 2026-10-05 | PASS | Private hosted checkpoint restored locally with owners/ACLs; all 51 app/Auth table hashes and three sequences unchanged by the CLI migration of `20261004000100`; prior seven history rows unchanged, one new row; permissions, protections and invariants passed. Owned container removed. This is not the full hosted recovery drill |
+| Actual-snapshot migration rehearsal | 2026-10-06 | PASS | Private hosted checkpoint (07:44 UTC) restored locally with owners/ACLs; the CLI applied `20261006000100` and `20261006000200`; only `app.units`, `app.audit_log` and `app.audit_log_id_seq` changed (declared), 49 other app/Auth tables and two sequences unchanged; prior eight history rows unchanged, two new rows; permissions, protections and invariants passed. Owned container removed. This is not the full hosted recovery drill |
 | Audit fix browser acceptance | 2026-10-02 | PASS | Real disposable Auth/PostgREST: active unplaced product in shelf/count picker; invitation password save and independent sign-in; cross-tab account switch removes password form and preserves both passwords; help reorder/focus, stale rejection and retry. No overflow at 360 px (password/help) or 1280 px (shelf/count). Owned seed and dev server removed after verification |
 | `./scripts/test-web.sh` | 2026-10-01 | PASS | Real local Auth, public/staff/Worker boundaries, exact decimal transport |
 | `./scripts/test-web.sh --shop` | 2026-10-01 | PASS | Lifecycle freshness, retained drafts, invalid saved quantities, removal focus, mobile drawer addresses |
@@ -109,16 +109,16 @@ the selected products. It is a regression check, not a hosted latency guarantee.
   cutover barrier and full hosted recovery drill remain open
   ([deploy](docs/runbook-deploy.md), [backup](docs/runbook-backup-restore.md)).
 - **Hosted migration and release:** with the owner's approval, CLI 2.116.0 applied
-  only `20261004000100_single_count_product.sql` at 13:08 UTC on 2026-10-05.
-  Linked history matches all eight local versions. The isolated rehearsal above
-  passed on a checkpoint taken minutes before; the checkpoint held zero products,
-  zero count batches and four staff rows, so the backfill changed nothing. Read-only
-  checks afterwards found `count_batches.product_id` and the matching
-  `amp_count_batches` column; `amp_record_single_count` keeps its signature and
-  stays closed to `anon`. The migration is additive, so the previous frontend kept
-  working until the matching one deployed. It did not require the global cutover
-  barrier; the hosted recovery drill remains open. Authenticated hosted counting
-  still requires staff acceptance.
+  `20261006000100_gram_unit.sql` and `20261006000200_catalog_compact_measurements.sql`
+  at 07:45 UTC on 2026-10-06. Linked history matches all ten local versions. The
+  isolated rehearsal above passed on a checkpoint taken a minute before.
+  `permissions.sql`, `protections.sql` and `v1-invariants.sql` passed against the
+  hosted project afterwards. Read-only checks found units `g`, `m` and `pcs`, one
+  new migration-made audit row for `g`, the compact-measurement match in
+  `app.catalog_matches` with its owner-only privileges, and 0 products, 4 active
+  staff members and 0 checkouts. Both migrations are additive: the deployed
+  frontend needs neither. The global cutover barrier was not needed; the hosted
+  recovery drill remains open.
 - **Repository and monitoring controls:** CI gating, deployment rollback, HTTPS
   and error-log changes are live. Provider settings confirm persisted logs with
   invocation logs off and query strings redacted. The reviewed native main-protection
