@@ -40,7 +40,7 @@
 				"PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_Hw7RYzd3kJ8efR-NIv5S0w_VEisoMNU",
 				"CHECKOUT_ALLOWED_ORIGIN": "https://ampoteket.no",
 				// Exactly "true" opens buying (docs/website-guide.md §1.1).
-				"SALES_OPEN": "false"
+				"SALES_OPEN": "true"
 			},
 			// www answers only to redirect to the apex (src/hooks.server.ts).
 			"routes": [

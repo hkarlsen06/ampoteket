@@ -8,9 +8,9 @@ products, placement, purchasing and counts with a full audit trail.
 SvelteKit 3 / Svelte 5 on Cloudflare Workers, Supabase (Postgres + Auth), Bun,
 shadcn-svelte and Tailwind CSS 4. Norwegian at `/`, English at `/en`.
 
-**Status:** live at `ampoteket.no` with sales closed. What is live right now is in
+**Status:** live at `ampoteket.no` with sales open since 2026-10-06. What is live right now is in
 [AGENTS.md](AGENTS.md#current-state); [VALIDATION.md](VALIDATION.md) lists what has
-been run and what is still needed before sales open.
+been run and which launch checks are still open.
 
 ## Access for maintainers
 

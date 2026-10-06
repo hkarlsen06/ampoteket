@@ -217,8 +217,9 @@ hosted settings and a deploy without `--env production` cannot replace the live
 Worker. Use the locked Wrangler (`bunx --no-install`), check the account with
 `wrangler whoami`, and record the Cloudflare zone/account.
 
-`SALES_OPEN` stays `"false"` (shop shown as opening soon) until the people who
-administer sales are ready; set it to `"true"` and redeploy to open buying.
+`SALES_OPEN` set to `"true"` opens buying; anything else shows the shop as opening
+soon. Change it in `wrangler.jsonc` and push: every deploy replaces the vars, so a
+dashboard edit lasts only until the next one.
 `SUPABASE_SECRET_KEY` is never a `vars` entry or build argument. A rehearsal
 Worker uses its own name, domain, Supabase project and origin, with no
 production credentials.
