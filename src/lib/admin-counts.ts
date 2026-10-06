@@ -78,7 +78,8 @@ function parseOwner(value: unknown): CountOwner {
 }
 export async function readCountBatches(session: StaffSession, fetcher: Fetcher = fetch): Promise<{ batches: CountBatch[]; owners: CountOwner[] }> {
 	const [batchRows, ownerRows] = await Promise.all([
-		allStaffRows(session, 'amp_count_batches', batchFields, 'id', {}, fetcher),
+		// Single-product counts (opening stock, product-page counts) live in the product's stock history.
+		allStaffRows(session, 'amp_count_batches', batchFields, 'id', { product_id: 'is.null' }, fetcher),
 		allStaffRows(session, 'amp_staff_members', 'id,auth_user_id,display_name,is_active', 'id', {}, fetcher)
 	]);
 	const owners = ownerRows.map(parseOwner);
