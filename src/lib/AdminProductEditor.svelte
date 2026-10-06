@@ -540,8 +540,8 @@
 						<div class={formGrid}>
 							<Field.Set class="col-span-2 gap-2 md:col-span-1">
 								<Field.Legend variant="label">{m.unit}</Field.Legend>
-								<ToggleGroup.Root type="single" variant="outline" value={draft.unit_code} onValueChange={(value) => { if (value) draft.unit_code = value; }} disabled={blocked || Boolean(product)}>
-									{#each [...references.units].sort((a, b) => Number(b.is_discrete) - Number(a.is_discrete)) as unit (unit.code)}<ToggleGroup.Item value={unit.code}>{unitLabel(unit.code, i18n.locale)}</ToggleGroup.Item>{/each}
+								<ToggleGroup.Root type="single" variant="outline" class="w-full" value={draft.unit_code} onValueChange={(value) => { if (value) draft.unit_code = value; }} disabled={blocked || Boolean(product)}>
+									{#each [...references.units].sort((a, b) => Number(b.is_discrete) - Number(a.is_discrete)) as unit (unit.code)}<ToggleGroup.Item value={unit.code} class="flex-1">{unitLabel(unit.code, i18n.locale)}</ToggleGroup.Item>{/each}
 								</ToggleGroup.Root>
 							</Field.Set>
 							<Field.Field><Field.Label for="product-stock-step" required={!product}>{m.stockStep} <span class="sr-only">({unitLabel(draft.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id="product-stock-step" aria-invalid={invalidField === 'stock_step'} aria-describedby={invalidField === 'stock_step' ? 'product-stock-step-error' : undefined} type="text" inputmode="decimal" required bind:value={draft.stock_step} disabled={blocked || Boolean(product)} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(draft.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'stock_step'}<Field.Error id="product-stock-step-error">{errorMessage('stock_step')}</Field.Error>{/if}</Field.Field>
