@@ -239,7 +239,7 @@
 		<Tooltip.Provider>
 			{#if showAdmin}{@render iconLink(links.admin, 'phone:hidden')}{/if}
 			{#if showSocial}<div class="flex">{@render iconLink(links.discord)}{@render iconLink(links.instagram, 'phone:hidden')}</div>{/if}
-			{#if data.salesOpen}<div class="flex">{@render iconLink(links.catalog, 'phone:hidden')}{@render iconLink(links.cart)}</div>{/if}
+			{#if data.salesOpen}<div class="flex">{@render iconLink(links.catalog, 'phone:hidden')}{@render iconLink(links.cart, 'header-cart')}</div>{/if}
 		</Tooltip.Provider>
 		{/if}
 		{#if buyerScanPage}<Scanner bind:this={scanner} config={data.adminConfig} />{/if}
