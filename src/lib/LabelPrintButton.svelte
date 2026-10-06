@@ -1,8 +1,8 @@
 <script module lang="ts">
 	import { printerSupported } from '#lib/labels/ptouch.js';
 	export const labelPrinterSupported = () => printerSupported() && window.matchMedia('(pointer: fine)').matches;
-	// Creating a product remounts its editor on the product's own route; a label
-	// requested with the save prints from there. Memory only, so reload never reprints,
+	// Creating a product remounts its editor on the product's own route, or on the next
+	// new-product form after "Save and add another"; a label requested with the save prints from there. Memory only, so reload never reprints,
 	// and the product's editor clears it on leaving, so Back never does either.
 	let queued: { productId: string; userId: string } | null = null;
 	export function queueLabelPrint(job: { productId: string; userId: string } | null) { queued = job; }

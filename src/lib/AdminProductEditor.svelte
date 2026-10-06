@@ -20,6 +20,7 @@
 	import CategoryGraphic from '#lib/CategoryGraphic.svelte';
 	import Icon from '#lib/Icon.svelte';
 	import ArrowUpRightIcon from 'phosphor-svelte/lib/ArrowUpRightIcon';
+	import CopyIcon from 'phosphor-svelte/lib/CopyIcon';
 
 	import { untrack, onMount, tick } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -47,13 +48,19 @@
 	// `oncreated` embeds a new-product editor in another page's sheet: no page heading, title,
 	// label printing or opening stock (an order's receipt brings the stock), and the created
 	// product goes to the caller instead of opening its own route. `busy` lets that sheet stay open while saving.
-	let { id, oncreated, busy = $bindable(false) }: { id: string; oncreated?: (product: AdminProduct) => void; busy?: boolean } = $props();
+	// A new product can start `from` another one's category, unit and steps; `created` says
+	// that product was just saved with "Save and add another", so its code and label stay at hand.
+	let { id, from = null, created = false, oncreated, busy = $bindable(false) }: { id: string; from?: string | null; created?: boolean; oncreated?: (product: AdminProduct) => void; busy?: boolean } = $props();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.adminProducts);
 	let product = $state<AdminProduct | null>(null); let references = $state<ProductReferences | null>(null); let stock = $state<ProductStock | null>(null);
 	// Quantity still expected from open supplier orders; null when none or unreadable.
 	let onOrder = $state<string | null>(null);
 	const blank: ProductWrite = { id: '', code: '', name_nb: '', name_en: '', description: null, category_id: null, bin_id: null, location_note: null, unit_code: 'pcs', stock_step: '1', sale_step: '1', sale_unit_price_nok: '0', minimum_stock: '0', datasheet_url: null, purchase_url: null, is_active: true };
 	let draft = $state<ProductWrite>({ ...blank });
+	// What an untouched new form holds: blank, or the fields copied `from` another product.
+	let start = blank; let copied = $state(false);
+	let previous = $state<AdminProduct | null>(null);
+	let addAnother = false;
 	let staged = $state<ProductAttributeDraft[]>([]);
 	let attributesEditor = $state<{ prepare: () => boolean; commit: () => Promise<boolean>; suggest: (code: string, value: string) => void }>();
 	let pending = $state<ProductCommand | null>(null); let storageReady = $state(false);
@@ -91,9 +98,9 @@
 	const stockLevel = $derived(!stock || !product ? null : compareDecimals(stock.quantity, '0') <= 0 ? 'out' : compareDecimals(stock.quantity, product.minimum_stock) < 0 ? 'low' : 'ok');
 	// Names, specifications and the rest follow the category, so a new product chooses
 	// it first on the category cards and the form grows in below; a saved
-	// uncategorized product keeps its form. Saved products change it in a compact select.
+	// uncategorized product keeps its form. Saved and copied products change it in a compact select.
 	const namesLocked = $derived(!draft.category_id && !keepUncategorized);
-	const categoryCards = $derived(!product && !legacyCategory && !keepUncategorized);
+	const categoryCards = $derived(!product && !copied && !legacyCategory && !keepUncategorized);
 	const family = $derived(categories.find(category => category.id === draft.category_id)?.prefix ?? null);
 	const productCategory = $derived(categories.find(category => category.id === draft.category_id)?.name ?? references?.categories.find(category => category.id === draft.category_id)?.name ?? null);
 	$effect(() => {
@@ -161,13 +168,20 @@
 		try {
 			const session = admin.credentials();
 			if (id !== 'new' && !uuidPattern.test(id)) { product = null; return; }
-			const [refs, item] = await Promise.all([readProductReferences(session), id === 'new' ? Promise.resolve(null) : readProduct(session, id)]);
+			const sourceId = id === 'new' && from && uuidPattern.test(from) ? from : null;
+			const [refs, item, source] = await Promise.all([readProductReferences(session), id === 'new' ? Promise.resolve(null) : readProduct(session, id), sourceId ? readProduct(session, sourceId) : Promise.resolve(null)]);
 			if (!alive || session.userId !== admin.session?.user.id) return;
-			references = refs; product = item;
+			references = refs; product = item; previous = created ? source : null;
 			// Unsaved input returns only onto the revision it was typed against.
 			if (pending && ownPending && !wrongIdentity) { draft = { ...pending.payload }; staged = pending.attributes ?? []; openingStock = pending.opening ?? ''; }
 			else {
 				if (item) draft = { ...item };
+				// Names, drawer, price, specifications and links differ from part to part; the rest carries over.
+				else if (source) {
+					start = { ...blank, category_id: source.category_id, unit_code: source.unit_code, stock_step: source.stock_step, sale_step: source.sale_step, minimum_stock: source.minimum_stock };
+					draft = { ...start }; copied = true;
+					void tick().then(() => document.getElementById('product-name-nb')?.focus({ preventScroll: true }));
+				}
 				// Unsaved input returns only onto the revision it was typed against.
 				const saved = readDraft(session.userId, `product:${id}`) as { revision?: unknown; fields?: unknown; staged?: unknown; opening?: unknown } | null;
 				if (saved && saved.revision === (item?.metadata_revision ?? null)) {
@@ -191,7 +205,7 @@
 	const writeFields = (value: ProductWrite) => JSON.stringify(writeKeys.map(key => value[key]));
 	$effect(() => {
 		if (!draftLoaded || pending) return;
-		const dirty = (writeFields(draft) !== writeFields(product ?? blank) || (!product && (staged.length > 0 || openingStock !== '')));
+		const dirty = (writeFields(draft) !== writeFields(product ?? start) || (!product && (staged.length > 0 || openingStock !== '')));
 		writeDraft(admin.session?.user.id, `product:${product?.id ?? id}`, dirty
 			? { revision: product?.metadata_revision ?? null, fields: $state.snapshot(draft), ...(product ? {} : { staged: $state.snapshot(staged), opening: openingStock }) } : null);
 	});
@@ -202,7 +216,8 @@
 	}
 	function useRevision() { if (!current || busy) return; product = current; current = null; outcome = 'idle'; }
 	async function save(event?: SubmitEvent) {
-		event?.preventDefault(); if (busy || moveOpen || admin.status !== 'ready' || !storageReady || wrongIdentity || (pending && !ownPending) || outcome === 'stale') return;
+		event?.preventDefault(); if (event) addAnother = event.submitter?.id === 'product-save-another';
+		if (busy || moveOpen || admin.status !== 'ready' || !storageReady || wrongIdentity || (pending && !ownPending) || outcome === 'stale') return;
 		// Enter can submit without a change event; tidy the names as leaving them would.
 		if (!pending) nameFields.forEach(({ field }) => tidyName(field));
 		if (attributesEditor && (product || !pending) && !attributesEditor.prepare()) return;
@@ -266,7 +281,7 @@
 			if (id === 'new' && product && oncreated) oncreated(product);
 			else if (id === 'new' && product) {
 				if (printLabel) queueLabelPrint({ productId: product.id, userId: session.userId });
-				void goto(i18n.href(`/admin/products/${product.id}`), { replace: true });
+				void goto(i18n.href(addAnother ? `/admin/products/new?from=${product.id}&created` : `/admin/products/${product.id}`), { replace: true });
 			} else void refreshStock();
 		} catch (error) {
 			if (error instanceof ProductSpecificationsError) outcome = 'specificationsIncomplete';
@@ -379,7 +394,8 @@
 		{#if product}<p class={[lede, nameWrap]}>{productName(product, i18n.locale)}</p>{/if}
 	</div>
 	<div class="w-16 justify-self-center lg:w-20"><CategoryGraphic category={productCategory} /></div>
-	{#if product && references}<div class={[formActions, 'col-span-full']}>{#if product.is_active}<Button variant="outline" size="sm" href={i18n.href(`/p/${product.code}`)}>{m.publicProduct}<Icon icon={ArrowUpRightIcon} data-icon="inline-end" /></Button>{/if}<LabelPrintButton {product} {references} /></div>{/if}
+	{#if product && references}<div class={[formActions, 'col-span-full']}>{#if product.is_active}<Button variant="outline" size="sm" href={i18n.href(`/p/${product.code}`)}>{m.publicProduct}<Icon icon={ArrowUpRightIcon} data-icon="inline-end" /></Button>{/if}<Button variant="outline" size="sm" href={i18n.href(`/admin/products/new?from=${product.id}`)}><Icon icon={CopyIcon} data-icon="inline-start" />{m.duplicate}</Button><LabelPrintButton {product} {references} /></div>
+	{:else if previous && references}<div class={[formActions, 'col-span-full']}><StateBadge tone="success">{m.saved}</StateBadge><a class={nameWrap} href={i18n.href(`/admin/products/${previous.id}`)}>{previous.code} {productName(previous, i18n.locale)}</a>{#if canPrint}<LabelPrintButton product={previous} {references} />{/if}</div>{/if}
 </div>
 {/if}
 {#if pending && (!ownPending || wrongIdentity)}
@@ -519,7 +535,7 @@
 					</section>
 					<Field.Field orientation="horizontal" class="min-h-12"><Switch id="product-active" bind:checked={draft.is_active} disabled={blocked} aria-describedby="product-active-hint" /><Field.Content><Field.Label for="product-active">{m.activeLabel}</Field.Label><Field.Description id="product-active-hint">{m.activeHint}</Field.Description></Field.Content></Field.Field>
 					{#if id === 'new' && !product && canPrint}<Field.Field orientation="horizontal"><Checkbox id="product-print-label" bind:checked={printAfterSave} disabled={blocked} /><Field.Label for="product-print-label" class="cursor-pointer">{m.printLabelName}</Field.Label></Field.Field>{/if}
-					<div class={formActions}><Button type="submit" disabled={busy || !storageReady || Boolean(pending && !ownPending) || outcome === 'stale'}><ButtonLabel pending={busy} pendingLabel={m.working} label={ownPending ? m.retrySave : m.save} reserveLabels={[m.retrySave, m.save]} /></Button></div>
+					<div class={formActions}><Button type="submit" disabled={busy || !storageReady || Boolean(pending && !ownPending) || outcome === 'stale'}><ButtonLabel pending={busy} pendingLabel={m.working} label={ownPending ? m.retrySave : m.save} reserveLabels={[m.retrySave, m.save]} /></Button>{#if id === 'new' && !oncreated && !ownPending}<Button type="submit" variant="outline" id="product-save-another" disabled={busy || !storageReady || Boolean(pending) || outcome === 'stale'}>{m.saveAndAddAnother}</Button>{/if}</div>
 				{/if}
 			</form>
 			<div class={formStatus} aria-live="polite">

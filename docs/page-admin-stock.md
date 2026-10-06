@@ -95,6 +95,15 @@ remain outside the scrolling region.
   (checked by default) picks the printer during the Save
   click and prints once the editor opens on the product's route; a cancelled picker
   just leaves **Print**.
+- **Save and add another** saves the same way, then opens a new form started from the
+  saved product (`/admin/products/new?from=<id>&created`) instead of its page, so a run
+  of resistors needs no trip back to the list. **Duplicate** on a saved product opens
+  the same form without `created`. The copy keeps category, unit, steps and minimum
+  stock, and starts published like any new product; name, drawer, price, specifications, description, links and
+  opening stock start empty, and a restored unsaved draft wins over the copy. The
+  category shows as the compact select and the cursor starts in the Norwegian name.
+  After **Save and add another**, a *Saved* badge links to the product just created
+  and its requested label prints there, with **Print** for a reprint.
 - Drawers are picked on the shelf graphic (`ShelfPlacementPicker`), never a coordinate
   dropdown (design-system §5). Changing an existing placement is confirmed in an
   `AlertDialog`, changes only the draft, and is saved by **Save product**.
