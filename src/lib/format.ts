@@ -74,12 +74,27 @@ export function parseMeasurement(input: string, unit: string | null, locale: Loc
 	const names = [...(unit === 'ohm' ? ['ohms'] : []), unit ?? '', base.symbol].filter(Boolean);
 	const name = names.find((candidate) => text.toLowerCase().endsWith(candidate.toLowerCase()));
 	if (name) text = text.slice(0, -name.length).trimEnd();
+	const fraction = /^(\d+)\s*\/\s*(\d+)$/.exec(text);
+	if (fraction) return parseFraction(BigInt(fraction[1]), BigInt(fraction[2]));
 	const prefixes = measurementPrefixes(unit);
 	// "4k7" is 4.7 k: the prefix stands in for the decimal point.
 	const match = /^(.*?\d)\s*(\D)(\d*)$/u.exec(text);
 	if (!match || !prefixes.has(match[2])) return normalizeDecimal(text, locale);
 	const number = normalizeDecimal(match[1], locale) + (match[3] ? `.${match[3]}` : '');
 	return shiftDecimal(number, prefixes.get(match[2])!);
+}
+
+/** "1/4" → "0.25", exactly; fractions without a finite decimal (1/3) are rejected. */
+function parseFraction(numerator: bigint, denominator: bigint): string {
+	let rest = denominator;
+	let places = 0;
+	for (const factor of [2n, 5n]) {
+		let count = 0;
+		for (; rest > 0n && rest % factor === 0n; count++) rest /= factor;
+		places = Math.max(places, count);
+	}
+	if (rest !== 1n) throw new SyntaxError('INVALID_DECIMAL');
+	return shiftDecimal((numerator * 10n ** BigInt(places) / denominator).toString(), -places);
 }
 
 function measurementPrefixes(unit: string | null): Map<string, number> {

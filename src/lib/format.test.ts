@@ -19,10 +19,11 @@ test('reads SI prefixes typed into measurement fields and shows stored values ba
 	for (const [input, unit, expected] of [
 		['27p', 'F', '0.000000000027'], ['27 pF', 'F', '0.000000000027'], ['4.7uF', 'F', '0.0000047'], ['100 µF', 'F', '0.0001'],
 		['4k7', 'ohm', '4700'], ['2M2', 'ohm', '2200000'], ['1 kΩ', 'ohm', '1000'], ['1K', 'ohm', '1000'], ['10 mohm', 'ohm', '0.01'],
-		['0R47', 'ohm', '0.47'], ['1000 ohm', 'ohm', '1000'], ['500 mA', 'A', '0.5'], ['25', 'V', '25'], ['5 %', '%', '5'], ['2.54mm', 'mm', '2.54']
+		['0R47', 'ohm', '0.47'], ['1000 ohm', 'ohm', '1000'], ['500 mA', 'A', '0.5'], ['25', 'V', '25'], ['5 %', '%', '5'], ['2.54mm', 'mm', '2.54'],
+		['1/4', 'W', '0.25'], ['1/8 W', 'W', '0.125'], ['3 / 2', 'W', '1.5']
 	]) expect(parseMeasurement(input, unit, 'en')).toBe(expected);
 	expect(parseMeasurement('4,7 kΩ', 'ohm', 'nb')).toBe('4700');
-	for (const [input, unit] of [['27 x', 'F'], ['5k', '%'], ['4.5k7', 'ohm'], ['1.2.3', 'V'], ['', 'V']]) expect(() => parseMeasurement(input, unit, 'en')).toThrow();
+	for (const [input, unit] of [['27 x', 'F'], ['5k', '%'], ['4.5k7', 'ohm'], ['1.2.3', 'V'], ['', 'V'], ['1/3', 'W'], ['1/0', 'W']]) expect(() => parseMeasurement(input, unit, 'en')).toThrow();
 	expect(measurementInput('0.000000000027', 'F', 'nb')).toBe('27 pF');
 	expect(measurementInput('4700', 'ohm', 'nb')).toBe('4,7 kΩ');
 	expect(measurementInput('25', 'V', 'en')).toBe('25');
