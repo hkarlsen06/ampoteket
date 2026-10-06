@@ -4,15 +4,19 @@ DO $$ DECLARE t record; n bigint; BEGIN
     EXECUTE format('SELECT count(*) FROM app.%I',t.tablename) INTO n;
     IF n<>0 THEN RAISE EXCEPTION 'FRESH_SCHEMA_HAS_INVENTED_FACTS: %',t.tablename; END IF;
   END LOOP;
-  IF (SELECT count(*) FROM app.units)<>2
+  IF (SELECT count(*) FROM app.units)<>3
      OR NOT EXISTS (SELECT FROM app.units WHERE code='pcs' AND is_discrete)
      OR NOT EXISTS (SELECT FROM app.units WHERE code='m' AND NOT is_discrete)
+     OR NOT EXISTS (SELECT FROM app.units WHERE code='g' AND NOT is_discrete)
   THEN RAISE EXCEPTION 'FRESH_SCHEMA_UNITS_MISMATCH'; END IF;
-  -- The volunteer migration is the only audited fact: 12 published inserts without a staff actor.
+  -- Migrations audit only their own inserts, without a staff actor: 12 published
+  -- volunteers and the gram unit.
   IF (SELECT count(*) FROM app.help_contacts WHERE is_published AND discord IS NOT NULL)<>12
      OR EXISTS (SELECT FROM app.help_contacts WHERE NOT is_published OR discord IS NULL)
-     OR (SELECT count(*) FROM app.audit_log)<>12
-     OR EXISTS (SELECT FROM app.audit_log WHERE table_name<>'help_contacts' OR action<>'INSERT' OR actor_id IS NOT NULL)
+     OR (SELECT count(*) FROM app.audit_log)<>13
+     OR (SELECT count(*) FROM app.audit_log WHERE table_name='help_contacts')<>12
+     OR (SELECT count(*) FROM app.audit_log WHERE table_name='units')<>1
+     OR EXISTS (SELECT FROM app.audit_log WHERE table_name NOT IN ('help_contacts','units') OR action<>'INSERT' OR actor_id IS NOT NULL)
   THEN RAISE EXCEPTION 'FRESH_SCHEMA_VOLUNTEERS_MISMATCH'; END IF;
   IF (SELECT count(*) FROM app.cabinets)<>12 OR (SELECT count(*) FROM app.bins)<>492
      OR (SELECT sum(inner_rows*inner_cols) FROM app.cabinets)<>496
