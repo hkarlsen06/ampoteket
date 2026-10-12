@@ -58,7 +58,7 @@
 	const blank: ProductWrite = { id: '', code: '', name_nb: '', name_en: '', description: null, category_id: null, bin_id: null, location_note: null, unit_code: 'pcs', stock_step: '1', sale_step: '1', sale_unit_price_nok: '0', minimum_stock: '0', datasheet_url: null, purchase_url: null, is_active: true };
 	let draft = $state<ProductWrite>({ ...blank });
 	// What an untouched new form holds: blank, or the fields copied `from` another product.
-	let start = blank; let copied = $state(false);
+	let start = blank;
 	let previous = $state<AdminProduct | null>(null);
 	let addAnother = false;
 	let staged = $state<ProductAttributeDraft[]>([]);
@@ -104,9 +104,10 @@
 	const stockLevel = $derived(!stock || !product ? null : compareDecimals(stock.quantity, '0') <= 0 ? 'out' : compareDecimals(stock.quantity, product.minimum_stock) < 0 ? 'low' : 'ok');
 	// Names, specifications and the rest follow the category, so a new product chooses
 	// it first on the category cards and the form grows in below; a saved
-	// uncategorized product keeps its form. Saved and copied products change it in a compact select.
+	// uncategorized product keeps its form. A copy starts on the cards with its category chosen,
+	// since the next product is not always the same kind; saved products change it in a compact select.
 	const namesLocked = $derived(!draft.category_id && !keepUncategorized);
-	const categoryCards = $derived(!product && !copied && !legacyCategory && !keepUncategorized);
+	const categoryCards = $derived(!product && !legacyCategory && !keepUncategorized);
 	const family = $derived(categories.find(category => category.id === draft.category_id)?.prefix ?? null);
 	const productCategory = $derived(categories.find(category => category.id === draft.category_id)?.name ?? references?.categories.find(category => category.id === draft.category_id)?.name ?? null);
 	$effect(() => {
@@ -185,7 +186,7 @@
 				// Names, drawer, price, specifications and links differ from part to part; the rest, borrow-only included, carries over.
 				else if (source) {
 					start = { ...blank, category_id: source.category_id, unit_code: source.unit_code, stock_step: source.stock_step, sale_step: source.sale_step, minimum_stock: source.minimum_stock, ...(source.sale_unit_price_nok === null ? { sale_unit_price_nok: null } : {}) };
-					draft = { ...start }; copied = true;
+					draft = { ...start };
 					void tick().then(() => document.getElementById('product-name-nb')?.focus({ preventScroll: true }));
 				}
 				// Unsaved input returns only onto the revision it was typed against.

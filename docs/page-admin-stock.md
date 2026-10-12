@@ -104,7 +104,8 @@ remain outside the scrolling region.
   stock, and starts published like any new product; name, drawer, price, specifications, description, links and
   opening stock start empty (a borrow-only source stays borrow-only), and a restored
   unsaved draft wins over the copy. The
-  category shows as the compact select and the cursor starts in the Norwegian name.
+  copy keeps the category cards with its category chosen, so a different kind is one
+  tap away, and the cursor starts in the Norwegian name.
   After **Save and add another**, a *Saved* badge links to the product just created
   and its requested label prints there, with **Print** for a reprint.
 - Drawers are picked on the shelf graphic (`ShelfPlacementPicker`), never a coordinate
