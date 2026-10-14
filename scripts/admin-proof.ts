@@ -56,6 +56,9 @@ async function openShelfCabinet(page: Page, address: string) {
     if (await wall.count()) await wall.click({ timeout: 1000 });
     await page.locator('[data-shelf-wall]').getByRole('button', { name: address, exact: true }).click({ timeout: 1000 });
   }).toPass();
+  // Geometry is measured after the zoom settles, not mid-scale.
+  await expect(page.locator('[data-cabinet-editor]')).toBeVisible();
+  await expect.poll(() => page.locator('[data-shelf-stage]').evaluate(stage => stage.getAnimations({ subtree: true }).length)).toBe(0);
 }
 async function chooseLayoutDrawer(scope: Locator, binId: string) {
   const drawer = scope.locator(`[data-item-id="${binId}"]`);
