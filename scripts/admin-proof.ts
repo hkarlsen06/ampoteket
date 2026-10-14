@@ -124,14 +124,20 @@ try {
   await page.unroute(membershipRead);
   await page.getByRole('button', { name: en.admin.retry, exact: true }).click();
   await expect(page.getByLabel(fieldLabel(m.nameEn))).toHaveValue('Miscellaneous browser test part');
+  // A forgotten price is a field error, never a free product.
+  await page.getByRole('button', { name: m.save, exact: true }).click();
+  await expect(page.getByText(m.priceRequired, { exact: true })).toBeVisible();
+  await expect(page.getByLabel(fieldLabel(`${m.price} (NOK)`))).toBeFocused();
+  expect(await sql('SELECT count(*) FROM app.products')).toBe('0');
   await page.getByLabel(fieldLabel(`${m.price} (NOK)`)).fill('0.0000001');
   await page.getByRole('button', { name: m.save, exact: true }).click();
   await expect(page.getByText(m.invalidPrice, { exact: true })).toBeVisible();
   await expect(page.getByLabel(fieldLabel(`${m.price} (NOK)`))).toBeFocused();
   await expect(page.getByLabel(fieldLabel(`${m.price} (NOK)`))).toHaveAttribute('aria-invalid', 'true');
   expect(await sql('SELECT count(*) FROM app.products')).toBe('0');
-  await page.getByLabel(fieldLabel(`${m.price} (NOK)`)).fill('0');
-  console.log('PASS: temporary access-check failure preserves draft and blocks writes; invalid price identifies and focuses its field');
+  await page.getByRole('switch', { name: m.freeLabel, exact: true }).check();
+  await expect(page.getByLabel(fieldLabel(`${m.price} (NOK)`))).toHaveCount(0);
+  console.log('PASS: temporary access-check failure preserves draft and blocks writes; missing and invalid prices identify and focus their field; Free hides the amount');
   const categoryCreated = await lostResponse(page, 'amp_categories', 'POST', () => page.getByRole('button', { name: m.save, exact: true }).click());
   await expect(page.getByText(m.unknown, { exact: true })).toBeVisible();
   expect(await sql('SELECT count(*) FROM app.products')).toBe('0');
@@ -176,6 +182,8 @@ try {
   await sql(`INSERT INTO app.categories(id,name) VALUES ('${legacyId}', 'Legacy parts'); UPDATE app.products SET category_id='${legacyId}' WHERE id=${literal(frozen.payload.id)};`);
   await page.goto(`${origin}/en/admin/products/${frozen.payload.id}`);
   await expect(categoryPicker).toHaveValue(legacyId);
+  await expect(page.getByRole('switch', { name: m.freeLabel, exact: true })).toBeChecked();
+  await page.getByRole('switch', { name: m.freeLabel, exact: true }).uncheck();
   await page.getByLabel(fieldLabel(`${m.price} (NOK)`)).fill('2');
   await page.getByRole('button', { name: m.save, exact: true }).click();
   await expect(page.getByText(m.saved, { exact: true })).toBeVisible();
@@ -411,6 +419,7 @@ try {
   await categoryCard(m.typeNames.CAP).click();
   await page.getByLabel(fieldLabel(m.nameNb)).fill('Delvis spesifikasjonslagring');
   await page.getByLabel(fieldLabel(m.nameEn)).fill('Partial specification save');
+  await page.getByRole('switch', { name: m.freeLabel, exact: true }).check();
   await specField(specs, 'capacitance').fill('0.000000000003');
   const rejectedAttribute = `${api.origin}/rest/v1/amp_product_attributes*`;
   await page.route(rejectedAttribute, route => route.request().method() === 'POST'
@@ -439,6 +448,7 @@ try {
   await categoryCard(m.typeNames.RES).click();
   await page.getByLabel(fieldLabel(m.nameNb)).fill('Kollisjonstest');
   await page.getByLabel(fieldLabel(m.nameEn)).fill('Code collision proof');
+  await page.getByRole('switch', { name: m.freeLabel, exact: true }).check();
   await page.getByLabel(m.openingStock, { exact: false }).fill('7');
   const collisionBodies: { id: string; code: string }[] = [];
   const productEndpoint = `${api.origin}/rest/v1/amp_products*`;
@@ -461,6 +471,7 @@ try {
   await categoryCard(m.typeNames.RES).click();
   await page.getByLabel(fieldLabel(m.nameNb)).fill('Tapt svar med lager');
   await page.getByLabel(fieldLabel(m.nameEn)).fill('Lost reply with stock');
+  await page.getByRole('switch', { name: m.freeLabel, exact: true }).check();
   await page.getByLabel(m.openingStock, { exact: false }).fill('3');
   const openedLost = await lostResponse(page, 'amp_products', 'POST', () => page.getByRole('button', { name: m.save, exact: true }).click());
   await expect(page.getByText(m.unknown, { exact: true })).toBeVisible();
