@@ -49,6 +49,14 @@ async function chooseDrawer(scope: Locator, binId: string) {
   await drawer.click();
   await expect(drawer).toHaveAttribute('aria-current', 'true');
 }
+// The shelf page zooms into one cabinet at a time; return to the wall first.
+async function openShelfCabinet(page: Page, address: string) {
+  const wall = page.getByRole('button', { name: new RegExp(`^(${nb.shelfMap.showWall}|${en.shelfMap.showWall})$`) });
+  await expect(async () => {
+    if (await wall.count()) await wall.click({ timeout: 1000 });
+    await page.locator('[data-shelf-wall]').getByRole('button', { name: address, exact: true }).click({ timeout: 1000 });
+  }).toPass();
+}
 async function chooseLayoutDrawer(scope: Locator, binId: string) {
   const drawer = scope.locator(`[data-item-id="${binId}"]`);
   await drawer.click();
@@ -602,8 +610,8 @@ try {
   }
   const liveBinIds = async (cabinet: string): Promise<string[]> => JSON.parse(await sql(`SELECT coalesce(jsonb_agg(id ORDER BY id),'[]') FROM app.bins WHERE cabinet_id='${cabinet}' AND NOT is_archived`));
   await page.goto(`${origin}/en/admin/shelf`);
-  await expect(page.locator('section[aria-labelledby="wall-title"]').getByRole('button')).toHaveCount(12);
-  await page.locator('section[aria-labelledby="wall-title"]').getByRole('button', { name: 'C2', exact: true }).click();
+  await expect(page.locator('[data-shelf-wall]').getByRole('button')).toHaveCount(12);
+  await openShelfCabinet(page, 'C2');
   const seededSpans = page.locator('[data-cabinet-editor]').getByRole('group', { name: sh.layoutPreview, exact: true });
   await expect(seededSpans.getByRole('button', { name: `A1–D1 · ${sh.emptyDrawer}`, exact: true })).toBeVisible();
   await expect(seededSpans.getByRole('button', { name: `C2–D2 · ${sh.emptyDrawer}`, exact: true })).toBeVisible();
@@ -684,7 +692,7 @@ try {
   expect(await sql(`SELECT quantity FROM app.inventory WHERE product_id='${productId}'`)).toBe('0');
   // No standing refresh button (design-system §4.2); the map re-reads when the tab regains focus.
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await page.locator('section[aria-labelledby="wall-title"]').getByRole('button', { name: 'F7', exact: true }).click();
+  await openShelfCabinet(page, 'F7');
   const cabinetDiagram = page.locator('[data-cabinet-editor]').getByRole('group', { name: sh.layoutPreview, exact: true });
   await expect(cabinetDiagram.getByRole('button', { name: 'A1', exact: true })).not.toHaveClass(/\bempty\b/);
   await expect(cabinetDiagram.getByRole('button', { name: `B1 · ${sh.emptyDrawer}`, exact: true })).toHaveClass(/\bempty\b/);
@@ -741,8 +749,8 @@ try {
   const reread = page.waitForResponse(response => response.url().includes('/rest/v1/amp_bins') && response.request().method() === 'GET');
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await reread;
-  await expect(page.locator('section[aria-labelledby="cabinet-title"]').getByRole('button', { name: 'A3', exact: true })).toHaveCount(0);
-  await page.locator('section[aria-labelledby="cabinet-title"]').getByRole('button', { name: 'A1–B1', exact: true }).click();
+  await expect(page.locator('[data-cabinet-editor]').getByRole('button', { name: 'A3', exact: true })).toHaveCount(0);
+  await page.locator('[data-cabinet-editor]').getByRole('button', { name: 'A1–B1', exact: true }).click();
   await expect(page.getByRole('link', { name: `${en.categories.resistors} · ${longName} reviewed`, exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: sh.archiveBin, exact: true })).toBeDisabled();
   await page.getByRole('button', { name: sh.moveDrawer, exact: true }).click();
@@ -757,8 +765,8 @@ try {
   expect(await sql(`SELECT bin_id FROM app.products WHERE id='${productId}'`)).toBe(firstBin);
   expect(await sql(`SELECT count(*) FROM app.bins WHERE cabinet_id='${cabinetId}' AND inner_row=1 AND inner_col IN (1,2)`)).toBe('0');
   expect(await liveBinIds(cabinetId)).toHaveLength(12);
-  await page.locator('section[aria-labelledby="wall-title"]').getByRole('button', { name: 'F7', exact: true }).click();
-  await page.locator('section[aria-labelledby="cabinet-title"]').getByRole('button', { name: 'A3–B3', exact: true }).click();
+  await openShelfCabinet(page, 'F7');
+  await page.locator('[data-cabinet-editor]').getByRole('button', { name: 'A3–B3', exact: true }).click();
   await page.getByRole('button', { name: sh.moveDrawer, exact: true }).click();
   await layout.locator(`[data-item-id="${secondBin}"]`).click();
   const swapped = await lostResponse(page, 'rpc/amp_swap_bins', 'POST', () => page.getByRole('alertdialog').getByRole('button', { name: sh.confirmAction, exact: true }).click());
@@ -833,7 +841,7 @@ try {
   const secondCabinet = await sql('SELECT id FROM app.cabinets WHERE outer_row=7 AND outer_col=7 AND NOT is_archived');
   expect(await liveBinIds(secondCabinet)).toHaveLength(3);
   expect(await sql(`SELECT count(*) FROM app.bins WHERE cabinet_id='${secondCabinet}' AND col_span=2`)).toBe('1');
-  await page.locator('section[aria-labelledby="wall-title"]').getByRole('button', { name: 'F7', exact: true }).click();
+  await openShelfCabinet(page, 'F7');
   await expect(page.locator('[data-cabinet-editor]')).toBeVisible();
   await expect(page.getByRole('button', { name: sh.archiveCabinetWithDrawers, exact: true })).toBeDisabled();
   await page.getByRole('button', { name: sh.moveCabinet, exact: true }).click();
@@ -934,7 +942,7 @@ try {
     await geometry.goto(`${origin}${prefix}/admin/shelf`);
     const cabinetMeasurements: { width: number; height: number; cellWidth: number; cellHeight: number }[] = [];
     for (const [address, rows, columns] of [['A1', 12, 4], ['A2', 8, 3]] as const) {
-      await geometry.locator('section[aria-labelledby="wall-title"]').getByRole('button', { name: address, exact: true }).click();
+      await openShelfCabinet(geometry, address);
       await expect(geometry.getByText(messages.adminShelf.grid(rows, columns), { exact: true })).toBeVisible();
       const diagram = geometry.locator('[data-cabinet-editor]').getByRole('group', { name: messages.adminShelf.layoutPreview, exact: true });
       const frame = await diagram.locator('.cabinet-frame').boundingBox();
@@ -949,7 +957,7 @@ try {
     expect(largeDrawers.height).toBeCloseTo(smallDrawers.height, 1);
     expect(largeDrawers.cellWidth).toBeCloseTo(smallDrawers.cellWidth, 1);
     expect(largeDrawers.cellHeight).toBeGreaterThan(smallDrawers.cellHeight);
-    await geometry.locator('section[aria-labelledby="wall-title"]').getByRole('button', { name: 'G7', exact: true }).click();
+    await openShelfCabinet(geometry, 'G7');
     await expect(geometry.locator('[data-cabinet-editor]')).toBeVisible();
     await expect(geometry.getByRole('dialog')).toHaveCount(0);
     const drawerLayout = geometry.locator('.layout-editor');

@@ -114,7 +114,7 @@ try {
 	// Shelf inline cabinet editor: reload keeps a drafted layout; Discard drops it.
 	const sm = en.adminShelf;
 	await page.goto(`${origin}/en/admin/shelf`);
-	const editor = page.locator('section[data-cabinet-editor]');
+	const editor = page.locator('[data-cabinet-editor]');
 	const rows = editor.getByRole('slider', { name: sm.resizeRows, exact: true });
 	const openCabinet = async () => {
 		await page.locator(`[data-item-id="${cabinetId}"]`).click();

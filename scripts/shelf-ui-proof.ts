@@ -74,7 +74,7 @@ try {
   await expect(page.getByRole('heading', { name: en.admin.overview, exact: true })).toBeVisible();
   await page.goto(`${origin}/en/admin/shelf`);
   await page.locator(`[data-item-id="${cabinetId}"]`).click();
-  const editor = page.locator('section[data-cabinet-editor]');
+  const editor = page.locator('[data-cabinet-editor]');
   const picker = page.getByRole('dialog');
   await expect(editor).toBeVisible();
   await expect(picker).toHaveCount(0);
@@ -128,7 +128,7 @@ try {
   await width.focus(); await page.keyboard.press('ArrowRight'); await expect(width).toHaveAttribute('aria-valuenow', '2');
   expect(await sql(`SELECT col_span FROM app.bins WHERE id='${first}'`)).toBe('1');
   await expect(page.getByRole('button', { name: m.newCabinet, exact: true })).toBeDisabled();
-  await expect(page.locator('section[aria-labelledby="wall-title"] [data-item-id]').first()).toBeDisabled();
+  await expect(page.getByRole('button', { name: en.shelfMap.showWall, exact: true })).toBeDisabled();
   await dragSwap(page, editor.locator(`[data-item-id="${swapFirst}"]`), editor.locator(`[data-item-id="${swapSecond}"]`)); await page.mouse.up(); await expect(page.locator('[data-drawer-drag-preview]')).toHaveCount(0);
   await expect(editor.getByText(m.saveBeforeSwap, { exact: true })).toBeVisible();
   await expect(page.getByRole('alertdialog')).toHaveCount(0);
@@ -205,12 +205,14 @@ try {
   await editor.getByRole('button', { name: m.cancelAction, exact: true }).click();
   await expect(editor.getByText(m.chooseSwap, { exact: true })).toBeHidden();
   await moveDrawer.click();
-  const anotherCabinet = page.locator(`section[aria-labelledby="wall-title"] [data-item-id]:not([data-item-id="${cabinetId}"])`).first();
+  await page.getByRole('button', { name: en.shelfMap.showWall, exact: true }).click();
+  const anotherCabinet = page.locator(`[data-shelf-wall] [data-item-id]:not([data-item-id="${cabinetId}"])`).first();
   await expect(anotherCabinet).toBeEnabled(); await anotherCabinet.click();
   await expect(editor.getByText(m.chooseSwap, { exact: true })).toBeVisible();
   await editor.locator('[data-item-id]').first().click(); await expect(confirm).toBeVisible();
   await confirm.getByRole('button', { name: m.cancelAction, exact: true }).click(); expect(swaps).toHaveLength(2);
-  await page.keyboard.press('Escape'); await page.locator(`[data-item-id="${cabinetId}"]`).click(); await source.click();
+  await page.keyboard.press('Escape'); await page.getByRole('button', { name: en.shelfMap.showWall, exact: true }).click();
+  await page.locator(`[data-item-id="${cabinetId}"]`).click(); await source.click();
   await expect(editor.getByText(m.noProducts, { exact: true })).toBeVisible();
   await expect(archiveDrawer).toBeEnabled();
   // A drafted layout change blocks immediate drawer commands until it is saved or discarded.
@@ -272,19 +274,19 @@ try {
     await sql(`INSERT INTO app.bins(id,code,cabinet_id,inner_row,inner_col) VALUES ('${id}','B-${id}','${retiringCabinet}',1,${index + 1})`);
   }
   await page.reload();
-  await page.locator(`section[aria-labelledby="wall-title"] [data-item-id="${retiringCabinet}"]`).click();
+  await page.locator(`[data-shelf-wall] [data-item-id="${retiringCabinet}"]`).click();
   await editor.getByRole('button', { name: m.archiveCabinetWithDrawers, exact: true }).click();
   await expect(confirm).toContainText(m.archiveCabinetWithDrawersConfirm(2));
   const cabinetArchived = page.waitForResponse(response => response.url().includes('/rpc/amp_archive_empty_cabinet') && response.ok());
   await confirm.getByRole('button', { name: m.confirmAction, exact: true }).click(); await cabinetArchived;
-  await expect(page.locator(`section[aria-labelledby="wall-title"] [data-item-id="${retiringCabinet}"]`)).toHaveCount(0);
+  await expect(page.locator(`[data-shelf-wall] [data-item-id="${retiringCabinet}"]`)).toHaveCount(0);
   expect(await sql(`SELECT is_archived FROM app.cabinets WHERE id='${retiringCabinet}'`)).toBe('t');
   expect(await sql(`SELECT count(*) FROM app.bins WHERE id IN ('${retiringBins.join("','")}') AND is_archived`)).toBe('2');
   console.log('PASS: cabinet and two empty drawers archive through one confirmed RPC');
 
   // Move cabinet: the wall picker offers vacant positions as well as cabinets to swap with.
   const binsBeforeMove = await sql(`SELECT coalesce(jsonb_agg(id ORDER BY id), '[]') FROM app.bins WHERE cabinet_id='${cabinetId}' AND NOT is_archived`);
-  await page.locator(`section[aria-labelledby="wall-title"] [data-item-id="${cabinetId}"]`).click();
+  await page.locator(`[data-shelf-wall] [data-item-id="${cabinetId}"]`).click();
   await editor.getByRole('button', { name: m.moveCabinet, exact: true }).click();
   const mover = page.getByRole('dialog', { name: m.moveCabinet, exact: true });
   await mover.getByRole('button', { name: `A3 · ${m.emptyDrawer}`, exact: true }).click();

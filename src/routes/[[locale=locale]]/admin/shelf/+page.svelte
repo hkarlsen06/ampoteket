@@ -24,6 +24,7 @@
 	import ShelfDiagram from '#lib/ShelfDiagram.svelte';
 	import ShelfLayoutEditor from '#lib/ShelfLayoutEditor.svelte';
 	import ShelfPlacementPicker from '#lib/ShelfPlacementPicker.svelte';
+	import ShelfZoom from '#lib/ShelfZoom.svelte';
 	import { resizeLayout, type LayoutSize } from '#lib/shelf-layout.js';
 	import { cabinetInner } from '#lib/shelf-map.js';
 	import { readAdminShelf, shelfInteger, shelfColumn, readShelfCommand, saveShelfCommand, clearShelfCommand,
@@ -70,6 +71,9 @@
 	});
 	const cabinets = $derived([...(shelf?.live.cabinets ?? [])].sort((a, b) => b.outer_row - a.outer_row || a.outer_col - b.outer_col));
 	const cabinet = $derived(cabinets.find((item) => item.id === cabinetId));
+	// The zoomed-in cabinet: the one edited inline (a restored draft may not have
+	// been picked on the wall), else the one picked.
+	const openCabinet = $derived(inlineEditor ? before : cabinet ?? null);
 	// The saved drawer behind the selection; drafted drawers have no contents, moves or archive yet.
 	const bin = $derived(before ? shelf?.live.bins.find((item) => item.id === binId && item.cabinet_id === before!.id) : undefined);
 	const assigned = $derived(shelf?.products.filter((item) => item.bin_id === binId) ?? []);
@@ -172,6 +176,11 @@
 	function selectCabinet(id: string) {
 		if (locked || draftChanged || id === cabinetId) return;
 		closeEditor(false); cabinetId = id; binId = null;
+	}
+	// Zooming out keeps a drawer move pending, so its target can be in another cabinet.
+	function zoomCabinet(id: string | null) {
+		if (id) { selectCabinet(id); return; }
+		closeEditor(false); cabinetId = null; binId = null;
 	}
 	function edit(value: AdminCabinet | null) {
 		if (locked) return;
@@ -452,41 +461,49 @@
 		</div>
 	</section>
 {:else}
-	<section class={shelfSection} aria-labelledby="wall-title"><Separator /><h2 class={sectionHeading} id="wall-title">{m.wall}</h2>
-		{#if cabinets.length}
-			<ShelfDiagram rows={wallRows} cols={wallCols} items={cabinets.map((item) => ({ id: item.id, row: item.outer_row, col: item.outer_col, label: gridCell(item.outer_row, item.outer_col), inner: cabinetInner(item, shelf?.live.bins ?? []) }))}
-				selected={cabinetId} label={m.wall} onselect={selectCabinet} disabled={locked || draftChanged} />
-		{:else}<Empty.Root><Empty.Description>{m.noCabinets}</Empty.Description></Empty.Root>{/if}
-	</section>
-	{#if inlineEditor && before}
-		<section data-cabinet-editor class={shelfSection} aria-labelledby="cabinet-title">
-			<Separator />
-			<h2 class={sectionHeading} id="cabinet-title">{m.cabinet(gridCell(before.outer_row!, before.outer_col!))}</h2>
-			<div class={[formActions, 'mt-3']}>
-				<Button type="button" variant="outline" disabled={locked} onclick={openMove}>{m.moveCabinet}</Button>
-				<Button type="button" variant="outline" disabled={locked || cabinetAssignments > 0 || draftChanged} onclick={archiveCabinet}>{m.archiveCabinetWithDrawers}</Button>
-			</div>
-			{#if cabinetAssignments}<p class="mt-2 text-sm text-muted-foreground">{m.cabinetAssignedBlocked(cabinetAssignments)}</p>{/if}
-			<div class="mt-6 min-w-0">
-				{@render review()}
-				{#if swapSource}<div class="flex flex-wrap items-center gap-3" role="status"><p>{m.chooseSwap}</p><Button variant="outline" onclick={() => swapSource = null}>{m.cancelAction}</Button></div>{/if}
-				<form id="shelf-editor-form" class={formLayout} onsubmit={save}>
-					{@render layoutView()}
-					<div class="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground" aria-hidden="true">
-						<span class="inline-flex items-center gap-2"><span class="size-4 rounded-xs border border-drawer-edge bg-drawer"></span>{m.legendAssigned}</span>
-						<span class="inline-flex items-center gap-2"><span class="size-4 rounded-xs border border-dashed border-drawer-edge bg-steel"></span>{m.emptyDrawer}</span>
+	<!-- The shared drill-down (ShelfZoom): the wall or, zoomed in, one cabinet's editor. -->
+	<section class={shelfSection} data-shelf-stage><Separator />
+		{#if cabinets.length || openCabinet}
+			<ShelfZoom headingLevel={2} disabled={locked || draftChanged} open={openCabinet?.id ?? null} onchange={zoomCabinet}
+				title={openCabinet ? m.cabinet(gridCell(openCabinet.outer_row!, openCabinet.outer_col!)) : m.wall}>
+				{#snippet wall(zoomTo)}
+					<div data-shelf-wall>
+						<ShelfDiagram rows={wallRows} cols={wallCols} items={cabinets.map((item) => ({ id: item.id, row: item.outer_row, col: item.outer_col, label: gridCell(item.outer_row, item.outer_col), inner: cabinetInner(item, shelf?.live.bins ?? []) }))}
+							selected={cabinetId} label={m.wall} onselect={(id) => { if (!locked && !draftChanged) zoomTo(id); }} disabled={locked || draftChanged} />
 					</div>
-				</form>
-				{@render drawerPanel()}
-				{@render pendingRetry()}
-				<div class={[formStatus, 'mt-6']} aria-live="polite" aria-atomic="true">{@render storageStatus()}</div>
-				<div class={[formActions, 'mt-6']}>
-					<Button form="shelf-editor-form" type="submit" disabled={locked || !draftChanged}><ButtonLabel pending={busy} pendingLabel={m.saving} label={m.save} /></Button>
-					{#if draftChanged}<Button type="button" variant="outline" disabled={locked} onclick={() => { discardDraft(); edit(shelf!.cabinets.find((item) => item.id === before!.id)!); }}>{m.discardChanges}</Button>{/if}
-				</div>
-			</div>
-		</section>
-	{/if}
+				{/snippet}
+				{#snippet cabinet()}
+					{#if inlineEditor && before}
+						<div data-cabinet-editor class="min-w-0">
+							<div class={formActions}>
+								<Button type="button" variant="outline" disabled={locked} onclick={openMove}>{m.moveCabinet}</Button>
+								<Button type="button" variant="outline" disabled={locked || cabinetAssignments > 0 || draftChanged} onclick={archiveCabinet}>{m.archiveCabinetWithDrawers}</Button>
+							</div>
+							{#if cabinetAssignments}<p class="mt-2 text-sm text-muted-foreground">{m.cabinetAssignedBlocked(cabinetAssignments)}</p>{/if}
+							<div class="mt-6 min-w-0">
+								{@render review()}
+								{#if swapSource}<div class="flex flex-wrap items-center gap-3" role="status"><p>{m.chooseSwap}</p><Button variant="outline" onclick={() => swapSource = null}>{m.cancelAction}</Button></div>{/if}
+								<form id="shelf-editor-form" class={formLayout} onsubmit={save}>
+									{@render layoutView()}
+									<div class="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground" aria-hidden="true">
+										<span class="inline-flex items-center gap-2"><span class="size-4 rounded-xs border border-drawer-edge bg-drawer"></span>{m.legendAssigned}</span>
+										<span class="inline-flex items-center gap-2"><span class="size-4 rounded-xs border border-dashed border-drawer-edge bg-steel"></span>{m.emptyDrawer}</span>
+									</div>
+								</form>
+								{@render drawerPanel()}
+								{@render pendingRetry()}
+								<div class={[formStatus, 'mt-6']} aria-live="polite" aria-atomic="true">{@render storageStatus()}</div>
+								<div class={[formActions, 'mt-6']}>
+									<Button form="shelf-editor-form" type="submit" disabled={locked || !draftChanged}><ButtonLabel pending={busy} pendingLabel={m.saving} label={m.save} /></Button>
+									{#if draftChanged}<Button type="button" variant="outline" disabled={locked} onclick={() => { discardDraft(); edit(shelf!.cabinets.find((item) => item.id === before!.id)!); }}>{m.discardChanges}</Button>{/if}
+								</div>
+							</div>
+						</div>
+					{/if}
+				{/snippet}
+			</ShelfZoom>
+		{:else}<h2 class={sectionHeading}>{m.wall}</h2><Empty.Root><Empty.Description>{m.noCabinets}</Empty.Description></Empty.Root>{/if}
+	</section>
 {/if}
 
 <Dialog.Root open={editor && !inlineEditor} onOpenChange={(open) => { if (open || busy) return; if (editorMode === 'move' && before) editorMode = 'edit'; else closeEditor(); }}>
