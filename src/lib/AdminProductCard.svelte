@@ -10,11 +10,12 @@
 	import LocationChips from '#lib/LocationChips.svelte';
 	import BorrowOnlyBadge from '#lib/BorrowOnlyBadge.svelte';
 	import type { AdminProduct, ProductReferences } from '#lib/admin-products.js';
+	import type { Snippet } from 'svelte';
 
 	// The public catalog card (page-catalog.md) for staff lists, linking to the editor.
-	// Renders one <li>; the parent <ul> owns the grid columns.
-	let { product, references, quantity, headingLevel = 2 }: {
-		product: AdminProduct; references: ProductReferences | null; quantity: string | null; headingLevel?: 2 | 3;
+	// Renders one <li>; the parent <ul> owns the grid columns. `children` adds a last line.
+	let { product, references, quantity, headingLevel = 2, children }: {
+		product: AdminProduct; references: ProductReferences | null; quantity: string | null; headingLevel?: 2 | 3; children?: Snippet;
 	} = $props();
 	const i18n = getI18n();
 	const bin = $derived(references?.shelf.bins.find(b => b.id === product.bin_id));
@@ -54,6 +55,7 @@
 				{:else if product.location_note}<LocationChips note={product.location_note} plain />
 				{:else}<span class="text-sm text-muted-foreground">{i18n.m.adminProducts.unplaced}</span>{/if}
 			</div>
+			{@render children?.()}
 		</Card.Content>
 	</Card.Root>
 </li>

@@ -281,6 +281,15 @@ export const nb = {
 		emptySales: 'Ingen registrerte kjøp i denne perioden.',
 		loading: 'Laster …', unavailable: 'Statistikken kunne ikke lastes.', overviewUnavailable: 'Oversikten kunne ikke lastes.', unknown: 'Utilgjengelig', retry: 'Prøv igjen',
 	},
+	adminReview: {
+		heading: 'Nye produkter', headingCount: (count: string) => `Nye produkter (${count})`,
+		empty: 'Ingenting nytt siden du sist gikk gjennom.',
+		added: (time: string) => `Lagt til ${time}`, addedBy: (time: string, name: string) => `Lagt til ${time} av ${name}`,
+		markReviewed: 'Merk alle som gjennomgått', reviewed: 'Alle er merket som gjennomgått.',
+		loading: 'Laster …', unavailable: 'De nye produktene kunne ikke lastes.',
+		creatorsUnavailable: 'Endringsloggen kunne ikke lastes, så listen viser ikke hvem som la til produktene, og dine egne er med.',
+		retry: 'Prøv igjen',
+	},
 	adminAudit: {
 		title: 'Endringslogg | Admin | Ampoteket', heading: 'Endringslogg',
 		description: 'Endringer i produkter, plassering, bestillinger, tellinger, administratorer og kontaktopplysninger.',

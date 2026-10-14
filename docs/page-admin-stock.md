@@ -24,6 +24,23 @@ filtered to **Low stock**. The overview links to the five most recent open stock
 «Start en bestilling» is always shown and opens the New order form at `/admin/orders?new`, which lists
 every product needing attention ([orders](page-admin-orders.md#orders)).
 
+Last, **New products** lists, as product cards newest first, every product (published or
+not) that other staff created since the signed-in staff member last reviewed, so whoever
+checks new entries sees value, drawer, names, price and recorded stock at a glance; the
+heading carries the count. Each card adds when it was created and by whom, the actor as
+[audit browsing](website-guide.md#58-audit-browsing) names it, from the product's `INSERT`
+in `amp_audit_log`; products from before the log was truncated show only the time. The
+viewer's own products are left out. If the audit cannot be read, the list still shows,
+without creators and with the viewer's own products, and says so with a retry; it never
+looks empty. **Mark all as reviewed** moves the review point to the newest listed product's
+`created_at` (exact to the microsecond), not the clock, so a product saved after the list
+was read stays new. The point is kept per staff user in this browser's `localStorage`
+(`src/lib/admin-review.ts`, beside the drafts); another device or a cleared browser starts
+again from the last 14 days, which is also the first visit's window. The section re-reads
+on focus, visibility and reconnect, and reads the stored point each time, so a review
+marked in another tab applies. Edits to existing products are not listed; they are in the
+audit.
+
 `/admin/statistics` graphs 30 days of purchases and ranks up to ten products by sales
 value; a saved product's **Statistics** tab shows its own figures (tab changes keep the
 editor's unsaved input). Rules, with aggregation in

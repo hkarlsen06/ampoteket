@@ -281,6 +281,15 @@ export const en: Messages = {
 		emptySales: 'No registered purchases in this period.',
 		loading: 'Loading …', unavailable: "Statistics couldn't be loaded.", overviewUnavailable: "The overview couldn't be loaded.", unknown: 'Unavailable', retry: 'Try again',
 	},
+	adminReview: {
+		heading: 'New products', headingCount: (count: string) => `New products (${count})`,
+		empty: 'Nothing new since your last review.',
+		added: (time: string) => `Added ${time}`, addedBy: (time: string, name: string) => `Added ${time} by ${name}`,
+		markReviewed: 'Mark all as reviewed', reviewed: 'All marked as reviewed.',
+		loading: 'Loading …', unavailable: "The new products couldn't be loaded.",
+		creatorsUnavailable: "The change log couldn't be loaded, so the list doesn't show who added each product, and your own are included.",
+		retry: 'Try again',
+	},
 	adminAudit: {
 		title: 'Change log | Admin | Ampoteket', heading: 'Change log',
 		description: 'Changes to products, placement, orders, stock counts, admins and contact details.',

@@ -62,6 +62,37 @@ export async function readAuditUpdates(session: StaffSession, newestId: string, 
 	}
 }
 
+/** Every product creation recorded since `since`, newest first: who added which product. */
+export async function readProductCreations(session: StaffSession, since: string, fetcher: Fetcher = fetch): Promise<AuditEntry[]> {
+	timestamp(since);
+	const entries: AuditEntry[] = [];
+	let cursor: string | null = null;
+	for (;;) {
+		const rows = await staffRequest(session, 'amp_audit_log', {
+			select: 'id,table_name,row_key,action,before_data,after_data,actor_id,database_role,recorded_at',
+			table_name: 'eq.products', action: 'eq.INSERT', recorded_at: `gte.${since}`,
+			order: 'id.desc', limit: '200', ...(cursor ? { id: `lt.${cursor}` } : {})
+		}, undefined, 'POST', fetcher);
+		if (!Array.isArray(rows) || rows.length > 200) throw new Error('Invalid audit page');
+		if (!rows.length) return entries;
+		for (const value of rows) {
+			const entry = parseEntry(value);
+			if (entry.table !== 'products' || entry.action !== 'INSERT' || (cursor !== null && BigInt(entry.id) >= BigInt(cursor))) throw new Error('Invalid product creation');
+			entries.push(entry); cursor = entry.id;
+		}
+	}
+}
+
+/** Staff names for these entries' actors only, without the rows' other references. */
+export function readActorReferences(session: StaffSession, entries: AuditEntry[], fetcher: Fetcher = fetch): Promise<AuditReferences> {
+	return readAuditReferences(session, entries.map(entry => ({ ...entry, before: null, after: null })), fetcher);
+}
+
+/** The actor as the audit page names it. */
+export function auditActor(entry: AuditEntry, locale: Locale, references: AuditReferences): string {
+	return describeAudit({ ...entry, before: null, after: null }, locale, references).actor;
+}
+
 type AuditRow = Record<string, unknown>;
 export type AuditReferences = Record<string, Record<string, AuditRow>>;
 export type AuditDescription = { subject: string; actor: string; fields: { label: string; before: string | null; after: string | null }[] };
