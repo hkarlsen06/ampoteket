@@ -783,7 +783,7 @@ try {
   await page.locator('[data-cabinet-editor]').getByRole('button', { name: 'A3–B3', exact: true }).click();
   await page.getByRole('button', { name: sh.moveDrawer, exact: true }).click();
   await layout.locator(`[data-item-id="${secondBin}"]`).click();
-  const swapped = await lostResponse(page, 'rpc/amp_swap_bins', 'POST', () => page.getByRole('alertdialog').getByRole('button', { name: sh.confirmAction, exact: true }).click());
+  const swapped = await lostResponse(page, 'rpc/amp_swap_bins', 'POST', () => page.getByRole('alertdialog').getByRole('button', { name: sh.swap, exact: true }).click());
   await expect(page.getByText(sh.unknown, { exact: true })).toBeVisible();
   await page.getByRole('button', { name: sh.finishChange, exact: true }).click();
   const drawerSwapToast = page.locator('[data-sonner-toast]').filter({ has: page.getByText(
@@ -795,6 +795,20 @@ try {
   expect(await sql(`SELECT inner_row FROM app.bins WHERE id='${secondBin}'`)).toBe('3');
   expect(await sql(`SELECT bin_id FROM app.products WHERE id='${productId}'`)).toBe(firstBin);
   expect(await liveBinIds(cabinetId)).toHaveLength(12);
+  // Two empty drawers of one size look identical everywhere, so a drop between them is a no-op.
+  const twins = (await sql(`SELECT a.id||','||b.id FROM app.bins a JOIN app.bins b ON b.cabinet_id=a.cabinet_id AND b.id>a.id
+    AND b.row_span=a.row_span AND b.col_span=a.col_span AND b.label IS NOT DISTINCT FROM a.label AND NOT b.is_archived
+    WHERE a.cabinet_id='${cabinetId}' AND NOT a.is_archived AND NOT EXISTS (SELECT 1 FROM app.products p WHERE p.bin_id IN (a.id,b.id))
+    ORDER BY a.id, b.id LIMIT 1`)).split(',');
+  expect(twins).toHaveLength(2);
+  const twinPositions = `SELECT string_agg(inner_row||':'||inner_col, ' ' ORDER BY id) FROM app.bins WHERE id IN ('${twins[0]}','${twins[1]}')`;
+  const twinsBefore = await sql(twinPositions);
+  await layout.locator(`[data-item-id="${twins[0]}"]`).click();
+  await page.getByRole('button', { name: sh.moveDrawer, exact: true }).click();
+  await layout.locator(`[data-item-id="${twins[1]}"]`).click();
+  await expect(page.getByRole('alertdialog')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: sh.moveDrawer, exact: true })).toBeEnabled();
+  expect(await sql(twinPositions)).toBe(twinsBefore);
   console.log('PASS: generated grid with one atomic save, identical lost-response replay, configured spans, drawer moves/swaps preserve products and vacancies');
 
   const beforeGrowth = await liveBinIds(cabinetId);
@@ -861,7 +875,7 @@ try {
   await page.getByRole('button', { name: sh.moveCabinet, exact: true }).click();
   await page.getByRole('group', { name: sh.moveTarget, exact: true }).locator(`[data-item-id="${secondCabinet}"]`).click();
   await page.getByRole('button', { name: sh.swap, exact: true }).click();
-  await page.getByRole('alertdialog').getByRole('button', { name: sh.confirmAction, exact: true }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: sh.swap, exact: true }).click();
   const cabinetSwapToast = page.locator('[data-sonner-toast]').filter({ has: page.getByText(
     sh.swapPreview(sh.cabinet('F7'), sh.cabinet('G7')), { exact: true }
   ) });
