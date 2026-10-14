@@ -202,8 +202,9 @@ database:
 
 **Moves and swaps.** A mouse can drag the drawer face; touch swipes on faces pan the
 diagram. Drag its move grip to move with touch, or use the grip (or *Move drawer*) by tap
-or keyboard. A drop on another drawer is a confirmed swap; on a vacant cell a confirmed
-guarded move. *Move cabinet* opens the wall with every vacant position, one row and
+or keyboard. A drop on another drawer is a confirmed swap, confirmed with *Swap*; on a
+vacant cell a confirmed guarded move. Two empty drawers of the same size and label look
+identical everywhere, so a drop of one on the other does nothing. *Move cabinet* opens the wall with every vacant position, one row and
 column beyond the current wall included: choosing a vacant position is a confirmed
 guarded move, choosing another cabinet a confirmed swap. A new cabinet's position is
 typed as row and column. Unsaved layout edits must be saved or discarded first. Only an

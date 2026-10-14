@@ -326,7 +326,12 @@
 		if (locked || !canSwapDraft()) return;
 		const first = swapSource?.id === firstId ? swapSource : shelf!.bins.find((item) => item.id === firstId && !item.is_archived);
 		const second = shelf!.bins.find((item) => item.id === secondId && !item.is_archived);
-		if (first && second && first.id !== second.id) confirm({ ...actor(), kind: 'swap-bins', first: { ...first }, second: { ...second } });
+		if (!first || !second || first.id === second.id) return;
+		// Two empty drawers of one size and label look the same in every view and label
+		// sheet, so swapping them changes nothing anyone can see: a slipped drag, not a choice.
+		if (!assignedIds.has(first.id) && !assignedIds.has(second.id) && first.row_span === second.row_span
+			&& first.col_span === second.col_span && first.label === second.label) { swapSource = null; return; }
+		confirm({ ...actor(), kind: 'swap-bins', first: { ...first }, second: { ...second } });
 	}
 	function pickSwap(id: string) {
 		const source = shelf?.bins.find((item) => item.id === id);
@@ -571,7 +576,7 @@
 		</AlertDialog.Header>
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel>{m.cancelAction}</AlertDialog.Cancel>
-			<AlertDialog.Action variant={archiving ? 'destructive' : 'default'} disabled={locked} onclick={() => { const command = confirmation; confirmation = null; if (command) void run(command); }}>{m.confirmAction}</AlertDialog.Action>
+			<AlertDialog.Action variant={archiving ? 'destructive' : 'default'} disabled={locked} onclick={() => { const command = confirmation; confirmation = null; if (command) void run(command); }}>{confirmation?.kind === 'swap-bins' || confirmation?.kind === 'swap-cabinets' ? m.swap : m.confirmAction}</AlertDialog.Action>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>
 </AlertDialog.Root>
