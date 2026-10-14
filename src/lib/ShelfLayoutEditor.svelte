@@ -8,7 +8,7 @@
 	import { gridRange } from '#lib/format.js';
 	import type { AdminBin } from '#lib/admin-shelf.js';
 	import { LayoutError, maxLayoutCells, resizeDrawer, resizeLayout, splitLayout, type LayoutSize } from '#lib/shelf-layout.js';
-	import ShelfDiagram from '#lib/ShelfDiagram.svelte';
+	import ShelfDiagram, { type EdgeGeometry } from '#lib/ShelfDiagram.svelte';
 
 	let { cabinetId, bins = $bindable(), size = $bindable(), original,
 		assigned, disabled = false, initialSelected = '', moving = false, onempty, onselect, onswap, onswapselect }: {
@@ -88,6 +88,18 @@
 		event.preventDefault();
 		if (!drag) resize(axis, Math.max(1, Math.min(maximum(axis), size[axis] + delta)));
 	}
+	// Each cabinet grip sits mid-edge unless the selected drawer's move or width
+	// handle reaches that edge; then it takes the clear spot nearest the middle,
+	// so the two 44px targets never overlap.
+	function gripOffset({ width, height, handles }: EdgeGeometry, axis: 'rows' | 'cols') {
+		const clear = 48, length = axis === 'rows' ? width : height, middle = length / 2;
+		const blocked = handles.filter((point) => axis === 'rows' ? point.y < clear : width - point.x < clear)
+			.map((point) => axis === 'rows' ? point.x : point.y);
+		const free = [middle, ...blocked.flatMap((point) => [point - clear, point + clear])]
+			.filter((point) => point >= 0 && point <= length && blocked.every((other) => Math.abs(point - other) >= clear))
+			.sort((a, b) => Math.abs(a - middle) - Math.abs(b - middle));
+		return `${(free[0] ?? middle) / length * 100}%`;
+	}
 	function resizeSelected(id: string, width: number) { change(() => resizeDrawer(bins, size, id, width, assigned)); }
 	// The page draws the selected drawer's actions beside its heading and contents.
 	export function widen() { if (current) resizeSelected(selected, current.col_span + 1); }
@@ -100,12 +112,13 @@
 
 <svelte:window onkeydown={(event) => { if (event.key === 'Escape' && drag) { event.preventDefault(); event.stopPropagation(); drag = null; } }} />
 
-{#snippet grips()}
+{#snippet grips(geometry: EdgeGeometry)}
 	{#each ['rows', 'cols'] as dimension (dimension)}
 		{@const axis = dimension as 'rows' | 'cols'}
 		<Button variant="ghost" size="icon-sm" type="button" role="slider" aria-label={axis === 'rows' ? m.resizeRows : m.resizeCols}
 			aria-valuemin={1} aria-valuemax={maximum(axis)} aria-valuenow={proposedSize[axis]} aria-orientation={axis === 'rows' ? 'vertical' : 'horizontal'}
-			disabled={disabled || moving} class={`cabinet-edge-grip absolute z-30 size-11 touch-none p-0 active:not-aria-[haspopup]:-translate-y-1/2 ${axis === 'rows' ? 'top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 cursor-ns-resize' : 'right-0 top-1/2 translate-x-1/2 -translate-y-1/2 cursor-ew-resize'}`}
+			disabled={disabled || moving} class={`cabinet-edge-grip absolute z-30 size-11 touch-none p-0 active:not-aria-[haspopup]:-translate-y-1/2 ${axis === 'rows' ? 'top-0 -translate-x-1/2 -translate-y-1/2 cursor-ns-resize' : 'right-0 translate-x-1/2 -translate-y-1/2 cursor-ew-resize'}`}
+			style={`${axis === 'rows' ? 'left' : 'top'}: ${gripOffset(geometry, axis)}`}
 			onpointerdown={(event) => startResize(event, axis)} onpointermove={moveResize} onpointerup={finishResize}
 			onpointercancel={() => drag = null} onlostpointercapture={() => drag = null} onkeydown={(event) => resizeKey(event, axis)}>
 			<span class={`flex items-center justify-center rounded-sm border border-muted-foreground bg-card p-1 text-card-foreground ${axis === 'rows' ? 'rotate-90' : ''}`}><ShelfGrip /></span>

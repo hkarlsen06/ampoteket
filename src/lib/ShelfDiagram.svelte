@@ -1,3 +1,9 @@
+<script lang="ts" module>
+	// Frame size and the selected drawer's handle centres, in frame units (px in the
+	// editor), so edge controls can keep clear of them.
+	export type EdgeGeometry = { width: number; height: number; handles: { x: number; y: number }[] };
+</script>
+
 <script lang="ts">
 	import Icon from '#lib/Icon.svelte';
 	import type { Snippet } from 'svelte';
@@ -23,7 +29,7 @@
 		resizeLabel?: string; resizeDisabled?: boolean; responsive?: boolean; expand?: boolean;
 		selectedIds?: string[]; partialIds?: string[]; disabled?: boolean;
 		onswap?: (firstId: string, secondId: string) => void; onswapselect?: (id: string) => void; swapLabel?: string;
-		editorGeometry?: boolean; edgeControls?: Snippet;
+		editorGeometry?: boolean; edgeControls?: Snippet<[EdgeGeometry]>;
 	} = $props();
 	// Geometry is application data; button and slider behavior belongs to the library.
 	// Maps draw the real cabinets in millimetres (`raaco`): one cabinet's drawers in
@@ -150,6 +156,12 @@
 		const element = Array.from(diagram?.querySelectorAll<HTMLButtonElement>('[data-item-id]') ?? []).find((node) => node.dataset.itemId === next.id);
 		element?.focus({ preventScroll: true });
 	}
+	const edgeGeometry = $derived.by((): EdgeGeometry => {
+		const handles = [];
+		if (chosen && onswap) { const box = rect(chosen); handles.push({ x: pad.x + box.x, y: pad.y + box.y }); }
+		if (chosen && onresize) { const box = rect(chosen, shownWidth); handles.push({ x: pad.x + box.x + box.width, y: pad.y + box.y + box.height }); }
+		return { width, height, handles };
+	});
 	function resize(value: number) {
 		if (chosen && !disabled && !resizeDisabled) onresize?.(chosen.id, value);
 		// Rejected domain changes leave the original width and identity visible.
@@ -256,7 +268,7 @@
 				</Slider.Root>
 				{/key}
 			{/if}
-			{@render edgeControls?.()}
+			{@render edgeControls?.(edgeGeometry)}
 		</div>
 	</AspectRatio>
 </div>
