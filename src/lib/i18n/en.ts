@@ -165,6 +165,21 @@ export const en: Messages = {
 			SEN: 'Temperature sensor DS18B20', MOT: 'Servo motor SG90', DRV: 'Motor driver L298N', CON: 'Pin header 2.54 mm 40-pin',
 			BRD: 'Breadboard 830 holes', CAB: 'Jumper wires male–male 20 cm', MIS: 'Battery holder 4 × AA'
 		},
+		warnings: {
+			untranslated: (words: string[]) => `Not translated: ${words.join(', ')}.`,
+			looksNorwegian: (words: string[]) => `Looks Norwegian: ${words.join(', ')}.`,
+			looksEnglish: (words: string[]) => `Looks English: ${words.join(', ')}.`,
+			small: {
+				resistance: (value: string, restated: string | null) => restated ? `${value} is ${restated}, an unusually small resistor.` : `${value} is an unusually small resistor.`,
+				capacitance: (value: string, restated: string | null) => restated ? `${value} is ${restated}, an unusually small capacitor.` : `${value} is an unusually small capacitor.`
+			},
+			large: {
+				resistance: (value: string, restated: string | null) => restated ? `${value} is ${restated}, an unusually large resistor.` : `${value} is an unusually large resistor.`,
+				capacitance: (value: string, restated: string | null) => restated ? `${value} is ${restated}, an unusually large capacitor.` : `${value} is an unusually large capacitor.`
+			},
+			series: (value: string) => `${value} isn't an E24 or E96 value.`,
+			duplicates: 'May already exist:'
+		},
 		savedRefreshFailed: "The change is saved, but current details couldn't be loaded.",
 		newTitle: 'New product | Admin | Ampoteket', noProducts: 'No products yet.', clearSearch: 'Clear search and filters', unknownSpecification: 'Unknown specification', attributeRejected: 'This value was rejected. Check it and try again.', title: 'Products | Admin | Ampoteket', heading: 'Products',
 		newProduct: 'New product', scanProduct: 'Scan product', scanAgain: 'Scan again', scanInvalid: "This isn't a product label.", scanMissing: (code: string) => `Product code ${code} doesn't exist.`, scanCameraUnavailable: "The camera isn't available. Allow camera access and try again, or search for the product instead.", editProduct: 'Edit product', onOrder: (value: string) => `${value} on order`, stockLedger: 'Stock changes', back: 'Back to products', search: 'Search by name or product code', stateFilter: 'Status', all: 'All', active: 'Published', inactive: 'Unpublished', lowStock: 'Low stock', sortBy: 'Sort by', sortCurrent: (order: string) => `Sort: ${order}`, sort: { attention: 'Needs attention', counted: 'Least recently counted', code: 'Product code', name: 'Name' }, empty: 'No products match this search.', loading: 'Loading …', unavailable: "Products couldn't be loaded.", missing: "This product doesn't exist.", retry: 'Try again', working: 'Saving …', save: 'Save product', saveAndAddAnother: 'Save and add another', duplicate: 'Duplicate', saved: 'Saved',

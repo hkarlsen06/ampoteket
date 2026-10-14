@@ -165,6 +165,22 @@ export const nb = {
 			SEN: 'Temperatursensor DS18B20', MOT: 'Servomotor SG90', DRV: 'Motordriver L298N', CON: 'Stiftlist 2,54 mm 40-pin',
 			BRD: 'Koblingsbrett 830 hull', CAB: 'Koblingsledninger hann–hann 20 cm', MIS: 'Batteriholder 4 × AA'
 		},
+		// Advice that never blocks saving. `restated` is the same value in the usual unit, when it differs.
+		warnings: {
+			untranslated: (words: string[]) => `Ikke oversatt: ${words.join(', ')}.`,
+			looksNorwegian: (words: string[]) => `Ser norsk ut: ${words.join(', ')}.`,
+			looksEnglish: (words: string[]) => `Ser engelsk ut: ${words.join(', ')}.`,
+			small: {
+				resistance: (value: string, restated: string | null) => restated ? `${value} er ${restated}, en uvanlig liten motstand.` : `${value} er en uvanlig liten motstand.`,
+				capacitance: (value: string, restated: string | null) => restated ? `${value} er ${restated}, en uvanlig liten kondensator.` : `${value} er en uvanlig liten kondensator.`
+			},
+			large: {
+				resistance: (value: string, restated: string | null) => restated ? `${value} er ${restated}, en uvanlig stor motstand.` : `${value} er en uvanlig stor motstand.`,
+				capacitance: (value: string, restated: string | null) => restated ? `${value} er ${restated}, en uvanlig stor kondensator.` : `${value} er en uvanlig stor kondensator.`
+			},
+			series: (value: string) => `${value} er ikke en E24- eller E96-verdi.`,
+			duplicates: 'Finnes kanskje allerede:'
+		},
 		savedRefreshFailed: 'Endringen er lagret, men gjeldende opplysninger kunne ikke hentes.',
 		newTitle: 'Nytt produkt | Admin | Ampoteket', noProducts: 'Ingen produkter ennå.', clearSearch: 'Fjern søk og filtre', unknownSpecification: 'Ukjent spesifikasjon', attributeRejected: 'Verdien ble avvist. Kontroller den og prøv igjen.', title: 'Produkter | Admin | Ampoteket', heading: 'Produkter',
 		newProduct: 'Nytt produkt', scanProduct: 'Skann produkt', scanAgain: 'Skann igjen', scanInvalid: 'Dette er ikke en produktetikett.', scanMissing: (code: string) => `Produktkode ${code} finnes ikke.`, scanCameraUnavailable: 'Kameraet er ikke tilgjengelig. Gi nettleseren tilgang til kameraet og prøv igjen, eller søk etter produktet.', editProduct: 'Rediger produkt', onOrder: (value: string) => `${value} på bestilling`, stockLedger: 'Beholdningsendringer', back: 'Tilbake til produkter', search: 'Søk etter navn eller produktkode', stateFilter: 'Status', all: 'Alle', active: 'Publisert', inactive: 'Upublisert', lowStock: 'Lav beholdning', sortBy: 'Sorter etter', sortCurrent: (order: string) => `Sortering: ${order}`, sort: { attention: 'Trenger oppmerksomhet', counted: 'Lengst siden telling', code: 'Produktkode', name: 'Navn' }, empty: 'Ingen produkter passer søket.', loading: 'Laster …', unavailable: 'Produktene kunne ikke lastes.', missing: 'Produktet finnes ikke.', retry: 'Prøv igjen', working: 'Lagrer …', save: 'Lagre produkt', saveAndAddAnother: 'Lagre og legg til nytt', duplicate: 'Dupliser', saved: 'Lagret',

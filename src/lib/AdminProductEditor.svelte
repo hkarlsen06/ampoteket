@@ -45,6 +45,13 @@
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { readOutstandingByProduct } from '#lib/admin-orders.js';
 	import { draftFields, readDraft, writeDraft } from '#lib/drafts.js';
+	import FieldWarning from '#lib/FieldWarning.svelte';
+	import { readAdminProducts, readAllProductAttributes } from '#lib/admin-products.js';
+	import { existingProducts, likelyDuplicates, type ExistingProduct } from '#lib/product-warnings.js';
+	import { otherLanguageWords, untranslatedWords } from '#lib/name-translation.js';
+	import { afterPointerRelease } from '#lib/pointer-release.js';
+	import { formatMeasurement } from '#lib/format.js';
+	import { codeText } from '#lib/ui.js';
 	import { clearProductCommand, definitiveProductFailure, executeProductCommand, sameProduct, generateCategoryProductCode, generateProductCode, isProductCodeCollision, parseProductWrite, persistProductCommand, ProductFieldError, productCategoryOptions, readProduct, readProductCommand, readProductReferences, readProductStock, StaleProductError, type AdminProduct, type ProductCommand, type ProductFamily, type ProductReferences, type ProductStock, type ProductWrite } from '#lib/admin-products.js';
 	// `oncreated` embeds a new-product editor in another page's sheet: no page heading, title,
 	// label printing or opening stock (an order's receipt brings the stock), and the created
@@ -401,6 +408,7 @@
 		if (!product && draft.unit_code === categoryUnit(draft.category_id) && categoryUnit(categoryId) !== draft.unit_code) setUnit(categoryUnit(categoryId));
 		draft.category_id = categoryId;
 		nameFields.forEach(({ field, locale }, index) => draft[field] = rests[index] ? namePrefix(categoryId, locale) + rests[index] : '');
+		checkDuplicates();
 	}
 	function tidyName(field: NameField) {
 		const locale = nameLocale(field); const specification = family ? nameSpecifications[family] : undefined;
@@ -408,6 +416,46 @@
 		typeName(field, rest);
 		const value = specification && nameMeasurement(rest, specification.unit, locale);
 		if (value) attributesEditor?.suggest(specification.code, value);
+	}
+	// Warnings that never block saving; they change only as a field is left, never per
+	// keystroke, and wait for a released pointer so a clicked button never moves (pointer-release.ts).
+	// A name drafted from the other one is flagged while it still holds that draft and
+	// keeps words the glossary could not translate; either name, for words of the other language.
+	let nameNotes = $state<Record<NameField, { untranslated: string[]; foreign: string[] }>>({ name_nb: { untranslated: [], foreign: [] }, name_en: { untranslated: [], foreign: [] } });
+	function checkNames() {
+		const notes = { ...nameNotes };
+		for (const { field, locale } of nameFields) {
+			const other: NameField = field === 'name_nb' ? 'name_en' : 'name_nb';
+			const rest = draft[field].slice(lockedPrefix(field).length);
+			const untranslated = drafted[field] && rest === drafted[field] ? untranslatedWords(draft[other].slice(lockedPrefix(other).length), nameLocale(other), locale) : [];
+			const foreign = otherLanguageWords(rest, locale).filter(word => !untranslated.some(item => item.toLocaleLowerCase() === word.toLocaleLowerCase()));
+			notes[field] = { untranslated, foreign };
+		}
+		afterPointerRelease(() => { nameNotes = notes; });
+		checkDuplicates();
+	}
+	// A new product that probably exists already: same category and value for resistors
+	// and capacitors, or the same name. The list loads once per editor, so after
+	// "Save and add another" it holds the product just saved; a failed load shows nothing.
+	let existing: ExistingProduct[] | null = null; let existingRequested = false;
+	let duplicates = $state.raw<ExistingProduct[]>([]);
+	const specificationValues: Record<string, string | null> = {};
+	function checkDuplicates() {
+		if (product || id !== 'new') return;
+		if (!existing) { loadExisting(); return; }
+		const specification = family ? nameSpecifications[family] : undefined;
+		const found = likelyDuplicates({ id: draft.id || null, category_id: draft.category_id, name_nb: draft.name_nb, name_en: draft.name_en,
+			valueCode: specification ? specification.code as 'resistance' | 'capacitance' : null, value: specification ? specificationValues[specification.code] ?? null : null }, existing);
+		afterPointerRelease(() => { duplicates = found; });
+	}
+	function loadExisting() {
+		if (existingRequested || !references || admin.status !== 'ready') return;
+		existingRequested = true;
+		const session = admin.credentials(); const definitions = references.definitions;
+		Promise.all([readAdminProducts(session), readAllProductAttributes(session)]).then(([items, values]) => {
+			if (!alive || session.userId !== admin.session?.user.id) return;
+			existing = existingProducts(items, values, definitions); checkDuplicates();
+		}, () => { /* No list, no duplicate warning. */ });
 	}
 	function categoryName(categoryId: string | null): string {
 		const standard = categories.find(category => category.id === categoryId);
@@ -504,18 +552,38 @@
 							{#each nameFields as { field, locale } (field)}
 								{@const id = `product-${field.replace('_', '-')}`}
 								{@const prefix = lockedPrefix(field)}
-								<Field.Field class={field === 'name_nb' ? 'col-span-2 col-start-1' : 'col-span-2'}>
+								{@const note = nameNotes[field]}
+								{@const warned = note.untranslated.length > 0 || note.foreign.length > 0}
+								<!-- Top-aligned, so a warning under one name never moves the other. -->
+								<Field.Field class={[field === 'name_nb' ? 'col-span-2 col-start-1' : 'col-span-2', 'self-start']}>
 									<Field.Label for={id} required>{field === 'name_nb' ? m.nameNb : m.nameEn}</Field.Label>
 									<InputGroup.Root>
 										{#if prefix}<InputGroup.Addon align="inline-start"><InputGroup.Text id={`${id}-prefix`} class="text-foreground">{prefix}</InputGroup.Text></InputGroup.Addon>{/if}
 										<InputGroup.Input {id} placeholder={family ? messagesFor(locale).adminProducts.nameExamples[family] : undefined} required maxlength={200 - prefix.length}
-											bind:value={() => draft[field].slice(prefix.length), rest => typeName(field, rest)} onchange={() => tidyName(field)}
-											aria-invalid={invalidField === field} aria-describedby={[prefix && `${id}-prefix`, invalidField === field && `${id}-error`, 'product-name-hint'].filter(Boolean).join(' ')} disabled={blocked} />
+											bind:value={() => draft[field].slice(prefix.length), rest => typeName(field, rest)} onchange={() => { tidyName(field); checkNames(); }}
+											aria-invalid={invalidField === field} aria-describedby={[prefix && `${id}-prefix`, invalidField === field && `${id}-error`, warned && `${id}-warning`, 'product-name-hint'].filter(Boolean).join(' ')} disabled={blocked} />
 									</InputGroup.Root>
 									{#if invalidField === field}<Field.Error id={`${id}-error`}>{m.invalidName}</Field.Error>{/if}
+									<FieldWarning id={`${id}-warning`} show={warned}>
+										{#if note.untranslated.length}<span class="block">{m.warnings.untranslated(note.untranslated)}</span>{/if}
+										{#if note.foreign.length}<span class="block">{field === 'name_en' ? m.warnings.looksNorwegian(note.foreign) : m.warnings.looksEnglish(note.foreign)}</span>{/if}
+									</FieldWarning>
 								</Field.Field>
 							{/each}
 							<Field.Description id="product-name-hint" class="col-span-full">{m.nameHint}</Field.Description>
+							<FieldWarning id="product-duplicates" class="col-span-full" show={!product && duplicates.length > 0}>
+								{m.warnings.duplicates}
+								<ul class="mt-1 grid gap-1">
+									{#each duplicates as match (match.id)}
+										<li class="flex flex-wrap items-center gap-x-3 gap-y-1">
+											<a class={nameWrap} href={i18n.href(`/admin/products/${match.id}`)}><span class={codeText}>{match.code}</span> {productName(match, i18n.locale)}</a>
+											<span class="text-muted-foreground">{binLabel(match.bin_id)}</span>
+											{#if family === 'CAP' && match.numbers.voltage}<span class="text-muted-foreground">{formatMeasurement(match.numbers.voltage, 'V', i18n.locale)}</span>{/if}
+											{#if !match.is_active}<StateBadge tone="neutral">{m.inactive}</StateBadge>{/if}
+										</li>
+									{/each}
+								</ul>
+							</FieldWarning>
 						{/if}
 					</div>
 				</section>
@@ -526,7 +594,7 @@
 						<ProductSpecificationRecovery command={pending} bind:definitions={references.definitions} family={family} disabled={busy}
 							onreviewed={(command) => { pending = command; adopt(command.payload); staged = command.attributes ?? []; void save(); }} />
 					{:else}
-						{#key attributeProductId}<ProductAttributes bind:this={attributesEditor} productId={attributeProductId} drafts={!(ownPending && pending?.revision === null)} bind:staged bind:definitions={references.definitions} family={family} disabled={blocked} />{/key}
+						{#key attributeProductId}<ProductAttributes bind:this={attributesEditor} productId={attributeProductId} drafts={!(ownPending && pending?.revision === null)} bind:staged bind:definitions={references.definitions} family={family} disabled={blocked} onvalue={(code, value) => { specificationValues[code] = value; checkDuplicates(); }} />{/key}
 					{/if}
 					<section class={section({ spacing: 'divided' })} aria-labelledby="product-placement-section-title">
 						<Separator />

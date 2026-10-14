@@ -15,12 +15,16 @@
 	import { getAdminContext } from '#lib/admin-context.svelte.js';
 	import { readDraft, writeDraft } from '#lib/drafts.js';
 	import { engineeringUnits, formatMeasurement, measurementInput, parseMeasurement } from '#lib/format.js';
+	import FieldWarning from '#lib/FieldWarning.svelte';
+	import { afterPointerRelease } from '#lib/pointer-release.js';
+	import { unlikelyValue, type ValueWarning } from '#lib/product-warnings.js';
 	import { definitiveProductFailure, detailCommandKey, executeDetailCommand, parseAttribute, parseDetailCommand, readProductAttributes, StaleProductError, type AttributeDefinition, type AttributeValue, type DetailCommand, type ProductFamily, type ProductAttributeDraft } from '#lib/admin-products.js';
 	// Every field is edited in place and written by the product's Save button:
 	// prepare() validates (and stages values for a new product) before the
 	// product write; commit() then saves each changed value of a saved product
 	// as its own persisted, individually acknowledged command.
-	let { productId, definitions = $bindable(), family, staged = $bindable([]), disabled = false, drafts = false }: { productId: string | null; definitions: AttributeDefinition[]; family: ProductFamily | null; staged?: ProductAttributeDraft[]; disabled?: boolean; drafts?: boolean } = $props();
+	// `onvalue` hears a number field's value (canonical, or null when empty or unreadable) once it is left or suggested.
+	let { productId, definitions = $bindable(), family, staged = $bindable([]), disabled = false, drafts = false, onvalue }: { productId: string | null; definitions: AttributeDefinition[]; family: ProductFamily | null; staged?: ProductAttributeDraft[]; disabled?: boolean; drafts?: boolean; onvalue?: (code: string, value: string | null) => void } = $props();
 	const draftProductId = '00000000-0000-4000-8000-000000000000';
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.adminProducts); const uid = $props.id();
 	let savedValues = $state.raw<AttributeValue[] | null>(null);
@@ -141,6 +145,27 @@
 		const shown = current(definition);
 		if (shown && shown !== suggested[definition.id]) return;
 		edits[definition.id] = suggested[definition.id] = measurementInput(value, unitOf(definition), i18n.locale);
+		check(definition);
+	}
+	// A resistor's or capacitor's own value gets a warning when it is probably a slip
+	// (product-warnings.ts). It never blocks saving and changes only as the field is left.
+	const checkedCode = $derived(family === 'RES' ? 'resistance' : family === 'CAP' ? 'capacitance' : null);
+	let valueWarnings = $state<Record<string, ValueWarning | null>>({});
+	const checkedValue = $derived.by(() => {
+		const definition = layout.fields.find(field => field.code === checkedCode);
+		return definition ? { warning: valueWarnings[definition.id] ?? null } : null;
+	});
+	function check(definition: AttributeDefinition) {
+		if (definition.value_type !== 'number') return;
+		const input = current(definition); let value: string | null = null;
+		try { value = input.trim() ? parseMeasurement(input, definition.canonical_unit, i18n.locale) : null; }
+		catch { /* Unreadable: save reports it. */ }
+		const warning = value === null ? null : unlikelyValue(definition.code, value, i18n.locale);
+		afterPointerRelease(() => { valueWarnings[definition.id] = warning; });
+		onvalue?.(definition.code, value);
+	}
+	function warningText(warning: ValueWarning): string {
+		return warning.reason === 'series' ? m.warnings.series(warning.shown) : m.warnings[warning.reason][warning.code](warning.shown, warning.restated);
 	}
 	// Leaving a number field shows how it was read ("27p" → "27 pF"). Errors change only on
 	// save, as in the rest of the form: adding or removing a message here would move Save
@@ -230,7 +255,8 @@
 				{@const unit = unitOf(definition)}
 				{@const locked = disabled || definitionState.conflict || definition.id === pendingId}
 				{@const error = errors[definition.id]}
-				{@const describedBy = [error && `${id}-error`, definition.value_type === 'number' && `${uid}-hint`].filter(Boolean).join(' ') || undefined}
+				{@const warning = definition.code === checkedCode ? valueWarnings[definition.id] : null}
+				{@const describedBy = [error && `${id}-error`, warning && `${uid}-warning`, definition.value_type === 'number' && `${uid}-hint`].filter(Boolean).join(' ') || undefined}
 				<Field.Field data-invalid={Boolean(error)}>
 					<Field.Label for={id}>{specificationLabel(definition.code, definition, i18n.locale)}{#if unit} <span class="sr-only">({unit})</span>{/if}</Field.Label>
 					{#if definition.value_type === 'boolean'}
@@ -240,14 +266,16 @@
 							<NativeSelect.Option value="false">{m.no}</NativeSelect.Option>
 						</NativeSelect.Root>
 					{:else if unit}
-						<InputGroup.Root><InputGroup.Input {id} type="text" inputmode={engineeringUnits(unit).length > 1 ? 'text' : 'decimal'} maxlength={2000} bind:value={() => current(definition), (next) => edits[definition.id] = next} onchange={() => tidy(definition)} disabled={locked} aria-invalid={Boolean(error)} aria-describedby={describedBy} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unit}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>
+						<InputGroup.Root><InputGroup.Input {id} type="text" inputmode={engineeringUnits(unit).length > 1 ? 'text' : 'decimal'} maxlength={2000} bind:value={() => current(definition), (next) => edits[definition.id] = next} onchange={() => { tidy(definition); check(definition); }} disabled={locked} aria-invalid={Boolean(error)} aria-describedby={describedBy} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unit}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>
 					{:else}
-						<Input {id} type="text" inputmode={definition.value_type === 'number' ? 'decimal' : 'text'} maxlength={2000} bind:value={() => current(definition), (next) => edits[definition.id] = next} onchange={() => tidy(definition)} disabled={locked} aria-invalid={Boolean(error)} aria-describedby={describedBy} />
+						<Input {id} type="text" inputmode={definition.value_type === 'number' ? 'decimal' : 'text'} maxlength={2000} bind:value={() => current(definition), (next) => edits[definition.id] = next} onchange={() => { tidy(definition); check(definition); }} disabled={locked} aria-invalid={Boolean(error)} aria-describedby={describedBy} />
 					{/if}
 					{#if error}<Field.Error id={`${id}-error`}>{error === 'stale' ? m.attributeChanged(display(saved(definition.id), unit)) : error === 'rejected' ? m.attributeRejected : m.attributeInvalid}</Field.Error>{/if}
 				</Field.Field>
 			{/each}
 		</div>
+		<!-- Below the grid, so a row of fields never grows unevenly; the text names the value. -->
+		{#if checkedValue}<FieldWarning id={`${uid}-warning`} show={Boolean(checkedValue.warning)}>{checkedValue.warning ? warningText(checkedValue.warning) : ''}</FieldWarning>{/if}
 		{#if layout.fields.some(definition => definition.value_type === 'number')}<Field.Description id={`${uid}-hint`}>{m.attributesHint}</Field.Description>{/if}
 		<div class={formGrid}>
 			{#if layout.addable.length}

@@ -98,6 +98,27 @@ remain outside the scrolling region.
   until staff edit it. Leaving a name tidies values (`tidyNameMeasurements`:
   `100 uF` → `100 µF`, `4k7` → `4,7 kΩ`) and fills the matching empty specification.
   Typed values are never overwritten.
+- Three warnings catch typical entry slips and **never block saving**
+  (`src/lib/product-warnings.ts`, `name-translation.ts`, shown by `FieldWarning`: icon and
+  text in a polite live region, tied to the field with `aria-describedby`). They change
+  only when a field is left, never per keystroke, and wait until a pressed pointer is
+  released so the button being clicked does not move (`pointer-release.ts`).
+  - *Unlikely value*, below the specifications of a resistor or capacitor: off the
+    E24 and E96 series, or outside 1 Ω–10 MΩ or 1 pF up to (not including) 1 mF, with
+    the value restated in the usual unit («2,2 mF er 2 200 µF, en uvanlig stor
+    kondensator.»). A 0 Ω link is not flagged. Exact decimal strings throughout.
+  - *May already exist*, below the names of a new product only: products with the
+    same category and resistance or capacitance, or the same name in either language
+    (case and spacing ignored), unpublished ones marked. Each links to its editor with
+    code, name, drawer and, for capacitors, voltage. The list loads once per editor, so
+    after **Save and add another** it includes the product just saved; a failed load
+    just omits the warning.
+  - *Name language*, below each name: a name drafted from the other one is flagged
+    while it still holds that draft and keeps words the glossary left untranslated
+    («Ikke oversatt: Gulvteppe.»; model numbers, acronyms, units and words spelled the
+    same in both languages pass). Either name is flagged for the other language's
+    glossary words, and the English name for æ, ø and å. A borrowing joined to a
+    number («40-pin») passes.
 - Code, stock unit and stock step are immutable after creation. Stock is a recorded
   balance, never an editable field or a zero shown for a failed read. Zero price is
   valid and is what «Gratis» saves; an empty price is a field error, never borrow-only. Unit prices use `formatMoney`, with at least two decimals and all stored
