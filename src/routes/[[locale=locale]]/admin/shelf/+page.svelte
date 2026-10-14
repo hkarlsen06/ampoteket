@@ -443,7 +443,6 @@
 <svelte:document onvisibilitychange={revalidate} />
 <header class={pageHeader}>
 	<h1 class={pageHeading}>{m.heading}</h1>
-	<div class={formActions}><Button type="button" variant="default" bind:ref={newCabinetButton} disabled={locked || draftChanged} onclick={() => edit(null)}>{m.newCabinet}</Button></div>
 </header>
 <div class={formStatus} aria-live="polite" aria-atomic="true">
 	{#if !editor}{@render storageStatus()}{/if}
@@ -480,12 +479,7 @@
 				{#snippet cabinet()}
 					{#if inlineEditor && before}
 						<div data-cabinet-editor class="min-w-0">
-							<div class={formActions}>
-								<Button type="button" variant="outline" disabled={locked} onclick={openMove}>{m.moveCabinet}</Button>
-								<Button type="button" variant="outline" disabled={locked || cabinetAssignments > 0 || draftChanged} onclick={archiveCabinet}>{m.archiveCabinetWithDrawers}</Button>
-							</div>
-							{#if cabinetAssignments}<p class="mt-2 text-sm text-muted-foreground">{m.cabinetAssignedBlocked(cabinetAssignments)}</p>{/if}
-							<div class="mt-6 min-w-0">
+							<div class="min-w-0">
 								{@render review()}
 								{#if swapSource}<div class="flex flex-wrap items-center gap-3" role="status"><p>{m.chooseSwap}</p><Button variant="outline" onclick={() => swapSource = null}>{m.cancelAction}</Button></div>{/if}
 								<form id="shelf-editor-form" class={formLayout} onsubmit={save}>
@@ -509,6 +503,19 @@
 			</ShelfZoom>
 		{:else}<h2 class={sectionHeading}>{m.wall}</h2><Empty.Root><Empty.Description>{m.noCabinets}</Empty.Description></Empty.Root>{/if}
 	</section>
+	<!-- Cabinet-level changes are rare, so they sit below the drawers staff work on every
+	day, and outside the zoom stage so nothing above the grid shifts where the zoom lands. -->
+	<div class={shelfSection}>
+		<Separator />
+		<div class={formActions}>
+			{#if openCabinet && inlineEditor && before}
+				<Button type="button" variant="outline" disabled={locked} onclick={openMove}>{m.moveCabinet}</Button>
+				<Button type="button" variant="outline" disabled={locked || cabinetAssignments > 0 || draftChanged} onclick={archiveCabinet}>{m.archiveCabinetWithDrawers}</Button>
+			{/if}
+			<Button type="button" variant="outline" bind:ref={newCabinetButton} disabled={locked || draftChanged} onclick={() => edit(null)}>{m.newCabinet}</Button>
+		</div>
+		{#if openCabinet && inlineEditor && before && cabinetAssignments}<p class="text-sm text-muted-foreground">{m.cabinetAssignedBlocked(cabinetAssignments)}</p>{/if}
+	</div>
 {/if}
 
 <Dialog.Root open={editor && !inlineEditor} onOpenChange={(open) => { if (open || busy) return; if (editorMode === 'move' && before) editorMode = 'edit'; else closeEditor(); }}>

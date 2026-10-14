@@ -127,7 +127,6 @@
 {/snippet}
 
 <div class="layout-editor min-w-0" data-resizing={drag ? 'true' : undefined}>
-	<p class="text-sm text-muted-foreground">{m.grid(proposedSize.rows, proposedSize.cols)}</p>
 	<div bind:this={frame}>
 		<ShelfDiagram cabinet editorGeometry responsive rows={preview.size.rows} cols={preview.size.cols}
 			items={[...preview.bins.map((bin) => ({ id: bin.id, row: bin.inner_row!, col: bin.inner_col!, rowSpan: bin.row_span, colSpan: bin.col_span,
@@ -136,6 +135,8 @@
 			onswap={moving ? undefined : onswap} {onswapselect} swapLabel={m.dragDrawer} disabled={disabled || !!drag}
 			onresize={resizeSelected} resizeLabel={m.resizeHandle} resizeDisabled={disabled || moving || !!drag} />
 	</div>
+	<!-- Below the grid, so the grid is the first thing in the cabinet, where the zoom lands. -->
+	<p class="text-sm text-muted-foreground">{m.grid(proposedSize.rows, proposedSize.cols)}</p>
 	{#if removed}<Field.Description>{m.layoutCount(bins.length, removed)}</Field.Description>{/if}
 	<div aria-live="polite" aria-atomic="true">
 		{#if layoutError}<Alert.Message appearance="inline" variant="destructive">{m[layoutError]}</Alert.Message>

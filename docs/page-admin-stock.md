@@ -234,10 +234,11 @@ C2 has two wide drawers (A1–D1, C2–D2) from the merged cells in `Bok.xlsx`: 
 492 drawers, no products or stock inferred.
 
 **Layout editor.** Selecting a cabinet zooms into it through the shared `ShelfZoom`,
-as on the public map: *Move cabinet* and *Archive cabinet and empty drawers*, then its
-size as text, the drawer grid, a legend (filled front with a strip: has products;
-hollow with a dashed edge: empty), and *Save cabinet* with *Discard* once something
-changed. Unsaved changes disable *Show wall*, so they block switching cabinets; a
+as on the public map: the drawer grid first, where the zoom lands, then its size as
+text, a legend (filled front with a strip: has products; hollow with a dashed edge:
+empty), and *Save cabinet* with *Discard* once something changed. Cabinet-level
+actions are rare, so they share one row below the zoom stage: *Move cabinet* and
+*Archive cabinet and empty drawers* while a cabinet is open, and *Add cabinet* always. Unsaved changes disable *Show wall*, so they block switching cabinets; a
 pending *Move drawer* survives zooming out, so its target can be in another cabinet.
 The border grips add or remove rows and columns, by pointer or arrow keys, up to 4,096
 cells. Each sits mid-edge and slides along it when the selected drawer's move or width

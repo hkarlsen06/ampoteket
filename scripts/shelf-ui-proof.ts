@@ -275,7 +275,7 @@ try {
   }
   await page.reload();
   await page.locator(`[data-shelf-wall] [data-item-id="${retiringCabinet}"]`).click();
-  await editor.getByRole('button', { name: m.archiveCabinetWithDrawers, exact: true }).click();
+  await page.getByRole('button', { name: m.archiveCabinetWithDrawers, exact: true }).click();
   await expect(confirm).toContainText(m.archiveCabinetWithDrawersConfirm(2));
   const cabinetArchived = page.waitForResponse(response => response.url().includes('/rpc/amp_archive_empty_cabinet') && response.ok());
   await confirm.getByRole('button', { name: m.confirmAction, exact: true }).click(); await cabinetArchived;
@@ -287,7 +287,7 @@ try {
   // Move cabinet: the wall picker offers vacant positions as well as cabinets to swap with.
   const binsBeforeMove = await sql(`SELECT coalesce(jsonb_agg(id ORDER BY id), '[]') FROM app.bins WHERE cabinet_id='${cabinetId}' AND NOT is_archived`);
   await page.locator(`[data-shelf-wall] [data-item-id="${cabinetId}"]`).click();
-  await editor.getByRole('button', { name: m.moveCabinet, exact: true }).click();
+  await page.getByRole('button', { name: m.moveCabinet, exact: true }).click();
   const mover = page.getByRole('dialog', { name: m.moveCabinet, exact: true });
   await mover.getByRole('button', { name: `A3 · ${m.emptyDrawer}`, exact: true }).click();
   await expect(mover).toContainText(m.cabinet('A3'));
