@@ -55,7 +55,7 @@
 	let product = $state<AdminProduct | null>(null); let references = $state<ProductReferences | null>(null); let stock = $state<ProductStock | null>(null);
 	// Quantity still expected from open supplier orders; null when none or unreadable.
 	let onOrder = $state<string | null>(null);
-	const blank: ProductWrite = { id: '', code: '', name_nb: '', name_en: '', description: null, category_id: null, bin_id: null, location_note: null, unit_code: 'pcs', stock_step: '1', sale_step: '1', sale_unit_price_nok: '0', minimum_stock: '0', datasheet_url: null, purchase_url: null, is_active: true };
+	const blank: ProductWrite = { id: '', code: '', name_nb: '', name_en: '', description: null, category_id: null, bin_id: null, location_note: null, unit_code: 'pcs', stock_step: '1', sale_step: '1', sale_unit_price_nok: '', minimum_stock: '0', datasheet_url: null, purchase_url: null, is_active: true };
 	let draft = $state<ProductWrite>({ ...blank });
 	// What an untouched new form holds: blank, or the fields copied `from` another product.
 	let start = blank;
@@ -77,12 +77,29 @@
 	// A new product's stock is its first count, posted right after creation; empty means
 	// not counted. Its label can print as the editor opens on the product's route.
 	let openingStock = $state(''); let openingInvalid = $state(false);
-	// Borrow-only means no price. Switching back offers the price typed before, else the saved one.
+	// A price is a deliberate choice: an amount, Free (price 0) or borrow-only (no price).
+	// A new product starts with neither, so a forgotten price is a field error, never free.
+	// The two switches exclude each other and hide the amount; switching one off offers
+	// the amount typed before, else the saved one, else an empty field.
+	let free = $state(false);
 	let previousPrice: string | null = null;
+	// Saved prices are normalized and Free stores exactly '0'; typed input is never parsed here.
+	const zeroPrice = (price: string | null) => price === '0';
+	const showPrice = $derived(draft.sale_unit_price_nok !== null && !free);
+	function typedPrice(): string { return previousPrice ?? (product && !zeroPrice(product.sale_unit_price_nok) ? product.sale_unit_price_nok ?? '' : ''); }
+	function keepTypedPrice() { if (showPrice) previousPrice = draft.sale_unit_price_nok; }
 	function setBorrowOnly(borrowOnly: boolean) {
-		if (borrowOnly) { previousPrice = draft.sale_unit_price_nok; draft.sale_unit_price_nok = null; }
-		else draft.sale_unit_price_nok = previousPrice ?? product?.sale_unit_price_nok ?? '';
+		if (borrowOnly) { keepTypedPrice(); free = false; draft.sale_unit_price_nok = null; }
+		else draft.sale_unit_price_nok = typedPrice();
 	}
+	function setFree(on: boolean) {
+		if (on) { keepTypedPrice(); free = true; draft.sale_unit_price_nok = '0'; }
+		else { free = false; draft.sale_unit_price_nok = typedPrice(); }
+	}
+	// Every whole-form assignment goes through here, so the Free switch follows the price.
+	function adopt(value: ProductWrite) { draft = { ...value }; free = zeroPrice(value.sale_unit_price_nok); previousPrice = null; }
+	// Set when the price was left empty, which has its own message.
+	let priceMissing = $state(false);
 	let printAfterSave = $state(true); let canPrint = $state(false);
 	const openingCount = (step: string) => openingStock.trim() ? validCountQuantity(openingStock, step, i18n.locale) : null;
 	let proposedPlacement = $state<{ from: string | null; to: string } | null>(null);
@@ -122,7 +139,7 @@
 	};
 	function errorMessage(field: keyof ProductWrite): string {
 		return field === 'stock_step' ? m.invalidStockStep : field === 'sale_step' ? m.invalidSaleStep
-			: field === 'sale_unit_price_nok' ? m.invalidPrice : field === 'minimum_stock' ? m.invalidMinimumStock
+			: field === 'sale_unit_price_nok' ? priceMissing ? m.priceRequired : m.invalidPrice : field === 'minimum_stock' ? m.invalidMinimumStock
 				: field === 'datasheet_url' || field === 'purchase_url' ? m.invalidLink : m.invalid;
 	}
 	function binLabel(binId: string | null): string {
@@ -180,22 +197,25 @@
 			if (!alive || session.userId !== admin.session?.user.id) return;
 			references = refs; product = item; previous = created ? source : null;
 			// Unsaved input returns only onto the revision it was typed against.
-			if (pending && ownPending && !wrongIdentity) { draft = { ...pending.payload }; staged = pending.attributes ?? []; openingStock = pending.opening ?? ''; }
+			if (pending && ownPending && !wrongIdentity) { adopt(pending.payload); staged = pending.attributes ?? []; openingStock = pending.opening ?? ''; }
 			else {
-				if (item) draft = { ...item };
-				// Names, drawer, price, specifications and links differ from part to part; the rest, borrow-only included, carries over.
+				if (item) adopt(item);
+				// Names, drawer, amount, specifications and links differ from part to part; the rest,
+				// Free and borrow-only included, carries over (a run of free resistors is the common case).
 				else if (source) {
-					start = { ...blank, category_id: source.category_id, unit_code: source.unit_code, stock_step: source.stock_step, sale_step: source.sale_step, minimum_stock: source.minimum_stock, ...(source.sale_unit_price_nok === null ? { sale_unit_price_nok: null } : {}) };
-					draft = { ...start };
+					start = { ...blank, category_id: source.category_id, unit_code: source.unit_code, stock_step: source.stock_step, sale_step: source.sale_step, minimum_stock: source.minimum_stock, ...(source.sale_unit_price_nok === null || zeroPrice(source.sale_unit_price_nok) ? { sale_unit_price_nok: source.sale_unit_price_nok } : {}) };
+					adopt(start);
 					void tick().then(() => document.getElementById('product-name-nb')?.focus({ preventScroll: true }));
 				}
 				// Unsaved input returns only onto the revision it was typed against.
 				const saved = readDraft(session.userId, `product:${id}`) as { revision?: unknown; fields?: unknown; staged?: unknown; opening?: unknown } | null;
 				if (saved && saved.revision === (item?.metadata_revision ?? null)) {
 					if (!item && typeof saved.opening === 'string') openingStock = saved.opening;
-					draft = { ...draft, ...draftFields(blank, saved.fields) };
-					// The blank form has a price, so draftFields only restores a string.
-					if ((saved.fields as Partial<ProductWrite> | null)?.sale_unit_price_nok === null) draft.sale_unit_price_nok = null;
+					const restored = { ...draft, ...draftFields(blank, saved.fields) };
+					// The blank price is an empty string, so draftFields restores only a string; a
+					// saved null (borrow-only) comes back here. A saved 0 restores as Free.
+					if ((saved.fields as Partial<ProductWrite> | null)?.sale_unit_price_nok === null) restored.sale_unit_price_nok = null;
+					adopt(restored);
 					if (!item && Array.isArray(saved.staged)) try {
 						staged = saved.staged.map(row => { const { product_id, ...value } = parseAttribute({ ...row, product_id: blankId }); return value; });
 					} catch { /* A malformed row leaves the specifications unrestored. */ }
@@ -230,7 +250,7 @@
 		// Enter can submit without a change event; tidy the names as leaving them would.
 		if (!pending) nameFields.forEach(({ field }) => tidyName(field));
 		if (attributesEditor && (product || !pending) && !attributesEditor.prepare()) return;
-		busy = true; outcome = 'idle'; invalidField = null; openingInvalid = false;
+		busy = true; outcome = 'idle'; invalidField = null; priceMissing = false; openingInvalid = false;
 		const existing = Boolean(product);
 		try {
 			const session = admin.credentials();
@@ -240,6 +260,7 @@
 					const decimals: Pick<ProductWrite, 'stock_step' | 'sale_step' | 'sale_unit_price_nok' | 'minimum_stock'> = { stock_step: '', sale_step: '', sale_unit_price_nok: null, minimum_stock: '' };
 					for (const field of ['stock_step', 'sale_step', 'sale_unit_price_nok', 'minimum_stock'] as const) {
 						const value = draft[field];
+						// Only borrow-only is null; an empty price fails here as the price field.
 						if (value === null) continue;
 						try { decimals[field] = normalizeDecimal(value, i18n.locale); }
 						catch { throw new ProductFieldError(field); }
@@ -254,6 +275,7 @@
 					outcome = 'invalid';
 					if (error instanceof ProductFieldError) {
 						invalidField = error.field;
+						priceMissing = error.field === 'sale_unit_price_nok' && draft.sale_unit_price_nok?.trim() === '';
 						void tick().then(() => {
 							const id = fieldIds[error.field];
 							const element = id ? document.getElementById(id) : null;
@@ -333,7 +355,7 @@
 		clearProductCommand(sessionStorage, pending);
 		if (pending.revision === null) for (const name of ['product:new', 'product:new:specifications']) writeDraft(session.userId, name, null);
 		if (!alive || session.userId !== admin.session?.user.id) return;
-		pending = null; product = result; draft = { ...result }; staged = [];
+		pending = null; product = result; adopt(result); staged = [];
 	}
 	// The value that names a resistor or capacitor; shorthand like "4p7" in a name uses its unit.
 	const nameSpecifications: Partial<Record<ProductFamily, { code: string; unit: string }>> = { RES: { code: 'resistance', unit: 'ohm' }, CAP: { code: 'capacitance', unit: 'F' } };
@@ -392,7 +414,7 @@
 		return standard ? m.typeNames[standard.prefix] : saved ? categoryLabel(saved.name, i18n.locale) : m.noCategory;
 	}
 	function comparable(row: ProductWrite) {
-		return [[m.nameNb, row.name_nb], [m.nameEn, row.name_en], [m.description, row.description ?? m.unset], [m.category, categoryName(row.category_id)], [m.placement, binLabel(row.bin_id)], [m.locationNote, row.location_note ?? m.unset], [m.saleStep, `${formatDecimal(row.sale_step, i18n.locale)} ${unitLabel(row.unit_code, i18n.locale, row.sale_step)}`], [m.price, row.sale_unit_price_nok === null ? m.borrowOnlyLabel : formatMoney(row.sale_unit_price_nok, i18n.locale)], [m.minimumStock, `${formatDecimal(row.minimum_stock, i18n.locale)} ${unitLabel(row.unit_code, i18n.locale, row.minimum_stock)}`], [m.datasheet, row.datasheet_url ?? m.unset], [m.purchaseUrl, row.purchase_url ?? m.unset], [m.stateFilter, row.is_active ? m.active : m.inactive]];
+		return [[m.nameNb, row.name_nb], [m.nameEn, row.name_en], [m.description, row.description ?? m.unset], [m.category, categoryName(row.category_id)], [m.placement, binLabel(row.bin_id)], [m.locationNote, row.location_note ?? m.unset], [m.saleStep, `${formatDecimal(row.sale_step, i18n.locale)} ${unitLabel(row.unit_code, i18n.locale, row.sale_step)}`], [m.price, row.sale_unit_price_nok === null ? m.borrowOnlyLabel : zeroPrice(row.sale_unit_price_nok) ? m.freeLabel : formatMoney(row.sale_unit_price_nok, i18n.locale)], [m.minimumStock, `${formatDecimal(row.minimum_stock, i18n.locale)} ${unitLabel(row.unit_code, i18n.locale, row.minimum_stock)}`], [m.datasheet, row.datasheet_url ?? m.unset], [m.purchaseUrl, row.purchase_url ?? m.unset], [m.stateFilter, row.is_active ? m.active : m.inactive]];
 	}
 </script>
 <svelte:head>{#if !oncreated}<title>{productCode ? `${productCode} | ${m.title}` : id === 'new' ? m.newTitle : m.title}</title>{/if}</svelte:head>
@@ -501,7 +523,7 @@
 					{#if product}{@render saleSection()}{/if}
 					{#if ownPending && pending?.attributes !== undefined}
 						<ProductSpecificationRecovery command={pending} bind:definitions={references.definitions} family={family} disabled={busy}
-							onreviewed={(command) => { pending = command; draft = { ...command.payload }; staged = command.attributes ?? []; void save(); }} />
+							onreviewed={(command) => { pending = command; adopt(command.payload); staged = command.attributes ?? []; void save(); }} />
 					{:else}
 						{#key attributeProductId}<ProductAttributes bind:this={attributesEditor} productId={attributeProductId} drafts={!(ownPending && pending?.revision === null)} bind:staged bind:definitions={references.definitions} family={family} disabled={blocked} />{/key}
 					{/if}
@@ -571,13 +593,14 @@
 <section class={section({ spacing: 'divided' })} aria-labelledby="product-sale-title">
 	<Separator />
 	<h2 class={sectionHeading} id="product-sale-title">{m.saleAndStock}</h2>
+	<Field.Field orientation="horizontal" class="min-h-12"><Switch id="product-free" bind:checked={() => free, setFree} disabled={blocked} aria-describedby="product-free-hint" /><Field.Content><Field.Label for="product-free">{m.freeLabel}</Field.Label><Field.Description id="product-free-hint">{m.freeHint}</Field.Description></Field.Content></Field.Field>
 	<Field.Field orientation="horizontal" class="min-h-12"><Switch id="product-borrow-only" bind:checked={() => draft.sale_unit_price_nok === null, setBorrowOnly} disabled={blocked} aria-describedby="product-borrow-only-hint" /><Field.Content><Field.Label for="product-borrow-only">{m.borrowOnlyLabel}</Field.Label><Field.Description id="product-borrow-only-hint">{m.borrowOnlyHint}</Field.Description></Field.Content></Field.Field>
 	<!-- Reads as one phrase: «250 kr per m». The unit moves below the price on phones. -->
 	<div class={[formGrid, 'items-end']}>
-		{#if draft.sale_unit_price_nok !== null}<Field.Field><Field.Label for="product-price" required>{m.price} <span class="sr-only">({currencySymbol(i18n.locale)})</span></Field.Label><InputGroup.Root class="h-16"><InputGroup.Input class="font-mono text-2xl font-semibold md:text-3xl" id="product-price" aria-invalid={invalidField === 'sale_unit_price_nok'} aria-describedby={invalidField === 'sale_unit_price_nok' ? 'product-price-error' : undefined} type="text" inputmode="decimal" required bind:value={draft.sale_unit_price_nok} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text class="text-lg">{currencySymbol(i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'sale_unit_price_nok'}<Field.Error id="product-price-error">{errorMessage('sale_unit_price_nok')}</Field.Error>{/if}</Field.Field>{/if}
+		{#if showPrice}<Field.Field><Field.Label for="product-price" required>{m.price} <span class="sr-only">({currencySymbol(i18n.locale)})</span></Field.Label><InputGroup.Root class="h-16"><InputGroup.Input class="font-mono text-2xl font-semibold md:text-3xl" id="product-price" aria-invalid={invalidField === 'sale_unit_price_nok'} aria-describedby={invalidField === 'sale_unit_price_nok' ? 'product-price-error' : undefined} type="text" inputmode="decimal" aria-required="true" bind:value={draft.sale_unit_price_nok} disabled={blocked} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text class="text-lg">{currencySymbol(i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>{#if invalidField === 'sale_unit_price_nok'}<Field.Error id="product-price-error">{errorMessage('sale_unit_price_nok')}</Field.Error>{/if}</Field.Field>{/if}
 		<Field.Set class="col-span-2 flex-row items-center gap-3 pb-2">
-			<Field.Legend variant="label" class={draft.sale_unit_price_nok === null ? undefined : 'sr-only'}>{m.unit}</Field.Legend>
-			{#if draft.sale_unit_price_nok !== null}<span class="text-lg text-muted-foreground" aria-hidden="true">{m.per}</span>{/if}
+			<Field.Legend variant="label" class={showPrice ? 'sr-only' : undefined}>{m.unit}</Field.Legend>
+			{#if showPrice}<span class="text-lg text-muted-foreground" aria-hidden="true">{m.per}</span>{/if}
 			<ToggleGroup.Root type="single" variant="outline" value={draft.unit_code} onValueChange={(value) => { if (value) setUnit(value); }} disabled={blocked || Boolean(product)}>
 				{#each [...(references?.units ?? [])].sort((a, b) => Number(b.is_discrete) - Number(a.is_discrete)) as unit (unit.code)}<ToggleGroup.Item value={unit.code} class="min-w-14">{unitLabel(unit.code, i18n.locale)}</ToggleGroup.Item>{/each}
 			</ToggleGroup.Root>

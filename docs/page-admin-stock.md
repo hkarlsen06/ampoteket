@@ -59,9 +59,14 @@ remain outside the scrolling region.
   name*, since its price changes far more often than its drawer. The section ranks by
   weight: unit price reads as one phrase with the unit («2,50 kr per m», a segmented
   group, counted units first), opening stock follows as large mono numerals, then
-  minimum stock and the steps at normal size. A «Kun utlån» switch heads the section:
-  on, it hides price and sale step and saves no price, so the product is borrow-only;
-  off again, it restores the price typed before. Choosing a unit sets the stock step it
+  minimum stock and the steps at normal size. Two switches head the section. «Gratis»
+  hides the price and saves 0: a free part is still registered at checkout (without
+  Vipps) and withdrawn from stock. «Kun utlån» hides price and sale step and saves no
+  price, so the product is borrow-only. Turning one on turns the other off; off again,
+  either restores the amount typed before. A new product starts with an empty price
+  and both switches off; saving with neither shows «Skriv inn en pris eller velg Gratis»
+  on the price field without sending anything: free is a deliberate choice, never a
+  forgotten price. A saved product priced 0 opens with «Gratis» on. Choosing a unit sets the stock step it
   can never change again (0,01 for metres, 1 otherwise); *Cable* starts in metres
   while the unit is still the previous category's default. The drawer is picked on
   the page with `ShelfPlacementPicker`. A new product starts
@@ -78,7 +83,7 @@ remain outside the scrolling region.
   Typed values are never overwritten.
 - Code, stock unit and stock step are immutable after creation. Stock is a recorded
   balance, never an editable field or a zero shown for a failed read. Zero price is
-  valid. Unit prices use `formatMoney`, with at least two decimals and all stored
+  valid and is what «Gratis» saves; an empty price is a field error, never borrow-only. Unit prices use `formatMoney`, with at least two decimals and all stored
   significant digits. New products start published. Unpublishing keeps identity and history.
 - Minimum stock (default 0), «Minstebeholdning», drives «Lite igjen» on staff views only.
 - A product may be published without a drawer, with an optional public location note;
@@ -102,7 +107,7 @@ remain outside the scrolling region.
   of resistors needs no trip back to the list. **Duplicate** on a saved product opens
   the same form without `created`. The copy keeps category, unit, steps and minimum
   stock, and starts published like any new product; name, drawer, price, specifications, description, links and
-  opening stock start empty (a borrow-only source stays borrow-only), and a restored
+  opening stock start empty (a free or borrow-only source stays free or borrow-only), and a restored
   unsaved draft wins over the copy. The
   copy keeps the category cards with its category chosen, so a different kind is one
   tap away, and the cursor starts in the Norwegian name.

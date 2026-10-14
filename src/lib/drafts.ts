@@ -26,7 +26,7 @@ export function writeDraft(userId: string | undefined, name: string, value: unkn
 	} catch { /* Full or blocked storage leaves the draft in memory only. */ }
 }
 
-/** The fields of `saved` typed like `shape`; a field that is null in `shape` takes a string or null. */
+/** The fields of `saved` typed like `shape`; a field that is null in `shape` takes a string or null, and a string field only a string. */
 export function draftFields<T extends object>(shape: T, saved: unknown): Partial<T> {
 	const fields: Partial<T> = {};
 	if (!saved || typeof saved !== 'object') return fields;

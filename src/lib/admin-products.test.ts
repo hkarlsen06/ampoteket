@@ -207,6 +207,15 @@ test('product validation identifies the rejected field without weakening exactne
 	}
 });
 
+test('an empty or missing price is rejected as the price field, never read as borrow-only', () => {
+	const { sale_unit_price_nok: _, ...unpriced } = payload;
+	for (const value of [{ ...payload, sale_unit_price_nok: '' }, { ...payload, sale_unit_price_nok: ' ' }, { ...payload, sale_unit_price_nok: undefined }, unpriced]) {
+		try { parseProductWrite(value); throw new Error('Expected price rejection'); }
+		catch (error) { expect(error).toBeInstanceOf(ProductFieldError); expect((error as ProductFieldError).field).toBe('sale_unit_price_nok'); }
+	}
+	expect(parseProductWrite({ ...payload, sale_unit_price_nok: '0' }).sale_unit_price_nok).toBe('0');
+});
+
 test('new-product specifications are frozen, validated and survive a lost value reply without duplicate writes', async () => {
 	const values = [{ attribute_id: attribute, number_value: '9007199254740993.000000000001', text_value: null, boolean_value: null }];
 	const command: ProductCommand = { userId: actor, payload, revision: null, attributes: values };
