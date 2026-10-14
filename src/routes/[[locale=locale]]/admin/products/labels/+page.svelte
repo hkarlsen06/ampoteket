@@ -19,6 +19,7 @@
 	import LabelShelfSelection from '#lib/LabelShelfSelection.svelte';
 	import LabelPrintButton, { labelPrinterSupported } from '#lib/LabelPrintButton.svelte';
 	import ShelfPlacementPicker from '#lib/ShelfPlacementPicker.svelte';
+	import { binProducts } from '#lib/shelf-map.js';
 	import { gridCell, gridRange } from '#lib/format.js';
 	import { readLabelData, selectedLabelProducts, labelSpecificationLines, type LabelData } from '#lib/labels/data.js';
 	import { proportionalLabelSettings } from '#lib/labels/settings.js';
@@ -64,7 +65,7 @@
 	const drawerBin = $derived(data?.references.shelf.bins.find(bin => bin.id === drawer));
 	const drawerCabinet = $derived(data?.references.shelf.cabinets.find(cabinet => cabinet.id === drawerBin?.cabinet_id));
 	const drawerProducts = $derived(data && (drawerBin || drawer === unplacedDrawer)
-		? data.products.filter(product => product.bin_id === (drawerBin?.id ?? null)).sort((a, b) => a.code.localeCompare(b.code)) : null);
+		? binProducts(data.products, drawerBin?.id ?? null) : null);
 	// Any changed selection, width or language invalidates the
 	// prior file. A download always belongs to the visible configuration.
 	const configuration = $derived(JSON.stringify({ selected, includeUnplaced, width, locale: i18n.locale }));

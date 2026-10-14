@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { parseApiJson } from './api';
 import type { CatalogProduct } from './catalog';
-import { cabinetInner, diagramRect, drawerFront, freeCellCount, locateProduct, parseShelfTopology, readShelfTopology, ShelfResponseError } from './shelf-map';
+import { binProducts, cabinetInner, diagramRect, drawerFront, drawerNeighbours, freeCellCount, locateProduct, parseShelfTopology, readShelfTopology, ShelfResponseError } from './shelf-map';
 
 const id = (n: number) => `00000000-0000-4000-8000-${n.toString(16).padStart(12, '0')}`;
 const cabinet = (n = 1, row = 1) => ({ id: id(n), code: `CAB-${n}`, outer_row: row, outer_col: 1, inner_rows: 4, inner_cols: 10, label: null });
@@ -102,5 +102,41 @@ describe('Raaco drawer fronts', () => {
 		const bins = [{ cabinet_id: id(1), inner_row: 2, inner_col: 1, row_span: 1, col_span: 2 },
 			{ cabinet_id: id(2), inner_row: 1, inner_col: 1, row_span: 1, col_span: 1 }, { cabinet_id: id(1), inner_row: null, inner_col: null, row_span: 1, col_span: 1 }];
 		expect(cabinetInner(cabinet(), bins)).toEqual({ rows: 4, cols: 10, drawers: [{ row: 2, col: 1, rowSpan: 1, colSpan: 2 }] });
+	});
+});
+
+describe('drawer neighbours', () => {
+	// One 4 × 4 cabinet, row 1 at the bottom (C1, D1 and D4 are empty cells):
+	//   4  A3–A4  B4–C4
+	//   3  A3–A4  B3     C2–D3
+	//   2  A2     B2     C2–D3
+	//   1  A1     B1
+	const drawer = (name: string, row: number, col: number, rowSpan = 1, colSpan = 1, cabinetId = id(1)) =>
+		({ id: name, cabinet_id: cabinetId, inner_row: row, inner_col: col, row_span: rowSpan, col_span: colSpan });
+	const bins = [drawer('A1', 1, 1), drawer('B1', 1, 2), drawer('A2', 2, 1), drawer('B2', 2, 2), drawer('C2-D3', 2, 3, 2, 2),
+		drawer('B3', 3, 2), drawer('A3-A4', 3, 1, 2), drawer('B4-C4', 4, 2, 1, 2), drawer('other', 2, 3, 1, 1, id(2))];
+	const names = (binId: string) => {
+		const value = drawerNeighbours(bins, binId);
+		return value && Object.fromEntries(Object.entries(value).map(([side, list]) => [side, list.map((bin) => bin.id)]));
+	};
+
+	test('finds the drawer above, below, left and right, counting rows upward', () => {
+		expect(names('B2')).toEqual({ above: ['B3'], left: ['A2'], right: ['C2-D3'], below: ['B1'] });
+	});
+	test('lists every drawer along a spanning edge, top to bottom or left to right', () => {
+		expect(names('C2-D3')).toEqual({ above: ['B4-C4'], left: ['B3', 'B2'], right: [], below: [] });
+		expect(names('B4-C4')).toEqual({ above: [], left: ['A3-A4'], right: [], below: ['B3', 'C2-D3'] });
+	});
+	test('omits cabinet edges, empty cells and other cabinets', () => {
+		expect(names('A1')).toEqual({ above: ['A2'], left: [], right: ['B1'], below: [] });
+		expect(names('other')).toEqual({ above: [], left: [], right: [], below: [] });
+		expect(names('missing')).toBeNull();
+	});
+	test('lists one drawer’s products by code, published or not', () => {
+		const products = [{ code: 'RES-B', bin_id: 'B2', is_active: false }, { code: 'RES-A', bin_id: 'B2', is_active: true },
+			{ code: 'CAP-A', bin_id: 'B3', is_active: true }, { code: 'MIS-A', bin_id: null, is_active: true }];
+		expect(binProducts(products, 'B2').map((product) => product.code)).toEqual(['RES-A', 'RES-B']);
+		expect(binProducts(products, null).map((product) => product.code)).toEqual(['MIS-A']);
+		expect(binProducts(products, 'A1')).toEqual([]);
 	});
 });

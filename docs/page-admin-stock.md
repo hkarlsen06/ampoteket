@@ -116,6 +116,15 @@ remain outside the scrolling region.
 - Drawers are picked on the shelf graphic (`ShelfPlacementPicker`), never a coordinate
   dropdown (design-system §5). Changing an existing placement is confirmed in an
   `AlertDialog`, changes only the draft, and is saved by **Save product**.
+- The chosen drawer lists what it already holds besides this product, and what the
+  drawers sharing an edge with it hold, by coordinate in spatial order (above, left,
+  this drawer, right, below), so a value in the wrong drawer or cabinet stands out
+  against its series (`DrawerNeighbours`, `drawerNeighbours` in `shelf-map.ts`). It
+  sits beside the map, or below it on a phone, so the map never moves between picks.
+  Shared drawers are normal, so nothing warns. Products load once per editor (a just
+  created product included) and revalidate on return to the tab; a failed load shows
+  the unavailable pattern, never an empty drawer. Choosing a drawer announces only
+  its own contents.
 
 **Categories.** Choosing a standard category for a new product picks the code prefix;
 five random hex digits complete it (`RES-A3F09`). The 14 standard categories work with

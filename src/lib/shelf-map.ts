@@ -146,3 +146,34 @@ export function freeCellCount(cabinet: ShelfCabinet, bins: ShelfBin[]): string {
 		- bins.filter((bin) => bin.cabinet_id === cabinet.id)
 			.reduce((sum, bin) => sum + BigInt(bin.row_span) * BigInt(bin.col_span), 0n)).toString();
 }
+
+export type DrawerSide = 'above' | 'left' | 'right' | 'below';
+type DrawerCells = { id: string; cabinet_id: string; inner_row: number; inner_col: number; row_span: number; col_span: number };
+/**
+ * The drawers sharing an edge with `binId` in its own cabinet, so a misplaced value
+ * stands out among its neighbours. Rows count upward, so "above" starts at the
+ * drawer's top row + 1. A spanning drawer can have several neighbours on one side:
+ * above/below run left to right, left/right top to bottom. An edge of the cabinet
+ * or an unplaced cell leaves that side empty; null when the drawer is unknown.
+ */
+export function drawerNeighbours<B extends DrawerCells>(bins: readonly B[], binId: string): Record<DrawerSide, B[]> | null {
+	const bin = bins.find((other) => other.id === binId);
+	if (!bin) return null;
+	const top = bin.inner_row + bin.row_span, right = bin.inner_col + bin.col_span;
+	const others = bins.filter((other) => other.cabinet_id === bin.cabinet_id && other.id !== bin.id);
+	const columns = (other: B) => other.inner_col < right && bin.inner_col < other.inner_col + other.col_span;
+	const rows = (other: B) => other.inner_row < top && bin.inner_row < other.inner_row + other.row_span;
+	const leftToRight = (a: B, b: B) => a.inner_col - b.inner_col;
+	const topToBottom = (a: B, b: B) => (b.inner_row + b.row_span) - (a.inner_row + a.row_span);
+	return {
+		above: others.filter((other) => other.inner_row === top && columns(other)).sort(leftToRight),
+		left: others.filter((other) => other.inner_col + other.col_span === bin.inner_col && rows(other)).sort(topToBottom),
+		right: others.filter((other) => other.inner_col === right && rows(other)).sort(topToBottom),
+		below: others.filter((other) => other.inner_row + other.row_span === bin.inner_row && columns(other)).sort(leftToRight)
+	};
+}
+
+/** Every saved product in one drawer (null: without a drawer), published or not, by code. */
+export function binProducts<P extends { bin_id: string | null; code: string }>(products: readonly P[], binId: string | null): P[] {
+	return products.filter((product) => product.bin_id === binId).sort((a, b) => a.code.localeCompare(b.code));
+}

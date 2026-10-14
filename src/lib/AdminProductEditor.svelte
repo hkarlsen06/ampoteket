@@ -41,6 +41,7 @@
 	import ProductSpecificationRecovery from '#lib/ProductSpecificationRecovery.svelte';
 	import { parseAttribute, ProductSpecificationsError, type ProductAttributeDraft } from '#lib/admin-products.js';
 	import ShelfPlacementPicker from '#lib/ShelfPlacementPicker.svelte';
+	import DrawerNeighbours from '#lib/DrawerNeighbours.svelte';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { readOutstandingByProduct } from '#lib/admin-orders.js';
 	import { draftFields, readDraft, writeDraft } from '#lib/drafts.js';
@@ -533,7 +534,11 @@
 						<Field.Set id="product-placement" class="gap-3" aria-invalid={invalidField === 'bin_id'} aria-describedby={invalidField === 'bin_id' ? 'product-placement-error' : undefined}>
 							<Field.Legend class="sr-only">{m.placement}</Field.Legend>
 							<p class="flex min-h-12 flex-wrap items-center gap-x-4 gap-y-1" aria-live="polite"><strong>{binLabel(draft.bin_id)}</strong>{#if draft.bin_id}<Button variant="ghost" disabled={blocked} onclick={() => draft.bin_id = null}>{m.clearPlacement}</Button>{/if}</p>
-							<ShelfPlacementPicker topology={references.shelf} selected={draft.bin_id} disabled={blocked} onselect={selectPlacement} />
+							<!-- The drawer contents sit beside the map when there is room and below it on a phone, never above it, so the map does not move between picks. -->
+							<div class="flex flex-wrap items-start gap-x-8 gap-y-4">
+								<div class="w-full max-w-80 min-w-0"><ShelfPlacementPicker topology={references.shelf} selected={draft.bin_id} disabled={blocked} onselect={selectPlacement} /></div>
+								<DrawerNeighbours topology={references.shelf} selected={draft.bin_id} exclude={product?.id ?? null} class="min-w-0 flex-1 basis-64" />
+							</div>
 							{#if invalidField === 'bin_id'}<Field.Error id="product-placement-error">{errorMessage('bin_id')}</Field.Error>{/if}
 							<div class="flex flex-wrap items-center gap-x-6 gap-y-2">
 								{#if !draft.bin_id && !showNote}<Button variant="link" class="px-0" disabled={blocked} onclick={revealNote}>{m.notInDrawer}</Button>{/if}
