@@ -29,8 +29,8 @@ type Unit = { exponent: number; symbol: string };
 // Plausible stock for a workshop shelf: below `min` is small, above `max` (or at it
 // when `atMaxIsLarge`) is large. The restated units are the ones a part is usually marked in.
 const plausible = {
-	resistance: { unit: 'ohm', min: '1', max: '10000000', atMaxIsLarge: false, small: { exponent: 0, symbol: 'Ω' }, large: { exponent: 6, symbol: 'MΩ' } },
-	capacitance: { unit: 'F', min: '0.000000000001', max: '0.001', atMaxIsLarge: true, small: { exponent: -12, symbol: 'pF' }, large: { exponent: -6, symbol: 'µF' } }
+	resistance: { unit: 'ohm', min: '0.1', max: '10000000', atMaxIsLarge: false, small: { exponent: 0, symbol: 'Ω' }, large: { exponent: 6, symbol: 'MΩ' } },
+	capacitance: { unit: 'F', min: '0.0000000000001', max: '0.001', atMaxIsLarge: true, small: { exponent: -12, symbol: 'pF' }, large: { exponent: -6, symbol: 'µF' } }
 } satisfies Record<string, { unit: string; min: string; max: string; atMaxIsLarge: boolean; small: Unit; large: Unit }>;
 export type ValueCode = keyof typeof plausible;
 export const valueCodes = Object.keys(plausible) as ValueCode[];

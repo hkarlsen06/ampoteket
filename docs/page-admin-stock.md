@@ -104,7 +104,7 @@ remain outside the scrolling region.
   only when a field is left, never per keystroke, and wait until a pressed pointer is
   released so the button being clicked does not move (`pointer-release.ts`).
   - *Unlikely value*, below the specifications of a resistor or capacitor: off the
-    E24 and E96 series, or outside 1 Ω–10 MΩ or 1 pF up to (not including) 1 mF, with
+    E24 and E96 series, or outside 0,1 Ω–10 MΩ or 0,1 pF up to (not including) 1 mF, with
     the value restated in the usual unit («2,2 mF er 2 200 µF, en uvanlig stor
     kondensator.»). A 0 Ω link is not flagged. Exact decimal strings throughout.
   - *May already exist*, below the names of a new product only: products with the

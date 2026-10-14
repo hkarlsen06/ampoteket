@@ -16,9 +16,12 @@ test('warns about unlikely resistances and capacitances', () => {
 	expect(unlikelyValue('capacitance', '0.0022', 'en')).toEqual({ code: 'capacitance', reason: 'large', shown: '2.2 mF', restated: '2,200 µF' });
 	expect(unlikelyValue('capacitance', '0.001', 'en')?.reason).toBe('large');
 	expect(unlikelyValue('capacitance', '0.00047', 'en')).toBeNull();
-	expect(unlikelyValue('capacitance', '0.0000000000005', 'nb')).toEqual({ code: 'capacitance', reason: 'small', shown: '0,5 pF', restated: null });
+	// The shelf stocks 0,5 pF RF capacitors and 0,1–0,82 Ω current-sense resistors: off-series, not small.
+	expect(unlikelyValue('capacitance', '0.0000000000005', 'nb')).toEqual({ code: 'capacitance', reason: 'series', shown: '0,5 pF', restated: null });
+	expect(unlikelyValue('capacitance', '0.00000000000005', 'nb')?.reason).toBe('small');
 	expect(unlikelyValue('capacitance', '0.000000000001', 'en')).toBeNull();
-	expect(unlikelyValue('resistance', '0.27', 'nb')).toEqual({ code: 'resistance', reason: 'small', shown: '270 mΩ', restated: '0,27 Ω' });
+	expect(unlikelyValue('resistance', '0.27', 'nb')).toBeNull();
+	expect(unlikelyValue('resistance', '0.047', 'nb')).toEqual({ code: 'resistance', reason: 'small', shown: '47 mΩ', restated: '0,047 Ω' });
 	expect(unlikelyValue('resistance', '3900', 'en')).toBeNull();
 	expect(unlikelyValue('resistance', '2000', 'en')).toBeNull();
 	expect(unlikelyValue('resistance', '1000000', 'en')).toBeNull();
