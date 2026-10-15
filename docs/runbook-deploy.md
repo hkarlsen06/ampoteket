@@ -65,13 +65,15 @@ password expires:
 ```sh
 (
   eval "$(supabase db dump --linked --dry-run 2>/dev/null | grep '^export PG')"
-  export PGOPTIONS='-c role=postgres -c default_transaction_read_only=on'
-  psql -X -v ON_ERROR_STOP=1 -c 'SELECT count(*) FROM app.products'
+  psql -X -v ON_ERROR_STOP=1 -c 'SET ROLE postgres' -c 'SET default_transaction_read_only = on' \
+    -c 'SELECT count(*) FROM app.products'
 )
 ```
 
-Leave out `default_transaction_read_only=on` only for a write the owner asked for,
-and wrap it in `BEGIN`/`COMMIT`.
+Take the role and read-only mode with `SET` inside the session, as above. This
+connection ignores `PGOPTIONS` (checked 2026-10-15 with CLI 2.116.0): with it the
+session silently stays `cli_login_postgres` and writable. Leave out the read-only
+`SET` only for a write the owner asked for, and wrap it in `BEGIN`/`COMMIT`.
 
 ## 3. Checkpoint and apply
 
@@ -164,13 +166,12 @@ Owner `psql` is only for documented checks, Auth provisioning and the rehearsed
 restore. Connect as in [reaching the hosted project](#reaching-the-hosted-project),
 after checking the link matches §2. Never run fixtures, acceptance or concurrency
 tests against production. These three end in `ROLLBACK` but create temporary
-tables, which a read-only session refuses, so in that subshell first
-`export PGOPTIONS='-c role=postgres'`:
+tables, which a read-only session refuses, so they take only the role:
 
 ```sh
-psql -X -v ON_ERROR_STOP=1 -f supabase/tests/permissions.sql
-psql -X -v ON_ERROR_STOP=1 -f supabase/tests/protections.sql
-psql -X -v ON_ERROR_STOP=1 -f supabase/tests/v1-invariants.sql
+psql -X -v ON_ERROR_STOP=1 -c 'SET ROLE postgres' -f supabase/tests/permissions.sql
+psql -X -v ON_ERROR_STOP=1 -c 'SET ROLE postgres' -f supabase/tests/protections.sql
+psql -X -v ON_ERROR_STOP=1 -c 'SET ROLE postgres' -f supabase/tests/v1-invariants.sql
 ```
 
 These change nothing. Keep their output, compare counts with `VALIDATION.md`,
