@@ -2,7 +2,7 @@ import type { StaffSession } from '../admin-api';
 import { readAdminProducts, readAllProductAttributes, readProductReferences, productTypes,
 	type AdminProduct, type AttributeValue, type ProductReferences } from '../admin-products';
 import { categorySpecifications } from '../product-specifications';
-import { formatMeasurement, formatMeasurementText } from '../format';
+import { formatMeasurementText, formatSpecificationNumber } from '../format';
 import { messagesFor, specificationLabel, type Locale } from '../i18n';
 import type { Fetcher } from '../api';
 
@@ -52,7 +52,7 @@ export function labelSpecificationLines(data: LabelData, product: AdminProduct, 
 	return [...new Set(ids)].flatMap(id => {
 		const definition = definitions.find(item => item.id === id), value = values.get(id);
 		if (!definition || !value || value.text_value === '') return [];
-		const shown = value.number_value !== null ? formatMeasurement(value.number_value, definition.canonical_unit, locale)
+		const shown = value.number_value !== null ? formatSpecificationNumber(value.number_value, value.number_max, definition.canonical_unit, locale)
 			: value.text_value !== null ? formatMeasurementText(value.text_value, locale)
 				: value.boolean_value ? messagesFor(locale).adminProducts.yes : messagesFor(locale).adminProducts.no;
 		return [value.number_value !== null && definition.canonical_unit ? shown

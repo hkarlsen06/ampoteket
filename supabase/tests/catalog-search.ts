@@ -24,7 +24,10 @@ const searches = ['', 'q=1+kΩ', 'q=1000+ohm', 'q=1,25+µF', 'q=1.25+µF', 'q=ST
 	'q=not-present', 'category=Resistors&category=Capacitors', 'eq.package=0603', 'eq.package=sot-23',
 	'eq.package=', 'eq.polarised=false', 'min.capacitance=0.000000000005&max.capacitance=0.000000000005',
 	'eq.value=9007199254740993.000000000001', 'min.value=9007199254740993.000000000002',
-	'category=Resistors&q=1000&eq.package=0603', 'after=SEARCH-C', ...Object.keys(compactSearches)];
+	'category=Resistors&q=1000&eq.package=0603', 'after=SEARCH-C',
+	// SEARCH-D is a 1000–2000 ohm range: filters match what it overlaps, search reads both bounds.
+	'min.resistance=1500', 'max.resistance=1000', 'eq.resistance=1500', 'eq.resistance=2000', 'min.resistance=2001',
+	'min.resistance=1001&max.resistance=1999', 'q=2+kΩ', 'q=2kΩ', 'q=2000', ...Object.keys(compactSearches)];
 const badSearches: [string, string][] = [
 	['category=Unknown', 'UNKNOWN_CATALOG_CATEGORY'], ['eq.absent=1', 'UNKNOWN_CATALOG_ATTRIBUTE'],
 	['min.package=1', 'INVALID_CATALOG_FILTER'], ['eq.polarised=no', 'INVALID_CATALOG_FILTER'],
@@ -94,6 +97,8 @@ INSERT INTO app.product_attributes(product_id,attribute_id,number_value,text_val
  (md5('SEARCH-B')::uuid,md5('package')::uuid,NULL,'SoT-23',NULL),
  (md5('SEARCH-C')::uuid,md5('capacitance')::uuid,0.000000010000,NULL,NULL),
  (md5('SEARCH-C')::uuid,md5('package')::uuid,NULL,'',NULL);
+INSERT INTO app.product_attributes(product_id,attribute_id,number_value,number_max) VALUES
+ (md5('SEARCH-D')::uuid,md5('resistance')::uuid,1000,2000.000);
 CREATE FUNCTION pg_temp.search_error(p_sql text) RETURNS text LANGUAGE plpgsql AS $$ BEGIN
  EXECUTE p_sql; RETURN 'NO_ERROR'; EXCEPTION WHEN OTHERS THEN RETURN SQLERRM; END $$;
 SELECT jsonb_build_object('kind','base','data',(SELECT jsonb_agg(t) FROM public.amp_catalog() t));

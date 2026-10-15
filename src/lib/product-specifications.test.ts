@@ -11,7 +11,7 @@ const customId = '44444444-4444-4444-8444-444444444444';
 const session = { userId: actor, token: 'staff-jwt', config: { url: 'https://fixture.invalid', publishableKey: 'sb_publishable_fixture' } };
 function standard(code: string): AttributeDefinition { return standardSpecifications.find(definition => definition.code === code)!; }
 function value(attributeId: string, fields: Partial<AttributeValue>): AttributeValue {
-	return { product_id: productId, attribute_id: attributeId, number_value: null, text_value: null, boolean_value: null, ...fields };
+	return { product_id: productId, attribute_id: attributeId, number_value: null, number_max: null, text_value: null, boolean_value: null, ...fields };
 }
 function command(after: AttributeValue): DetailCommand { return { userId: actor, kind: 'attribute', before: null, after }; }
 const definitionView = '/rest/v1/amp_attribute_definitions';
@@ -103,7 +103,7 @@ for (const [code, fields] of [
 test('unknown values and mixed data types are never encoded as zero, false, or empty text', () => {
 	const id = standard('resistance').id;
 	expect(() => parseAttribute(value(id, {}))).toThrow();
-	expect(() => parseAttribute(value(id, { number_value: '0', boolean_value: false }))).toThrow();
+	expect(() => parseAttribute(value(id, { number_value: '0', number_max: null, boolean_value: false }))).toThrow();
 	expect(() => parseAttribute(value(id, { text_value: '', boolean_value: false }))).toThrow();
 });
 

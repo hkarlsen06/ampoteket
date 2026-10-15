@@ -201,6 +201,15 @@ scrolls in short viewports.
   metadata. Partial failure keeps the command for retry or review. A value changed by
   someone else stops the save and shows the current value; saving again replaces it
   deliberately. An uncertain response locks the field until the next Save.
+- Every number field has «Min–maks» / "Min–max" under its input. It turns the field into
+  Min and Max inputs side by side (the field spans two grid columns), moving the typed
+  value into Min and focus to Max; «Én verdi» / "Single value" returns to one input,
+  keeping Min. A range needs both bounds with Max strictly higher, otherwise the save
+  stops on the field with its message; clearing both removes the value. A saved range
+  opens as one. It is stored as `number_value` and `number_max`
+  ([datamodell.md](datamodell.md#product_attributes)); the unlikely-value warning checks
+  both bounds. A dual rating (250 VAC and 400 VDC) is two fields, «Vekselspenning» /
+  "AC voltage" (`voltage_ac`) and Voltage, not a range.
 - Missing definitions are created through `amp_attribute_definitions` with their stable
   UUID, then values go through `amp_product_attributes`. A conflicting definition is
   reported, never reinterpreted.

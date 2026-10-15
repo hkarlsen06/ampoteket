@@ -30,7 +30,7 @@ test('complete admin products and composite attribute reads traverse short pages
 		const url = new URL(String(input)); expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer staff-jwt'); expect(url.searchParams.get('select')).not.toContain('*');
 		if (pages++) { expect(url.searchParams.get('and')).toBe(`(id.gt.${id})`); return Response.json([]); } return Response.json([product]);
 	}); expect(rows).toEqual([product]); expect(pages).toBe(2);
-	pages = 0; const attributes = await readProductAttributes(session, id, async input => { const url = new URL(String(input)); expect(url.searchParams.get('product_id')).toBe(`eq.${id}`); if (pages++) { expect(url.searchParams.get('and')).toBe(`(attribute_id.gt.${attribute})`); return Response.json([]); } return Response.json([{ product_id: id, attribute_id: attribute, number_value: '0.000000000001', text_value: null, boolean_value: null }]); });
+	pages = 0; const attributes = await readProductAttributes(session, id, async input => { const url = new URL(String(input)); expect(url.searchParams.get('product_id')).toBe(`eq.${id}`); if (pages++) { expect(url.searchParams.get('and')).toBe(`(attribute_id.gt.${attribute})`); return Response.json([]); } return Response.json([{ product_id: id, attribute_id: attribute, number_value: '0.000000000001', number_max: null, text_value: null, boolean_value: null }]); });
 	expect(attributes[0].number_value).toBe('0.000000000001'); expect(pages).toBe(2);
 });
 test('frozen product persistence rejects replacing payload or actor and can recover same identity after a lost creation reply', async () => {
@@ -57,14 +57,14 @@ test('only definite unique product-code collisions permit a different code candi
 	for (const error of [new Error('timeout'), new ApiError(409, { code: '23505', message: 'duplicate key value violates unique constraint "products_pkey"' }), new ApiError(500, { code: '23505', message: 'products_code_key' }), new ApiError(409, { code: 'OTHER', message: 'products_code_key' })]) expect(isProductCodeCollision(error)).toBe(false);
 });
 test('typed attributes preserve tiny numbers, false and empty text, reject mixing, and guard the original value on update', async () => {
-	const original = { product_id: id, attribute_id: attribute, number_value: '0.000000000001', text_value: null, boolean_value: null };
-	expect(parseAttribute(original).number_value).toBe('0.000000000001'); expect(parseAttribute({ ...original, number_value: null, boolean_value: false }).boolean_value).toBe(false); expect(parseAttribute({ ...original, number_value: null, text_value: '' }).text_value).toBe('');
+	const original = { product_id: id, attribute_id: attribute, number_value: '0.000000000001', number_max: null, text_value: null, boolean_value: null };
+	expect(parseAttribute(original).number_value).toBe('0.000000000001'); expect(parseAttribute({ ...original, number_value: null, number_max: null, boolean_value: false }).boolean_value).toBe(false); expect(parseAttribute({ ...original, number_value: null, number_max: null, text_value: '' }).text_value).toBe('');
 	expect(() => parseAttribute({ ...original, boolean_value: false })).toThrow(); expect(() => parseAttribute({ ...original, number_value: 'NaN' })).toThrow();
 	const after = { ...original, number_value: '0.000000000002' }; let writes = 0;
 	await executeDetailCommand(session, { userId: actor, kind: 'attribute', before: original, after }, async (input, init) => { if (init?.method === 'GET') return Response.json([original]); writes++; const url = new URL(String(input)); expect(url.searchParams.get('number_value')).toBe('eq.0.000000000001'); expect(url.searchParams.get('text_value')).toBe('is.null'); expect(init?.method).toBe('PATCH'); return Response.json([after]); }); expect(writes).toBe(1);
 });
 test('attribute removal uses DELETE with guarded values and retries an already absent row without another write', async () => {
-	const before = { product_id: id, attribute_id: attribute, number_value: null, text_value: 'a,b"c.(d)&name=other#value', boolean_value: null }; let exists = true; let writes = 0;
+	const before = { product_id: id, attribute_id: attribute, number_value: null, number_max: null, text_value: 'a,b"c.(d)&name=other#value', boolean_value: null }; let exists = true; let writes = 0;
 	const command = { userId: actor, kind: 'attribute' as const, before, after: null };
 	const fetcher = async (input: RequestInfo | URL, init?: RequestInit) => { if (init?.method === 'GET') return Response.json(exists ? [before] : []); writes++; expect(init?.method).toBe('DELETE'); const params = new URL(String(input)).searchParams; expect(params.get('text_value')).toBe('eq.a,b"c.(d)&name=other#value'); expect(params.has('name')).toBe(false); exists = false; return Response.json([before]); };
 	await executeDetailCommand(session, command, fetcher); await executeDetailCommand(session, command, fetcher); expect(writes).toBe(1);
@@ -217,7 +217,7 @@ test('an empty or missing price is rejected as the price field, never read as bo
 });
 
 test('new-product specifications are frozen, validated and survive a lost value reply without duplicate writes', async () => {
-	const values = [{ attribute_id: attribute, number_value: '9007199254740993.000000000001', text_value: null, boolean_value: null }];
+	const values = [{ attribute_id: attribute, number_value: '9007199254740993.000000000001', number_max: null, text_value: null, boolean_value: null }];
 	const command: ProductCommand = { userId: actor, payload, revision: null, attributes: values };
 	const storage = memory(); persistProductCommand(storage, command);
 	expect(readProductCommand(storage)).toEqual(command);
@@ -247,7 +247,7 @@ test('new-product specifications are frozen, validated and survive a lost value 
 });
 
 test('a rejected or concurrently changed staged specification cannot masquerade as a wholly rejected product', async () => {
-	const attributes = [{ attribute_id: attribute, number_value: null, text_value: 'draft', boolean_value: null }];
+	const attributes = [{ attribute_id: attribute, number_value: null, number_max: null, text_value: 'draft', boolean_value: null }];
 	const command: ProductCommand = { userId: actor, payload, revision: null, attributes };
 	for (const stale of [false, true]) {
 		let thrown: unknown;
@@ -265,7 +265,7 @@ test('a rejected or concurrently changed staged specification cannot masquerade 
 });
 
 test('partial-specification recovery keeps newer metadata, atomically freezes explicit review, and guards concurrent values', async () => {
-	const intended = { attribute_id: attribute, number_value: null, text_value: 'intended', boolean_value: null };
+	const intended = { attribute_id: attribute, number_value: null, number_max: null, text_value: 'intended', boolean_value: null };
 	const command: ProductCommand = { userId: actor, payload, revision: null, attributes: [intended] };
 	const newerProduct = { ...product, name_en: 'Changed by another admin', metadata_revision: '9007199254740994' };
 	const existing = { ...intended, product_id: id, text_value: 'Recorded by another admin' };
@@ -308,7 +308,7 @@ test('partial-specification recovery keeps newer metadata, atomically freezes ex
 });
 
 test('reviewed specification removal deletes only its guarded saved value and retains empty-draft recovery after metadata changes', async () => {
-	const intended = { attribute_id: attribute, number_value: null, text_value: 'draft', boolean_value: null };
+	const intended = { attribute_id: attribute, number_value: null, number_max: null, text_value: 'draft', boolean_value: null };
 	const command: ProductCommand = { userId: actor, payload, revision: null, attributes: [intended] };
 	const existing = { ...intended, product_id: id };
 	const unrelated = { ...existing, attribute_id: bin, text_value: 'Keep this unrelated specification' };
@@ -342,8 +342,18 @@ test('staff search matches unpublished products by category, specification and c
 	const references = { categories: [{ id: category, name: 'Resistors' }], units: [], shelf: { cabinets: [], bins: [] },
 		definitions: [{ id: attribute, code: 'resistance', label: 'Resistance', value_type: 'number', canonical_unit: 'ohm' }, { id: pkg, code: 'package', label: 'Package', value_type: 'text', canonical_unit: null }] } as unknown as ProductReferences;
 	const text = adminSearchTexts([{ ...product, name_nb: 'Del', name_en: 'Part', category_id: category, is_active: false }], references, [
-		{ product_id: id, attribute_id: attribute, number_value: '10000', text_value: null, boolean_value: null },
-		{ product_id: id, attribute_id: pkg, number_value: null, text_value: '0603', boolean_value: null }]).get(id)!;
+		{ product_id: id, attribute_id: attribute, number_value: '10000', number_max: null, text_value: null, boolean_value: null },
+		{ product_id: id, attribute_id: pkg, number_value: null, number_max: null, text_value: '0603', boolean_value: null }]).get(id)!;
 	for (const q of ['motstand 10k 0603', '10 kΩ', 'res-a3f09', 'resa3f']) expect(matchesSearch(text, searchTerms(q))).toBe(true);
 	expect(matchesSearch(text, searchTerms('capacitor'))).toBe(false);
+});
+
+test('a number range keeps exact bounds; commands saved before ranges read as single values', () => {
+	const ids = { product_id: '00000000-0000-4000-8000-000000000001', attribute_id: '00000000-0000-4000-8000-000000000002' };
+	expect(parseAttribute({ ...ids, number_value: '250', number_max: '400.0', text_value: null, boolean_value: null }).number_max).toBe('400');
+	expect(parseAttribute({ ...ids, number_value: '250', text_value: null, boolean_value: null }).number_max).toBeNull();
+	for (const invalid of [{ number_value: '250', number_max: '250' }, { number_value: '250', number_max: '100' },
+		{ number_value: null, number_max: '5', text_value: 'TO-220' }, { number_value: '1', number_max: 'NaN' }]) {
+		expect(() => parseAttribute({ ...ids, text_value: null, boolean_value: null, ...invalid })).toThrow();
+	}
 });

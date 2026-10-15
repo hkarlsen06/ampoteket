@@ -152,7 +152,7 @@ export const nb = {
 		specificationsIncomplete: 'Produktet er lagret, men ikke alle spesifikasjonene. Prøv igjen for å fullføre.',
 		invalidName: 'Angi et navn med 1–200 tegn.',
 		invalidStockStep: 'Oppgi et tall større enn 0, med høyst 6 desimaler. For stk må det være et heltall.', invalidSaleStep: 'Oppgi et multiplum av lagersteget, for eksempel det samme eller det dobbelte.', invalidPrice: 'Oppgi en pris på 0 eller mer, med høyst 6 desimaler.', priceRequired: 'Skriv inn en pris eller velg Gratis.', invalidMinimumStock: 'Oppgi 0 eller et multiplum av lagersteget.', invalidLink: 'Oppgi en nettadresse som begynner med https:// eller http://.',
-		referenceRecovery: 'Fullfør endringen', referenceRecoveryStale: 'Dette er endret i mellomtiden, så den tidligere endringen ble ikke gjentatt.', referenceRecoveryRejected: 'Den tidligere endringen ble avvist.', attributeInvalid: 'Skriv et tall i enheten som vises.', specificationConflict: 'En lagret spesifikasjon passer ikke med standardoppsettet, så spesifikasjonene er låst. Kontakt den som drifter systemet.',
+		referenceRecovery: 'Fullfør endringen', referenceRecoveryStale: 'Dette er endret i mellomtiden, så den tidligere endringen ble ikke gjentatt.', referenceRecoveryRejected: 'Den tidligere endringen ble avvist.', attributeInvalid: 'Skriv et tall i enheten som vises.', attributeRangeIncomplete: 'Fyll inn både min og maks, eller velg Én verdi.', attributeRangeOrder: 'Maks må være høyere enn min.', rangeToggle: 'Min–maks', singleValue: 'Én verdi', rangeMin: 'Min', rangeMax: 'Maks', specificationConflict: 'En lagret spesifikasjon passer ikke med standardoppsettet, så spesifikasjonene er låst. Kontakt den som drifter systemet.',
 		typeNames: {
 			RES: 'Motstander', CAP: 'Kondensatorer', DIO: 'Dioder', LED: 'Lysdioder',
 			BJT: 'Bipolare transistorer', MOS: 'MOSFET-transistorer', MCU: 'Mikrokontrollere',
@@ -321,7 +321,7 @@ export const nb = {
 			unit_code: 'Enhet', stock_step: 'Beholdningstrinn', sale_step: 'Kjøpstrinn', sale_unit_price_nok: 'Salgspris', minimum_stock: 'Minstebeholdning',
 			location_note: 'Plasseringsmerknad', datasheet_url: 'Datablad', purchase_url: 'Bestillingslenke', is_active: 'Tilgang', is_published: 'Publisering',
 			label: 'Navn', outer_row: 'Rad på veggen', outer_col: 'Kolonne på veggen', inner_row: 'Rad i kabinettet', inner_col: 'Kolonne i kabinettet', inner_rows: 'Rader', inner_cols: 'Kolonner', row_span: 'Høyde i celler', col_span: 'Bredde i celler', is_archived: 'Arkivering',
-			symbol: 'Symbol', is_discrete: 'Hele enheter', value_type: 'Verditype', canonical_unit: 'Måleenhet', number_value: 'Verdi', text_value: 'Verdi', boolean_value: 'Verdi',
+			symbol: 'Symbol', is_discrete: 'Hele enheter', value_type: 'Verditype', canonical_unit: 'Måleenhet', number_value: 'Verdi', number_max: 'Maks', text_value: 'Verdi', boolean_value: 'Verdi',
 			supplier_name: 'Leverandør', supplier_reference: 'Leverandørreferanse', placed_at: 'Bestilt', additional_cost_nok: 'Tilleggskostnad', note: 'Merknad', ordered_quantity: 'Bestilt mengde', unit_cost_nok: 'Innkjøpspris', supplier_sku: 'Leverandørens produktkode',
 			owner_id: 'Ansvarlig administrator', created_by: 'Registrert av', started_at: 'Startet', finished_at: 'Avsluttet', finished_by: 'Avsluttet av', finish_reason: 'Årsak til avslutning',
 			email: 'E-post', phone: 'Telefon', contact_url: 'Kontaktlenke', discord: 'Discord-brukernavn', responsibility: 'Ansvarsområde', display_order: 'Rekkefølge'
@@ -410,7 +410,7 @@ export const nb = {
 
 	/** Singular display labels; the database names remain category/filter identities. */
 	specificationLabels: {
-		resistance: 'Resistans', capacitance: 'Kapasitans', voltage: 'Spenning', current: 'Strøm',
+		resistance: 'Resistans', capacitance: 'Kapasitans', voltage: 'Spenning', voltage_ac: 'Vekselspenning', current: 'Strøm',
 		power: 'Effekt', tolerance: 'Toleranse', package: 'Kapsling', model: 'Modell', colour: 'Farge',
 		pitch: 'Pinneavstand', pins: 'Antall pinner', polarised: 'Polarisert', interface: 'Grensesnitt', step_angle: 'Stegvinkel'
 	},

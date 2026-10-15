@@ -50,7 +50,7 @@ INSERT INTO expected_columns VALUES
  ('products','INSERT',ARRAY['id','code','name_nb','name_en','description','category_id','bin_id','location_note','unit_code','stock_step','sale_step','sale_unit_price_nok','minimum_stock','datasheet_url','purchase_url','is_active']::name[]),
  ('products','UPDATE',ARRAY['name_nb','name_en','description','category_id','bin_id','location_note','sale_step','sale_unit_price_nok','minimum_stock','datasheet_url','purchase_url','is_active']::name[]),
  ('attribute_definitions','UPDATE',ARRAY['label']::name[]),
- ('product_attributes','UPDATE',ARRAY['number_value','text_value','boolean_value']::name[]),
+ ('product_attributes','UPDATE',ARRAY['number_value','text_value','boolean_value','number_max']::name[]),
  ('purchase_orders','UPDATE',ARRAY['supplier_name','supplier_reference','placed_at','additional_cost_nok','note']::name[]),
  ('purchase_order_lines','UPDATE',ARRAY['unit_cost_nok','purchase_url','supplier_sku']::name[]),
  ('checkouts','SELECT',ARRAY['id','request_id','created_at']::name[]);

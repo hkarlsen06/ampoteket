@@ -6,7 +6,7 @@
 	import * as Empty from '#lib/components/ui/empty/index.js';
 	import { getI18n, specificationLabel } from '#lib/i18n/index.js';
 	import { getAdminContext } from '#lib/admin-context.svelte.js';
-	import { formatDecimal } from '#lib/format.js';
+	import { formatSpecificationNumber } from '#lib/format.js';
 	import { standardSpecificationDefinitions } from '#lib/product-specifications.js';
 	import { readProductSpecificationReview, replaceReviewedProductCommand, type AttributeDefinition, type AttributeValue, type ProductAttributeDraft, type ProductCommand, type ProductFamily, type ProductSpecificationReview } from '#lib/admin-products.js';
 	import { formActions, formStatus, sectionHeading } from '#lib/ui.js';
@@ -26,7 +26,7 @@
 		return definition ? `${specificationLabel(definition.code, definition, i18n.locale)}${definition.canonical_unit ? ` (${definition.canonical_unit})` : ''}` : m.unknownSpecification;
 	}
 	function display(value: AttributeValue) {
-		return value.number_value !== null ? formatDecimal(value.number_value, i18n.locale) : value.text_value !== null ? value.text_value : value.boolean_value ? m.yes : m.no;
+		return value.number_value !== null ? formatSpecificationNumber(value.number_value, value.number_max, null, i18n.locale) : value.text_value !== null ? value.text_value : value.boolean_value ? m.yes : m.no;
 	}
 	async function load() {
 		if (disabled || busy || wrongIdentity || admin.status !== 'ready') return;

@@ -14,7 +14,7 @@ function product(index: number, changes: Partial<CatalogProduct & CatalogPlaceme
 		inner_rows: 10, inner_cols: 10, bin_code: `B${index}`, bin_label: null, inner_row: 1, inner_col: 1,
 		row_span: 1, col_span: 1, location_note: null, datasheet_url: null,
 		attributes: {
-			capacitance: { label: 'Capacitance', value_type: 'number', unit: 'F', value: '0.000000000005' },
+			capacitance: { label: 'Capacitance', value_type: 'number', unit: 'F', value: '0.000000000005', max: null },
 			package: { label: 'Package', value_type: 'text', unit: null, value: '0603' },
 			polarized: { label: 'Polarized', value_type: 'boolean', unit: null, value: false }
 		}, distinguishing: [], ...changes
@@ -73,7 +73,7 @@ describe('catalog search and shareable conditions', () => {
 
 	test('matches both saved and SI-formatted measurement text', () => {
 		const part = product(1, { name_nb: '1000 ohm motstand', name_en: '1000 ohm resistor',
-			category_name: 'Resistors', attributes: { resistance: { label: 'Resistance', value_type: 'number', unit: 'ohm', value: '1000' } } });
+			category_name: 'Resistors', attributes: { resistance: { label: 'Resistance', value_type: 'number', unit: 'ohm', value: '1000', max: null } } });
 		for (const term of ['1000 ohm', '1 kΩ', '1k', '1kΩ']) {
 			expect(searchCatalog([part], query(`q=${encodeURIComponent(term)}`)).products).toEqual([part]);
 		}
@@ -83,7 +83,7 @@ describe('catalog search and shareable conditions', () => {
 
 	test('combines text, category, exact text, boolean and inclusive exact numeric bounds', () => {
 		const a = product(1);
-		const b = product(2, { attributes: { ...a.attributes, capacitance: { label: 'Capacitance', value_type: 'number', unit: 'F', value: '0.00000001' } } });
+		const b = product(2, { attributes: { ...a.attributes, capacitance: { label: 'Capacitance', value_type: 'number', unit: 'F', value: '0.00000001', max: null } } });
 		const missing = product(3, { attributes: {} });
 		const conditions = query('q=CERAMIC+filters+0603&category=Capacitors&min.capacitance=0.000000000005&max.capacitance=0.000000000005&eq.package=0603&eq.polarized=false');
 		expect(searchCatalog([a, b, missing], conditions).products.map((p) => p.code)).toEqual([a.code]);
@@ -94,7 +94,7 @@ describe('catalog search and shareable conditions', () => {
 	test('compares values beyond exact JavaScript integers and converts tiny engineering units without rounding', () => {
 		expect(canonicalFilterNumber('5', -12, 'en')).toBe('0.000000000005');
 		expect(canonicalFilterNumber('1,25', -9, 'nb')).toBe('0.00000000125');
-		const large = product(1, { attributes: { value: { label: 'Value', value_type: 'number', unit: null, value: '9007199254740993.000000000001' } } });
+		const large = product(1, { attributes: { value: { label: 'Value', value_type: 'number', unit: null, value: '9007199254740993.000000000001', max: null } } });
 		expect(searchCatalog([large], query('min.value=9007199254740993.000000000002')).total).toBe(0);
 		expect(searchCatalog([large], query('eq.value=9007199254740993.000000000001')).total).toBe(1);
 		expect(engineeringUnits('F')).toContainEqual({ symbol: 'pF', exponent: -12 });
@@ -130,8 +130,8 @@ describe('catalog search and shareable conditions', () => {
 		const a = product(1);
 		const b = product(2, { name_en: 'STRASSE µ controller', attributes: { ...a.attributes, package: { label: 'Package', unit: null, value_type: 'text', value: 'SoT-23' } } });
 		expect(catalogFacets([a, b], ['Capacitors']).attributes.find((facet) => facet.code === 'package')?.values).toEqual(['0603', 'SoT-23']);
-		const large = product(4, { attributes: { ...a.attributes, capacitance: { label: 'Capacitance', value_type: 'number', unit: 'F', value: '0.00000001' } } });
-		const duplicate = product(5, { attributes: { ...a.attributes, capacitance: { label: 'Capacitance', value_type: 'number', unit: 'F', value: '0.000000000005000' } } });
+		const large = product(4, { attributes: { ...a.attributes, capacitance: { label: 'Capacitance', value_type: 'number', unit: 'F', value: '0.00000001', max: null } } });
+		const duplicate = product(5, { attributes: { ...a.attributes, capacitance: { label: 'Capacitance', value_type: 'number', unit: 'F', value: '0.000000000005000', max: null } } });
 		// Numeric facet values arrive normalized, deduplicated and in decimal order: the slider ticks.
 		expect(catalogFacets([large, a, duplicate], ['Capacitors']).attributes.find((facet) => facet.code === 'capacitance')?.values)
 			.toEqual(['0.000000000005', '0.00000001']);

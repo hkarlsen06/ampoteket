@@ -260,6 +260,44 @@ BEGIN
   END;
 END $$;
 
+-- A number may be a range (250–400 V): published with both bounds, matched by
+-- the filters it overlaps, found by either bound, and never equal to one bound.
+DO $$
+DECLARE v_sort jsonb := '[["Capacitors","capacitance",["voltage"]]]'; j jsonb;
+BEGIN
+  BEGIN
+    INSERT INTO app.categories(id,name) VALUES (md5('range-capacitors')::uuid,'Capacitors');
+    INSERT INTO app.attribute_definitions(id,code,label,value_type,canonical_unit) SELECT md5('range-'||code)::uuid,* FROM (VALUES
+      ('capacitance','Capacitance','number','F'),('voltage','Voltage','number','V'),('package','Package','text',NULL)) AS fields(code,label,value_type,canonical_unit);
+    INSERT INTO app.products(id,code,name_nb,name_en,category_id,bin_id,unit_code,stock_step,sale_step,sale_unit_price_nok,is_active)
+    SELECT md5(code)::uuid,code,'Kondensator','Capacitor',md5('range-capacitors')::uuid,'75000000-0000-4000-8000-000000000001','pcs',1,1,1,true
+    FROM unnest(ARRAY['RANGE-1','RANGE-2']) code;
+    INSERT INTO app.product_attributes(product_id,attribute_id,number_value,number_max) VALUES
+      (md5('RANGE-1')::uuid,md5('range-capacitance')::uuid,0.0000001,NULL),(md5('RANGE-1')::uuid,md5('range-voltage')::uuid,250,400),
+      (md5('RANGE-2')::uuid,md5('range-capacitance')::uuid,0.0000001,NULL),(md5('RANGE-2')::uuid,md5('range-voltage')::uuid,250,NULL);
+    SELECT to_jsonb(c) INTO j FROM public.amp_catalog('RANGE-1',p_sort=>v_sort) c;
+    PERFORM pg_temp.assert_true(j#>'{attributes,voltage}'='{"label":"Voltage","unit":"V","value_type":"number","value":"250","max":"400"}'
+      AND j#>'{attributes,capacitance,max}'='null' AND j->'distinguishing'='["voltage"]'
+      AND (SELECT distinguishing='{voltage}' FROM public.amp_catalog('RANGE-2',p_sort=>v_sort)),
+      'a range is published with both bounds and differs from its lower bound alone');
+    PERFORM pg_temp.assert_true((SELECT array_agg(code ORDER BY code)='{RANGE-1}' FROM public.amp_catalog(p_categories=>ARRAY['Capacitors'],p_conditions=>'{"voltage":{"min":"300"}}'))
+      AND (SELECT array_agg(code ORDER BY code)='{RANGE-1,RANGE-2}' FROM public.amp_catalog(p_categories=>ARRAY['Capacitors'],p_conditions=>'{"voltage":{"max":"250"}}'))
+      AND (SELECT array_agg(code ORDER BY code)='{RANGE-1}' FROM public.amp_catalog(p_categories=>ARRAY['Capacitors'],p_conditions=>'{"voltage":{"eq":"400"}}'))
+      AND (SELECT array_agg(code ORDER BY code)='{RANGE-1}' FROM public.amp_catalog(p_categories=>ARRAY['Capacitors'],p_conditions=>'{"voltage":{"min":"260","max":"300"}}'))
+      AND NOT EXISTS (SELECT 1 FROM public.amp_catalog(p_categories=>ARRAY['Capacitors'],p_conditions=>'{"voltage":{"min":"401"}}')),
+      'a range matches every filter it overlaps');
+    PERFORM pg_temp.assert_true((SELECT array_agg(code)='{RANGE-1}' FROM public.amp_catalog(p_q=>'400 V'))
+      AND (SELECT public.amp_catalog_facets(ARRAY['Capacitors'])->'attributes' @> '[{"code":"voltage","values":["250","400"]}]'),
+      'search and facets read both bounds');
+    PERFORM pg_temp.expect_error($q$UPDATE app.product_attributes SET number_max=250 WHERE product_id=md5('RANGE-1')::uuid AND attribute_id=md5('range-voltage')::uuid$q$,'product_attributes_range_check');
+    PERFORM pg_temp.expect_error($q$UPDATE app.product_attributes SET number_max='Infinity' WHERE product_id=md5('RANGE-1')::uuid AND attribute_id=md5('range-voltage')::uuid$q$,'product_attributes_range_check');
+    PERFORM pg_temp.expect_error($q$INSERT INTO app.product_attributes(product_id,attribute_id,text_value,number_max) VALUES (md5('RANGE-2')::uuid,md5('range-package')::uuid,'TO-220',5)$q$,'product_attributes_range_check');
+    RAISE EXCEPTION 'ROLLBACK_RANGES';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'ROLLBACK_RANGES' THEN RAISE; END IF;
+  END;
+END $$;
+
 -- These blocks exercise actual application roles, not just auth.uid().
 SET LOCAL ROLE anon;
 DO $$ BEGIN

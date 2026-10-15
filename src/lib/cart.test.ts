@@ -36,7 +36,7 @@ describe('browser cart persistence boundary', () => {
 	test('a look-alike product saves what tells it apart for the next visit', async () => {
 		const { saved, env } = environment();
 		const cart = createCartStore(env);
-		await cart.add({ ...product, attributes: { voltage: { label: 'Voltage', unit: 'V', value_type: 'number', value: '350' },
+		await cart.add({ ...product, attributes: { voltage: { label: 'Voltage', unit: 'V', value_type: 'number', value: '350', max: null },
 			package: { label: 'Package', unit: null, value_type: 'text', value: 'Radial' } }, distinguishing: ['voltage', 'package'] }, '1');
 		expect(parseCart(saved.raw)[0]).toMatchObject({ variant_nb: '350 V · Kapsling: Radial', variant_en: '350 V · Package: Radial' });
 		expect(() => parseCart(JSON.stringify([{ product_id: id, quantity: '1', variant_nb: 1 }]))).toThrow(CartError);

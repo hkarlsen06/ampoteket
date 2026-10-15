@@ -11,7 +11,7 @@
 	import { specificationLabel, getI18n } from '#lib/i18n/index.js';
 	import { onDestroy, untrack } from 'svelte';
 	import { forSale, lookupCatalogProduct, productName } from '#lib/catalog.js';
-	import { formatMeasurement } from '#lib/format.js';
+	import { formatSpecificationNumber } from '#lib/format.js';
 	import { compareDecimals } from '#lib/decimal.js';
 	import ProductIdentity from '#lib/ProductIdentity.svelte';
 	import ProductPrice from '#lib/ProductPrice.svelte';
@@ -117,7 +117,7 @@ JavaScript, always show the content with a plain heading. -->
 								{#each Object.entries(product?.attributes ?? {}) as [code, attribute] (code)}
 									<Table.Row>
 										<Table.Head scope="row" class="w-1/2 whitespace-normal font-normal text-muted-foreground wrap-break-word hyphens-auto">{specificationLabel(code, attribute, i18n.locale)}</Table.Head>
-										<Table.Cell class={attribute.value_type === 'number' ? 'font-mono whitespace-normal wrap-anywhere' : 'whitespace-normal wrap-anywhere'}>{attribute.value_type === 'boolean' ? (attribute.value ? i18n.m.shop.yes : i18n.m.shop.no) : attribute.value_type === 'number' ? formatMeasurement(attribute.value, attribute.unit, i18n.locale) : attribute.value}</Table.Cell>
+										<Table.Cell class={attribute.value_type === 'number' ? 'font-mono whitespace-normal wrap-anywhere' : 'whitespace-normal wrap-anywhere'}>{attribute.value_type === 'boolean' ? (attribute.value ? i18n.m.shop.yes : i18n.m.shop.no) : attribute.value_type === 'number' ? formatSpecificationNumber(attribute.value, attribute.max, attribute.unit, i18n.locale) : attribute.value}</Table.Cell>
 									</Table.Row>
 								{/each}
 							</Table.Body>

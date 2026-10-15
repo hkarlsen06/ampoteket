@@ -117,6 +117,11 @@ export function catalogSearchLabels() {
 	};
 }
 
+/** Both bounds of a range are filter values. */
+function bounds(attribute: { value: string; max: string | null }): string[] {
+	return [attribute.value, ...(attribute.max === null ? [] : [attribute.max])].map(value => normalizeDecimal(value));
+}
+
 export function catalogFacets(products: CatalogProduct[], selectedCategories: string[]): CatalogFacets {
 	const categories = catalogCategories(products);
 	const definitions = new Map<string, CatalogFacet>();
@@ -129,11 +134,10 @@ export function catalogFacets(products: CatalogProduct[], selectedCategories: st
 					|| existing.definition.label !== definition.label) throw new CatalogQueryError('invalidFilter');
 				if (definition.value_type === 'text' && !existing.values.includes(definition.value)) existing.values.push(definition.value);
 				else if (definition.value_type === 'number') {
-					const value = normalizeDecimal(definition.value);
-					if (!existing.values.includes(value)) existing.values.push(value);
+					for (const value of bounds(definition)) if (!existing.values.includes(value)) existing.values.push(value);
 				}
 			} else definitions.set(code, { code, definition, values: definition.value_type === 'text' ? [definition.value]
-				: definition.value_type === 'number' ? [normalizeDecimal(definition.value)] : [] });
+				: definition.value_type === 'number' ? bounds(definition) : [] });
 		}
 	}
 	const attributes = [...definitions.values()];
@@ -156,7 +160,10 @@ export function catalogSearchText(product: SearchableProduct): string {
 		...Object.entries(product.attributes).map(([code, attribute]) => [attribute.label, ...locales.map(locale => specificationLabel(code, attribute, locale)),
 			attribute.value_type === 'boolean' ? (attribute.value ? 'true yes ja' : 'false no nei') : attribute.value,
 			...(attribute.value_type === 'number' ? locales.map((locale) => formatMeasurement(attribute.value, attribute.unit, locale)) : []),
-			attribute.unit].filter((part) => part !== null).join(' '))].filter((part) => part !== null).join(' '));
+			attribute.unit,
+			...(attribute.value_type === 'number' && attribute.max !== null
+				? [attribute.max, ...locales.map((locale) => formatMeasurement(attribute.max!, attribute.unit, locale))] : [])
+		].filter((part) => part !== null).join(' '))].filter((part) => part !== null).join(' '));
 	return `${text} ${text.replace(/([0-9])\s+(?=[\p{L}ωμ])/gu, '$1')}`;
 }
 
@@ -201,9 +208,13 @@ export function searchCatalog(products: CatalogProduct[], query: CatalogQuery, l
 		if (!Object.entries(query.conditions).every(([code, condition]) => {
 			const attribute = product.attributes[code];
 			if (!attribute) return false;
-			if (attribute.value_type === 'number') return (condition.eq === undefined || compareDecimals(attribute.value, condition.eq) === 0)
-				&& (condition.min === undefined || compareDecimals(attribute.value, condition.min) >= 0)
-				&& (condition.max === undefined || compareDecimals(attribute.value, condition.max) <= 0);
+			// A range matches a condition it overlaps.
+			if (attribute.value_type === 'number') {
+				const upper = attribute.max ?? attribute.value;
+				return (condition.eq === undefined || compareDecimals(attribute.value, condition.eq) <= 0 && compareDecimals(upper, condition.eq) >= 0)
+					&& (condition.min === undefined || compareDecimals(upper, condition.min) >= 0)
+					&& (condition.max === undefined || compareDecimals(attribute.value, condition.max) <= 0);
+			}
 			return String(attribute.value) === condition.eq;
 		})) continue;
 		matches.push({ product, index });

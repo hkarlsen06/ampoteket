@@ -152,7 +152,7 @@ export const en: Messages = {
 		specificationsIncomplete: "The product is saved, but some specifications aren't. Try again to finish.",
 		invalidName: 'Enter a name with 1–200 characters.',
 		invalidStockStep: 'Enter a number above 0 with at most 6 decimals. Pieces need a whole number.', invalidSaleStep: 'Enter a multiple of the stock increment, such as the same or double.', invalidPrice: 'Enter a price of 0 or more, with at most 6 decimals.', priceRequired: 'Enter a price or choose Free.', invalidMinimumStock: 'Enter 0 or a multiple of the stock increment.', invalidLink: 'Enter a web address starting with https:// or http://.',
-		referenceRecovery: 'Finish the change', referenceRecoveryStale: "This changed in the meantime, so the earlier change wasn't repeated.", referenceRecoveryRejected: 'The earlier change was rejected.', attributeInvalid: 'Enter a number in the unit shown.', specificationConflict: "A saved specification doesn't match the standard setup, so specifications are locked. Contact whoever maintains the system.",
+		referenceRecovery: 'Finish the change', referenceRecoveryStale: "This changed in the meantime, so the earlier change wasn't repeated.", referenceRecoveryRejected: 'The earlier change was rejected.', attributeInvalid: 'Enter a number in the unit shown.', attributeRangeIncomplete: 'Enter both min and max, or choose Single value.', attributeRangeOrder: 'Max must be higher than min.', rangeToggle: 'Min–max', singleValue: 'Single value', rangeMin: 'Min', rangeMax: 'Max', specificationConflict: "A saved specification doesn't match the standard setup, so specifications are locked. Contact whoever maintains the system.",
 		typeNames: {
 			RES: 'Resistors', CAP: 'Capacitors', DIO: 'Diodes', LED: 'Light-emitting diodes',
 			BJT: 'Bipolar transistors', MOS: 'MOSFET transistors', MCU: 'Microcontrollers',
@@ -320,7 +320,7 @@ export const en: Messages = {
 			unit_code: 'Unit', stock_step: 'Stock increment', sale_step: 'Purchase increment', sale_unit_price_nok: 'Sales price', minimum_stock: 'Minimum stock',
 			location_note: 'Location note', datasheet_url: 'Datasheet', purchase_url: 'Order link', is_active: 'Access', is_published: 'Publication',
 			label: 'Name', outer_row: 'Wall row', outer_col: 'Wall column', inner_row: 'Cabinet row', inner_col: 'Cabinet column', inner_rows: 'Rows', inner_cols: 'Columns', row_span: 'Height in cells', col_span: 'Width in cells', is_archived: 'Archive state',
-			symbol: 'Symbol', is_discrete: 'Whole units', value_type: 'Value type', canonical_unit: 'Measurement unit', number_value: 'Value', text_value: 'Value', boolean_value: 'Value',
+			symbol: 'Symbol', is_discrete: 'Whole units', value_type: 'Value type', canonical_unit: 'Measurement unit', number_value: 'Value', number_max: 'Max', text_value: 'Value', boolean_value: 'Value',
 			supplier_name: 'Supplier', supplier_reference: 'Supplier reference', placed_at: 'Ordered', additional_cost_nok: 'Additional cost', note: 'Note', ordered_quantity: 'Ordered quantity', unit_cost_nok: 'Purchase price', supplier_sku: "Supplier's product code",
 			owner_id: 'Responsible admin', created_by: 'Recorded by', started_at: 'Started', finished_at: 'Finished', finished_by: 'Finished by', finish_reason: 'Reason for finishing',
 			email: 'Email', phone: 'Phone', contact_url: 'Contact link', discord: 'Discord username', responsibility: 'Responsibility', display_order: 'Order'
@@ -408,7 +408,7 @@ export const en: Messages = {
 	},
 
 	specificationLabels: {
-		resistance: 'Resistance', capacitance: 'Capacitance', voltage: 'Voltage', current: 'Current',
+		resistance: 'Resistance', capacitance: 'Capacitance', voltage: 'Voltage', voltage_ac: 'AC voltage', current: 'Current',
 		power: 'Power', tolerance: 'Tolerance', package: 'Package', model: 'Model', colour: 'Colour',
 		pitch: 'Pin pitch', pins: 'Number of pins', polarised: 'Polarised', interface: 'Interface', step_angle: 'Step angle'
 	},

@@ -75,10 +75,10 @@ test('reads the duplicate check numbers from specifications', () => {
 		{ id: 'pkg', code: 'package', label: 'Package', value_type: 'text' as const, canonical_unit: null }
 	];
 	const values = [
-		{ product_id: 'p', attribute_id: 'cap', number_value: '0.0000001', text_value: null, boolean_value: null },
-		{ product_id: 'p', attribute_id: 'volt', number_value: '50', text_value: null, boolean_value: null },
-		{ product_id: 'p', attribute_id: 'pkg', number_value: null, text_value: '0805', boolean_value: null },
-		{ product_id: 'other', attribute_id: 'cap', number_value: '1', text_value: null, boolean_value: null }
+		{ product_id: 'p', attribute_id: 'cap', number_value: '0.0000001', number_max: null, text_value: null, boolean_value: null },
+		{ product_id: 'p', attribute_id: 'volt', number_value: '50', number_max: null, text_value: null, boolean_value: null },
+		{ product_id: 'p', attribute_id: 'pkg', number_value: null, number_max: null, text_value: '0805', boolean_value: null },
+		{ product_id: 'other', attribute_id: 'cap', number_value: '1', number_max: null, text_value: null, boolean_value: null }
 	];
 	expect(existingProducts([product], values, definitions)).toEqual([{ id: 'p', code: 'CAP-00001', name_nb: 'a', name_en: 'b', category_id: capacitors, bin_id: null, is_active: true, numbers: { capacitance: '0.0000001', voltage: '50' } }]);
 });

@@ -123,7 +123,10 @@ input; scanned and pasted label URLs use exact lookup only.
 condition are AND. Specification controls appear when exactly one category is selected,
 from values recorded for it. Text matches case-sensitively; booleans are any/yes/no.
 Selected options stay visible at zero matches. A missing value matches no condition and
-never becomes `0`, `false` or empty. Changing category clears its specification draft.
+never becomes `0`, `false` or empty. A range (250–400 V) matches every condition it
+overlaps (`min.voltage=300`, `max.voltage=250`, `eq.voltage=400`), offers both bounds as
+slider values and is found by either bound in search; it displays as one value
+("250–400 V", `formatSpecificationNumber`). Changing category clears its specification draft.
 
 Numeric specifications use a two-handle `Slider` over the category's distinct recorded
 values. A handle at either end removes that bound, so parts without the value are not

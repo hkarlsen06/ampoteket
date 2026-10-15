@@ -141,7 +141,7 @@ export async function readAuditReferences(session: StaffSession, entries: AuditE
 }
 
 const uuidInText = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
-const numericFields = new Set(['stock_step', 'sale_step', 'minimum_stock', 'ordered_quantity', 'number_value', 'display_order', 'outer_row', 'outer_col', 'inner_row', 'inner_col', 'inner_rows', 'inner_cols', 'row_span', 'col_span']);
+const numericFields = new Set(['stock_step', 'sale_step', 'minimum_stock', 'ordered_quantity', 'number_value', 'number_max', 'display_order', 'outer_row', 'outer_col', 'inner_row', 'inner_col', 'inner_rows', 'inner_cols', 'row_span', 'col_span']);
 const readable = (value: unknown): string | undefined => typeof value === 'string' && value.trim() && !uuidInText.test(value) ? value : undefined;
 const coordinate = (value: unknown): number | undefined => typeof value === 'string' && /^\d+$/.test(value) && Number.isSafeInteger(Number(value)) && Number(value) > 0 ? Number(value) : typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined;
 
@@ -200,7 +200,7 @@ export function describeAudit(entry: AuditEntry, locale: Locale, references: Aud
 			const unit = product && typeof product.unit_code === 'string' ? unitLabel(product.unit_code, locale, raw) : undefined;
 			if (['stock_step', 'sale_step', 'minimum_stock', 'ordered_quantity'].includes(field)) return `${formatDecimal(raw, locale)}${unit ? ` ${unit}` : ''}`;
 			const definition = reference('attribute_definitions', data.attribute_id);
-			if (field === 'number_value' && typeof definition?.canonical_unit === 'string') return formatMeasurement(raw, definition.canonical_unit, locale);
+			if ((field === 'number_value' || field === 'number_max') && typeof definition?.canonical_unit === 'string') return formatMeasurement(raw, definition.canonical_unit, locale);
 			return formatDecimal(raw, locale);
 		}
 		if (typeof raw === 'number' && Number.isSafeInteger(raw)) return formatDecimal(String(raw), locale);

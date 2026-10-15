@@ -1,6 +1,6 @@
 import { ApiError, isRecord, requestApiJson, type Fetcher } from './api';
 import { messagesFor, specificationLabel, type Locale } from './i18n';
-import { formatMeasurement, formatMeasurementText } from './format';
+import { formatMeasurementText, formatSpecificationNumber } from './format';
 import { catalogSearchLabels, CatalogQueryError, sortCatalogCategories, type CatalogFacets, type CatalogQuery } from './catalog-search';
 import { compareDecimals, normalizeDecimal } from './decimal';
 import { catalogSort } from './product-specifications';
@@ -19,9 +19,9 @@ export function productVariant(product: Pick<CatalogProduct, 'attributes' | 'dis
 	const parts = product.distinguishing.flatMap(code => {
 		const attribute = Object.hasOwn(product.attributes, code) ? product.attributes[code] : undefined;
 		if (!attribute || attribute.value === '') return [];
-		if (attribute.value_type === 'number' && attribute.unit) return [formatMeasurement(attribute.value, attribute.unit, locale)];
+		if (attribute.value_type === 'number' && attribute.unit) return [formatSpecificationNumber(attribute.value, attribute.max, attribute.unit, locale)];
 		const shown = attribute.value_type === 'boolean' ? messagesFor(locale).shop[attribute.value ? 'yes' : 'no']
-			: attribute.value_type === 'number' ? formatMeasurement(attribute.value, null, locale) : attribute.value;
+			: attribute.value_type === 'number' ? formatSpecificationNumber(attribute.value, attribute.max, null, locale) : attribute.value;
 		return [`${specificationLabel(code, attribute, locale)}: ${shown}`];
 	});
 	return parts.length ? parts.join(' · ') : null;
@@ -29,8 +29,9 @@ export function productVariant(product: Pick<CatalogProduct, 'attributes' | 'dis
 export type CatalogRequestOptions = { fetcher?: Fetcher; signal?: AbortSignal };
 export type CatalogPageOptions = CatalogRequestOptions & { afterCode?: string; limit?: number; query?: CatalogQuery; binId?: string };
 
+/** A number may be a range: `value` is then its lower bound and `max` the upper one. */
 export type CatalogAttribute =
-	| { label: string; unit: string | null; value_type: 'number'; value: string }
+	| { label: string; unit: string | null; value_type: 'number'; value: string; max: string | null }
 	| { label: string; unit: null; value_type: 'text'; value: string }
 	| { label: string; unit: null; value_type: 'boolean'; value: boolean };
 
@@ -182,17 +183,21 @@ function attributes(value: unknown): Record<string, CatalogAttribute> {
 		const label = named(item.label, 100);
 		let attribute: CatalogAttribute;
 		switch (item.value_type) {
-			case 'number':
-				attribute = { label, unit: nullableString(item.unit), value_type: 'number', value: exactDecimal(item.value, 'attribute') };
+			case 'number': {
+				const value = exactDecimal(item.value, 'attribute');
+				const max = item.max === null ? null : exactDecimal(item.max, 'attribute');
+				if (max !== null && compareDecimals(max, value) <= 0) invalid();
+				attribute = { label, unit: nullableString(item.unit), value_type: 'number', value, max };
 				break;
+			}
 			case 'text': {
 				const text = string(item.value);
-				if (item.unit !== null || [...text].length > 2000) invalid();
+				if (item.unit !== null || item.max !== null || [...text].length > 2000) invalid();
 				attribute = { label, unit: null, value_type: 'text', value: text };
 				break;
 			}
 			case 'boolean':
-				if (item.unit !== null || typeof item.value !== 'boolean') invalid();
+				if (item.unit !== null || item.max !== null || typeof item.value !== 'boolean') invalid();
 				attribute = { label, unit: null, value_type: 'boolean', value: item.value };
 				break;
 			default:

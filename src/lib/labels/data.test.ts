@@ -3,7 +3,7 @@ import { selectedLabelProducts, labelSpecificationLines, type LabelData } from '
 import { productTypes, readAllProductAttributes, type AdminProduct } from '../admin-products';
 const id = (n: number) => `00000000-0000-4000-8000-${n.toString().padStart(12, '0')}`;
 const session = { userId: id(99), token: 'staff-test', config: { url: 'https://fixture.invalid', publishableKey: 'public-test' } };
-const attribute = (product: number, definition: number) => ({ product_id: id(product), attribute_id: id(definition), number_value: '0.000000000005', text_value: null, boolean_value: null });
+const attribute = (product: number, definition: number) => ({ product_id: id(product), attribute_id: id(definition), number_value: '0.000000000005', number_max: null, text_value: null, boolean_value: null });
 
 test('label attributes traverse a capped composite key without losing same-product or same-definition rows', async () => {
 	const pages = [[attribute(1, 10), attribute(1, 11)], [attribute(2, 10)], []];
@@ -36,8 +36,8 @@ function fixture(): LabelData {
 				bins: [1, 2].map(row => ({ id: id(20 + row), code: `B-${row}`, cabinet_id: id(20), inner_row: row, inner_col: 1, row_span: 1, col_span: 1, label: null, has_products: true })) } },
 		attributes: [
 			{ ...attribute(1, 10), number_value: '1000' },
-			{ ...attribute(1, 11), number_value: null, boolean_value: false },
-			{ ...attribute(1, 12), number_value: null, text_value: '' }
+			{ ...attribute(1, 11), number_value: null, number_max: null, boolean_value: false },
+			{ ...attribute(1, 12), number_value: null, number_max: null, text_value: '' }
 		]
 	};
 }

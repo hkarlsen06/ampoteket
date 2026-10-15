@@ -45,11 +45,11 @@ function fixture(code = 'RES-A3F09', id = 1): Record<string, unknown> {
 		location_note: null,
 		datasheet_url: 'https://example.invalid/datasheet.pdf',
 		attributes: {
-			resistance: { label: 'Resistance', unit: 'ohm', value_type: 'number', value: '1000' },
-			capacitance: { label: 'Capacitance', unit: 'F', value_type: 'number', value: '0.000000000005' },
-			large_value: { label: 'Exact value', unit: null, value_type: 'number', value: '9007199254740993.000000000001' },
-			package: { label: 'Package', unit: null, value_type: 'text', value: '0603' },
-			polarized: { label: 'Polarized', unit: null, value_type: 'boolean', value: false }
+			resistance: { label: 'Resistance', unit: 'ohm', value_type: 'number', value: '1000', max: null },
+			capacitance: { label: 'Capacitance', unit: 'F', value_type: 'number', value: '0.000000000005', max: null },
+			large_value: { label: 'Exact value', unit: null, value_type: 'number', value: '9007199254740993.000000000001', max: null },
+			package: { label: 'Package', unit: null, value_type: 'text', value: '0603', max: null },
+			polarized: { label: 'Polarized', unit: null, value_type: 'boolean', value: false, max: null }
 		},
 		distinguishing: ['package', 'tolerance']
 	};
@@ -65,13 +65,13 @@ function responding(body: unknown, status = 200) {
 
 describe('look-alike products', () => {
 	const attributes = {
-		voltage: { label: 'Voltage', unit: 'V', value_type: 'number', value: '350' },
-		tolerance: { label: 'Tolerance', unit: '%', value_type: 'number', value: '5' },
-		package: { label: 'Package', unit: null, value_type: 'text', value: 'TO-220' },
-		blank: { label: 'Blank', unit: null, value_type: 'text', value: '' },
-		polarised: { label: 'Polarised', unit: null, value_type: 'boolean', value: true },
-		pins: { label: 'Pins', unit: null, value_type: 'number', value: '8' },
-		pitch: { label: 'Pitch', unit: 'mm', value_type: 'number', value: '2.54' }
+		voltage: { label: 'Voltage', unit: 'V', value_type: 'number', value: '350', max: null },
+		tolerance: { label: 'Tolerance', unit: '%', value_type: 'number', value: '5', max: null },
+		package: { label: 'Package', unit: null, value_type: 'text', value: 'TO-220', max: null },
+		blank: { label: 'Blank', unit: null, value_type: 'text', value: '', max: null },
+		polarised: { label: 'Polarised', unit: null, value_type: 'boolean', value: true, max: null },
+		pins: { label: 'Pins', unit: null, value_type: 'number', value: '8', max: null },
+		pitch: { label: 'Pitch', unit: 'mm', value_type: 'number', value: '2.54', max: null }
 	} as const;
 	test('a value with a unit names itself; others keep their translated field name', () => {
 		expect(productVariant({ attributes, distinguishing: ['voltage'] }, 'nb')).toBe('350 V');
@@ -163,15 +163,27 @@ describe('catalog response boundary', () => {
 
 	test('requires each attribute type and unit to agree without treating missing as false', () => {
 		for (const attribute of [
-			{ label: 'Flag', unit: null, value_type: 'boolean', value: 'false' },
-			{ label: 'Value', unit: null, value_type: 'number', value: false },
-			{ label: 'Value', unit: null, value_type: 'number', value: 'Infinity' },
-			{ label: 'Value', unit: 'V', value_type: 'text', value: '3.3' },
-			{ label: 'Value', value_type: 'number', value: '1' },
-			{ label: 'Value', unit: null, value_type: 'list', value: [] }
+			{ label: 'Flag', unit: null, value_type: 'boolean', value: 'false', max: null },
+			{ label: 'Value', unit: null, value_type: 'number', value: false, max: null },
+			{ label: 'Value', unit: null, value_type: 'number', value: 'Infinity', max: null },
+			{ label: 'Value', unit: 'V', value_type: 'text', value: '3.3', max: null },
+			{ label: 'Value', value_type: 'number', value: '1', max: null },
+			{ label: 'Value', unit: null, value_type: 'list', value: [] },
+			// A range's upper bound is exact and above the lower; only numbers have one.
+			{ label: 'Value', unit: 'V', value_type: 'number', value: '250' },
+			{ label: 'Value', unit: 'V', value_type: 'number', value: '250', max: '250' },
+			{ label: 'Value', unit: 'V', value_type: 'number', value: '250', max: '1e3' },
+			{ label: 'Value', unit: null, value_type: 'text', value: 'TO-220', max: '5' },
+			{ label: 'Flag', unit: null, value_type: 'boolean', value: true, max: '1' }
 		]) {
 			expect(() => decode([{ ...fixture(), attributes: { value: attribute } }])).toThrow(CatalogResponseError);
 		}
+	});
+
+	test('a range keeps both exact bounds', () => {
+		const [product] = decode([{ ...fixture(), attributes: { voltage: { label: 'Voltage', unit: 'V', value_type: 'number', value: '250', max: '400.000' } } }]);
+		expect(product.attributes.voltage).toEqual({ label: 'Voltage', unit: 'V', value_type: 'number', value: '250', max: '400.000' });
+		expect(productVariant({ ...product, distinguishing: ['voltage'] }, 'nb')).toBe('250–400 V');
 	});
 });
 
@@ -297,7 +309,7 @@ describe('catalog HTTP reads and completeness', () => {
 			{ p_after_code: 'RES-00002', p_limit: 200, p_sort: catalogSort }
 		]);
 		expect(catalogSort.slice(0, 2)).toEqual([['Resistors', 'resistance', ['power', 'tolerance', 'package', 'model']],
-			['Capacitors', 'capacitance', ['voltage', 'tolerance', 'polarised', 'package', 'model']]]);
+			['Capacitors', 'capacitance', ['voltage', 'voltage_ac', 'tolerance', 'polarised', 'package', 'model']]]);
 		expect(catalogSort.at(-1)?.slice(0, 2)).toEqual(['Miscellaneous', null]);
 	});
 

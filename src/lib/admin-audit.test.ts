@@ -84,6 +84,10 @@ test('audit diffs keep money and quantities exact, translate states and keep unr
 	const spec = describeAudit(audit('product_attributes', { product_id: session.userId, attribute_id: session.userId, number_value: '1000' }, { product_id: session.userId, attribute_id: session.userId, number_value: '2000' }), 'nb', references);
 	expect(spec.subject).toBe('Produktspesifikasjon: RES-01 · Motstand · Resistans');
 	expect(spec.fields).toEqual([{ label: 'Verdi', before: '1 kΩ', after: '2 kΩ' }]);
+	// Widening a value into a range shows the new upper bound in the specification's unit.
+	const range = describeAudit(audit('product_attributes', { product_id: session.userId, attribute_id: session.userId, number_value: '1000', number_max: null },
+		{ product_id: session.userId, attribute_id: session.userId, number_value: '1000', number_max: '1500' }), 'nb', references);
+	expect(range.fields).toEqual([{ label: 'Maks', before: 'Ikke angitt', after: '1,5 kΩ' }]);
 	expect(describeAudit(audit('help_contacts', { phone: '12345678' }, { phone: '87654321' }), 'en').fields).toEqual([{ label: 'Phone', before: '12345678', after: '87654321' }]);
 	// Created and deleted rows list only the fields they had; an update still shows a cleared field.
 	expect(describeAudit(audit('count_batches', null, { title: 'Friday count', finished_at: null }), 'en').fields).toEqual([{ label: 'Title', before: null, after: 'Friday count' }]);

@@ -52,6 +52,22 @@ export function formatMeasurement(value: string, unit: string | null, locale: Lo
 	return formatDecimal(shiftDecimal(normalizeDecimal(value), -chosen.exponent), locale) + (chosen.symbol ? ` ${chosen.symbol}` : '');
 }
 
+/** "250–400 V", "0,1–1 µF"; each bound keeps its own prefix when the lower one
+ * would read below 0.1 in the upper one's ("10 nF–1 µF"). */
+export function formatMeasurementRange(min: string, max: string, unit: string | null, locale: Locale): string {
+	const chosen = readableUnit(max, unit);
+	const low = shiftDecimal(normalizeDecimal(min), -chosen.exponent);
+	if (normalizeDecimal(min) !== '0' && compareDecimals(low.replace(/^-/, ''), '0.1') < 0) {
+		return `${formatMeasurement(min, unit, locale)}–${formatMeasurement(max, unit, locale)}`;
+	}
+	return `${formatDecimal(low, locale)}–${formatDecimal(shiftDecimal(normalizeDecimal(max), -chosen.exponent), locale)}${chosen.symbol ? ` ${chosen.symbol}` : ''}`;
+}
+
+/** A stored number specification: one measurement or a range. */
+export function formatSpecificationNumber(value: string, max: string | null, unit: string | null, locale: Locale): string {
+	return max === null ? formatMeasurement(value, unit, locale) : formatMeasurementRange(value, max, unit, locale);
+}
+
 function readableUnit(value: string, unit: string | null) {
 	const magnitude = normalizeDecimal(value).replace(/^-/, '');
 	const units = engineeringUnits(unit).sort((a, b) => b.exponent - a.exponent);

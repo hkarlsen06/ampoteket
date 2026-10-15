@@ -13,7 +13,8 @@ export type ProductWrite = { id: string; code: string; name_nb: string; name_en:
 export type AdminProduct = ProductWrite & { metadata_revision: string };
 export type Category = { id: string; name: string };
 export type AttributeDefinition = { id: string; code: string; label: string; value_type: 'number' | 'text' | 'boolean'; canonical_unit: string | null };
-export type AttributeValue = { product_id: string; attribute_id: string; number_value: string | null; text_value: string | null; boolean_value: boolean | null };
+/** A number may be a range: number_value is then its lower bound and number_max the upper one. */
+export type AttributeValue = { product_id: string; attribute_id: string; number_value: string | null; number_max: string | null; text_value: string | null; boolean_value: boolean | null };
 export type ProductReferences = { categories: Category[]; definitions: AttributeDefinition[]; units: { code: string; name: string; symbol: string; is_discrete: boolean }[]; shelf: ShelfTopology };
 export type ProductStock = { product_id: string; quantity: string; revision: string; last_counted_at: string | null };
 export function productCategoryOptions(categories: Category[]) {
@@ -111,9 +112,12 @@ export function parseDefinition(value: unknown): AttributeDefinition {
 }
 export function parseAttribute(value: unknown): AttributeValue {
 	const r = object(value); const number_value = r.number_value === null ? null : exactNumber(r.number_value); const text_value = nullableText(r.text_value);
+	// Commands saved before ranges existed have no number_max: a single value.
+	const number_max = r.number_max === undefined || r.number_max === null ? null : exactNumber(r.number_max);
 	if ((r.boolean_value !== null && typeof r.boolean_value !== 'boolean') || (text_value !== null && [...text_value].length > 2000)
-		|| [number_value, text_value, r.boolean_value].filter(v => v !== null).length !== 1) throw new Error('Invalid attribute');
-	return { product_id: identifier(r.product_id), attribute_id: identifier(r.attribute_id), number_value, text_value, boolean_value: r.boolean_value as boolean | null };
+		|| [number_value, text_value, r.boolean_value].filter(v => v !== null).length !== 1
+		|| (number_max !== null && (number_value === null || compareDecimals(number_max, number_value) <= 0))) throw new Error('Invalid attribute');
+	return { product_id: identifier(r.product_id), attribute_id: identifier(r.attribute_id), number_value, number_max, text_value, boolean_value: r.boolean_value as boolean | null };
 }
 export function parseStock(value: unknown): ProductStock {
 	const r = object(value); const quantity = exactNumber(r.quantity);
@@ -154,7 +158,7 @@ export async function readInventory(session: StaffSession, fetcher: Fetcher = fe
 }
 export async function readProductAttributes(session: StaffSession, id: string, fetcher: Fetcher = fetch): Promise<AttributeValue[]> {
 	identifier(id);
-	return (await allStaffRows(session, 'amp_product_attributes', 'product_id,attribute_id,number_value,text_value,boolean_value', 'attribute_id', { product_id: `eq.${id}` }, fetcher)).map(value => { const v = parseAttribute(value); if (v.product_id !== id) throw new Error('Invalid attribute binding'); return v; });
+	return (await allStaffRows(session, 'amp_product_attributes', 'product_id,attribute_id,number_value,number_max,text_value,boolean_value', 'attribute_id', { product_id: `eq.${id}` }, fetcher)).map(value => { const v = parseAttribute(value); if (v.product_id !== id) throw new Error('Invalid attribute binding'); return v; });
 }
 /** Attributes have a composite key: paging on either UUID alone loses rows. */
 export async function readAllProductAttributes(session: StaffSession, fetcher: Fetcher = fetch): Promise<AttributeValue[]> {
@@ -162,7 +166,7 @@ export async function readAllProductAttributes(session: StaffSession, fetcher: F
 	let after: AttributeValue | undefined;
 	for (;;) {
 		const raw = await staffRequest(session, 'amp_product_attributes', {
-			select: 'product_id,attribute_id,number_value,text_value,boolean_value',
+			select: 'product_id,attribute_id,number_value,number_max,text_value,boolean_value',
 			order: 'product_id.asc,attribute_id.asc', limit: '200',
 			...(after ? { or: `(product_id.gt.${after.product_id},and(product_id.eq.${after.product_id},attribute_id.gt.${after.attribute_id}))` } : {})
 		}, undefined, 'GET', fetcher);
@@ -372,7 +376,7 @@ export async function executeDetailCommand(session: StaffSession, command: Detai
 	const c = parseDetailCommand(command); const key = (c.after ?? c.before)!;
 	const view = c.kind === 'category' ? 'amp_categories' : c.kind === 'definition' ? 'amp_attribute_definitions' : 'amp_product_attributes';
 	const parse = c.kind === 'category' ? parseCategory : c.kind === 'definition' ? parseDefinition : parseAttribute;
-	const select = c.kind === 'category' ? 'id,name' : c.kind === 'definition' ? 'id,code,label,value_type,canonical_unit' : 'product_id,attribute_id,number_value,text_value,boolean_value';
+	const select = c.kind === 'category' ? 'id,name' : c.kind === 'definition' ? 'id,code,label,value_type,canonical_unit' : 'product_id,attribute_id,number_value,number_max,text_value,boolean_value';
 	const query: Record<string, string> = 'id' in key ? { id: `eq.${key.id}` } : { product_id: `eq.${key.product_id}`, attribute_id: `eq.${key.attribute_id}` };
 	const raw = await staffRequest(session, view, { ...query, select, limit: '2' }, undefined, 'POST', fetcher);
 	if (!Array.isArray(raw) || raw.length > 1) throw new Error('Invalid detail read');
@@ -387,7 +391,7 @@ export async function executeDetailCommand(session: StaffSession, command: Detai
 	if (c.before && c.after) {
 		if (c.kind === 'category') payload = { name: (c.after as Category).name };
 		else if (c.kind === 'definition') payload = { label: (c.after as AttributeDefinition).label };
-		else { const a = c.after as AttributeValue; payload = { number_value: a.number_value, text_value: a.text_value, boolean_value: a.boolean_value }; }
+		else { const a = c.after as AttributeValue; payload = { number_value: a.number_value, number_max: a.number_max, text_value: a.text_value, boolean_value: a.boolean_value }; }
 	}
 	const saved = await staffRequest(session, view, c.before ? { ...filters, select } : { select }, c.after ? payload : undefined, !c.after ? 'DELETE' : c.before ? 'PATCH' : 'POST', fetcher);
 	if (!Array.isArray(saved) || saved.length > 1) throw new Error('Invalid detail acknowledgement');
@@ -401,7 +405,7 @@ export function adminSearchTexts(products: AdminProduct[], references: ProductRe
 	const attributes = new Map<string, Record<string, CatalogAttribute>>();
 	for (const value of values) {
 		const d = definitions.get(value.attribute_id); if (!d) continue;
-		const attribute = (d.value_type === 'number' ? { label: d.label, unit: d.canonical_unit, value_type: 'number', value: value.number_value }
+		const attribute = (d.value_type === 'number' ? { label: d.label, unit: d.canonical_unit, value_type: 'number', value: value.number_value, max: value.number_max }
 			: d.value_type === 'text' ? { label: d.label, unit: null, value_type: 'text', value: value.text_value }
 			: { label: d.label, unit: null, value_type: 'boolean', value: value.boolean_value }) as CatalogAttribute;
 		if (attribute.value === null) continue;

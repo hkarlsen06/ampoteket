@@ -37,13 +37,15 @@ export const standardSpecifications = [
 	{ id: '30929fae-4785-49a7-8000-00000000000b', code: 'polarised', label: 'Polarised', value_type: 'boolean', canonical_unit: null },
 	{ id: '30929fae-4785-49a7-8000-00000000000c', code: 'interface', label: 'Interface', value_type: 'text', canonical_unit: null },
 	{ id: '30929fae-4785-49a7-8000-00000000000d', code: 'step_angle', label: 'Step angle', value_type: 'number', canonical_unit: 'deg' },
-	{ id: '30929fae-4785-49a7-8000-00000000000e', code: 'current', label: 'Current', value_type: 'number', canonical_unit: 'A' }
+	{ id: '30929fae-4785-49a7-8000-00000000000e', code: 'current', label: 'Current', value_type: 'number', canonical_unit: 'A' },
+	// A dual rating (250 VAC / 400 VDC) is two specifications: voltage holds the DC one.
+	{ id: '30929fae-4785-49a7-8000-00000000000f', code: 'voltage_ac', label: 'AC voltage', value_type: 'number', canonical_unit: 'V' }
 ] as const satisfies readonly AttributeDefinition[];
 
 type SpecificationCode = typeof standardSpecifications[number]['code'];
 export const categorySpecifications: Record<ProductFamily, readonly SpecificationCode[]> = {
 	RES: ['resistance', 'power', 'tolerance', 'package', 'model'],
-	CAP: ['capacitance', 'voltage', 'tolerance', 'polarised', 'package', 'model'],
+	CAP: ['capacitance', 'voltage', 'voltage_ac', 'tolerance', 'polarised', 'package', 'model'],
 	DIO: ['model', 'voltage', 'current', 'package'],
 	LED: ['colour', 'voltage', 'current', 'package', 'model'],
 	BJT: ['model', 'voltage', 'current', 'power', 'package'],

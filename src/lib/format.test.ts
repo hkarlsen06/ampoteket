@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { currency, formatDecimal, formatMeasurement, formatMeasurementText, formatMoney, measurementInput, nameMeasurement, parseMeasurement, tidyNameMeasurements, unitLabel } from './format';
+import { currency, formatDecimal, formatMeasurement, formatMeasurementRange, formatMeasurementText, formatSpecificationNumber, formatMoney, measurementInput, nameMeasurement, parseMeasurement, tidyNameMeasurements, unitLabel } from './format';
 
 test('uses SI prefixes at exact thresholds, preserving sign, zero and every digit', () => {
 	for (const [value, unit, expected] of [
@@ -85,4 +85,17 @@ test('tidies shorthand values in product names using the category unit', () => {
 	expect(nameMeasurement('Keramisk kondensator 4,7 pF 50 V', 'F', 'nb')).toBe('0.0000000000047');
 	expect(nameMeasurement('Motstand 4,7 kΩ', 'ohm', 'nb')).toBe('4700');
 	expect(nameMeasurement('Motstand', 'ohm', 'nb')).toBeNull();
+});
+
+test('a range shares one unit unless its lower bound would read below 0.1 in it', () => {
+	expect(formatMeasurementRange('250', '400', 'V', 'nb')).toBe('250–400 V');
+	expect(formatMeasurementRange('3', '5.5', 'V', 'nb')).toBe('3–5,5 V');
+	expect(formatMeasurementRange('0.5', '5', 'V', 'en')).toBe('0.5–5 V');
+	expect(formatMeasurementRange('0.0000001', '0.000001', 'F', 'nb')).toBe('0,1–1 µF');
+	expect(formatMeasurementRange('0.00000001', '0.000001', 'F', 'nb')).toBe('10 nF–1 µF');
+	expect(formatMeasurementRange('0', '0.02', 'A', 'en')).toBe('0–20 mA');
+	expect(formatMeasurementRange('-40', '85', null, 'nb')).toBe('-40–85');
+	expect(formatMeasurementRange('1000', '1500', 'ohm', 'nb')).toBe('1–1,5 kΩ');
+	expect(formatSpecificationNumber('250', null, 'V', 'nb')).toBe('250 V');
+	expect(formatSpecificationNumber('250', '400', 'V', 'nb')).toBe('250–400 V');
 });

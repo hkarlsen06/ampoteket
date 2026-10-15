@@ -440,7 +440,11 @@ CREATE TABLE app.attribute_definitions (
 
 ### `product_attributes`
 
-One typed value per product and attribute.
+One typed value per product and attribute. A number may be a range (250–400 V):
+`number_value` is then the lower bound and `number_max` the upper one, strictly
+greater; `number_max` is null for a single value. Filters match a range they overlap,
+search reads both bounds and facets offer both. A dual rating such as 250 VAC and
+400 VDC is two attributes (`voltage_ac`, `voltage`), not a range.
 
 ```sql
 CREATE TABLE app.product_attributes (
@@ -449,11 +453,14 @@ CREATE TABLE app.product_attributes (
   number_value numeric,
   text_value text,
   boolean_value boolean,
+  number_max numeric,
   PRIMARY KEY (product_id, attribute_id),
   CHECK (num_nonnulls(number_value, text_value, boolean_value) = 1),
   CHECK (number_value IS NULL OR
     (number_value > '-Infinity'::numeric AND number_value < 'Infinity'::numeric)),
-  CHECK (text_value IS NULL OR length(text_value) <= 2000)
+  CHECK (text_value IS NULL OR length(text_value) <= 2000),
+  CHECK (number_max IS NULL OR (number_value IS NOT NULL AND number_max > number_value
+    AND number_max < 'Infinity'::numeric))
 );
 ```
 
