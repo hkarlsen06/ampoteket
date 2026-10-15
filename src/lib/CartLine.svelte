@@ -131,7 +131,7 @@
 					<ProductIdentity {product} />
 				{:else}
 					<!-- Same scale as ProductIdentity, so rows do not change size when facts load. -->
-					<h2 class={['m-0 text-lg font-semibold leading-snug', nameWrap]}>{name}{#if variant}<span class="sr-only">{', '}</span><span class="block text-base font-medium">{variant}</span>{/if}</h2>
+					<h2 class={['m-0 text-lg font-semibold leading-snug', nameWrap]}>{name}{#if variant}<span class="sr-only">,</span> <span class="block text-base font-medium">{variant}</span>{/if}</h2>
 					{#if line.code}<p class={[codeText, 'mt-1 text-muted-foreground']}>{line.code}</p>{/if}
 				{/if}
 				<div class="mt-2 flex min-h-11 flex-wrap content-start items-baseline gap-x-4 gap-y-2 md:min-h-6">

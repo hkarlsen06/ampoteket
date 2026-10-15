@@ -26,7 +26,7 @@
 
 <!-- The chevron ends the last line, so a variant never leaves it on a line of its own. -->
 {#snippet chevron()}{#if linked && showChevron}<Icon icon={CaretRightIcon} class="ml-1 inline size-5 align-[calc(0.5cap-0.625rem)]" />{/if}{/snippet}
-{#snippet name()}{productName(product, i18n.locale)}{#if variant}<span class="sr-only">{', '}</span><span class={['block font-medium', prominent ? 'text-xl' : compact ? 'text-sm' : 'text-base']}>{variant}{@render chevron()}</span>{:else}{@render chevron()}{/if}{/snippet}
+{#snippet name()}{productName(product, i18n.locale)}{#if variant}<span class="sr-only">,</span> <span class={['block font-medium', prominent ? 'text-xl' : compact ? 'text-sm' : 'text-base']}>{variant}{@render chevron()}</span>{:else}{@render chevron()}{/if}{/snippet}
 
 <div class="min-w-0">
 	<svelte:element this={`h${headingLevel}`} class={['m-0', nameWrap, prominent ? pageHeading : [compact ? 'text-base' : 'text-lg', 'font-semibold leading-snug']]}>
