@@ -11,7 +11,8 @@ Identify the exact part, find its drawer and deliberately add a quantity to the 
 A code identifies one interchangeable type; several types can share a drawer, and the
 drawer's position is separate from that identity.
 
-At 360 px: identity line (catalog link, name, code, category, recorded balance); unit
+At 360 px: identity line (catalog link, name with the line that tells it from
+[look-alikes](page-catalog.md#3-url-and-matching-rules), code, category, recorded balance); unit
 price (at least two decimals, with extra stored precision preserved); quantity form
 (stepper, Add, reserved result region showing any cart quantity);
 description; shelf map, always shown, opened on the wall with the product's drawer filled in

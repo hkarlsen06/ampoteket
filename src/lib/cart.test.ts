@@ -4,7 +4,7 @@ import { createCartStore, parseCart, parseActiveAttempt, CartError, type ActiveA
 import type { SaleProduct } from './catalog';
 
 const id = '10000000-0000-4000-8000-000000000001';
-const product = { product_id: id, code: 'RES-A0001', name_nb: 'Testmotstand', name_en: 'Test resistor', unit_symbol: 'pcs', sale_step: '0.25' } as SaleProduct;
+const product = { product_id: id, code: 'RES-A0001', name_nb: 'Testmotstand', name_en: 'Test resistor', unit_symbol: 'pcs', sale_step: '0.25', attributes: {}, distinguishing: [] } as unknown as SaleProduct;
 const attempt: ActiveAttempt = {
 	requestId: '20000000-0000-4000-8000-000000000001', fingerprint: 'a'.repeat(64), version: 1,
 	createdAt: '2026-09-19T12:00:00.000Z', state: 'preparing'
@@ -31,6 +31,15 @@ describe('browser cart persistence boundary', () => {
 		for (const raw of ['{', '{}', 'null', JSON.stringify([{ product_id: id, quantity: 1 }]), JSON.stringify([{ product_id: id, quantity: '0' }]), JSON.stringify([{ product_id: id, quantity: '0.0000001' }]), JSON.stringify([{ product_id: id, quantity: '1000000000000' }]), JSON.stringify([{ product_id: id, quantity: '1' }, { product_id: id, quantity: '1' }])]) {
 			expect(() => parseCart(raw)).toThrow(CartError);
 		}
+	});
+
+	test('a look-alike product saves what tells it apart for the next visit', async () => {
+		const { saved, env } = environment();
+		const cart = createCartStore(env);
+		await cart.add({ ...product, attributes: { voltage: { label: 'Voltage', unit: 'V', value_type: 'number', value: '350' },
+			package: { label: 'Package', unit: null, value_type: 'text', value: 'Radial' } }, distinguishing: ['voltage', 'package'] }, '1');
+		expect(parseCart(saved.raw)[0]).toMatchObject({ variant_nb: '350 V · Kapsling: Radial', variant_en: '350 V · Package: Radial' });
+		expect(() => parseCart(JSON.stringify([{ product_id: id, quantity: '1', variant_nb: 1 }]))).toThrow(CartError);
 	});
 
 	test('two tabs merge concurrent additions from fresh persisted state', async () => {

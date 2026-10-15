@@ -1,6 +1,6 @@
 import { ApiError, isRecord, requestApiJson, type Fetcher } from './api';
-import type { Locale } from './i18n';
-import { formatMeasurementText } from './format';
+import { messagesFor, specificationLabel, type Locale } from './i18n';
+import { formatMeasurement, formatMeasurementText } from './format';
 import { catalogSearchLabels, CatalogQueryError, sortCatalogCategories, type CatalogFacets, type CatalogQuery } from './catalog-search';
 import { compareDecimals, normalizeDecimal } from './decimal';
 import { catalogSort } from './product-specifications';
@@ -12,6 +12,19 @@ export type CatalogConfig = { url: string; publishableKey: string };
 /** The displayed product name follows the UI language. */
 export function productName(product: { name_nb: string; name_en: string }, locale: Locale): string {
 	return formatMeasurementText(locale === 'nb' ? product.name_nb : product.name_en, locale);
+}
+/** What tells the product from look-alikes, such as "350 V" or "Package: TO-220";
+ * null when nothing does. A value with a unit names itself, as on shelf labels. */
+export function productVariant(product: Pick<CatalogProduct, 'attributes' | 'distinguishing'>, locale: Locale): string | null {
+	const parts = product.distinguishing.flatMap(code => {
+		const attribute = Object.hasOwn(product.attributes, code) ? product.attributes[code] : undefined;
+		if (!attribute || attribute.value === '') return [];
+		if (attribute.value_type === 'number' && attribute.unit) return [formatMeasurement(attribute.value, attribute.unit, locale)];
+		const shown = attribute.value_type === 'boolean' ? messagesFor(locale).shop[attribute.value ? 'yes' : 'no']
+			: attribute.value_type === 'number' ? formatMeasurement(attribute.value, null, locale) : attribute.value;
+		return [`${specificationLabel(code, attribute, locale)}: ${shown}`];
+	});
+	return parts.length ? parts.join(' · ') : null;
 }
 export type CatalogRequestOptions = { fetcher?: Fetcher; signal?: AbortSignal };
 export type CatalogPageOptions = CatalogRequestOptions & { afterCode?: string; limit?: number; query?: CatalogQuery; binId?: string };
@@ -38,6 +51,9 @@ export type CatalogProduct = {
 	last_counted_at: string | null;
 	datasheet_url: string | null;
 	attributes: Record<string, CatalogAttribute>;
+	/** Attribute codes that tell this product from look-alikes (same category and
+	 * primary value), in display order; empty when nothing looks like it. */
+	distinguishing: string[];
 } & (CatalogPlacement | CatalogOffShelf);
 /** Only these can go in the cart; staff alone change a borrow-only product's stock. */
 export type SaleProduct = CatalogProduct & { sale_unit_price_nok: string };
@@ -187,6 +203,13 @@ function attributes(value: unknown): Record<string, CatalogAttribute> {
 	return Object.fromEntries(entries);
 }
 
+function distinguishing(value: unknown): string[] {
+	if (!Array.isArray(value) || value.length > 8) invalid();
+	const codes = value.map(code => matching(code, attributeCode));
+	if (new Set(codes).size !== codes.length) invalid();
+	return codes;
+}
+
 function product(value: unknown): CatalogProduct {
 	const row = record(value);
 	const result: CatalogProduct = {
@@ -204,6 +227,7 @@ function product(value: unknown): CatalogProduct {
 		last_counted_at: timestamp(row.last_counted_at),
 		datasheet_url: datasheet(row.datasheet_url),
 		attributes: attributes(row.attributes),
+		distinguishing: distinguishing(row.distinguishing),
 		...placement(row)
 	};
 	return result;

@@ -59,8 +59,12 @@ export const categorySpecifications: Record<ProductFamily, readonly Specificatio
 };
 
 /** The public catalog lists categories in picker order, each sorted by its first
- * suggested specification (Miscellaneous by name). amp_catalog's p_sort. */
-export const catalogSort: [string, string | null][] = productTypes.map(type => [type.name, type.prefix === 'MIS' ? null : categorySpecifications[type.prefix][0]]);
+ * suggested specification (Miscellaneous by name). The rest, in order, are the
+ * candidates that tell look-alike products apart. amp_catalog's p_sort. */
+export const catalogSort: [string, string | null, string[]][] = productTypes.map(type => {
+	const [primary, ...rest] = categorySpecifications[type.prefix];
+	return type.prefix === 'MIS' ? [type.name, null, [...categorySpecifications.MIS]] : [type.name, primary, rest];
+});
 
 export function standardSpecificationDefinitions(existing: AttributeDefinition[]): AttributeDefinition[] {
 	const standards = standardSpecifications.map(standard => {

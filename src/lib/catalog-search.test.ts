@@ -17,7 +17,7 @@ function product(index: number, changes: Partial<CatalogProduct & CatalogPlaceme
 			capacitance: { label: 'Capacitance', value_type: 'number', unit: 'F', value: '0.000000000005' },
 			package: { label: 'Package', value_type: 'text', unit: null, value: '0603' },
 			polarized: { label: 'Polarized', value_type: 'boolean', unit: null, value: false }
-		}, ...changes
+		}, distinguishing: [], ...changes
 	};
 }
 const query = (search = '') => parseCatalogQuery(new URLSearchParams(search));

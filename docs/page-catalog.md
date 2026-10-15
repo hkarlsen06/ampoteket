@@ -32,7 +32,7 @@ location while keeping the rest of the search. «Filtre» opens a `Dialog` with 
 dismissing it discards the draft and returns focus. No match-count or refresh toolbar;
 retry appears only on failure.
 
-Each card is one link with name, code, category (omitted when the name starts with it),
+Each card is one link with name, the line that tells it from look-alikes, code, category (omitted when the name starts with it),
 price and unit (or the «Kun utlån» badge for a borrow-only product), coordinates and recorded quantity with a status icon. Long text wraps,
 never truncates. One, two (48rem) or three (64rem) columns, same DOM order; controls
 stay above the results. Updates never move scroll or focus. Category images come from
@@ -102,6 +102,16 @@ resistance, capacitors by capacitance, LEDs by colour; Miscellaneous has none), 
 products lacking that value after the rest; then by Norwegian name and code.
 `catalogSort` sends this list as `p_sort`; facet categories use the same order.
 Staff product search uses the same matcher (`catalogSearchText`).
+
+**Look-alikes.** Products in one category with the same primary value (two 680 pF
+capacitors), or without one the same name, show what tells them apart under the name:
+`distinguishing` from `amp_catalog` ([rule](api-contract.md#catalog-and-topology)),
+formatted by `productVariant` as a value that names itself ("350 V") or with its field
+name ("Kapsling: TO-220"), joined by « · ». It is part of the heading and link text, so
+look-alike links have different names. SQL computes it over the whole catalog, so it is
+present on the first render and never appears as more rows load. Products with no
+differing specification look identical until staff enter one. The same line follows
+`ProductIdentity` to the [product page](page-product.md), scanner and [cart](page-cart.md).
 
 **Compact codes.** Manual lookup trims and ignores case and tries the exact code first.
 Only a valid empty response permits retrying eight characters as three letters, hyphen,

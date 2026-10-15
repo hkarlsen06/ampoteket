@@ -192,6 +192,74 @@ DO $$ BEGIN
   END;
 END $$;
 
+-- Look-alike products (same category and primary value, or without one the same
+-- name) name the specification that tells them apart, whatever page or filter.
+DO $$
+DECLARE v_sort jsonb := '[["Capacitors","capacitance",["voltage","tolerance","package"]]]';
+  v_seen text;
+BEGIN
+  BEGIN
+    INSERT INTO app.categories(id,name) VALUES (md5('look-capacitors')::uuid,'Capacitors'),(md5('look-misc')::uuid,'Look-alike misc');
+    INSERT INTO app.attribute_definitions(id,code,label,value_type,canonical_unit) SELECT md5('look-'||code)::uuid,* FROM (VALUES
+      ('capacitance','Capacitance','number','F'),('voltage','Voltage','number','V'),('tolerance','Tolerance','number','%'),
+      ('package','Package','text',NULL),('colour','Colour','text',NULL)) AS fields(code,label,value_type,canonical_unit);
+    INSERT INTO app.products(id,code,name_nb,name_en,category_id,bin_id,unit_code,stock_step,sale_step,sale_unit_price_nok,is_active)
+    SELECT md5(code)::uuid,code,name,name,md5(category)::uuid,'75000000-0000-4000-8000-000000000001','pcs',1,1,1,active FROM (VALUES
+      ('LOOK-01','Kondensator','look-capacitors',true),('LOOK-02','Kondensator','look-capacitors',true),
+      ('LOOK-03','Kondensator','look-capacitors',true),('LOOK-04','Kondensator','look-capacitors',true),
+      ('LOOK-05','Kondensator','look-capacitors',true),('LOOK-06','Kondensator','look-capacitors',true),('LOOK-07','Kondensator','look-capacitors',true),
+      ('LOOK-08','Kondensator','look-capacitors',true),('LOOK-09','Kondensator','look-capacitors',true),('LOOK-10','Kondensator','look-capacitors',true),
+      ('LOOK-11','Kondensator','look-capacitors',true),('LOOK-12','Kondensator','look-capacitors',false),
+      ('LOOK-13','Kondensator uten verdi','look-capacitors',true),('LOOK-14','kondensator  UTEN verdi','look-capacitors',true),
+      ('LOOK-15','Stiftlist','look-misc',true),('LOOK-16','Stiftlist','look-misc',true),('LOOK-17','Stiftlist','look-misc',true))
+      AS rows(code,name,category,active);
+    INSERT INTO app.product_attributes(product_id,attribute_id,number_value,text_value)
+    SELECT md5(code)::uuid,md5('look-'||attribute)::uuid,number,text FROM (VALUES
+      -- 680 pF, stored at two scales, at 125 V and 350 V.
+      ('LOOK-01','capacitance',0.00000000068,NULL),('LOOK-01','voltage',125,NULL),
+      ('LOOK-02','capacitance',0.000000000680000,NULL),('LOOK-02','voltage',350,NULL),
+      -- 3.3 nF: voltage alone settles it, so tolerance is not shown.
+      ('LOOK-03','capacitance',0.0000000033,NULL),('LOOK-03','voltage',25,NULL),('LOOK-03','tolerance',5,NULL),
+      ('LOOK-04','capacitance',0.0000000033,NULL),('LOOK-04','voltage',63,NULL),
+      -- 250 pF: two have nothing more, so they stay alike; the third has a voltage.
+      ('LOOK-05','capacitance',0.00000000025,NULL),('LOOK-06','capacitance',0.00000000025,NULL),('LOOK-06','package',NULL,''),
+      ('LOOK-07','capacitance',0.00000000025,NULL),('LOOK-07','voltage',125,NULL),
+      -- 10 nF: voltage splits off one, package the remaining two.
+      ('LOOK-08','capacitance',0.00000001,NULL),('LOOK-08','voltage',50,NULL),('LOOK-08','package',NULL,'X7R'),
+      ('LOOK-09','capacitance',0.00000001,NULL),('LOOK-09','voltage',50,NULL),('LOOK-09','package',NULL,'C0G'),
+      ('LOOK-10','capacitance',0.00000001,NULL),('LOOK-10','voltage',100,NULL),
+      -- 1 µF has a look-alike only among inactive products.
+      ('LOOK-11','capacitance',0.000001,NULL),('LOOK-12','capacitance',0.000001,NULL),('LOOK-12','voltage',16,NULL),
+      -- Without the primary value, the name groups them.
+      ('LOOK-13','voltage',10,NULL),('LOOK-14','voltage',16,NULL),
+      -- An unlisted category: unlisted specifications by code.
+      ('LOOK-15','package',NULL,'Hunn'),('LOOK-15','colour',NULL,'Svart'),
+      ('LOOK-16','package',NULL,'Hann'),('LOOK-16','colour',NULL,'Svart'),
+      ('LOOK-17','package',NULL,'Hann'),('LOOK-17','colour',NULL,'Rød')) AS v(code,attribute,number,text);
+    SELECT string_agg(c.code||'='||array_to_string(c.distinguishing,'+'),' ' ORDER BY c.code) INTO v_seen
+      FROM public.amp_catalog(p_q=>'LOOK',p_sort=>v_sort) c;
+    PERFORM pg_temp.assert_true(v_seen='LOOK-01=voltage LOOK-02=voltage LOOK-03=voltage LOOK-04=voltage '
+      'LOOK-05=voltage LOOK-06=voltage LOOK-07=voltage LOOK-08=voltage+package LOOK-09=voltage+package LOOK-10=voltage+package '
+      'LOOK-11= LOOK-13=voltage LOOK-14=voltage LOOK-15=colour+package LOOK-16=colour+package LOOK-17=colour+package',
+      'look-alike products name what tells them apart: '||v_seen);
+    PERFORM pg_temp.assert_true((SELECT distinguishing='{voltage}' FROM public.amp_catalog('LOOK-02',p_sort=>v_sort))
+      AND (SELECT distinguishing='{voltage}' FROM public.amp_catalog(p_categories=>ARRAY['Capacitors'],
+        p_conditions=>'{"voltage":{"eq":"350"}}',p_sort=>v_sort))
+      AND (SELECT array_agg(distinguishing ORDER BY code)='{{voltage,package},{voltage,package}}'
+        FROM public.amp_catalog(p_q=>'LOOK',p_limit=>2,p_after_code=>'LOOK-04',p_sort=>v_sort)),
+      'a lookup, a filter or a later page names the same specification');
+    PERFORM pg_temp.assert_true((SELECT distinguishing='{capacitance,package}' FROM public.amp_catalog('LOOK-02')),
+      'without a specification order, names group products and any specification may tell them apart');
+    PERFORM pg_temp.expect_error($q$SELECT public.amp_catalog(p_sort=>'[["Capacitors","capacitance","voltage"]]')$q$,'INVALID_CATALOG_QUERY');
+    PERFORM pg_temp.expect_error($q$SELECT public.amp_catalog(p_sort=>'[["Capacitors","capacitance",["Voltage"]]]')$q$,'INVALID_CATALOG_QUERY');
+    PERFORM pg_temp.expect_error($q$SELECT public.amp_catalog(p_sort=>'[["Capacitors","capacitance",[1]]]')$q$,'INVALID_CATALOG_QUERY');
+    PERFORM pg_temp.expect_error($q$SELECT public.amp_catalog(p_sort=>'[["Capacitors","capacitance",[],null]]')$q$,'INVALID_CATALOG_QUERY');
+    RAISE EXCEPTION 'ROLLBACK_LOOK_ALIKES';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'ROLLBACK_LOOK_ALIKES' THEN RAISE; END IF;
+  END;
+END $$;
+
 -- These blocks exercise actual application roles, not just auth.uid().
 SET LOCAL ROLE anon;
 DO $$ BEGIN

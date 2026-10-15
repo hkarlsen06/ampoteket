@@ -31,8 +31,9 @@ and a low or negative balance never blocks recording items actually taken.
 The server renders only the shell. The browser reads `ampoteket:cart` and the attempt
 metadata before enabling changes.
 
-- Saved name/code hints are display-only; resolve them by direct lookup and verify the
-  product ID. Refresh product facts on entering the cart, tab return and reconnect,
+- Saved name, code and look-alike (`variant_nb`/`variant_en`, the line under the name)
+  hints are display-only and keep a row's height while facts load; resolve them by
+  direct lookup and verify the product ID. Refresh product facts on entering the cart, tab return and reconnect,
   preserving quantity drafts, contact input and focus. Keep loaded lines mounted
   while checking; unavailable facts block proceeding and offer contextual retry.
 - Validate saved data: string quantities, one line per product, at most 200 lines.

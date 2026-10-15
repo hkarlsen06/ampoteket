@@ -5,6 +5,7 @@ import {
 	forSale,
 	lookupCatalogProduct,
 	parseCatalogProducts,
+	productVariant,
 	readCatalogPage,
 	readCatalogFacets,
 	readCompleteCatalog,
@@ -49,7 +50,8 @@ function fixture(code = 'RES-A3F09', id = 1): Record<string, unknown> {
 			large_value: { label: 'Exact value', unit: null, value_type: 'number', value: '9007199254740993.000000000001' },
 			package: { label: 'Package', unit: null, value_type: 'text', value: '0603' },
 			polarized: { label: 'Polarized', unit: null, value_type: 'boolean', value: false }
-		}
+		},
+		distinguishing: ['package', 'tolerance']
 	};
 }
 
@@ -61,6 +63,30 @@ function responding(body: unknown, status = 200) {
 	return async () => new Response(JSON.stringify(body), { status });
 }
 
+describe('look-alike products', () => {
+	const attributes = {
+		voltage: { label: 'Voltage', unit: 'V', value_type: 'number', value: '350' },
+		tolerance: { label: 'Tolerance', unit: '%', value_type: 'number', value: '5' },
+		package: { label: 'Package', unit: null, value_type: 'text', value: 'TO-220' },
+		blank: { label: 'Blank', unit: null, value_type: 'text', value: '' },
+		polarised: { label: 'Polarised', unit: null, value_type: 'boolean', value: true },
+		pins: { label: 'Pins', unit: null, value_type: 'number', value: '8' },
+		pitch: { label: 'Pitch', unit: 'mm', value_type: 'number', value: '2.54' }
+	} as const;
+	test('a value with a unit names itself; others keep their translated field name', () => {
+		expect(productVariant({ attributes, distinguishing: ['voltage'] }, 'nb')).toBe('350 V');
+		expect(productVariant({ attributes, distinguishing: ['voltage', 'tolerance'] }, 'en')).toBe('350 V · 5 %');
+		expect(productVariant({ attributes, distinguishing: ['package'] }, 'nb')).toBe('Kapsling: TO-220');
+		expect(productVariant({ attributes, distinguishing: ['polarised'] }, 'en')).toBe('Polarised: Yes');
+		expect(productVariant({ attributes, distinguishing: ['pins', 'pitch'] }, 'nb')).toBe('Antall pinner: 8 · 2,54 mm');
+	});
+	test('nothing is shown for values this product lacks or a product without look-alikes', () => {
+		expect(productVariant({ attributes, distinguishing: [] }, 'nb')).toBeNull();
+		expect(productVariant({ attributes, distinguishing: ['blank', 'colour'] }, 'nb')).toBeNull();
+		expect(productVariant({ attributes, distinguishing: ['colour', 'voltage'] }, 'nb')).toBe('350 V');
+	});
+});
+
 describe('catalog response boundary', () => {
 	test('preserves all domain decimals and converts only bounded structural coordinates', () => {
 		const [product] = decode([fixture()]);
@@ -71,6 +97,8 @@ describe('catalog response boundary', () => {
 		expect(product.attributes.package.value).toBe('0603');
 		expect(product.attributes.polarized.value).toBe(false);
 		expect(Object.hasOwn(product.attributes, 'tolerance')).toBe(false);
+		// A distinguishing code may name a value this product lacks.
+		expect(product.distinguishing).toEqual(['package', 'tolerance']);
 		expect(product.inner_row).toBe(4);
 		expect(product.description).toBeNull();
 		expect(product.bin_label).toBeNull();
@@ -112,6 +140,8 @@ describe('catalog response boundary', () => {
 	test('rejects missing fields, incorrect scalar types, unsafe URLs and impossible placement', () => {
 		for (const changes of [
 			{ quantity: undefined }, { attributes: null }, { description: true },
+			{ distinguishing: undefined }, { distinguishing: null }, { distinguishing: ['Voltage'] },
+			{ distinguishing: ['voltage', 'voltage'] }, { distinguishing: [1] },
 			{ name_nb: undefined }, { name_en: '' },
 			{ sale_step: '0' }, { sale_step: '0.0000001' }, { sale_unit_price_nok: '-0.001' },
 			{ sale_unit_price_nok: '999999999999.000001' }, { quantity: '0.0000001' },
@@ -266,8 +296,9 @@ describe('catalog HTTP reads and completeness', () => {
 			{ p_after_code: 'RES-00001', p_limit: 200, p_sort: catalogSort },
 			{ p_after_code: 'RES-00002', p_limit: 200, p_sort: catalogSort }
 		]);
-		expect(catalogSort.slice(0, 2)).toEqual([['Resistors', 'resistance'], ['Capacitors', 'capacitance']]);
-		expect(catalogSort.at(-1)).toEqual(['Miscellaneous', null]);
+		expect(catalogSort.slice(0, 2)).toEqual([['Resistors', 'resistance', ['power', 'tolerance', 'package', 'model']],
+			['Capacitors', 'capacitance', ['voltage', 'tolerance', 'polarised', 'package', 'model']]]);
+		expect(catalogSort.at(-1)?.slice(0, 2)).toEqual(['Miscellaneous', null]);
 	});
 
 	test('rejects repeated cursors, cycles and duplicate identities rather than completing', async () => {

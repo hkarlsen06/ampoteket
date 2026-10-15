@@ -12,7 +12,7 @@ let ids = 0;
 function product(code: string, name: string, category: string, price: string, quantity: string, place: ReturnType<typeof placed>): SaleProduct {
 	return { product_id: `00000000-0000-4000-8000-${String(++ids).padStart(12, '0')}`, code, name_nb: name, name_en: name,
 		description: null, category_name: category, unit_code: 'pcs', unit_symbol: 'stk', sale_step: '1', sale_unit_price_nok: price,
-		quantity, last_counted_at: '2026-09-30T16:00:00Z', datasheet_url: null, attributes: {}, ...place };
+		quantity, last_counted_at: '2026-09-30T16:00:00Z', datasheet_url: null, attributes: {}, distinguishing: [], ...place };
 }
 
 export const resistor = product('RES-00005', '1 kΩ motstand', 'Motstander', '0.50', '84', placed('A1', 1, 1, 2, 1));
