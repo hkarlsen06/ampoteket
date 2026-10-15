@@ -14,6 +14,7 @@
 	import QrCodeIcon from 'phosphor-svelte/lib/QrCodeIcon';
 	import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon';
 	import UsersIcon from 'phosphor-svelte/lib/UsersIcon';
+	import NewspaperIcon from 'phosphor-svelte/lib/NewspaperIcon';
 	import UserCircleIcon from 'phosphor-svelte/lib/UserCircleIcon';
 	import UserGearIcon from 'phosphor-svelte/lib/UserGearIcon';
 	import SignOutIcon from 'phosphor-svelte/lib/SignOutIcon';
@@ -57,6 +58,9 @@
 		{ key: 'reports', label: m.groups.reports, entries: [
 			{ path: '/admin/statistics', label: i18n.m.adminStatistics.heading, icon: ChartLineUpIcon },
 			{ path: '/admin/audit', label: i18n.m.adminAudit.heading, icon: ClockCounterClockwiseIcon }
+		] },
+		{ key: 'website', label: m.groups.website, entries: [
+			{ path: '/admin/news', label: i18n.m.adminNews.heading, icon: NewspaperIcon }
 		] },
 		{ key: 'access', label: m.groups.access, entries: [
 			{ path: '/admin/purchases', label: m.recoveryHeading, icon: MagnifyingGlassIcon },
@@ -145,7 +149,7 @@
 						{/if}
 						{#if detailPage}
 							<li class="shrink-0" aria-hidden="true"><Icon icon={CaretRightIcon} class="size-4" /></li>
-							<li class="min-w-0 truncate" aria-current="page">{productPage ? productCode ?? (page.params.id === 'new' ? i18n.m.adminProducts.newProduct : i18n.m.adminProducts.editProduct) : currentNav === '/admin/orders' ? i18n.m.adminOrders.detailHeading : i18n.m.adminCounts.detailHeading}</li>
+							<li class="min-w-0 truncate" aria-current="page">{productPage ? productCode ?? (page.params.id === 'new' ? i18n.m.adminProducts.newProduct : i18n.m.adminProducts.editProduct) : currentNav === '/admin/orders' ? i18n.m.adminOrders.detailHeading : currentNav === '/admin/news' ? (page.params.id === 'new' ? i18n.m.adminNews.newEntry : i18n.m.adminNews.editEntry) : i18n.m.adminCounts.detailHeading}</li>
 						{/if}
 					</ol>
 				</nav>

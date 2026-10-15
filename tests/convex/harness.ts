@@ -35,6 +35,7 @@ const tables = ['units', 'staff_members', 'help_contacts', 'categories', 'cabine
 	'product_attributes', 'command_requests', 'purchase_orders', 'purchase_order_lines', 'purchase_order_cancellations', 'checkouts',
 	'checkout_lines', 'checkout_contacts', 'count_batches', 'inventory_events', 'inventory_movements', 'movement_corrections',
 	'receipt_allocations', 'sales', 'stock_counts', 'audit_log', 'stock_levels', 'counters', 'password_tokens', 'rate_limits',
+	'news_articles', 'events', 'news_images', 'news_image_data', 'news_image_uses',
 	'users', 'authAccounts', 'authSessions', 'authRefreshTokens', 'authVerificationCodes', 'authVerifiers', 'authRateLimits'];
 
 /** Empty every table, then add units and the workshop wall. */

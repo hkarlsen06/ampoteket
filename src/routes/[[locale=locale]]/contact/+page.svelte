@@ -38,7 +38,7 @@
 					{#if index > 0}<Item.Separator />{/if}
 					<Item.Root variant="row" role="listitem" class="items-start">
 						<Item.Content class="min-w-0 gap-1">
-							<h3 class={itemTitle}>{contact.display_name}</h3>
+							<h3 id={`contact-${contact.id}`} class={itemTitle}>{contact.display_name}</h3>
 							{#if contact.responsibility}<p class="text-muted-foreground">{contact.responsibility}</p>{/if}
 							<div class="flex flex-wrap items-center gap-x-6">
 								{#if contact.discord}{@const username = contact.discord}<Button variant="link" class="justify-start text-left wrap-anywhere no-underline" onclick={() => copyDiscord(contact.id, username)}><DiscordLogo /><span class="sr-only">{`${m.copyDiscord}: `}</span>{username}<Icon icon={copied === contact.id ? CheckIcon : CopyIcon} /></Button>{/if}

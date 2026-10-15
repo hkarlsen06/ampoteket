@@ -19,7 +19,8 @@ case "${1:-}" in
   --drafts) runner=scripts/draft-proof.ts ;;
   --admin-help) runner=scripts/admin-help-proof.ts ;;
   --sidebar) runner=scripts/admin-sidebar-proof.ts ;;
-  *) echo 'Usage: ./scripts/test-web.sh [--shop|--checkout|--scanner|--admin|--admins|--statistics|--labels|--shelf|--orders|--drafts|--admin-help|--sidebar]' >&2; exit 1 ;;
+  --news) runner=scripts/news-proof.ts ;;
+  *) echo 'Usage: ./scripts/test-web.sh [--shop|--checkout|--scanner|--admin|--admins|--statistics|--labels|--shelf|--orders|--drafts|--admin-help|--sidebar|--news]' >&2; exit 1 ;;
 esac
 if [[ $# -gt 1 ]]; then echo 'Run one proof at a time.' >&2; exit 1; fi
 for executable in bun openssl certutil python3 flock curl jq; do

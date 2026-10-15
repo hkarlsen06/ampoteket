@@ -7,6 +7,13 @@ export type HelpContact = {
 };
 /** Whether the row has a way to reach the person, which publishing requires. */
 export const reachable = (contact: Pick<HelpContact, 'email' | 'phone' | 'contact_url' | 'discord'>) => Boolean(contact.email || contact.phone || contact.contact_url || contact.discord);
+/** The database's rule for published links: HTTPS on a DNS name, no credentials, whitespace, backslashes or control characters. */
+export function isSafeHttpsUrl(value: string): boolean {
+	let url: URL;
+	try { url = new URL(value); } catch { return false; }
+	// eslint-disable-next-line no-control-regex -- control characters are exactly what this rejects.
+	return url.protocol === 'https:' && !url.username && !url.password && !/[\s\\\x00-\x1f\x7f]/.test(value) && /^[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,63}$/.test(url.hostname);
+}
 export type EditableHelpContact = HelpContact & { is_published: boolean; edit_revision: string };
 export function parseHelpContact(value: unknown): HelpContact {
 	const row = object(value);
@@ -18,11 +25,7 @@ export function parseHelpContact(value: unknown): HelpContact {
 	if (discord && (!/^[a-z0-9_.]{2,32}$/.test(discord) || discord.includes('..'))) throw new Error('Invalid contact Discord');
 	if (email && !/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,63}$/.test(email)) throw new Error('Invalid contact email');
 	if (phone && (!/^\+?[0-9 ()-]+$/.test(phone) || phone.replace(/\D/g, '').length < 3)) throw new Error('Invalid contact phone');
-	if (contact_url) {
-		const url = new URL(contact_url);
-		// eslint-disable-next-line no-control-regex -- control characters are exactly what this rejects.
-		if (url.protocol !== 'https:' || url.username || url.password || /[\s\\\x00-\x1f\x7f]/.test(contact_url) || !/^[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,63}$/.test(url.hostname)) throw new Error('Invalid contact URL');
-	}
+	if (contact_url && !isSafeHttpsUrl(contact_url)) throw new Error('Invalid contact URL');
 	const display_order = row.display_order;
 	if (typeof display_order !== 'number' || !Number.isSafeInteger(display_order) || display_order < 0 || display_order > 2147483647) throw new Error('Invalid contact order');
 	return { id: identifier(row.id), display_name: text(row.display_name, 120), responsibility, email, phone, contact_url, discord, display_order };

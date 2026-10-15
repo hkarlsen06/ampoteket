@@ -12,7 +12,7 @@ The data contract: model, invariants, precision, concurrency, access and functio
 - Purchase orders record orders already placed elsewhere; they reserve nothing and add no stock. Receipts can be partial or unplanned (donations are unplanned receipts). Outstanding quantity can be cancelled with a reason. A surplus delivery is a normal adjustment with a note.
 - Negative recorded stock is allowed.
 - Counts are open, not blind. Each count posts immediately; closing a batch posts nothing.
-- Nothing that history refers to is deleted. No function deletes staff, help contacts, units, categories, cabinets, bins, products, attribute definitions, purchase orders and lines, count batches or any ledger or audit row, and ledger rows are never patched. The only deletes in application code are specification values (`product_attributes`, audited) and checkout contacts (erasure and retention, audited as `CONTACT_CLEARED`). Retire a product with `is_active=false`, unpublish a contact, archive storage. A hard delete needs the owner's explicit request and a reviewed one-off procedure, not a workaround.
+- Nothing that history refers to is deleted. No function deletes staff, help contacts, news articles, events, news images, units, categories, cabinets, bins, products, attribute definitions, purchase orders and lines, count batches or any ledger or audit row, and ledger rows are never patched. The only deletes in application code are specification values (`product_attributes`, audited) checkout contacts (erasure and retention, audited as `CONTACT_CLEARED`) and the derived `news_image_uses` index. Retire a product with `is_active=false`, unpublish a contact, article or event, archive storage. A hard delete needs the owner's explicit request and a reviewed one-off procedure, not a workaround.
 
 ## 2. Sources of truth
 
@@ -24,7 +24,7 @@ The data contract: model, invariants, precision, concurrency, access and functio
 
 Latest purchase price/URL, outstanding quantity, order status and checkout totals are never stored; queries derive them. Stock is the sum of the ledger. `stock_levels` holds a rebuildable projection of it (quantity, revision, last count), written in the same transaction as every movement ([§11](#11-read-models)); it is a cache of the ledger, not a second source of truth.
 
-Arbitrary JSON is stored only in idempotency results and audit images.
+Arbitrary JSON is stored only in idempotency results and audit images; the image and link lists of news articles and events are typed in the schema.
 
 ## 3. Relations at a glance
 
@@ -33,6 +33,7 @@ Arbitrary JSON is stored only in idempotency results and audit images.
 | Catalogue | `units`, `categories`, `cabinets`, `bins`, `products` |
 | Component specifications | `attribute_definitions`, `product_attributes` |
 | Public support | `help_contacts` |
+| Newsroom and calendar | `news_articles`, `events`, `news_images`, `news_image_data`, `news_image_uses` |
 | Staff | `staff_members` |
 | Purchasing | `purchase_orders`, `purchase_order_lines`, `purchase_order_cancellations` |
 | Checkout | `checkouts`, `checkout_lines`, `checkout_contacts`, `sales` |
@@ -55,6 +56,9 @@ inventory_event 1 ---- many movements (a matching count has zero movements)
 movement 1 ---- many later correction links
 product 1 ---- 0..1 stock_levels row
 staff_member 0..1 ---- 1 users row (by auth_user_id)
+news_article 1 ---- 0..1 event (by events.article_id)
+news_article/event ---- many tagged help_contacts and news_images (ordered lists in the row)
+news_image 1 ---- 1 news_image_data row
 ```
 
 Application rows refer to each other by the UUID in their `id` field, never by Convex `_id`; only `password_tokens` and the Convex Auth tables use `_id` references. There are no foreign-key constraints: the functions look up each referenced row before writing.
@@ -161,7 +165,7 @@ The guest protocol and retries are owned by [checkout-recovery.md](checkout-reco
 
 | Caller | Permitted access |
 | --- | --- |
-| Anyone | `catalog.page`, `catalog.product`, `catalog.facets`, `catalog.shelfMap`, `catalog.helpDirectory`; `members.me` (null when signed out); sign-in (`session.signIn`, built on Convex Auth's own `auth.*` functions) and the password-link functions (`passwords.requestReset`, `passwords.checkLink`, `passwords.complete`). |
+| Anyone | `catalog.page`, `catalog.product`, `catalog.facets`, `catalog.shelfMap`, `catalog.helpDirectory`; the published newsroom reads `news.feed`, `news.article`, `news.calendar`, `news.event` and `news.image`; `members.me` (null when signed out); sign-in (`session.signIn`, built on Convex Auth's own `auth.*` functions) and the password-link functions (`passwords.requestReset`, `passwords.checkLink`, `passwords.complete`). |
 | Signed-in non-staff | The same; `members.me` returns `membership: null` and every staff function raises `STAFF_REQUIRED`. |
 | Active staff | Every function that starts with `requireStaff`: staff reads, audited master-data edits, operational commands and membership changes. |
 | Worker gateway | `checkout.prepare`, `checkout.get`, `checkout.confirm`, with `serverKey`. |
@@ -177,6 +181,14 @@ The guest protocol and retries are owned by [checkout-recovery.md](checkout-reco
 ### Public volunteer directory
 
 `help_contacts` is deliberately public and grants no access. Never put buyer contact data in it. Publishing requires at least one valid Discord username, email, phone or HTTPS URL (DNS hostname; no credentials, whitespace, control characters or backslashes) (`HELP_CONTACT_NOT_REACHABLE`). Render fields as text and validate links in the frontend too. `catalog.helpDirectory` returns only published rows. Staff edit through `help.save` with an `edit_revision` guard and arrange the list with `help.reorder`; `display_order` is never typed ([protocol](api-contract.md#public-volunteer-directory)). Entries are unpublished, never deleted, and every change is audited.
+
+### Newsroom and event calendar
+
+Articles (`news_articles`) and events (`events`) are separate rows; an event may belong to one article through `events.article_id`, so the event owns the link, and `news.save` refuses a second event for the same article (`EVENT_ARTICLE_TAKEN`). Staff write both only through `news.save`, so an article and its event are created, linked, unlinked and published in one atomic, retry-safe command ([protocol](api-contract.md#news-and-events)). Rows are unpublished, never deleted, and every version is audited through `convex/lib/audit.ts`.
+
+Images are stored as bytes in `news_image_data`, beside their metadata in `news_images`, so snapshot exports include them and lists read only the metadata. The browser re-encodes an upload to WebP or JPEG (at most 1600 px and 1 MB, which drops EXIF and GPS) before `news.addImage` stores it; the declared type must match the file signature. Image rows never change. `news_image_uses` records which article or event lists each image; `news.save` rewrites it with the row, and `news.image` returns an image only while a published article or event uses it, so an orphaned or unpublished upload is never public.
+
+Tagged people are `help_contacts` IDs. Public reads return only published contacts, with the same fields as `catalog.helpDirectory`, so tagging someone not on `/contact` shows nothing publicly. Slugs are chosen once from the title and never change.
 
 ### Staff provisioning
 
@@ -220,6 +232,8 @@ Functions are called as `module.function` (`api.stock.adjust` in clients, `stock
 | `products.rename` | Staff | `kind` (`category`/`definition`), `id`, `before`, `after` | Rename a category or relabel a specification. |
 | `products.createDefinition` | Staff | `id`, `code`, `label`, `value_type`, `canonical_unit` | A new specification type. |
 | `help.save`, `help.reorder` | Staff | `id`, `revision`, `fields`; `ids`, `expectedIds` | Edit or rearrange volunteer contacts. |
+| `news.addImage` | Staff | `id`, `contentType`, `data` (bytes), `width`, `height` | Store a re-encoded image; repeat-safe with the same ID and bytes. |
+| `news.save` | Staff | `requestId`, `article`, `event` | Save an article, its event or both ([protocol](api-contract.md#news-and-events)). |
 | `members.invite`, `members.deactivate` | Staff | See [Staff provisioning](#staff-provisioning) | Add/reactivate or deactivate another member. |
 | `shelf.*` | Staff | See below | Layouts, moves, swaps and retirement. |
 
@@ -257,6 +271,9 @@ Master-data writes go through `convex/lib/audit.ts` (`insertAudited`, `patchAudi
 | `catalog.facets` | Public | Categories with active products and the specification values within the selected ones. |
 | `catalog.shelfMap` | Public | Live cabinets and bins with `has_products` (any assigned product, active or not). |
 | `catalog.helpDirectory` | Public | Published support contacts in display order. |
+| `news.feed`, `news.article` | Public | Published articles, newest first, and one article with its images, links, tagged contacts and published event. |
+| `news.calendar`, `news.event` | Public | Published events overlapping a range of at most 400 days, and one event with its published article. |
+| `news.image` | Public | One image's bytes, only while a published row uses it; served by the Worker at `/api/news/images/<id>`. |
 | `members.me` | Anyone | The signed-in user and their active membership, or null. |
 | `stock.inventory` | Staff | Quantity, revision and last count per product (from `stock_levels`). |
 | `stock.detail` | Staff | One product's balance, movements (newest first) with correction and order links, and counts. |
@@ -266,6 +283,7 @@ Master-data writes go through `convex/lib/audit.ts` (`insertAudited`, `patchAudi
 | `products.list`, `products.get`, `products.createdSince`, `products.references`, `products.attributes` | Staff | Product master data, categories, definitions, units and specification values. |
 | `shelf.admin` | Staff | Every cabinet and drawer, archived too, and every product's drawer assignment. |
 | `help.list` | Staff | Every contact, drafts included, with `edit_revision`. |
+| `news.list`, `news.adminImage` | Staff | Every article and event, drafts included, with `edit_revision`; any stored image for editor previews. |
 | `members.list` | Staff | The membership directory ([Staff provisioning](#staff-provisioning)). |
 | `checkout.staffLookup`, `checkout.staffContact` | Staff | A checkout by ID or prepare request ID; its contact, read only when staff choose to show it. |
 | `statistics.read` | Staff | Sales summary and overview ([response](api-contract.md#staff-statistics)). |
@@ -316,6 +334,31 @@ Public volunteer directory (§9). Unpublish to remove an entry. Checks in `conve
 - `discord`: current usernames, 2–32 of `a-z`, `0-9`, `_` and `.`, never two periods in a row.
 - A published entry needs at least one of email, phone, URL or Discord (`HELP_CONTACT_NOT_REACHABLE`).
 - `display_order` is assigned (last + 1 on create) and rewritten only by `help.reorder`; `edit_revision` starts at 1 and increases on each edit.
+
+### `news_images`, `news_image_data`, `news_image_uses`
+
+`news_images`: `id uuid, content_type text, width int, height int, created_by uuid, created_at timestamp`. `news_image_data`: `image_id uuid, data bytes`. `news_image_uses`: `image_id uuid, owner_id uuid`.
+
+Newsroom images (§9). Checks in `convex/news.ts` (`INVALID_NEWS_IMAGE`): `content_type` is `image/webp`, `image/jpeg` or `image/png` and matches the file signature; 1 byte to 1,000,000 bytes (a Convex document holds at most 1 MiB); width and height 1–4096. Image rows never change. `news_image_uses` is derived from the `images` lists, rewritten by every save, and not audited.
+
+### `news_articles`
+
+`id uuid, slug text, title text, summary text?, body text, images [{id, alt}], links [{label, url}], people uuid[], is_published boolean, published_at timestamp?, edit_revision int, created_at timestamp, updated_at timestamp`
+
+Checks in `convex/news.ts` (`INVALID_NEWS`), shared with `events` where the field exists:
+
+- `slug`: `^[a-z0-9]+(-[a-z0-9]+)*$`, at most 80 characters, unique per table (`NEWS_SLUG_TAKEN`), never changed after creation.
+- `title`: 1–160 characters trimmed; `summary`: 1–300 trimmed; no control characters. `body`: at most 20000 characters of plain text (a blank line starts a new paragraph), line breaks and tabs only.
+- `images`: at most 8 distinct existing images (`NEWS_IMAGE_NOT_FOUND`), each with alt text of 1–300 characters; the first is the cover.
+- `links`: at most 10, labels 1–80 characters, URLs with the `help_contacts.contact_url` rule.
+- `people`: at most 20 distinct existing `help_contacts` (`NEWS_PERSON_NOT_FOUND`), in tag order.
+- `published_at` is set on first publication and kept, so republishing keeps the original date. `edit_revision` starts at 1 and increases on each save.
+
+### `events`
+
+`id uuid, slug text, title text, description text, location text?, starts_at timestamp, ends_at timestamp?, article_id uuid?, images, links, people, is_published boolean, edit_revision int, created_at timestamp, updated_at timestamp`
+
+Calendar events, optionally belonging to one article. `description`: at most 5000 characters, line breaks and tabs only; `location`: 1–160 trimmed. `starts_at` and `ends_at` arrive as ISO instants with an explicit offset and are stored in UTC; `ends_at` is optional, after `starts_at` and at most 62 days later, so a month view stays readable.
 
 ### `categories`
 

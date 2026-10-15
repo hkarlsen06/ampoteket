@@ -31,6 +31,7 @@ import type * as lib_staff from "../lib/staff.js";
 import type * as lib_time from "../lib/time.js";
 import type * as members from "../members.js";
 import type * as migration from "../migration.js";
+import type * as news from "../news.js";
 import type * as orders from "../orders.js";
 import type * as passwords from "../passwords.js";
 import type * as products from "../products.js";
@@ -71,6 +72,7 @@ declare const fullApi: ApiFromModules<{
   "lib/time": typeof lib_time;
   members: typeof members;
   migration: typeof migration;
+  news: typeof news;
   orders: typeof orders;
   passwords: typeof passwords;
   products: typeof products;

@@ -202,6 +202,52 @@ Staff edit with their own session:
   and let the user move again. A retry whose desired order is already current
   succeeds without another write.
 
+## News and events
+
+Public reads run on the Worker during SSR with an unauthenticated `ConvexHttpClient`.
+Every page reads only published rows; a failed read renders as unavailable, never as
+"no news".
+
+- `news.feed({ before, limit })` returns published articles newest first by
+  `(published_at, id)` with `id`, `slug`, `title`, `summary`, `published_at`,
+  `cover` (the first image) and `event` (the linked published event, else null).
+  `limit` is 1–100 (`INVALID_NEWS_PAGE_SIZE`); `before` is null or the
+  `{published_at, id}` of the last article shown (`INVALID_NEWS_CURSOR`). The
+  newsroom reads one row more than it shows to know whether an older page exists.
+- `news.calendar({ from, to, after, limit })` returns published events overlapping
+  `[from, to)` by `(starts_at, id)`; the range is at most 400 days
+  (`INVALID_EVENT_RANGE`) and `limit` 1–500. Page with `after` (`{starts_at, id}`
+  of the last row) until a page is empty, and reject cursors that do not advance.
+- `news.article({ slug })` and `news.event({ slug })` return one published row, or
+  null. Images carry `id`, `alt`, `width` and `height`; people carry the
+  `catalog.helpDirectory` fields of published contacts only, in tag order.
+- `news.image({ id })` returns `content_type` and the bytes only while a published
+  row uses the image. The Worker serves it at `/api/news/images/<id>` with
+  `Cache-Control: public, max-age=3600`, `nosniff` and a sandboxing CSP.
+
+Timestamps are UTC ISO strings with six fractional digits.
+
+Staff write with their own session:
+
+- `news.addImage({ id, contentType, data, width, height })` stores a re-encoded
+  image (bytes, at most 1,000,000, WebP, JPEG or PNG whose signature matches the
+  type). The client picks the ID; a retry with the same bytes returns it, other
+  bytes raise `IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_INPUT`.
+- `news.save({ requestId, article, event })` takes each side as null (left
+  untouched) or the complete row, plus `expected_revision` (null to create, else
+  the `edit_revision` string the editor read). Unknown keys and wrong types fail
+  argument validation; out-of-range text raises `INVALID_NEWS`. Event times are ISO
+  instants with an offset; the editor converts Oslo wall time and asks again for a
+  time that happens twice when the clocks go back. The event's `article_id` is the
+  link: null unlinks, and when both sides are sent it must be the article beside
+  it. A revision mismatch raises `STALE_NEWS` (refresh and review, never resubmit a
+  rebuilt command automatically); a slug already in use raises `NEWS_SLUG_TAKEN`;
+  an article that already has another event raises `EVENT_ARTICLE_TAKEN`. The
+  result is `{ article: {id, slug, edit_revision} | null, event: {...} | null }`,
+  and a retry with the same request ID returns it unchanged.
+- Editors read `news.list` (every article and event, drafts included) and preview
+  stored images with `news.adminImage`.
+
 ## Staff membership and invitations
 
 Every membership function except `members.me` requires an active staff member's own

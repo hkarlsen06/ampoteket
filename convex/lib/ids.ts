@@ -8,7 +8,7 @@ export function newUuid(): string { return crypto.randomUUID(); }
 
 type UuidTable = 'staff_members' | 'help_contacts' | 'categories' | 'cabinets' | 'bins' | 'products' | 'attribute_definitions'
 	| 'command_requests' | 'purchase_orders' | 'purchase_order_lines' | 'purchase_order_cancellations' | 'checkouts'
-	| 'count_batches' | 'inventory_events';
+	| 'count_batches' | 'inventory_events' | 'news_articles' | 'events' | 'news_images';
 
 /** The row with this UUID, or null. Invalid UUIDs find nothing. */
 export async function byUuid<T extends UuidTable>(ctx: QueryCtx, table: T, id: string | null | undefined): Promise<Doc<T> | null> {

@@ -12,7 +12,7 @@ import { nextSequence } from './sequence';
 import { isoNow } from './time';
 
 export const AUDITED = ['staff_members', 'help_contacts', 'units', 'categories', 'cabinets', 'bins', 'products',
-	'attribute_definitions', 'product_attributes', 'purchase_orders', 'purchase_order_lines', 'count_batches'] as const;
+	'attribute_definitions', 'product_attributes', 'purchase_orders', 'purchase_order_lines', 'count_batches', 'news_articles', 'events'] as const;
 export type AuditedTable = (typeof AUDITED)[number];
 
 /** Who performed a write: a staff member, or a role without one (`convex` for maintenance). */

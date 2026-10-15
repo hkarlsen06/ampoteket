@@ -15,7 +15,8 @@ const reviewed: Record<string, number> = {
 	'convex/lib/commands.ts': 1, // command_requests.result
 	'convex/lib/sequence.ts': 1, // counters
 	'convex/lib/rateLimit.ts': 2, // rate_limits
-	'convex/lib/inventory.ts': 2 // stock_levels
+	'convex/lib/inventory.ts': 2, // stock_levels
+	'convex/news.ts': 1 // news_image_uses
 };
 
 test('audited tables are written only through the audit helper', async () => {

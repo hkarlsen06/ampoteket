@@ -26,6 +26,8 @@ const text = v.string();
 const uuid = v.string();
 const decimal = v.string();
 const timestamp = v.string();
+const newsImageRef = v.object({ id: v.string(), alt: v.string() });
+const newsLink = v.object({ label: v.string(), url: v.string() });
 
 export default defineSchema({
 	...authTables,
@@ -53,6 +55,32 @@ export default defineSchema({
 		display_order: v.number(), is_published: v.boolean(), edit_revision: v.number(),
 		created_at: timestamp, updated_at: timestamp, responsibility: nullable(text), discord: nullable(text)
 	}).index('uuid', ['id']).index('display_order', ['display_order', 'id']),
+
+	// Newsroom (docs/page-news.md). Articles and events are separate rows; an event
+	// belongs to at most one article (`article_id`). Slugs are chosen once and never
+	// change. Image and link lists are ordered; the first image is the cover.
+	news_articles: defineTable({
+		id: uuid, slug: text, title: text, summary: nullable(text), body: text, images: v.array(newsImageRef), links: v.array(newsLink),
+		people: v.array(uuid), is_published: v.boolean(), published_at: nullable(timestamp), edit_revision: v.number(),
+		created_at: timestamp, updated_at: timestamp
+	}).index('uuid', ['id']).index('slug', ['slug']).index('published', ['is_published', 'published_at', 'id']),
+
+	events: defineTable({
+		id: uuid, slug: text, title: text, description: text, location: nullable(text), starts_at: timestamp, ends_at: nullable(timestamp),
+		article_id: nullable(uuid), images: v.array(newsImageRef), links: v.array(newsLink), people: v.array(uuid), is_published: v.boolean(),
+		edit_revision: v.number(), created_at: timestamp, updated_at: timestamp
+	}).index('uuid', ['id']).index('slug', ['slug']).index('article_id', ['article_id']).index('published_start', ['is_published', 'starts_at', 'id']),
+
+	// Uploaded images never change. The bytes sit in their own table, so lists and
+	// pages read only the size, and snapshot exports cover them like any other row.
+	news_images: defineTable({
+		id: uuid, content_type: v.union(v.literal('image/webp'), v.literal('image/jpeg'), v.literal('image/png')),
+		width: v.number(), height: v.number(), created_by: uuid, created_at: timestamp
+	}).index('uuid', ['id']),
+	news_image_data: defineTable({ image_id: uuid, data: v.bytes() }).index('image_id', ['image_id']),
+	// Which article or event lists each image, rewritten by every save (convex/news.ts),
+	// so the public image endpoint can check publication without scanning rows.
+	news_image_uses: defineTable({ image_id: uuid, owner_id: uuid }).index('image_id', ['image_id']).index('owner_id', ['owner_id']),
 
 	categories: defineTable({ id: uuid, name: text }).index('uuid', ['id']).index('name', ['name']),
 

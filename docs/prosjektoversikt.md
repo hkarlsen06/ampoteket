@@ -116,13 +116,17 @@ labels always use the Norwegian, unprefixed address.
 | `/checkout/[id]` | Saved checkout, Vipps instructions, registration and retry ([page-checkout.md](page-checkout.md)) |
 | `/contact` | Contact us: the Discord invite, then volunteer contacts maintained at `/admin/contacts`. Linked from the header menu and footer; `/help` redirects here (posters and sent receipts). No page doc: [website-guide.md §4.5](website-guide.md#45-help-when-registration-cannot-be-completed), [volunteer directory protocol](api-contract.md#public-volunteer-directory), [`help_contacts`](datamodell.md#help_contacts) |
 | `/privacy` | What buyers' data the shop stores, where, and how to have contact details deleted; linked from the footer |
+| `/news`, `/news/[slug]` | Newsroom: the next three events, then published articles, and one article with its images, links, tagged volunteers and event ([page-news.md](page-news.md)). Linked from the hero, header menu and footer |
+| `/events`, `/events/[slug]` | Event calendar: a month grid with the month's events listed by day, and one event ([page-news.md](page-news.md)) |
 | `/admin` | Overview (with products others added since your last review), statistics, products, shelf, counts, labels, stock corrections, audit ([page-admin-stock.md](page-admin-stock.md), [page-labels.md](page-labels.md)) |
 | `/admin/orders` | Orders and receipts ([page-admin-orders.md](page-admin-orders.md)) |
 | `/admin/purchases` | Find a purchase by its support reference, register an unregistered one and erase the buyer's contact detail ([website-guide.md](website-guide.md#57-checkout-recovery-and-contact-erasure)) |
 | `/admin/contacts` | Edit, publish and reorder the `/contact` volunteer list (same documents as `/contact`) |
+| `/admin/news`, `/admin/news/[id]` | Write and publish articles and events, together or apart ([page-news.md](page-news.md#4-admin)) |
 | `/admin/admins` | Invite, list, reactivate and deactivate admins ([website-guide.md](website-guide.md#59-admin-access), [api-contract.md](api-contract.md#staff-membership-and-invitations)) |
 | `/admin/login`, `/admin/password` | Staff sign-in; setting a password from an invitation or reset link |
 | `POST /api/checkouts/…` | Worker checkout endpoints. Browsers never call the checkout functions directly. |
+| `GET /api/news/images/[id]` | A newsroom image, only while a published article or event uses it |
 | `GET /api/discord`, `/api/discord/avatar/…` | Online members of the Ampoteket Discord server and their avatars, proxied and edge-cached so browsers never contact Discord |
 
 Until `SALES_OPEN=true` is deployed, the buyer routes and the checkout API are closed
@@ -141,7 +145,7 @@ One scanner dialog is shared by all shopping pages ([scanner.md](scanner.md)).
 
 | Caller | Credential | Allowed |
 |---|---|---|
-| Visitor or signed-in non-staff | none needed | Public queries: catalog, facets, shelf map and help directory, without costs, contacts, tokens or staff identities |
+| Visitor or signed-in non-staff | none needed | Public queries: catalog, facets, shelf map, help directory and published news and events, without costs, contacts, tokens or staff identities |
 | Staff | own Convex Auth session | Staff functions, each starting with `requireStaff`, including audited admin management. Stock changes only through the ledger commands |
 | Worker | `CHECKOUT_SERVER_KEY`, server-side only | The three guest checkout functions (prepare, get, confirm); public queries for server loads |
 | Maintainer | Convex deploy key (`bunx convex run`, dashboard) | Deploys, internal functions (import, stock projection checks), backups and restore |
@@ -176,6 +180,7 @@ drawers; `seed:base` creates the same wall in a fresh development or test backen
 | Labels | A4: select cabinets or drawers on the map and print sheets. Brother: pick one drawer and print its products one by one on the P-touch printer |
 | Cart after checkout | One active cart and checkout at a time, locked across tabs |
 | Help when nobody is there | Buyer notes the amount and reference, then uses `/contact` |
+| News and events | Written once in the author's language; images stored as Convex rows and re-encoded in the browser; tagged people come from the volunteer directory; an event belongs to at most one article |
 | Retention | Unconfirmed checkouts' contact strings are cleared automatically after 90 days; checkouts, sales and history are never purged ([runbook](runbook-contact-retention.md)) |
 
 ## 9. Out of scope for v1

@@ -135,7 +135,7 @@ Without a flag it runs the boundary proof (`scripts/web-proof/run.ts`): sign-in,
 non-staff denial, exact values, membership revocation and the checkout cookie.
 One flag selects another proof: `--shop`, `--checkout`, `--scanner`, `--admin`,
 `--admins`, `--statistics`, `--labels`, `--shelf`, `--orders`, `--drafts`,
-`--admin-help` or `--sidebar`. It needs `openssl`, `certutil`
+`--admin-help`, `--sidebar` or `--news`. It needs `openssl`, `certutil`
 (`libnss3-tools`), `flock`, `jq` and
 `bunx --no-install playwright install --with-deps firefox`. `--scanner` also needs
 WebKit. `--labels` needs PyMuPDF 1.28.2 on `PATH`, for example from a venv
