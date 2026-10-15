@@ -80,6 +80,7 @@ bun run supabase/tests/catalog-search.ts
 psql -X -v ON_ERROR_STOP=1 -f supabase/tests/catalog-workload.sql
 psql -X -v ON_ERROR_STOP=1 -f supabase/tests/input-boundaries.sql
 psql -X -v ON_ERROR_STOP=1 -f supabase/tests/help-directory.sql
+psql -X -v ON_ERROR_STOP=1 -f supabase/tests/news.sql
 python3 supabase/tests/security_mutations.py
 python3 supabase/tests/invariant-detector.py
 

@@ -1,0 +1,79 @@
+# `/news` and `/events`: newsroom and event calendar
+
+Public pages in `src/routes/[[locale=locale]]/news/` and `events/`, the staff editor in
+`admin/news/`. Copy lives in `src/lib/i18n/{nb,en}.ts` under `news`, `events` and
+`adminNews`; the read protocol is in [api-contract.md](api-contract.md#news-and-events)
+and the tables in [datamodell.md](datamodell.md#newsroom-and-event-calendar).
+
+## 1. Job of the pages
+
+Tell members what is coming up and what has happened in the workshop. An article and
+an event are separate things that often belong together: a course has a time and place
+in the calendar and a story with photos and the volunteers running it. Either can
+exist alone. Content is written once, in the author's language; only the interface is
+translated ([i18n.md](i18n.md#6-what-is-not-translated)).
+
+Hard constraints:
+
+- **Only published rows are public**, and an image is served only while a published
+  article or event shows it. A failed read says unavailable with a retry, never
+  "no news".
+- **The homepage reads nothing.** It links here from the hero with one quiet text
+  link under the actions («Nyheter og arrangementer»), not a third button and not a
+  live "next event", because the homepage renders without a database read
+  ([page-home.md](page-home.md#1-job-of-the-page)).
+- **Times are Oslo wall time** at every width and in every browser time zone.
+- **Images reserve their box** from the stored width and height, so nothing shifts.
+- **Tagged people** are published volunteers from `/contact`. A name opens their
+  contact details in a popover; without JavaScript it links to the same person on
+  `/contact`.
+
+## 2. `/news`
+
+Phone first: the heading, «Kommende arrangementer» with the next three events that
+have not ended (a date tile, title, time and place), the calendar link, then «Nyheter»:
+one card per article with its cover, date, title, summary and, when linked, the event
+time. From 48rem the events sit in three columns and the cards fill the width. Twelve
+articles per page; «Eldre nyheter» continues from the last one shown
+(`?before=<published_at>&id=<id>`, not indexed).
+
+`/news/[slug]` shows the title, summary and date, the cover, a bordered box with the
+linked event, the body (a blank line starts a paragraph), the remaining images, then
+«Folk» and «Lenker» sections when they have entries.
+
+## 3. `/events`
+
+A month grid (`?month=YYYY-MM`, default the current Oslo month) of whole Monday-first
+weeks, then that month's events listed by day. On phones a day with events shows its
+number as a link and up to three dots; from 48rem up to two titles show in the cell.
+The day link jumps to that day's list. Today has an outline and a hidden «i dag». An
+event spanning several days appears under each day. Previous and next are icon links
+with names; «Denne måneden» returns to the current month.
+
+`/events/[slug]` shows the title, when and where, the cover, the description, the
+linked article as a box with a link, the remaining images, people and links.
+
+## 4. Admin
+
+`/admin/news` («Nettsiden» in the sidebar) lists every article and event, an article
+and its event as one entry with a published or unpublished badge each, latest change
+first. «Ny artikkel» and «Nytt arrangement» open the editor.
+
+`/admin/news/[id]` (an article or event id, or `new?with=article|event`) is one form:
+
+- **Artikkel** and **Arrangement** sections. A missing side offers «Legg til …» or a
+  select of existing rows that have no link yet. With both sides present, «Fjern …»
+  takes one out; a side that is linked in the database is then saved back unlinked,
+  never deleted, and «Angre» restores it until saving.
+- **Bilder, Lenker, Personer** apply to both sides. The browser re-encodes each
+  image (at most 1600 px and 1 MB, no EXIF) and uploads it once with a fixed id; a
+  failed upload retries the same id. Every image needs a description for screen
+  readers; the first is the cover. People are checked from the contact list, in its
+  order; unpublished contacts are marked «Ikke på kontaktsiden».
+- **Lagre** persists the exact command in `sessionStorage` before sending. An
+  uncertain result keeps it and the button becomes «Lagre igjen», which resends the
+  same request. A reload with an unfinished command says so and offers «Fullfør
+  endringen». A stale revision asks to load the new version; nothing is overwritten.
+
+Slugs come from the title on first save (æ, ø and å spelt out, a number added when
+taken) and never change, so shared links keep working.

@@ -37,6 +37,9 @@ INSERT INTO expected_tables VALUES
  ('receipt_allocations',          'table','none',  'none',  'none', true, false,false),
  ('sales',                        'table','none',  'none',  'none', true, false,false),
  ('stock_counts',                 'table','none',  'none',  'none', true, false,false),
+ ('news_images',                  'table','none',  'none',  'none', true, false,false),
+ ('news_articles',                'table','none',  'none',  'none', false,true, true ),
+ ('events',                       'table','none',  'none',  'none', false,true, true ),
  ('audit_log',                    'table','none',  'none',  'none', true, false,false);
 
 -- Column grants are intentional boundaries, not just "some column access".

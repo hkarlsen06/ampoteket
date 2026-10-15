@@ -47,13 +47,13 @@ colour only, per Discord's brand rules, left of the catalog icon) linking the pe
 `localStorage["ampoteket:cart"]`) and a menu button. An Instagram icon (`INSTAGRAM`) follows
 Discord above 40rem and becomes a menu row after the catalog on phones. Discord and Instagram
 are left out of the header and menu on `/cart` and `/checkout`. Above 40rem, Admin, catalog (storefront) and cart are icon-only header links with
-tooltips; Discord with Instagram and catalog with cart sit in gapless pairs. The menu holds Contact, scanning and the language picker. At phone
+tooltips; Discord with Instagram and catalog with cart sit in gapless pairs. The menu holds News, Calendar, Contact, scanning and the language picker. At phone
 widths, catalog and Admin move into the menu and scanning follows the placement below.
 The same DOM adapts through CSS, and opening the menu does not move the header.
 Without JavaScript the button is hidden and the panel is the
 header's second row (`html.no-js`, set in `src/app.html`). The Admin link appears only
 after active staff membership is confirmed; the footer login link is always there. The
-footer also names the operators and photographer (`footer.about`) and links help, `/privacy` and
+footer also names the operators and photographer (`footer.about`) and links news, help, `/privacy` and
 Discord. On
 phones (≤ 40rem) the scanner is a Scan button in the hero, then a floating button once
 that scrolls under the header. The layout emits site-wide link-preview metadata; this
@@ -64,6 +64,9 @@ JSON-LD (name, logo, address, Instagram) for search results.
 
 A scheme-stable `--night` stage telling one walk: up to the lit storefront window, then
 inside. The copy names the workshop, what is in the room and where, and leads to `/p`.
+Under the actions, one quiet text link («Nyheter og arrangementer») leads to `/news`
+([page-news.md](page-news.md)); it is not a button, so the catalog stays the hero's
+one primary action, and it shows nothing live, so the page still reads no data.
 The headline scales with its column (container query) so a wide fallback font cannot
 push it into the status strip. The catalog button stays in the first viewport down to
 320 × 568. Below 64rem the photograph starts under the status strip and its height
