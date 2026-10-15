@@ -12,7 +12,7 @@ The database contract: model, invariants, precision, concurrency, permissions an
 - Purchase orders record orders already placed elsewhere; they reserve nothing and add no stock. Receipts can be partial or unplanned (donations are unplanned receipts). Outstanding quantity can be cancelled with a reason. A surplus delivery is a normal adjustment with a note.
 - Negative recorded stock is allowed.
 - Counts are open, not blind. Each count posts immediately; closing a batch posts nothing.
-- Nothing that history refers to is deleted. A `keep_records` trigger rejects `DELETE` on staff, help contacts, units, categories, cabinets, bins, products, attribute definitions, purchase orders and lines, and count batches; ledger and audit tables reject updates too. Retire a product with `is_active=false`, unpublish a contact, archive storage. A hard delete needs the owner's explicit request and a migration-level review, not a workaround.
+- Nothing that history refers to is deleted. A `keep_records` trigger rejects `DELETE` on staff, help contacts, news articles, events, units, categories, cabinets, bins, products, attribute definitions, purchase orders and lines, and count batches; ledger and audit tables reject updates too. Retire a product with `is_active=false`, unpublish a contact, article or event, archive storage. A hard delete needs the owner's explicit request and a migration-level review, not a workaround.
 
 ## 2. Sources of truth
 
@@ -24,7 +24,7 @@ The database contract: model, invariants, precision, concurrency, permissions an
 
 Stock, latest purchase price/URL, last count, outstanding quantity, order status and checkout totals are never stored; views derive them. If summing movements ever proves too slow, add a rebuildable projection in a migration, not a second source of truth.
 
-JSON is used only for RPC request envelopes, idempotency results and audit images.
+JSON is used only for RPC request envelopes, idempotency results, audit images and the image and link lists of news articles and events, which are validated in their `CHECK` constraints.
 
 ## 3. Relations at a glance
 
@@ -33,6 +33,7 @@ JSON is used only for RPC request envelopes, idempotency results and audit image
 | Catalogue | `units`, `categories`, `cabinets`, `bins`, `products` |
 | Component specifications | `attribute_definitions`, `product_attributes` |
 | Public support | `help_contacts` |
+| Newsroom and calendar | `news_articles`, `events`, `news_images` |
 | Staff | `staff_members` |
 | Purchasing | `purchase_orders`, `purchase_order_lines`, `purchase_order_cancellations` |
 | Checkout | `checkouts`, `checkout_lines`, `checkout_contacts`, `sales` |
@@ -52,6 +53,8 @@ checkout 1 ---- 0..1 sale ---- 1 inventory event
 count_batch 1 ---- many stock_counts ---- 1 inventory event
 inventory_event 1 ---- many movements (a matching count has zero movements)
 movement 1 ---- many later correction links
+news_article 1 ---- 0..1 event (events.article_id is unique)
+news_article/event ---- many tagged help_contacts and news_images (ordered lists in the row)
 ```
 
 ## 4. Units, quantities and rounding
@@ -161,10 +164,10 @@ Keep `app` out of the Data API's exposed schemas; `public` holds only the explic
 
 | Caller | Permitted access |
 | --- | --- |
-| Public `anon` | `amp_catalog(...)`, `amp_catalog_facets(...)`, `amp_shelf_map()` and `amp_help_directory(...)` only. |
+| Public `anon` | `amp_catalog(...)`, `amp_catalog_facets(...)`, `amp_shelf_map()`, `amp_help_directory(...)` and the published newsroom reads `amp_news_feed`, `amp_news_article`, `amp_event_calendar`, `amp_event` and `amp_news_image` only. |
 | Logged-in non-staff | Catalogue/facets, shelf map and published help directory; no staff rows or staff operations. |
 | Active staff JWT | Staff read views, controlled master-data edits, membership management and authorised operational RPCs. |
-| Worker `service_role` | Catalogue/facets, shelf map, published help directory and the three guest checkout RPCs; no blanket app-table grants. |
+| Worker `service_role` | Catalogue/facets, shelf map, published help directory, published newsroom reads and the three guest checkout RPCs; no blanket app-table grants. |
 | Database maintainer | Migrations, first-staff bootstrap and emergency access recovery. Treat as privileged access outside ordinary operations. |
 
 - Staff views are `security_invoker=true`. Public reads are narrow `SECURITY DEFINER` functions.
@@ -177,6 +180,14 @@ Keep `app` out of the Data API's exposed schemas; `public` holds only the explic
 ### Public volunteer directory
 
 `help_contacts` is deliberately public and grants no access. Never put buyer contact data in it. Publishing requires at least one valid Discord username, email, phone or HTTPS URL (DNS hostname; no credentials, whitespace, control characters or backslashes). Render fields as text and validate links in the frontend too. `amp_help_directory` exposes only published rows. Staff edit through `amp_help_contacts` with an `edit_revision` guard and arrange the list with `amp_reorder_help_contacts`; `display_order` is never typed ([protocol](api-contract.md#public-volunteer-directory)). Entries are unpublished, never deleted, and every change is audited.
+
+### Newsroom and event calendar
+
+Articles (`news_articles`) and events (`events`) are separate rows; an event may belong to one article through `events.article_id`, which is unique, so the event owns the link. Staff write both only through `amp_save_news`, so an article and its event are created, linked, unlinked and published in one atomic, retry-safe command ([protocol](api-contract.md#news-and-events)). There are no direct table writes. Rows are unpublished, never deleted, and every version is audited.
+
+Images are stored in `news_images` as bytes, so the database backups include them. The browser re-encodes an upload to WebP or JPEG (at most 1600 px and 1 MB, which drops EXIF and GPS) before `amp_add_news_image` stores it; the declared type must match the file signature. Image rows never change. `amp_news_image` returns an image only while a published article or event shows it, so an orphaned or unpublished upload is never public.
+
+Tagged people are `help_contacts` ids. Public reads return only published contacts, with the same fields as `amp_help_directory`, so tagging someone not on `/contact` shows nothing publicly. Slugs are chosen once from the title and never change.
 
 ### Staff provisioning
 
@@ -205,6 +216,10 @@ All RPCs are in `public`; helpers in `app` are not client APIs. Signatures are i
 | `amp_catalog`, `amp_catalog_facets` | Public | Product pages, by category and primary specification, and filter choices ([details](api-contract.md#catalog-and-topology)). |
 | `amp_shelf_map` | Public | Complete live cabinets and bins with `has_products`. |
 | `amp_help_directory` | Public | Published support contacts. |
+| `amp_news_feed`, `amp_news_article` | Public | Published articles, newest first, and one article with its images, links, tagged contacts and published event. |
+| `amp_event_calendar`, `amp_event` | Public | Published events overlapping a range of at most 400 days, and one event with its published article. |
+| `amp_news_image` | Public | One image as base64, only while a published row shows it; served by the Worker at `/api/news/images/<id>`. |
+| `amp_add_news_image`, `amp_save_news` | Staff | Store a re-encoded image; save an article, its event or both. |
 | `amp_admin_statistics` | Staff | Sales summary and overview ([response](api-contract.md#staff-statistics)). |
 | `amp_list_staff` | Staff | Complete membership directory and Auth invitation state. |
 | `amp_grant_staff_access`, `amp_deactivate_staff` | Staff | Add/reactivate or deactivate another member; returns their staff UUID. |
@@ -254,7 +269,7 @@ Only the owner can post to or finish a batch. If the owner is disabled or loses 
 
 ### Metadata edits
 
-The views `amp_help_contacts`, `amp_products`, `amp_bins`, `amp_cabinets`, `amp_categories`, `amp_attribute_definitions` and `amp_product_attributes` allow controlled CRUD, audited by triggers. Column grants block product code and unit changes. Use explicit inserts and updates, not an upsert of every returned column. Purchase corrections are limited to supplier, reference, placement, extra cost, note, line cost, URL and SKU.
+Staff read `amp_news_articles`, `amp_events` and `amp_news_images`; they write news only through `amp_save_news`. The views `amp_help_contacts`, `amp_products`, `amp_bins`, `amp_cabinets`, `amp_categories`, `amp_attribute_definitions` and `amp_product_attributes` allow controlled CRUD, audited by triggers. Column grants block product code and unit changes. Use explicit inserts and updates, not an upsert of every returned column. Purchase corrections are limited to supplier, reference, placement, extra cost, note, line cost, URL and SKU.
 
 ## 11. Read models
 
@@ -330,6 +345,73 @@ CREATE TABLE app.help_contacts (
   -- Current Discord usernames: 2–32 of a-z, 0-9, '_' and '.', never two periods in a row.
   discord text CHECK (discord IS NULL OR (discord ~ '^[a-z0-9_.]{2,32}$' AND discord !~ '\.\.')),
   CHECK (NOT is_published OR num_nonnulls(email,phone,contact_url,discord) > 0)
+);
+```
+
+### `news_images`
+
+Newsroom images, re-encoded in the browser (§9). Rows never change.
+
+```sql
+CREATE TABLE app.news_images (
+  id uuid PRIMARY KEY,
+  content_type text NOT NULL CHECK (content_type IN ('image/webp','image/jpeg','image/png')),
+  data bytea NOT NULL CHECK (octet_length(data) >= 1 AND octet_length(data) <= 1048576),
+  width integer NOT NULL CHECK (width >= 1 AND width <= 4096),
+  height integer NOT NULL CHECK (height >= 1 AND height <= 4096),
+  created_by uuid NOT NULL REFERENCES app.staff_members(id),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+```
+
+### `news_articles`
+
+Newsroom articles. Images and links are ordered JSON lists checked by `app.news_images_valid` and `app.news_links_valid`; `people` lists tagged `help_contacts`.
+
+```sql
+CREATE TABLE app.news_articles (
+  id uuid PRIMARY KEY,
+  slug text NOT NULL UNIQUE CHECK (slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$' AND length(slug) <= 80),
+  title text NOT NULL CHECK (length(btrim(title)) >= 1 AND length(title) <= 160 AND title !~ '[[:cntrl:]]'),
+  summary text CHECK (summary IS NULL OR (length(btrim(summary)) >= 1 AND length(summary) <= 300 AND summary !~ '[[:cntrl:]]')),
+  -- Plain text; a blank line starts a new paragraph.
+  body text NOT NULL DEFAULT '' CHECK (length(body) <= 20000 AND translate(body,E'\n\r\t','') !~ '[[:cntrl:]]'),
+  images jsonb NOT NULL DEFAULT '[]' CHECK (app.news_images_valid(images)),
+  links jsonb NOT NULL DEFAULT '[]' CHECK (app.news_links_valid(links)),
+  -- Tagged volunteers (help_contacts), in display order. Public pages show only published contacts.
+  people uuid[] NOT NULL DEFAULT '{}' CHECK (cardinality(people) <= 20 AND array_position(people,NULL) IS NULL),
+  is_published boolean NOT NULL DEFAULT false,
+  -- Set on first publication and kept, so republishing keeps the original date.
+  published_at timestamptz,
+  edit_revision bigint NOT NULL DEFAULT 1 CHECK (edit_revision > 0),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CHECK (NOT is_published OR published_at IS NOT NULL)
+);
+```
+
+### `events`
+
+Calendar events, optionally belonging to one article.
+
+```sql
+CREATE TABLE app.events (
+  id uuid PRIMARY KEY,
+  slug text NOT NULL UNIQUE CHECK (slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$' AND length(slug) <= 80),
+  title text NOT NULL CHECK (length(btrim(title)) >= 1 AND length(title) <= 160 AND title !~ '[[:cntrl:]]'),
+  description text NOT NULL DEFAULT '' CHECK (length(description) <= 5000 AND translate(description,E'\n\r\t','') !~ '[[:cntrl:]]'),
+  location text CHECK (location IS NULL OR (length(btrim(location)) >= 1 AND length(location) <= 160 AND location !~ '[[:cntrl:]]')),
+  starts_at timestamptz NOT NULL,
+  -- Optional; an event lasts at most 62 days so a month view stays readable.
+  ends_at timestamptz CHECK (ends_at IS NULL OR (ends_at > starts_at AND ends_at <= starts_at + interval '62 days')),
+  article_id uuid UNIQUE REFERENCES app.news_articles(id),
+  images jsonb NOT NULL DEFAULT '[]' CHECK (app.news_images_valid(images)),
+  links jsonb NOT NULL DEFAULT '[]' CHECK (app.news_links_valid(links)),
+  people uuid[] NOT NULL DEFAULT '{}' CHECK (cardinality(people) <= 20 AND array_position(people,NULL) IS NULL),
+  is_published boolean NOT NULL DEFAULT false,
+  edit_revision bigint NOT NULL DEFAULT 1 CHECK (edit_revision > 0),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
 ```
 

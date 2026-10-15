@@ -9,6 +9,8 @@
 	import QrCodeIcon from 'phosphor-svelte/lib/QrCodeIcon';
 	import InstagramLogoIcon from 'phosphor-svelte/lib/InstagramLogoIcon';
 	import ChatsIcon from 'phosphor-svelte/lib/ChatsIcon';
+	import NewspaperIcon from 'phosphor-svelte/lib/NewspaperIcon';
+	import CalendarDotsIcon from 'phosphor-svelte/lib/CalendarDotsIcon';
 	import DiscordLogo from '#lib/DiscordLogo.svelte';
 	import { onMount, setContext, untrack } from 'svelte';
 	import { AdminContext, setAdminContext } from '#lib/admin-context.svelte.js';
@@ -109,6 +111,8 @@
 		},
 		discord: { href: DISCORD_INVITE, label: m.header.discord, icon: DiscordLogo, external: true },
 		instagram: { href: INSTAGRAM, label: m.header.instagram, icon: InstagramLogoIcon, external: true },
+		news: { href: '/news', label: m.header.news, icon: NewspaperIcon },
+		calendar: { href: '/events', label: m.header.calendar, icon: CalendarDotsIcon },
 		contact: { href: '/contact', label: m.header.contact, icon: ChatsIcon }
 	} satisfies Record<string, NavLink>);
 
@@ -254,13 +258,15 @@
 			</Collapsible.Trigger>
 			<Collapsible.Content forceMount id="site-menu" class="menu absolute top-[calc(50%+var(--header-h)/2+1px)] right-0 z-10 hidden w-64 rounded-lg border bg-card p-2 shadow-card data-[state=open]:block phone:inset-x-0 phone:top-full phone:w-auto phone:rounded-none phone:border-0 phone:px-[calc(var(--gutter)-0.75rem)] phone:pt-2 phone:pb-3 phone:shadow-none no-js:relative no-js:inset-auto no-js:block no-js:w-full no-js:rounded-none no-js:border-0 no-js:px-0 no-js:pt-2 no-js:pb-3 no-js:shadow-none">
 			<Separator class="absolute inset-x-0 top-0 hidden no-js:block" />
-			<!-- Phone: catalog, Instagram and Admin, which desktop has in the header row; then Contact at every width. -->
+			<!-- Phone: catalog, Instagram and Admin, which desktop has in the header row; then News, Calendar and Contact at every width. -->
 			{#if !adminPage}
 			<nav aria-label={m.header.menu}>
 				<ul class="m-0 flex list-none flex-col p-0">
 					{#if data.salesOpen}{@render menuLink(links.catalog, true)}{/if}
 					{#if showSocial}{@render menuLink(links.instagram, true)}{/if}
 					{#if showAdmin}{@render menuLink(links.admin, true)}{/if}
+					{@render menuLink(links.news)}
+					{@render menuLink(links.calendar)}
 					{@render menuLink(links.contact)}
 				</ul>
 			</nav>
@@ -317,6 +323,7 @@
 				{#each data.salesOpen ? [links.catalog, links.cart] : [] as item (item.href)}
 					<li><a href={i18n.href(item.href)}>{item.label}</a></li>
 				{/each}
+				<li><a href={i18n.href('/news')}>{m.footer.news}</a></li>
 				<li><a href={i18n.href('/contact')}>{m.footer.help}</a></li>
 				<li><a href={i18n.href('/privacy')}>{m.footer.privacy}</a></li>
 				<li><a href={DISCORD_INVITE} target="_blank" rel="external noopener">{m.footer.discord}<span class="sr-only"> {m.newTab}</span></a></li>

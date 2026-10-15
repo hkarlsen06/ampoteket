@@ -13,8 +13,9 @@ below are local runs, not CI claims.
 | Check | Last run | Result | Covers |
 | --- | --- | --- | --- |
 | `bun run check`, `bun run check:scripts`, `bun run lint` | 2026-10-15 | PASS, 0 errors/warnings | Types, scripts, lint (oxlint run under Bun: the host's Node lacks TypeScript support for its config) |
-| `bun run build` | 2026-10-05 | PASS | Production SvelteKit/Cloudflare bundle with the admin professionalism fixes |
-| `bun test` | 2026-10-15 | 276 pass, 1 fail (2,276 assertions) | Unit tests, including CI/deploy failures, HTTPS headers, account-bound password changes, receipt retries, Discord deadlines/cooldowns, look-alike lines and specification ranges. The failure is the seed cleanup-ownership test, which needs `psql`, absent on that host; last passed 2026-10-06 |
+| `bun run build` | 2026-10-15 | PASS | Production SvelteKit/Cloudflare bundle with the newsroom and calendar (run as `bun --bun run build`: the host's Node cannot load the TypeScript config) |
+| `bun test` | 2026-10-15 | 285 pass (2,330 assertions) | Unit tests, including CI/deploy failures, HTTPS headers, account-bound password changes, receipt retries, Discord deadlines/cooldowns, look-alike lines and specification ranges, newsroom slugs, paragraphs, Oslo month grids and calendar paging, and the persisted news save command |
+| Newsroom local stack check | 2026-10-15 | PASS | Docker-free stand-in (PostgreSQL 17.6, PostgREST 16.1, GoTrue 2.196 from the CLI 2.116 pins; not the CLI stack itself) with all fifteen migrations: `permissions.sql`, `protections.sql`, `news.sql`, `help-directory.sql` and the Appendix A comparison passed. In Chromium, an admin created an article and its event in one save with two uploaded images, a link and two tagged volunteers; `/news`, the article, the person popover, `/events` and the event page read them; no horizontal overflow at 390 or 1280 px. `./scripts/test-database.sh`, its Python suites and `test-web.sh` were not run there (no Docker); CI runs them |
 | `bun audit` | 2026-10-02 | PASS, no reported vulnerabilities | Resolved dependency tree |
 | `python3 scripts/test-check-clipped-ink.py`, `bun run check:ink` | 2026-10-02 | PASS | Checker regressions, static SVG checks |
 | `./scripts/test-database.sh` | 2026-10-06 | PASS | Eleven migrations, catalog order by category and primary specification across 37-row pages, rollback/retry, ACLs/RLS, acceptance, 12 stored-data corruption cases including drawer bounds/overlap, 42 concurrency scenarios including competing help-order writes, restore, schema/docs comparison, signed-JWT HTTP |
@@ -76,8 +77,10 @@ Update this section whenever a migration changes (`sha256sum supabase/migrations
   `be2b8b0e934e155e8cdc6cc2545224465de2dc53bd2fa0072670a1e297e4dea8`
 - `20261015000200_specification_ranges.sql`: SHA-256
   `f9d0ac918afe4cd07aa4c6296a9b054f790d26a887bd71a77bd8ee9a920e6fdc`
+- `20261015000300_news_and_events.sql`: SHA-256
+  `38c4d57df825b9d97de1ea86e42cb962bd0fdc9db3527324436186e06856bae2`
 
-24 app tables, four exact numeric domains, 30 public RPCs, 29 staff views and five
+27 app tables, four exact numeric domains, 37 public RPCs, 32 staff views and five
 internal derived views. All views are security invoker; only `public` is exposed.
 Initial data: 12 cabinets, 492 drawers, reference units and 12 published volunteer
 contacts; no products or stock.

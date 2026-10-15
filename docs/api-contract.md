@@ -40,6 +40,50 @@ Staff edit through `amp_help_contacts` with their own JWT:
 - Send blank optional contact methods as `null`. Entries cannot be deleted; unpublish instead.
 - Never send `display_order`: a new contact goes last. `amp_reorder_help_contacts(p_ids, p_expected_ids)` takes every contact ID, drafts included, in both the desired order and the order displayed before the move, and renumbers from 0. A move does not advance `edit_revision`. The database compares the previous order after locking; `STALE_HELP_ORDER` means contacts or their order changed: re-read and let the user move again. A retry whose desired order is already current succeeds without another write. The old one-argument signature is unavailable.
 
+## News and events
+
+Public reads use the publishable key from the Worker during SSR. Every page reads
+only published rows; a failed read renders as unavailable, never as "no news".
+
+- `amp_news_feed(p_before_published, p_before_id, p_limit)` returns published
+  articles newest first by `(published_at, id)` with `id`, `slug`, `title`,
+  `summary`, `published_at`, `cover` (the first image) and `event` (the linked
+  published event, else null). `p_limit` is 1–100 (`INVALID_NEWS_PAGE_SIZE`); send
+  both cursor fields or neither (`INVALID_NEWS_CURSOR`). The newsroom reads one row
+  more than it shows to know whether an older page exists.
+- `amp_event_calendar(p_from, p_to, p_after_start, p_after_id, p_limit)` returns
+  published events overlapping `[p_from, p_to)` by `(starts_at, id)`; the range is
+  at most 400 days (`INVALID_EVENT_RANGE`). Page until empty and reject cursors that
+  do not advance, as for the volunteer directory.
+- `amp_news_article(p_slug)` and `amp_event(p_slug)` return one published row as
+  JSON, or null. Images carry `id`, `alt`, `width` and `height`; people carry the
+  `amp_help_directory` fields of published contacts only, in tag order.
+- `amp_news_image(p_id)` returns `content_type` and base64 `data` only while a
+  published row shows the image. The Worker serves it at `/api/news/images/<id>`
+  with `Cache-Control: public, max-age=3600`, `nosniff` and a sandboxing CSP.
+
+Staff write with their own JWT:
+
+- `amp_add_news_image(p_id, p_content_type, p_data, p_width, p_height)` stores a
+  re-encoded image (base64, at most 1 MB, WebP, JPEG or PNG whose signature matches
+  the type). The client picks the id; a retry with the same bytes returns it, other
+  bytes raise `IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_INPUT`.
+- `amp_save_news(p_request_id, p_article, p_event)` takes each side as null (left
+  untouched) or the complete row with exactly the keys in the migration, plus
+  `expected_revision` (null to create, else the `edit_revision` the editor read).
+  Unknown keys, wrong JSON types and out-of-range text raise `INVALID_NEWS`.
+  Event times are ISO instants with an offset; the editor converts Oslo wall time
+  and asks again for a time that happens twice when the clocks go back. The event's
+  `article_id` is the link: null unlinks, and when both sides are sent it must be
+  the article beside it. A revision mismatch raises `STALE_NEWS` (refresh and
+  review, never resubmit a rebuilt command automatically); a slug taken by a
+  concurrent save raises `NEWS_SLUG_TAKEN`; an article that already has another
+  event raises `EVENT_ARTICLE_TAKEN`. The result is
+  `{"article":{"id","slug","edit_revision"}|null,"event":{...}|null}`, and a retry
+  with the same request ID returns it unchanged.
+- Editors read `amp_news_articles`, `amp_events` and `amp_news_images` through
+  `allStaffRows`; image previews read `data`, which PostgREST sends as `\x` and hex.
+
 ## Staff membership and invitations
 
 All membership RPCs require the active staff member's own JWT. Anon and service
