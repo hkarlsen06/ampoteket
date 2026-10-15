@@ -1,7 +1,7 @@
 import { getContext, setContext } from 'svelte';
 import { writable, type Readable } from 'svelte/store';
 import { isRecord } from './api';
-import { productVariant, type SaleProduct } from './catalog';
+import { productVariants, type SaleProduct } from './catalog';
 import { addDecimals, validQuantity } from './decimal';
 import type { Locale } from './i18n';
 
@@ -27,9 +27,9 @@ export type CartLine = {
 	code?: string;
 	name_nb?: string;
 	name_en?: string;
-	/** What tells the product from look-alikes, shown under the name (productVariant). */
-	variant_nb?: string;
-	variant_en?: string;
+	/** What tells the product from look-alikes, shown under the name (productVariants). */
+	variant_nb?: string[];
+	variant_en?: string[];
 	unit_symbol?: string;
 };
 export type ActiveAttempt = {
@@ -67,7 +67,14 @@ export function parseCart(raw: string | null): CartLine[] {
 		try { validQuantity(row.quantity, '0.000001'); } catch { throw new CartError('invalid'); }
 		ids.add(row.product_id);
 		const line: CartLine = { product_id: row.product_id, quantity: row.quantity };
-		for (const key of ['code', 'name_nb', 'name_en', 'variant_nb', 'variant_en', 'unit_symbol'] as const) {
+		for (const key of ['variant_nb', 'variant_en'] as const) {
+			// Carts saved on release day hold one joined string.
+			const value = typeof row[key] === 'string' ? [row[key]] : row[key];
+			if (value === undefined) continue;
+			if (!Array.isArray(value) || value.length > 8 || value.some(part => typeof part !== 'string' || part.length > 1000)) throw new CartError('invalid');
+			line[key] = value as string[];
+		}
+		for (const key of ['code', 'name_nb', 'name_en', 'unit_symbol'] as const) {
 			if (row[key] !== undefined) {
 				if (typeof row[key] !== 'string' || row[key].length > 1000) throw new CartError('invalid');
 				line[key] = row[key];
@@ -254,8 +261,8 @@ export function createCartStore(environment?: CartEnvironment): CartStore {
 				const next = index < 0 ? amount : quantity(addDecimals(lines[index].quantity, amount), product.sale_step);
 				const line: CartLine = { product_id: product.product_id, quantity: next, code: product.code, name_nb: product.name_nb, name_en: product.name_en, unit_symbol: product.unit_symbol };
 				for (const locale of ['nb', 'en'] as const) {
-					const variant = productVariant(product, locale);
-					if (variant !== null) line[`variant_${locale}`] = variant;
+					const variants = productVariants(product, locale);
+					if (variants.length) line[`variant_${locale}`] = variants;
 				}
 				return index < 0 ? [...lines, line] : lines.map((current, i) => i === index ? line : current);
 			});

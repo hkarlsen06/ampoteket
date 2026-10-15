@@ -5,7 +5,7 @@ import {
 	forSale,
 	lookupCatalogProduct,
 	parseCatalogProducts,
-	productVariant,
+	productVariants,
 	readCatalogPage,
 	readCatalogFacets,
 	readCompleteCatalog,
@@ -74,16 +74,16 @@ describe('look-alike products', () => {
 		pitch: { label: 'Pitch', unit: 'mm', value_type: 'number', value: '2.54', max: null }
 	} as const;
 	test('a value with a unit names itself; others keep their translated field name', () => {
-		expect(productVariant({ attributes, distinguishing: ['voltage'] }, 'nb')).toBe('350 V');
-		expect(productVariant({ attributes, distinguishing: ['voltage', 'tolerance'] }, 'en')).toBe('350 V · 5 %');
-		expect(productVariant({ attributes, distinguishing: ['package'] }, 'nb')).toBe('Kapsling: TO-220');
-		expect(productVariant({ attributes, distinguishing: ['polarised'] }, 'en')).toBe('Polarised: Yes');
-		expect(productVariant({ attributes, distinguishing: ['pins', 'pitch'] }, 'nb')).toBe('Antall pinner: 8 · 2,54 mm');
+		expect(productVariants({ attributes, distinguishing: ['voltage'] }, 'nb')).toEqual(['350 V']);
+		expect(productVariants({ attributes, distinguishing: ['voltage', 'tolerance'] }, 'en')).toEqual(['350 V', '5 %']);
+		expect(productVariants({ attributes, distinguishing: ['package'] }, 'nb')).toEqual(['Kapsling: TO-220']);
+		expect(productVariants({ attributes, distinguishing: ['polarised'] }, 'en')).toEqual(['Polarised: Yes']);
+		expect(productVariants({ attributes, distinguishing: ['pins', 'pitch'] }, 'nb')).toEqual(['Antall pinner: 8', '2,54 mm']);
 	});
 	test('nothing is shown for values this product lacks or a product without look-alikes', () => {
-		expect(productVariant({ attributes, distinguishing: [] }, 'nb')).toBeNull();
-		expect(productVariant({ attributes, distinguishing: ['blank', 'colour'] }, 'nb')).toBeNull();
-		expect(productVariant({ attributes, distinguishing: ['colour', 'voltage'] }, 'nb')).toBe('350 V');
+		expect(productVariants({ attributes, distinguishing: [] }, 'nb')).toEqual([]);
+		expect(productVariants({ attributes, distinguishing: ['blank', 'colour'] }, 'nb')).toEqual([]);
+		expect(productVariants({ attributes, distinguishing: ['colour', 'voltage'] }, 'nb')).toEqual(['350 V']);
 	});
 });
 
@@ -183,7 +183,7 @@ describe('catalog response boundary', () => {
 	test('a range keeps both exact bounds', () => {
 		const [product] = decode([{ ...fixture(), attributes: { voltage: { label: 'Voltage', unit: 'V', value_type: 'number', value: '250', max: '400.000' } } }]);
 		expect(product.attributes.voltage).toEqual({ label: 'Voltage', unit: 'V', value_type: 'number', value: '250', max: '400.000' });
-		expect(productVariant({ ...product, distinguishing: ['voltage'] }, 'nb')).toBe('250–400 V');
+		expect(productVariants({ ...product, distinguishing: ['voltage'] }, 'nb')).toEqual(['250–400 V']);
 	});
 });
 

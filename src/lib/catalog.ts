@@ -13,10 +13,11 @@ export type CatalogConfig = { url: string; publishableKey: string };
 export function productName(product: { name_nb: string; name_en: string }, locale: Locale): string {
 	return formatMeasurementText(locale === 'nb' ? product.name_nb : product.name_en, locale);
 }
-/** What tells the product from look-alikes, such as "350 V" or "Package: TO-220";
- * null when nothing does. A value with a unit names itself, as on shelf labels. */
-export function productVariant(product: Pick<CatalogProduct, 'attributes' | 'distinguishing'>, locale: Locale): string | null {
-	const parts = product.distinguishing.flatMap(code => {
+/** What tells the product from look-alikes, one entry per specification, such as
+ * "350 V" or "Package: TO-220"; empty when nothing does. A value with a unit names
+ * itself, as on shelf labels. */
+export function productVariants(product: Pick<CatalogProduct, 'attributes' | 'distinguishing'>, locale: Locale): string[] {
+	return product.distinguishing.flatMap(code => {
 		const attribute = Object.hasOwn(product.attributes, code) ? product.attributes[code] : undefined;
 		if (!attribute || attribute.value === '') return [];
 		if (attribute.value_type === 'number' && attribute.unit) return [formatSpecificationNumber(attribute.value, attribute.max, attribute.unit, locale)];
@@ -24,7 +25,6 @@ export function productVariant(product: Pick<CatalogProduct, 'attributes' | 'dis
 			: attribute.value_type === 'number' ? formatSpecificationNumber(attribute.value, attribute.max, null, locale) : attribute.value;
 		return [`${specificationLabel(code, attribute, locale)}: ${shown}`];
 	});
-	return parts.length ? parts.join(' · ') : null;
 }
 export type CatalogRequestOptions = { fetcher?: Fetcher; signal?: AbortSignal };
 export type CatalogPageOptions = CatalogRequestOptions & { afterCode?: string; limit?: number; query?: CatalogQuery; binId?: string };

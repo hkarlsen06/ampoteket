@@ -1,7 +1,8 @@
 <script lang="ts">
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
 	import Icon from '#lib/Icon.svelte';
-	import { productName, productVariant, type CatalogProduct } from '#lib/catalog.js';
+	import { productName, productVariants, type CatalogProduct } from '#lib/catalog.js';
+	import VariantBadges from '#lib/VariantBadges.svelte';
 	import { categoryBesideName, getI18n } from '#lib/i18n/index.js';
 	import ProductAvailability from '#lib/ProductAvailability.svelte';
 	import { codeText, nameWrap, pageHeading } from '#lib/ui.js';
@@ -21,12 +22,11 @@
 	const category = $derived(categoryBesideName(product.category_name, productName(product, i18n.locale), i18n.locale));
 	// Part of the name: look-alikes (two 680 pF capacitors) differ by it, so it
 	// belongs in the heading and link text too.
-	const variant = $derived(productVariant(product, i18n.locale));
+	const variants = $derived(productVariants(product, i18n.locale));
 </script>
 
-<!-- The chevron ends the last line, so a variant never leaves it on a line of its own. -->
-{#snippet chevron()}{#if linked && showChevron}<Icon icon={CaretRightIcon} class="ml-1 inline size-5 align-[calc(0.5cap-0.625rem)]" />{/if}{/snippet}
-{#snippet name()}{productName(product, i18n.locale)}{#if variant}<span class="sr-only">,</span> <span class={['block font-medium', prominent ? 'text-xl' : compact ? 'text-sm' : 'text-base']}>{variant}{@render chevron()}</span>{:else}{@render chevron()}{/if}{/snippet}
+<!-- The chevron ends the last line, so the badges never leave it on a line of its own. -->
+{#snippet name()}{productName(product, i18n.locale)}<VariantBadges parts={variants} {prominent}>{#if linked && showChevron}<Icon icon={CaretRightIcon} class="ml-1 inline size-5 align-[calc(0.5cap-0.625rem)]" />{/if}</VariantBadges>{/snippet}
 
 <div class="min-w-0">
 	<svelte:element this={`h${headingLevel}`} class={['m-0', nameWrap, prominent ? pageHeading : [compact ? 'text-base' : 'text-lg', 'font-semibold leading-snug']]}>

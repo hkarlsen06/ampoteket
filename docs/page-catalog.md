@@ -106,8 +106,9 @@ Staff product search uses the same matcher (`catalogSearchText`).
 **Look-alikes.** Products in one category with the same primary value (two 680 pF
 capacitors), or without one the same name, show what tells them apart under the name:
 `distinguishing` from `amp_catalog` ([rule](api-contract.md#catalog-and-topology)),
-formatted by `productVariant` as a value that names itself ("350 V") or with its field
-name ("Kapsling: TO-220"), joined by « · ». It is part of the heading and link text, so
+formatted by `productVariants` as a value that names itself ("350 V") or with its field
+name ("Kapsling: TO-220"), each in an outline `Badge` under the name (`VariantBadges`).
+The badges are part of the heading and link text, with hidden commas between them, so
 look-alike links have different names. SQL computes it over the whole catalog, so it is
 present on the first render and never appears as more rows load. Products with no
 differing specification look identical until staff enter one. The same line follows

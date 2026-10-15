@@ -38,7 +38,9 @@ describe('browser cart persistence boundary', () => {
 		const cart = createCartStore(env);
 		await cart.add({ ...product, attributes: { voltage: { label: 'Voltage', unit: 'V', value_type: 'number', value: '350', max: null },
 			package: { label: 'Package', unit: null, value_type: 'text', value: 'Radial' } }, distinguishing: ['voltage', 'package'] }, '1');
-		expect(parseCart(saved.raw)[0]).toMatchObject({ variant_nb: '350 V · Kapsling: Radial', variant_en: '350 V · Package: Radial' });
+		expect(parseCart(saved.raw)[0]).toMatchObject({ variant_nb: ['350 V', 'Kapsling: Radial'], variant_en: ['350 V', 'Package: Radial'] });
+		// A cart saved with the first, joined hint still reads.
+		expect(parseCart(JSON.stringify([{ product_id: id, quantity: '1', variant_nb: '350 V' }]))[0].variant_nb).toEqual(['350 V']);
 		expect(() => parseCart(JSON.stringify([{ product_id: id, quantity: '1', variant_nb: 1 }]))).toThrow(CartError);
 	});
 
