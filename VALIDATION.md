@@ -12,9 +12,9 @@ below are local runs, not CI claims.
 
 | Check | Last run | Result | Covers |
 | --- | --- | --- | --- |
-| `bun run check`, `bun run check:scripts`, `bun run lint` | 2026-10-06 | PASS, 0 errors/warnings | Types, scripts, lint |
+| `bun run check`, `bun run check:scripts`, `bun run lint` | 2026-10-15 | PASS, 0 errors/warnings | Types, scripts, lint (oxlint run under Bun: the host's Node lacks TypeScript support for its config) |
 | `bun run build` | 2026-10-05 | PASS | Production SvelteKit/Cloudflare bundle with the admin professionalism fixes |
-| `bun test` | 2026-10-06 | PASS, 254 tests, 2,119 assertions | Unit tests, including CI/deploy failures, HTTPS headers, seed cleanup ownership, account-bound password changes, receipt retries and Discord deadlines/cooldowns |
+| `bun test` | 2026-10-15 | 276 pass, 1 fail (2,276 assertions) | Unit tests, including CI/deploy failures, HTTPS headers, account-bound password changes, receipt retries, Discord deadlines/cooldowns, look-alike lines and specification ranges. The failure is the seed cleanup-ownership test, which needs `psql`, absent on that host; last passed 2026-10-06 |
 | `bun audit` | 2026-10-02 | PASS, no reported vulnerabilities | Resolved dependency tree |
 | `python3 scripts/test-check-clipped-ink.py`, `bun run check:ink` | 2026-10-02 | PASS | Checker regressions, static SVG checks |
 | `./scripts/test-database.sh` | 2026-10-06 | PASS | Eleven migrations, catalog order by category and primary specification across 37-row pages, rollback/retry, ACLs/RLS, acceptance, 12 stored-data corruption cases including drawer bounds/overlap, 42 concurrency scenarios including competing help-order writes, restore, schema/docs comparison, signed-JWT HTTP |
@@ -71,6 +71,10 @@ Update this section whenever a migration changes (`sha256sum supabase/migrations
   `92f114fed52a0ea3cf45c62adade1444c8b268666e5dc8366ce773ea67058b5b`
 - `20261006000400_borrow_only_products.sql`: SHA-256
   `7c374a27c2b0662eff5a52abdcd28d9b2435ce02015db6705cb604412dd2a65b`
+- `20261015000100_catalog_distinguishing_specs.sql`: SHA-256
+  `be2b8b0e934e155e8cdc6cc2545224465de2dc53bd2fa0072670a1e297e4dea8`
+- `20261015000200_specification_ranges.sql`: SHA-256
+  `f9d0ac918afe4cd07aa4c6296a9b054f790d26a887bd71a77bd8ee9a920e6fdc`
 
 24 app tables, four exact numeric domains, 30 public RPCs, 29 staff views and five
 internal derived views. All views are security invoker; only `public` is exposed.
