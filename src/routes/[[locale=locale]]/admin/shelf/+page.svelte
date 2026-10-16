@@ -79,6 +79,12 @@
 	const assigned = $derived(shelf?.products.filter((item) => item.bin_id === binId) ?? []);
 	const wallRows = $derived(cabinets.reduce((max, item) => Math.max(max, item.outer_row), 1));
 	const wallCols = $derived(cabinets.reduce((max, item) => Math.max(max, item.outer_col), 1));
+	// Each face fills the drawers that have products, so the wall shows at a glance where things are.
+	const wallItems = $derived(cabinets.map((item) => {
+		const inner = cabinetInner(item, shelf?.live.bins ?? [], true);
+		return { id: item.id, row: item.outer_row, col: item.outer_col, label: gridCell(item.outer_row, item.outer_col), inner,
+			description: m.drawersInUse(inner.drawers.filter((drawer) => drawer.occupied).length, inner.drawers.length) };
+	}));
 	const cabinetAssignments = $derived(editor && before ? (shelf?.products.filter((product) =>
 		product.bin_id && shelf?.bins.some((item) => item.id === product.bin_id && !item.is_archived && item.cabinet_id === before!.id)).length ?? 0) : 0);
 	// A move target is a vacant wall position or another cabinet to swap with.
@@ -397,6 +403,14 @@
 	{/if}
 {/snippet}
 
+<!-- The wall's faces at their own scale: solid drawers have products, outlines are empty. -->
+{#snippet legend()}
+	<div class="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 text-sm text-muted-foreground" aria-hidden="true">
+		<span class="inline-flex items-center gap-2"><span class="h-2 w-4 bg-muted-foreground"></span>{m.legendAssigned}</span>
+		<span class="inline-flex items-center gap-2"><span class="h-2 w-4 border border-drawer-edge"></span>{m.emptyDrawer}</span>
+	</div>
+{/snippet}
+
 {#snippet layoutView()}
 	{#key layoutVersion}<ShelfLayoutEditor bind:this={layoutEditor} initialSelected={binId ?? ''} onselect={selectDrawer} moving={Boolean(swapSource)} onempty={moveToEmpty}
 		cabinetId={layoutId} bind:bins={layoutBins} bind:size={layoutSize} original={beforeBins} assigned={assignedIds} disabled={locked} onswap={dragSwap} onswapselect={pickSwap} />{/key}
@@ -472,8 +486,9 @@
 				title={openCabinet ? m.cabinet(gridCell(openCabinet.outer_row!, openCabinet.outer_col!)) : m.wall}>
 				{#snippet wall(zoomTo)}
 					<div data-shelf-wall>
-						<ShelfDiagram rows={wallRows} cols={wallCols} items={cabinets.map((item) => ({ id: item.id, row: item.outer_row, col: item.outer_col, label: gridCell(item.outer_row, item.outer_col), inner: cabinetInner(item, shelf?.live.bins ?? []) }))}
+						<ShelfDiagram rows={wallRows} cols={wallCols} items={wallItems}
 							selected={cabinetId} label={m.wall} onselect={(id) => { if (!locked && !draftChanged) zoomTo(id); }} disabled={locked || draftChanged} />
+						{@render legend()}
 					</div>
 				{/snippet}
 				{#snippet cabinet()}

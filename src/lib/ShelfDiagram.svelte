@@ -18,8 +18,9 @@
 	import { diagramRect, raaco, type CabinetInner } from '#lib/shelf-map.js';
 	import { revealShelfFocus } from '#lib/shelf-focus.js';
 
-	// `inner` draws a wall cabinet's drawer layout on its face.
-	type Item = { id: string; row: number; col: number; rowSpan?: number; colSpan?: number; label: string; empty?: boolean; inner?: CabinetInner };
+	// `inner` draws a wall cabinet's drawer layout on its face; `description` extends
+	// the accessible name with what the face shows beyond its label.
+	type Item = { id: string; row: number; col: number; rowSpan?: number; colSpan?: number; label: string; description?: string; empty?: boolean; inner?: CabinetInner };
 	let { rows, cols, items, selected, current, label, onselect, cabinet = false, emptyLabel = '',
 		onresize, resizeLabel = '', resizeDisabled = false, responsive = false, expand = false,
 		selectedIds, partialIds = [], disabled = false, onswap, onswapselect, swapLabel = '', editorGeometry = false, edgeControls }: {
@@ -211,7 +212,7 @@
 							class={['cell-hit group/cell relative h-full min-h-0 w-full min-w-0 rounded-none border-0 bg-transparent p-0 font-mono font-normal text-foreground hover:bg-transparent active:not-aria-[haspopup]:translate-y-0', item.empty && 'empty', active && 'selected', partial && 'partial', current === item.id && 'current', onswap && !disabled && 'cursor-grab', drag?.id === item.id && drag.moved && 'cursor-grabbing border border-dashed border-muted-foreground']}
 							tabindex={!disabled && tabId === item.id ? 0 : -1}
 							aria-current={current === item.id ? 'true' : undefined}
-							aria-label={item.empty && emptyLabel ? `${item.label} · ${emptyLabel}` : item.label}
+							aria-label={[item.label, item.empty && emptyLabel, item.description].filter(Boolean).join(' · ')}
 							aria-pressed={partial ? 'mixed' : active}
 							onpointerdown={(event) => { dragged = false; if (onswap && event.pointerType === 'mouse') startDrag(event, item.id); }} onlostpointercapture={cancelDrag}
 							onfocus={(event) => { focusedId = item.id; revealShelfFocus(event.currentTarget, viewport); }}

@@ -48,6 +48,7 @@ export const nb = {
 		widenDrawer: 'Bredere',
 		narrowDrawer: 'Smalere',
 		legendAssigned: 'Har produkter',
+		drawersInUse: (used: number, total: number) => `${used} av ${total} skuffer har produkter`,
 		layoutChanged: (range: string) => `Skuffen dekker nå ${range}.`,
 		emptyDrawer: 'Tom',
 		splitLayout: 'Del i enkeltskuffer',

@@ -48,6 +48,7 @@ export const en: Messages = {
 		widenDrawer: 'Wider',
 		narrowDrawer: 'Narrower',
 		legendAssigned: 'Has products',
+		drawersInUse: (used: number, total: number) => `${used} of ${total} drawers have products`,
 		layoutChanged: (range: string) => `Drawer now covers ${range}.`,
 		emptyDrawer: 'Empty',
 		splitLayout: 'Split into single drawers',

@@ -131,13 +131,18 @@ export function drawerFront(rows: number, cols: number, row: number, col: number
 }
 
 type DrawerSpan = { row: number; col: number; rowSpan: number; colSpan: number };
-/** `marked` is the drawer a product page points at; the face fills it instead of showing its address. */
-export type CabinetInner = { rows: number; cols: number; drawers: DrawerSpan[]; marked?: DrawerSpan };
+/**
+ * `marked` is the drawer a product page points at; the face fills it instead of showing its address.
+ * `occupancy` draws drawers with assigned products filled and the rest hollow (staff wall only).
+ */
+export type CabinetInner = { rows: number; cols: number; drawers: (DrawerSpan & { occupied?: boolean })[]; marked?: DrawerSpan; occupancy?: boolean };
 /** A wall cabinet's drawer layout, so its face shows the real drawers. Unplaced drawers are skipped. */
 export function cabinetInner(cabinet: { id: string; inner_rows: number; inner_cols: number },
-	bins: { cabinet_id: string | null; inner_row: number | null; inner_col: number | null; row_span: number; col_span: number }[]): CabinetInner {
-	return { rows: cabinet.inner_rows, cols: cabinet.inner_cols, drawers: bins.flatMap((bin) => bin.cabinet_id === cabinet.id && bin.inner_row && bin.inner_col
-		? [{ row: bin.inner_row, col: bin.inner_col, rowSpan: bin.row_span, colSpan: bin.col_span }] : []) };
+	bins: { cabinet_id: string | null; inner_row: number | null; inner_col: number | null; row_span: number; col_span: number; has_products?: boolean }[],
+	occupancy = false): CabinetInner {
+	const drawers = bins.flatMap((bin) => bin.cabinet_id === cabinet.id && bin.inner_row && bin.inner_col
+		? [{ row: bin.inner_row, col: bin.inner_col, rowSpan: bin.row_span, colSpan: bin.col_span, ...(occupancy && { occupied: Boolean(bin.has_products) }) }] : []);
+	return { rows: cabinet.inner_rows, cols: cabinet.inner_cols, drawers, ...(occupancy && { occupancy }) };
 }
 
 /** Exact even for the largest legal int4 grid, without allocating every free cell. */

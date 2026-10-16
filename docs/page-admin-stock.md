@@ -242,6 +242,10 @@ rows:
 C2 has two wide drawers (A1–D1, C2–D2) from the merged cells in `Bok.xlsx`: 496 cells,
 492 drawers, no products or stock inferred.
 
+**Wall.** Each cabinet face draws its real drawers: solid where a drawer has products,
+a hollow outline where it is empty, with a legend below. Each cabinet's accessible
+name adds how many of its drawers have products.
+
 **Layout editor.** Selecting a cabinet zooms into it through the shared `ShelfZoom`,
 as on the public map: the drawer grid first, where the zoom lands, then its size as
 text, a legend (filled front with a strip: has products; hollow with a dashed edge:

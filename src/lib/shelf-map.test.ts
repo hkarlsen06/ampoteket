@@ -103,6 +103,12 @@ describe('Raaco drawer fronts', () => {
 			{ cabinet_id: id(2), inner_row: 1, inner_col: 1, row_span: 1, col_span: 1 }, { cabinet_id: id(1), inner_row: null, inner_col: null, row_span: 1, col_span: 1 }];
 		expect(cabinetInner(cabinet(), bins)).toEqual({ rows: 4, cols: 10, drawers: [{ row: 2, col: 1, rowSpan: 1, colSpan: 2 }] });
 	});
+	test('mark occupied drawers only when asked', () => {
+		const bins = [{ cabinet_id: id(1), inner_row: 1, inner_col: 1, row_span: 1, col_span: 1, has_products: true },
+			{ cabinet_id: id(1), inner_row: 2, inner_col: 1, row_span: 1, col_span: 1, has_products: false }];
+		expect(cabinetInner(cabinet(), bins).drawers.some((drawer) => 'occupied' in drawer)).toBe(false);
+		expect(cabinetInner(cabinet(), bins, true)).toMatchObject({ occupancy: true, drawers: [{ occupied: true }, { occupied: false }] });
+	});
 });
 
 describe('drawer neighbours', () => {

@@ -14,7 +14,11 @@
 		{#each inner.drawers as drawer, index (index)}
 			{@const front = drawerFront(inner.rows, inner.cols, drawer.row, drawer.col, drawer.rowSpan, drawer.colSpan)}
 			{@const marked = inner.marked?.row === drawer.row && inner.marked.col === drawer.col}
-			<rect class={marked ? 'marked-drawer fill-warning' : 'fill-drawer'} x={front.x * raaco.width} y={front.y * raaco.height} width={front.width * raaco.width} height={front.height * raaco.height} />
+			<!-- With occupancy, drawers with products are solid and the rest hollow
+			     outlines: a shape cue, legible at wall scale, that needs no colour. -->
+			<rect class={marked ? 'marked-drawer fill-warning' : !inner.occupancy ? 'fill-drawer' : drawer.occupied ? 'fill-muted-foreground' : 'fill-none stroke-drawer-edge'}
+				vector-effect={inner.occupancy && !drawer.occupied ? 'non-scaling-stroke' : undefined}
+				x={front.x * raaco.width} y={front.y * raaco.height} width={front.width * raaco.width} height={front.height * raaco.height} />
 		{/each}
 	</svg>
 {/if}
