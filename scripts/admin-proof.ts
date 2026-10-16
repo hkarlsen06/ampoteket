@@ -54,8 +54,9 @@ async function openShelfCabinet(page: Page, address: string) {
   const wall = page.getByRole('button', { name: new RegExp(`^(${nb.shelfMap.showWall}|${en.shelfMap.showWall})$`) });
   await expect(async () => {
     if (await wall.count()) await wall.click({ timeout: 1000 });
-    await page.locator('[data-shelf-wall]').getByRole('button', { name: address, exact: true }).click({ timeout: 1000 });
-  }).toPass();
+    // The admin wall names each cabinet by its address, then how many drawers have products.
+    await page.locator('[data-shelf-wall]').getByRole('button', { name: new RegExp(`^${address}( · |$)`) }).click({ timeout: 1000 });
+  }).toPass({ timeout: 30_000 });
   // Geometry is measured after the zoom settles, not mid-scale.
   await expect(page.locator('[data-cabinet-editor]')).toBeVisible();
   await expect.poll(() => page.locator('[data-shelf-stage]').evaluate(stage => stage.getAnimations({ subtree: true }).length)).toBe(0);
