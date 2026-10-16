@@ -403,11 +403,11 @@
 	{/if}
 {/snippet}
 
-<!-- The wall's faces at their own scale: solid drawers have products, outlines are empty. -->
+<!-- The wall's faces at their own scale: filled drawers have products, outlines are empty. -->
 {#snippet legend()}
 	<div class="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 text-sm text-muted-foreground" aria-hidden="true">
-		<span class="inline-flex items-center gap-2"><span class="h-2 w-4 bg-muted-foreground"></span>{m.legendAssigned}</span>
-		<span class="inline-flex items-center gap-2"><span class="h-2 w-4 border border-drawer-edge"></span>{m.emptyDrawer}</span>
+		<span class="inline-flex items-center gap-2"><span class="h-2 w-4 border border-drawer-edge bg-drawer"></span>{m.legendAssigned}</span>
+		<span class="inline-flex items-center gap-2"><span class="h-2 w-4 border border-steel-seam bg-steel"></span>{m.emptyDrawer}</span>
 	</div>
 {/snippet}
 
