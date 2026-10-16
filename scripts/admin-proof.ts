@@ -1076,42 +1076,48 @@ try {
   await expect(stockReason).toHaveValue('Design consistency validation');
   await fits(page);
 
-  // New audit entries prepend without throwing away older pages or an open row.
+  // The log groups entries into day sections; new entries prepend without closing an open row or moving focus.
   await page.goto(`${origin}/en/admin/audit`);
-  const auditRows = page.locator('[data-slot="item"][role="listitem"]');
-  await expect(auditRows).toHaveCount(30);
-  await page.getByRole('button', { name: en.adminAudit.more, exact: true }).click();
-  await expect(auditRows).toHaveCount(60);
-  // Entry IDs are intentionally never shown; keep the first row that has details by position.
-  const originalIndex = await auditRows.evaluateAll(rows => rows.findIndex(row => row.querySelector('[aria-expanded]')));
+  const auditRows = page.locator('section[aria-labelledby^="audit-"] > [role="list"] > [role="listitem"]');
+  await expect(auditRows.first()).toBeVisible();
+  const [entryCount, dayCount] = (await sql(`SELECT count(*) || ',' || count(DISTINCT (recorded_at AT TIME ZONE 'Europe/Oslo')::date) FROM app.audit_log`)).split(',').map(Number);
+  // A day loads whole, so a single day of entries needs no further page.
+  if (dayCount === 1) await expect(page.getByRole('button', { name: en.adminAudit.more, exact: true })).toHaveCount(0);
+  const rowsBefore = await auditRows.count();
+  expect(rowsBefore).toBeLessThan(entryCount);
+  // Entry IDs are intentionally never shown; keep a staff row with a disclosure by position.
+  const systemActor = `${en.adminAudit.actor}: ${en.adminAudit.system}`;
+  const originalIndex = await auditRows.evaluateAll((rows, system) => rows.findIndex(row => row.querySelector('[aria-expanded]') && !row.textContent?.includes(system)), systemActor);
   expect(originalIndex).toBeGreaterThanOrEqual(0);
   const originalRow = auditRows.nth(originalIndex);
-  const disclosure = originalRow.getByRole('button', { name: en.adminAudit.details, exact: true });
+  const disclosure = originalRow.locator('[aria-expanded]').first();
   await disclosure.click(); await disclosure.focus();
+  await expect(disclosure).toHaveAttribute('aria-expanded', 'true');
   const originalText = await originalRow.innerText();
   await sql(`UPDATE app.products SET description='Design audit refresh proof' WHERE id=${literal(productId)}`);
   const changedCode = await sql(`SELECT code FROM app.products WHERE id=${literal(productId)}`);
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
-  await expect(auditRows.first()).toContainText(`${en.adminAudit.tables.products}: ${changedCode}`);
-  await expect(auditRows.first()).toContainText(`${en.adminAudit.actor}: ${en.adminAudit.system}`);
-  await expect(auditRows.first()).toContainText(en.adminAudit.fields.description);
-  await expect(auditRows).toHaveCount(61);
-  const movedRow = auditRows.nth(originalIndex + 1);
+  await expect(auditRows.first()).toContainText(changedCode);
+  await expect(auditRows.first()).toContainText(systemActor);
+  // The edit joins the System row for this product if one is already open in time, otherwise it adds one row above.
+  const rowsAfter = await auditRows.count();
+  expect([rowsBefore, rowsBefore + 1]).toContain(rowsAfter);
+  const movedRow = auditRows.nth(originalIndex + rowsAfter - rowsBefore);
   expect(await movedRow.innerText()).toBe(originalText);
-  const movedDisclosure = movedRow.getByRole('button', { name: en.adminAudit.details, exact: true });
+  const movedDisclosure = movedRow.locator('[aria-expanded]').first();
   await expect(movedDisclosure).toHaveAttribute('aria-expanded', 'true');
   await expect(movedDisclosure).toBeFocused();
   const auditRead = `${api.origin}/rest/v1/amp_audit_log?*`;
   await page.route(auditRead, route => route.abort('failed'));
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(page.getByText(en.adminAudit.unavailable, { exact: true })).toBeVisible();
-  await expect(auditRows).toHaveCount(61);
+  await expect(auditRows).toHaveCount(rowsAfter);
   await expect(movedDisclosure).toBeFocused();
   await page.unroute(auditRead);
   await page.getByRole('button', { name: en.adminAudit.retry, exact: true }).click();
   await expect(page.getByText(en.adminAudit.unavailable, { exact: true })).toHaveCount(0);
   await fits(page);
-  console.log('PASS: stock field validation and retained failed-read drafts; audit freshness keeps older pages, open details and focus');
+  console.log('PASS: stock field validation and retained failed-read drafts; audit grouping and freshness keep open details and focus');
   await page.goto(`${origin}/en/admin/shelf`);
   // Revoked (not merely no access) needs the reloaded page to have admitted this user first.
   await expect(page.getByRole('button', { name: sh.newCabinet, exact: true })).toBeVisible();
