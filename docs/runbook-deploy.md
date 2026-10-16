@@ -332,6 +332,15 @@ error right after a push usually means a backend change the running Worker or an
 open tab did not expect (§1). Persisted Worker error logs are in the Cloudflare
 dashboard under the `ampoteket` Worker's Logs.
 
+Search indexing depends on the zone's AI Crawl Control. Cloudflare counts
+Googlebot as a training crawler too, so setting the *Training* category to
+*Block* answers Googlebot with 403 and Google indexes nothing (2026-10-16). Keep
+*Search* and *Training* on *Allow* and block training crawlers one by one in the
+crawler list, with Googlebot unblocked; robots.txt disallows `Google-Extended`,
+Google's training opt-out. If Search Console reports 403, check Security → Events
+filtered on Googlebot and run its live URL test, since a spoofed Googlebot user
+agent from elsewhere is not blocked and curl cannot reproduce it.
+
 ## 7. Release verification and recovery
 
 Before opening the shop, take the first owner-held snapshot and finish a restore
