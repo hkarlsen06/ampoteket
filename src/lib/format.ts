@@ -187,6 +187,17 @@ export function gridRange(row: number, col: number, rowSpan: number, colSpan: nu
 	return `${start}–${gridCell(row + rowSpan - 1, col + colSpan - 1)}`;
 }
 
+/** A day heading such as «Tirsdag 13. oktober 2026». */
+export function formatDay(value: string, locale: Locale): string {
+	const day = new Intl.DateTimeFormat(locale === 'nb' ? 'nb-NO' : 'en-GB', { timeZone: 'Europe/Oslo', dateStyle: 'full' }).format(new Date(value));
+	return day.charAt(0).toLocaleUpperCase(locale) + day.slice(1);
+}
+
+/** The time of day alone, for entries already under a day heading. */
+export function formatClock(value: string, locale: Locale): string {
+	return new Intl.DateTimeFormat(locale === 'nb' ? 'nb-NO' : 'en-GB', { timeZone: 'Europe/Oslo', timeStyle: 'short' }).format(new Date(value));
+}
+
 export function formatCountedAt(value: string, locale: Locale): string {
 	return new Intl.DateTimeFormat(locale === 'nb' ? 'nb-NO' : 'en-GB', {
 		timeZone: 'Europe/Oslo', dateStyle: 'medium', timeStyle: 'short'

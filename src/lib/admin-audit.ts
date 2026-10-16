@@ -10,7 +10,7 @@ export type AuditEntry = {
 	actorId: string | null; role: string; recordedAt: string;
 };
 
-const pageSize = 30;
+const pageSize = 200;
 function auditId(value: unknown): string {
 	if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value) || BigInt(value) > 9223372036854775807n) throw new Error('Invalid audit ID');
 	return value;
@@ -145,41 +145,46 @@ const numericFields = new Set(['stock_step', 'sale_step', 'minimum_stock', 'orde
 const readable = (value: unknown): string | undefined => typeof value === 'string' && value.trim() && !uuidInText.test(value) ? value : undefined;
 const coordinate = (value: unknown): number | undefined => typeof value === 'string' && /^\d+$/.test(value) && Number.isSafeInteger(Number(value)) && Number(value) > 0 ? Number(value) : typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined;
 
+/** The name staff know a row by, without its type, or undefined when it has none. */
+export function auditName(table: string, data: AuditRow, locale: Locale, references: AuditReferences = {}): string | undefined {
+	const subject = (table: string, data: AuditRow) => auditName(table, data, locale, references);
+	function reference(table: string, id: unknown): AuditRow | undefined { return typeof id === 'string' ? references[table]?.[id] : undefined; }
+	if (table === 'products') {
+		const name = readable(data.name_nb) && readable(data.name_en) ? productName(data as { name_nb: string; name_en: string }, locale) : readable(data[`name_${locale}`]);
+		return [readable(data.code), name].filter(Boolean).join(' · ') || undefined;
+	}
+	if (table === 'categories') { const name = readable(data.name); return name && categoryLabel(name, locale); }
+	if (table === 'purchase_orders') return [readable(data.supplier_name), readable(data.supplier_reference)].filter(Boolean).join(' · ') || undefined;
+	if (table === 'attribute_definitions') {
+		const label = readable(data.label); const code = typeof data.code === 'string' ? data.code : '';
+		return label && specificationLabel(code, { label, value_type: String(data.value_type), canonical_unit: typeof data.canonical_unit === 'string' ? data.canonical_unit : null }, locale);
+	}
+	if (table === 'cabinets') {
+		const r = coordinate(data.outer_row); const c = coordinate(data.outer_col);
+		return readable(data.label) ?? (r && c ? gridCell(r, c) : undefined);
+	}
+	if (table === 'bins') {
+		const r = coordinate(data.inner_row); const c = coordinate(data.inner_col);
+		const archived = data.archived_cabinet; const cabinet = archived && typeof archived === 'object' ? archived as AuditRow : reference('cabinets', data.cabinet_id);
+		return readable(data.label) ?? ([cabinet && subject('cabinets', cabinet), r && c ? gridRange(r, c, coordinate(data.row_span) ?? 1, coordinate(data.col_span) ?? 1) : undefined].filter(Boolean).join(' / ') || undefined);
+	}
+	if (table === 'purchase_order_lines' || table === 'product_attributes') {
+		const product = reference('products', data.product_id);
+		const definition = reference('attribute_definitions', data.attribute_id);
+		const order = reference('purchase_orders', data.order_id);
+		return [product && subject('products', product), definition && subject('attribute_definitions', definition), order && subject('purchase_orders', order)].filter(Boolean).join(' · ') || undefined;
+	}
+	if (table === 'units') return typeof data.code === 'string' ? unitLabel(data.code, locale) : readable(data.name);
+	return readable(data.display_name) ?? readable(data.title) ?? readable(data.name);
+}
+
 /** Presentation whitelist: internal IDs, revisions and unrecognized columns never reach staff. */
 export function describeAudit(entry: AuditEntry, locale: Locale, references: AuditReferences = {}): AuditDescription {
 	const m = messagesFor(locale).adminAudit;
 	const before = entry.before ?? {}; const after = entry.after ?? {};
 	const row = { ...before, ...after };
 	function reference(table: string, id: unknown): AuditRow | undefined { return typeof id === 'string' ? references[table]?.[id] : undefined; }
-	function subject(table: string, data: AuditRow): string | undefined {
-		if (table === 'products') {
-			const name = readable(data.name_nb) && readable(data.name_en) ? productName(data as { name_nb: string; name_en: string }, locale) : readable(data[`name_${locale}`]);
-			return [readable(data.code), name].filter(Boolean).join(' · ') || undefined;
-		}
-		if (table === 'categories') { const name = readable(data.name); return name && categoryLabel(name, locale); }
-		if (table === 'purchase_orders') return [readable(data.supplier_name), readable(data.supplier_reference)].filter(Boolean).join(' · ') || undefined;
-		if (table === 'attribute_definitions') {
-			const label = readable(data.label); const code = typeof data.code === 'string' ? data.code : '';
-			return label && specificationLabel(code, { label, value_type: String(data.value_type), canonical_unit: typeof data.canonical_unit === 'string' ? data.canonical_unit : null }, locale);
-		}
-		if (table === 'cabinets') {
-			const r = coordinate(data.outer_row); const c = coordinate(data.outer_col);
-			return readable(data.label) ?? (r && c ? gridCell(r, c) : undefined);
-		}
-		if (table === 'bins') {
-			const r = coordinate(data.inner_row); const c = coordinate(data.inner_col);
-			const archived = data.archived_cabinet; const cabinet = archived && typeof archived === 'object' ? archived as AuditRow : reference('cabinets', data.cabinet_id);
-			return readable(data.label) ?? ([cabinet && subject('cabinets', cabinet), r && c ? gridRange(r, c, coordinate(data.row_span) ?? 1, coordinate(data.col_span) ?? 1) : undefined].filter(Boolean).join(' / ') || undefined);
-		}
-		if (table === 'purchase_order_lines' || table === 'product_attributes') {
-			const product = reference('products', data.product_id);
-			const definition = reference('attribute_definitions', data.attribute_id);
-			const order = reference('purchase_orders', data.order_id);
-			return [product && subject('products', product), definition && subject('attribute_definitions', definition), order && subject('purchase_orders', order)].filter(Boolean).join(' · ') || undefined;
-		}
-		if (table === 'units') return typeof data.code === 'string' ? unitLabel(data.code, locale) : readable(data.name);
-		return readable(data.display_name) ?? readable(data.title) ?? readable(data.name);
-	}
+	const subject = (table: string, data: AuditRow) => auditName(table, data, locale, references);
 	function value(field: string, data: AuditRow): string | undefined {
 		const raw = data[field];
 		if (raw == null) return m.none;
@@ -225,4 +230,99 @@ export function describeAudit(entry: AuditEntry, locale: Locale, references: Aud
 		actor: staffName ?? (entry.actorId || entry.role === 'authenticated' ? m.unknownAdmin : entry.role === 'service_role' ? m.selfService : m.system),
 		fields
 	};
+}
+
+export type AuditField = AuditDescription['fields'][number];
+/** One person's work on one thing: a product with its specifications and opening count, an order with its lines, or any other row. */
+export type AuditEvent = { key: string; table: string; action: AuditEntry['action']; subject: string; name: string; first: string; last: string; fields: AuditField[] };
+/** Events of one kind and action by one person on one day, such as every product Ada created on Monday. */
+export type AuditBatch = { key: string; table: string; action: AuditEntry['action']; actor: string; first: string; last: string; title: string; summary: string; events: AuditEvent[] };
+export type AuditDay = { key: string; at: string; batches: AuditBatch[] };
+
+/** Entries this close together by the same person on the same thing read as one piece of work. */
+const eventGap = 30 * 60 * 1000;
+const osloDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Oslo', year: 'numeric', month: '2-digit', day: '2-digit' });
+/** The workshop's calendar day an entry falls on, as YYYY-MM-DD. */
+export const auditDay = (recordedAt: string) => osloDay.format(new Date(recordedAt));
+
+/** The row an entry belongs to: specifications and opening counts join their product, lines their order. */
+function auditOwner(entry: AuditEntry): { table: string; id: string } {
+	const row = { ...entry.before, ...entry.after };
+	if ((entry.table === 'product_attributes' || entry.table === 'count_batches') && typeof row.product_id === 'string') return { table: 'products', id: row.product_id };
+	if (entry.table === 'purchase_order_lines' && typeof row.order_id === 'string') return { table: 'purchase_orders', id: row.order_id };
+	return { table: entry.table, id: typeof entry.key.id === 'string' ? entry.key.id : JSON.stringify(entry.key) };
+}
+
+/** Fold entries into days of batched events, newest first, so a day of catalogue entry reads as a few lines. */
+export function groupAudit(entries: AuditEntry[], locale: Locale, references: AuditReferences = {}): AuditDay[] {
+	const m = messagesFor(locale).adminAudit;
+	type Draft = { event: AuditEvent; ownerId: string; actorKey: string; actor: string; newest: bigint; at: number; main: AuditRow | undefined; fields: Map<string, AuditField>; inserted: Set<string> };
+	const open = new Map<string, Draft>(); const drafts: Draft[] = [];
+	// Oldest first, so entries that arrive later only extend the newest events and keys stay stable.
+	for (const entry of [...entries].sort((a, b) => BigInt(a.id) < BigInt(b.id) ? -1 : 1)) {
+		const owner = auditOwner(entry); const actorKey = entry.actorId ?? `role:${entry.role}`;
+		const slot = `${actorKey}|${owner.table}|${owner.id}`; const at = Date.parse(entry.recordedAt);
+		let draft = open.get(slot);
+		if (!draft || at - draft.at > eventGap) {
+			draft = { event: { key: entry.id, table: owner.table, action: 'UPDATE', subject: '', name: '', first: entry.recordedAt, last: entry.recordedAt, fields: [] },
+				ownerId: owner.id, actorKey, actor: auditActor(entry, locale, references), newest: 0n, at, main: undefined, fields: new Map(), inserted: new Set() };
+			open.set(slot, draft); drafts.push(draft);
+		}
+		draft.at = at; draft.event.last = entry.recordedAt; draft.newest = BigInt(entry.id);
+		const row = { ...entry.before, ...entry.after }; const rowKey = `${entry.table}|${JSON.stringify(entry.key)}`;
+		if (entry.action === 'INSERT') draft.inserted.add(rowKey);
+		if (entry.table === owner.table) {
+			draft.main = { ...draft.main, ...row };
+			if (entry.action === 'INSERT' || (entry.action !== 'UPDATE' && draft.event.action === 'UPDATE')) draft.event.action = entry.action;
+		}
+		const add = (key: string, field: AuditField) => {
+			const known = draft.fields.get(key);
+			if (known) known.after = field.after;
+			else draft.fields.set(key, { ...field, before: draft.inserted.has(rowKey) ? null : field.before });
+		};
+		if (entry.table === 'count_batches' && owner.table === 'products') {
+			add(rowKey, { label: m.tables.count_batches, before: null, after: entry.after ? row.finished_at ? m.counted : m.fields.started_at : null });
+			continue;
+		}
+		const identity = [m.fields.product_id, m.fields.attribute_id, m.fields.order_id];
+		const specification = entry.table === 'product_attributes' && entry.table !== owner.table
+			? auditName('attribute_definitions', references.attribute_definitions?.[String(row.attribute_id)] ?? {}, locale, references) ?? m.unresolved : undefined;
+		const line = entry.table === 'purchase_order_lines' && entry.table !== owner.table
+			? auditName('products', references.products?.[String(row.product_id)] ?? {}, locale, references) ?? m.unresolved : undefined;
+		for (const field of describeAudit(entry, locale, references).fields) {
+			if ((specification || line) && identity.includes(field.label)) continue;
+			const label = specification ? field.label === m.fields.number_max ? `${specification} (${field.label})` : specification : line ? `${line}: ${field.label}` : field.label;
+			add(`${rowKey}|${label}`, { ...field, label });
+		}
+	}
+	const days = new Map<string, AuditDay>(); const batches = new Map<string, AuditBatch>();
+	for (const draft of drafts.sort((a, b) => a.newest > b.newest ? -1 : 1)) {
+		const { event } = draft;
+		event.fields = [...draft.fields.values()].filter(field => field.before !== field.after && !(field.before === null && field.after === m.none));
+		const type = (m.tables as Record<string, string>)[event.table] ?? m.unknownSubject;
+		const name = auditName(event.table, draft.main ?? references[event.table]?.[draft.ownerId] ?? {}, locale, references);
+		event.name = name ?? type; event.subject = name ? `${type}: ${name}` : type;
+		const day = auditDay(event.last);
+		const key = `${day}|${draft.actorKey}|${event.table}|${event.action}`;
+		let batch = batches.get(key);
+		if (!batch) {
+			batch = { key, table: event.table, action: event.action, actor: draft.actor, first: event.first, last: event.last, title: '', summary: '', events: [] };
+			batches.set(key, batch);
+			let date = days.get(day);
+			if (!date) days.set(day, date = { key: day, at: event.last, batches: [] });
+			date.batches.push(batch);
+		}
+		batch.events.push(event);
+		if (Date.parse(event.first) < Date.parse(batch.first)) batch.first = event.first;
+	}
+	for (const batch of batches.values()) {
+		const [only] = batch.events;
+		if (batch.events.length === 1) {
+			batch.title = only.subject; batch.summary = only.fields.slice(0, 3).map(field => field.label).join(', ');
+		} else {
+			batch.title = m.batch(batch.events.length, (m.many as Record<string, string>)[batch.table] ?? m.many.entries);
+			batch.summary = m.someOf(batch.events.slice(0, 3).map(event => event.name), batch.events.length - 3);
+		}
+	}
+	return [...days.values()];
 }

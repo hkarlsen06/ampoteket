@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { describeAudit, readAuditReferences, readAuditPage, readAuditUpdates, type AuditEntry, type AuditReferences } from './admin-audit';
+import { describeAudit, groupAudit, readAuditReferences, readAuditPage, readAuditUpdates, type AuditEntry, type AuditReferences } from './admin-audit';
 
 const session = { config: { url: 'https://fixture.invalid', publishableKey: 'sb_publishable_fixture' }, token: 'staff-jwt', userId: '11111111-1111-4111-8111-111111111111' };
 const entry = (id: string) => ({ id, table_name: 'products', row_key: { id: session.userId }, action: 'UPDATE', before_data: { sale_unit_price_nok: '9007199254740993.123456' }, after_data: { sale_unit_price_nok: '9007199254740994.123456' }, actor_id: session.userId, database_role: 'authenticated', recorded_at: '2026-09-23T10:00:00Z' });
@@ -22,13 +22,13 @@ test('audit paging retains exact nested values and fills capped responses withou
 	const fetcher = async (input: RequestInfo | URL) => {
 		const url = new URL(String(input));
 		calls.push(url.searchParams.get('id') ?? '');
-		const cursor = url.searchParams.get('id')?.slice(3) ?? '9007199254741024';
+		const cursor = url.searchParams.get('id')?.slice(3) ?? '9007199254741194';
 		const count = Math.min(Number(url.searchParams.get('limit')), 7);
 		const rows = Array.from({ length: count }, (_, index) => entry((BigInt(cursor) - BigInt(index + 1)).toString()));
 		return new Response(JSON.stringify(rows).replaceAll('"9007199254740993.123456"', '9007199254740993.123456'));
 	};
 	const first = await readAuditPage(session, null, fetcher);
-	expect(first.entries).toHaveLength(30);
+	expect(first.entries).toHaveLength(200);
 	expect(first.more).toBe(true);
 	expect(first.entries[0].before?.sale_unit_price_nok).toBe('9007199254740993.123456');
 	expect(first.entries.at(-1)?.id).toBe('9007199254740994');
@@ -143,4 +143,42 @@ test('an archived drawer resolves to its former place instead of hiding the plac
 	});
 	expect(describeAudit(entry, 'en', loaded).fields).toEqual([{ label: 'Drawer', before: 'C2 / A1', after: 'Not set' }]);
 	expect(loaded.cabinets[cabinet].outer_col).toBe('4');
+});
+
+test('a day of catalogue entry folds into one line per person and kind, each product carrying its specifications and count', () => {
+	const ada = session.userId; const bo = '22222222-2222-4222-8222-222222222222';
+	const first = '00000000-0000-4000-8000-0000000000a1'; const second = '00000000-0000-4000-8000-0000000000b2';
+	const refs: AuditReferences = { ...references, staff_members: { [ada]: { display_name: 'Ada' }, [bo]: { display_name: 'Bo' } },
+		products: { [first]: { code: 'RES-01', name_nb: 'Motstand', name_en: 'Resistor', unit_code: 'pcs' }, [second]: { code: 'RES-02', name_nb: 'Motstand 2', name_en: 'Resistor 2', unit_code: 'pcs' } } };
+	let id = 100;
+	const at = (table: string, key: Record<string, unknown>, before: AuditEntry['before'], after: AuditEntry['after'], recordedAt: string, actorId = ada): AuditEntry =>
+		({ id: String(id++), table, key, action: before ? after ? 'UPDATE' : 'DELETE' : 'INSERT', before, after, actorId, role: 'authenticated', recordedAt });
+	const product = (product: string, extra: Record<string, unknown> = {}) => ({ id: product, ...refs.products[product], is_active: true, bin_id: null, ...extra });
+	const entries = [
+		at('products', { id: first }, null, product(first), '2026-10-13T09:15:20Z'),
+		at('product_attributes', { product_id: first, attribute_id: ada }, null, { product_id: first, attribute_id: ada, number_value: '1000' }, '2026-10-13T09:15:21Z'),
+		at('count_batches', { id: bo }, null, { product_id: first, title: 'RES-01', finished_at: '2026-10-13T09:15:46Z' }, '2026-10-13T09:15:46Z'),
+		at('products', { id: first }, product(first), product(first, { bin_id: ada }), '2026-10-13T09:17:19Z'),
+		at('products', { id: second }, null, product(second), '2026-10-13T09:27:05Z'),
+		// Bo's correction and Ada's edit an hour later are separate pieces of work.
+		at('products', { id: second }, product(second), product(second, { is_active: false }), '2026-10-13T09:40:00Z', bo),
+		at('products', { id: first }, product(first, { bin_id: ada }), product(first, { bin_id: ada, is_active: false }), '2026-10-13T10:30:00Z'),
+		// 23:30 UTC is already the next day in Oslo.
+		at('products', { id: first }, product(first, { bin_id: ada, is_active: false }), product(first, { bin_id: ada }), '2026-10-13T22:30:00Z')
+	];
+	const days = groupAudit(entries.toReversed(), 'en', refs);
+	expect(days.map(day => day.key)).toEqual(['2026-10-14', '2026-10-13']);
+	const [changedByAda, changedByBo, created] = days[1].batches;
+	expect(created).toMatchObject({ action: 'INSERT', actor: 'Ada', title: '2 products', summary: 'RES-02 · Resistor 2, RES-01 · Resistor', first: '2026-10-13T09:15:20Z', last: '2026-10-13T09:27:05Z' });
+	expect(created.events.map(event => event.key)).toEqual(['104', '100']);
+	expect(created.events[1].fields).toEqual(expect.arrayContaining([
+		{ label: 'Resistance', before: null, after: '1 kΩ' }, { label: 'Stock count', before: null, after: 'Counted' }, { label: 'Drawer', before: null, after: 'C2 / A1–D1' }
+	]));
+	expect(created.events[1].fields.map(field => field.label)).not.toContain('Product');
+	expect(changedByBo).toMatchObject({ action: 'UPDATE', actor: 'Bo', title: 'Product: RES-02 · Resistor 2', summary: 'Publication' });
+	expect(changedByAda.events[0].fields).toEqual([{ label: 'Publication', before: 'Published', after: 'Unpublished' }]);
+	// A newer entry extends the day's head without renaming the events already shown.
+	const later = groupAudit([at('products', { id: first }, product(first, { bin_id: ada }), product(first, { bin_id: ada, minimum_stock: '5' }), '2026-10-13T22:40:00Z'), ...entries.toReversed()], 'en', refs);
+	expect(later[0].batches[0].events.map(event => event.key)).toEqual(['107']);
+	expect(later[0].batches[0].events[0].fields).toEqual([{ label: 'Publication', before: 'Unpublished', after: 'Published' }, { label: 'Minimum stock', before: 'Not set', after: '5 pieces' }]);
 });

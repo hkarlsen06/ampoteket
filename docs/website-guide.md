@@ -310,15 +310,28 @@ history; the audit records only that a clearance happened.
 
 ### 5.8 Audit browsing
 
-`/admin/audit` reads `amp_audit_log` with the staff JWT, newest first, paging with
-`id < last_id` until complete. A failed page keeps loaded rows and the cursor for
-retry. `describeAudit()` in `src/lib/admin-audit.ts` turns each row into an action
-badge, a named subject (product code and name, supplier, count, contact, drawer), the
-actor's name (database roles read as «System» or «Selvbetjent kjøp») and the changed
-fields with translated labels; a disclosure shows each changed field's formatted
-before and after values. Staff never see row ids, record keys, role names or JSON. There
-is no contact search. Movements, orders, counts and checkout recovery live on their
-own screens.
+`/admin/audit` reads `amp_audit_log` with the staff JWT, newest first, 200 rows per
+page with `id < last_id` until complete. Each load continues until one more Oslo
+calendar day is whole, and the oldest loaded day stays hidden until it is, so a day
+never shows a partial count. A failed page keeps loaded rows and the cursor for retry.
+`describeAudit()` in `src/lib/admin-audit.ts` turns each row into a named subject
+(product code and name, supplier, count, contact, drawer), the actor's name (database
+roles read as «System» or «Selvbetjent kjøp») and the changed fields with translated
+labels and formatted before and after values.
+
+`groupAudit()` then folds rows so a day of catalogue entry reads as a few lines:
+
+- **Event**: one person's rows on one thing with no more than 30 minutes between
+  them. A product's specifications and product-linked counts join the product, and
+  order lines join their order. A product created with its specification, opening count
+  and drawer is one «Opprettet» event; each field shows its net change.
+- **Batch**: a day's events by one person with the same kind and action, such as
+  «Opprettet 26 produkter» with the time span, the actor and the first names. «Vis alle»
+  lists the events; each has its own «Vis endringer» disclosure.
+- **Day**: batches sit under a heading per Oslo calendar day, newest first.
+
+Staff never see row ids, record keys, role names or JSON. There is no contact search.
+Movements, orders, counts and checkout recovery live on their own screens.
 
 ### 5.9 Admin access
 

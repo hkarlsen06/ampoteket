@@ -328,7 +328,11 @@ export const nb = {
 			email: 'E-post', phone: 'Telefon', contact_url: 'Kontaktlenke', discord: 'Discord-brukernavn', responsibility: 'Ansvarsområde', display_order: 'Rekkefølge'
 		},
 		tables: { staff_members: 'Administrator', help_contacts: 'Kontakt', units: 'Enhet', categories: 'Kategori', cabinets: 'Kabinett', bins: 'Skuff', products: 'Produkt', attribute_definitions: 'Spesifikasjonstype', product_attributes: 'Produktspesifikasjon', purchase_orders: 'Bestilling', purchase_order_lines: 'Bestillingslinje', count_batches: 'Telling', checkout_contacts: 'Kjøperens kontaktopplysning' },
-		actions: { INSERT: 'Opprettet', UPDATE: 'Endret', DELETE: 'Slettet', CONTACT_CLEARED: 'Kontaktopplysning slettet' }
+		actions: { INSERT: 'Opprettet', UPDATE: 'Endret', DELETE: 'Slettet', CONTACT_CLEARED: 'Kontaktopplysning slettet' },
+		many: { staff_members: 'administratorer', help_contacts: 'kontakter', units: 'enheter', categories: 'kategorier', cabinets: 'kabinetter', bins: 'skuffer', products: 'produkter', attribute_definitions: 'spesifikasjonstyper', product_attributes: 'produktspesifikasjoner', purchase_orders: 'bestillinger', purchase_order_lines: 'bestillingslinjer', count_batches: 'tellinger', checkout_contacts: 'kontaktopplysninger fra kjøpere', entries: 'oppføringer' },
+		batch: (count: number, noun: string) => `${count} ${noun}`,
+		someOf: (names: string[], rest: number) => rest > 0 ? `${names.join(', ')} og ${rest} til` : names.join(', '),
+		showAll: 'Vis alle', counted: 'Telt'
 	},
 	adminMembers: {
 		title: 'Administratorer | Admin | Ampoteket', heading: 'Administratorer', list: 'Alle administratorer',

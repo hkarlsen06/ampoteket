@@ -327,7 +327,11 @@ export const en: Messages = {
 			email: 'Email', phone: 'Phone', contact_url: 'Contact link', discord: 'Discord username', responsibility: 'Responsibility', display_order: 'Order'
 		},
 		tables: { staff_members: 'Admin', help_contacts: 'Contact', units: 'Unit', categories: 'Category', cabinets: 'Cabinet', bins: 'Drawer', products: 'Product', attribute_definitions: 'Specification type', product_attributes: 'Product specification', purchase_orders: 'Order', purchase_order_lines: 'Order line', count_batches: 'Stock count', checkout_contacts: 'Buyer contact detail' },
-		actions: { INSERT: 'Created', UPDATE: 'Changed', DELETE: 'Deleted', CONTACT_CLEARED: 'Contact detail cleared' }
+		actions: { INSERT: 'Created', UPDATE: 'Changed', DELETE: 'Deleted', CONTACT_CLEARED: 'Contact detail cleared' },
+		many: { staff_members: 'admins', help_contacts: 'contacts', units: 'units', categories: 'categories', cabinets: 'cabinets', bins: 'drawers', products: 'products', attribute_definitions: 'specification types', product_attributes: 'product specifications', purchase_orders: 'orders', purchase_order_lines: 'order lines', count_batches: 'stock counts', checkout_contacts: 'buyer contact details', entries: 'entries' },
+		batch: (count: number, noun: string) => `${count} ${noun}`,
+		someOf: (names: string[], rest: number) => rest > 0 ? `${names.join(', ')} and ${rest} more` : names.join(', '),
+		showAll: 'Show all', counted: 'Counted'
 	},
 	adminMembers: {
 		title: 'Admins | Admin | Ampoteket', heading: 'Admins', list: 'All admins',
