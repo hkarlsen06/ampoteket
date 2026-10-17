@@ -343,12 +343,12 @@ Newsroom images (§9). Checks in `convex/news.ts` (`INVALID_NEWS_IMAGE`): `conte
 
 ### `news_articles`
 
-`id uuid, slug text, title text, summary text?, body text, images [{id, alt}], links [{label, url}], people uuid[], is_published boolean, published_at timestamp?, edit_revision int, created_at timestamp, updated_at timestamp`
+`id uuid, slug text, title text, author text? (optional field), summary text?, body text, images [{id, alt}], links [{label, url}], people uuid[], is_published boolean, published_at timestamp?, edit_revision int, created_at timestamp, updated_at timestamp`
 
 Checks in `convex/news.ts` (`INVALID_NEWS`), shared with `events` where the field exists:
 
 - `slug`: `^[a-z0-9]+(-[a-z0-9]+)*$`, at most 80 characters, unique per table (`NEWS_SLUG_TAKEN`), never changed after creation.
-- `title`: 1–160 characters trimmed; `summary`: 1–300 trimmed; no control characters. `body`: at most 20000 characters of plain text (a blank line starts a new paragraph), line breaks and tabs only.
+- `title`: 1–160 characters trimmed; `author` (the byline): 1–80; `summary`: 1–300 trimmed; no control characters. `body`: at most 20000 characters of plain text (a blank line starts a new paragraph), line breaks and tabs only. A paragraph that is exactly `[image:<id>]` places that image there and must name one of the article's own `images`.
 - `images`: at most 8 distinct existing images (`NEWS_IMAGE_NOT_FOUND`), each with alt text of 1–300 characters; the first is the cover.
 - `links`: at most 10, labels 1–80 characters, URLs with the `help_contacts.contact_url` rule.
 - `people`: at most 20 distinct existing `help_contacts` (`NEWS_PERSON_NOT_FOUND`), in tag order.

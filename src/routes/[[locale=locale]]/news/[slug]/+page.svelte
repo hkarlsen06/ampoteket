@@ -11,7 +11,7 @@
 	import NewsPeople from '#lib/NewsPeople.svelte';
 	import { lede, pageContainer, pageHeader, pageHeading, section, sectionHeading } from '#lib/ui.js';
 	import { getI18n } from '#lib/i18n/index.js';
-	import { formatNewsDate, paragraphs } from '#lib/news.js';
+	import { articleBlocks, formatPublished, placedImages } from '#lib/news.js';
 	import { page } from '$app/state';
 	import type { PageProps } from './$types';
 
@@ -19,14 +19,18 @@
 	const i18n = getI18n();
 	const m = $derived(i18n.m.news);
 	const article = $derived(data.article);
-	const [cover, ...gallery] = $derived(article?.images ?? []);
+	// Images placed in the text show there; the cover opens the article unless it is placed,
+	// and the rest follow the text.
+	const placed = $derived(placedImages(article?.body ?? ''));
+	const cover = $derived(article?.images.find((image, index) => index === 0 && !placed.has(image.id)));
+	const gallery = $derived(article?.images.filter((image, index) => index > 0 && !placed.has(image.id)) ?? []);
 </script>
 
 <svelte:head>
 	{#if article}
 		<title>{m.articleTitle(article.title)}</title>
 		{#if article.summary}<meta name="description" content={article.summary} /><meta property="og:description" content={article.summary} />{/if}
-		<meta property="og:title" content={article.title} /><meta property="og:type" content="article" />
+		<meta property="og:title" content={article.title} /><meta property="og:type" content="article" /><meta property="article:published_time" content={article.published_at} />
 	{:else}<title>{m.title}</title>{/if}
 </svelte:head>
 <div class={pageContainer({ width: 'reading', padding: 'page' })}>
@@ -39,7 +43,7 @@
 			<header class={[pageHeader, 'mb-0']}>
 				<h1 class={pageHeading}>{article.title}</h1>
 				{#if article.summary}<p class={lede}>{article.summary}</p>{/if}
-				<p class="text-sm text-muted-foreground"><time datetime={article.published_at}>{formatNewsDate(article.published_at, i18n.locale)}</time></p>
+				<p class="flex flex-wrap gap-x-2 text-sm text-muted-foreground">{#if article.author}<span class="text-foreground">{m.byline(article.author)}<span class="sr-only">,</span></span><span aria-hidden="true">·</span>{/if}<time datetime={article.published_at}>{formatPublished(article.published_at, i18n.locale)}</time></p>
 			</header>
 			{#if cover}<NewsImage image={cover} eager />{/if}
 			{#if article.event}
@@ -48,8 +52,12 @@
 					<EventRow event={article.event} tile />
 				</aside>
 			{/if}
-			<div class="grid max-w-[var(--measure)] gap-4 text-[1.0625rem] leading-relaxed">
-				{#each paragraphs(article.body) as paragraph, index (index)}<p class="whitespace-pre-line">{paragraph}</p>{/each}
+			<!-- Text keeps its reading measure; an image placed in it takes the article's width. -->
+			<div class="grid gap-4 text-[1.0625rem] leading-relaxed">
+				{#each articleBlocks(article.body, article.images) as block, index (index)}
+					{#if block.type === 'text'}<p class="max-w-[var(--measure)] whitespace-pre-line">{block.text}</p>
+					{:else}<figure class="my-2"><NewsImage image={block.image} /></figure>{/if}
+				{/each}
 			</div>
 			{#if gallery.length}
 				<ul class="m-0 grid list-none gap-4 p-0 md:grid-cols-2">

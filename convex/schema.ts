@@ -58,9 +58,11 @@ export default defineSchema({
 
 	// Newsroom (docs/page-news.md). Articles and events are separate rows; an event
 	// belongs to at most one article (`article_id`). Slugs are chosen once and never
-	// change. Image and link lists are ordered; the first image is the cover.
+	// change. Image and link lists are ordered; the first image is the cover. An article
+	// body places an image with a paragraph of its own, `[image:<id>]`. `author` is the
+	// byline (optional, so rows written before it existed stay valid).
 	news_articles: defineTable({
-		id: uuid, slug: text, title: text, summary: nullable(text), body: text, images: v.array(newsImageRef), links: v.array(newsLink),
+		id: uuid, slug: text, title: text, author: v.optional(nullable(text)), summary: nullable(text), body: text, images: v.array(newsImageRef), links: v.array(newsLink),
 		people: v.array(uuid), is_published: v.boolean(), published_at: nullable(timestamp), edit_revision: v.number(),
 		created_at: timestamp, updated_at: timestamp
 	}).index('uuid', ['id']).index('slug', ['slug']).index('published', ['is_published', 'published_at', 'id']),

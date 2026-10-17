@@ -6,7 +6,7 @@ import { enabled, freshDeployment, guest, rejected, staff, uuid } from './harnes
 
 const png = (extra = 0) => new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, extra]).buffer;
 const article = (overrides: Record<string, unknown> = {}) => ({
-	id: uuid(), slug: `post-${uuid().slice(0, 8)}`, title: 'Loddekveld', summary: null, body: 'Første avsnitt.\n\nAndre avsnitt.',
+	id: uuid(), slug: `post-${uuid().slice(0, 8)}`, title: 'Loddekveld', author: null, summary: null, body: 'Første avsnitt.\n\nAndre avsnitt.',
 	images: [], links: [], people: [], is_published: false, expected_revision: null, ...overrides
 });
 const event = (overrides: Record<string, unknown> = {}) => ({
@@ -51,6 +51,24 @@ describe.skipIf(!enabled)('news', () => {
 		const bytes = await guest().query(api.news.image, { id: imageId });
 		expect(bytes?.content_type).toBe('image/png');
 		expect(new Uint8Array(bytes!.data)).toEqual(new Uint8Array(png()));
+	});
+
+	test('the byline is read back, and an image marker must name one of the article\'s images', async () => {
+		const { client } = await staff();
+		const [inline, other] = [uuid(), uuid()];
+		for (const id of [inline, other]) await client.mutation(api.news.addImage, { id, contentType: 'image/png', data: png(), width: 40, height: 30 });
+		const body = `Før bildet.\n\n[image:${inline}]\n\nEtter bildet.`;
+		const a = article({ author: 'Kari Nordmann', body, images: [{ id: inline, alt: 'Benken' }], is_published: true });
+		await save(client, a, null);
+		expect(await guest().query(api.news.feed, { before: null, limit: 10 })).toMatchObject([{ slug: a.slug, author: 'Kari Nordmann' }]);
+		expect(await guest().query(api.news.article, { slug: a.slug })).toMatchObject({ author: 'Kari Nordmann', body });
+		expect((await client.query(api.news.list, {})).articles[0].author).toBe('Kari Nordmann');
+		// A marker for an image the article does not list, or no image at all, is refused; inside a sentence it is plain text.
+		for (const bad of [`[image:${other}]`, '[image:]', 'Tekst\n\n  [image:nope]  ']) {
+			expect(await rejected(save(client, article({ body: bad, images: [{ id: inline, alt: 'Benken' }] }), null))).toBe('INVALID_NEWS');
+		}
+		await save(client, article({ body: `Se [image:${other}] her.` }), null);
+		for (const author of ['', '   ', 'x'.repeat(81), 'Kari\nNordmann']) expect(await rejected(save(client, article({ author }), null))).toBe('INVALID_NEWS');
 	});
 
 	test('drafts, their images and unpublished rows stay private; republishing keeps the first date', async () => {

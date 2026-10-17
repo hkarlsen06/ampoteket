@@ -209,7 +209,7 @@ Every page reads only published rows; a failed read renders as unavailable, neve
 "no news".
 
 - `news.feed({ before, limit })` returns published articles newest first by
-  `(published_at, id)` with `id`, `slug`, `title`, `summary`, `published_at`,
+  `(published_at, id)` with `id`, `slug`, `title`, `author` (the byline, or null), `summary`, `published_at`,
   `cover` (the first image) and `event` (the linked published event, else null).
   `limit` is 1–100 (`INVALID_NEWS_PAGE_SIZE`); `before` is null or the
   `{published_at, id}` of the last article shown (`INVALID_NEWS_CURSOR`). The
@@ -219,7 +219,8 @@ Every page reads only published rows; a failed read renders as unavailable, neve
   (`INVALID_EVENT_RANGE`) and `limit` 1–500. Page with `after` (`{starts_at, id}`
   of the last row) until a page is empty, and reject cursors that do not advance.
 - `news.article({ slug })` and `news.event({ slug })` return one published row, or
-  null. Images carry `id`, `alt`, `width` and `height`; people carry the
+  null; an article also has `author` and its `body`, where a paragraph `[image:<id>]`
+  places one of its images. Images carry `id`, `alt`, `width` and `height`; people carry the
   `catalog.helpDirectory` fields of published contacts only, in tag order.
 - `news.image({ id })` returns `content_type` and the bytes only while a published
   row uses the image. The Worker serves it at `/api/news/images/<id>` with
@@ -236,7 +237,9 @@ Staff write with their own session:
 - `news.save({ requestId, article, event })` takes each side as null (left
   untouched) or the complete row, plus `expected_revision` (null to create, else
   the `edit_revision` string the editor read). Unknown keys and wrong types fail
-  argument validation; out-of-range text raises `INVALID_NEWS`. Event times are ISO
+  argument validation; out-of-range text, or a body marker `[image:<id>]` for an image
+  the article does not list, raises `INVALID_NEWS`. The article's `author` is null or
+  1–80 characters. Event times are ISO
   instants with an offset; the editor converts Oslo wall time and asks again for a
   time that happens twice when the clocks go back. The event's `article_id` is the
   link: null unlinks, and when both sides are sent it must be the article beside

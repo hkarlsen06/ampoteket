@@ -20,7 +20,7 @@ const nullableString = v.union(v.string(), v.null());
 const imageRef = v.object({ id: v.string(), alt: v.string() });
 const link = v.object({ label: v.string(), url: v.string() });
 const articleWrite = v.object({
-	id: v.string(), slug: v.string(), title: v.string(), summary: nullableString, body: v.string(), images: v.array(imageRef),
+	id: v.string(), slug: v.string(), title: v.string(), author: nullableString, summary: nullableString, body: v.string(), images: v.array(imageRef),
 	links: v.array(link), people: v.array(v.string()), is_published: v.boolean(), expected_revision: nullableString
 });
 const eventWrite = v.object({
@@ -43,6 +43,8 @@ const slugPattern = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 // Instants carry an explicit offset; the editor converts Oslo wall time.
 const instantPattern = /^\d{4}-\d\d-\d\dT\d\d:\d\d(:\d\d(\.\d{1,6})?)?(Z|[+-]\d\d:\d\d)$/;
 const chars = (value: string) => [...value].length;
+// A paragraph of its own in an article body that places one of the article's images.
+const imageMarker = /^\[image:([^\]]*)\]$/;
 
 /** One line of text: not blank, at most `max` characters, no control characters. */
 function line(value: string, max: number): string {
@@ -80,6 +82,14 @@ async function checkLists(ctx: QueryCtx, images: ImageRef[], links: Link[], peop
 	for (const id of people) if (!await byUuid(ctx, 'help_contacts', id)) fail('NEWS_PERSON_NOT_FOUND', id);
 	for (const image of images) if (!await byUuid(ctx, 'news_images', image.id)) fail('NEWS_IMAGE_NOT_FOUND', image.id);
 }
+/** Every image marker in the body names one of the article's own images. */
+function checkBody(body: string, images: ImageRef[]) {
+	const ids = new Set(images.map((i) => i.id));
+	for (const paragraph of body.replace(/\r\n?/g, '\n').split(/\n[ \t]*\n+/)) {
+		const id = imageMarker.exec(paragraph.trim())?.[1];
+		if (id !== undefined && !ids.has(id)) fail('INVALID_NEWS');
+	}
+}
 function checkRow(row: { id: string; slug: string }) {
 	if (!isUuid(row.id) || row.slug.length > 80 || !slugPattern.test(row.slug)) fail('INVALID_NEWS');
 }
@@ -100,9 +110,10 @@ async function recordImageUses(ctx: MutationCtx, ownerId: string, images: ImageR
 async function saveArticle(ctx: MutationCtx, actor: Actor, a: ArticleWrite): Promise<Doc<'news_articles'>> {
 	checkRow(a);
 	const expected = revision(a.expected_revision);
-	const fields = { title: line(a.title, 160), summary: a.summary === null ? null : line(a.summary, 300), body: longText(a.body, 20000),
-		images: a.images, links: a.links, people: a.people, is_published: a.is_published };
+	const fields = { title: line(a.title, 160), author: a.author === null ? null : line(a.author, 80), summary: a.summary === null ? null : line(a.summary, 300),
+		body: longText(a.body, 20000), images: a.images, links: a.links, people: a.people, is_published: a.is_published };
 	await checkLists(ctx, a.images, a.links, a.people);
+	checkBody(fields.body, a.images);
 	const current = await byUuid(ctx, 'news_articles', a.id);
 	const now = isoNow();
 	let row: Doc<'news_articles'>;
@@ -225,7 +236,7 @@ export const addImage = mutation({
 // ---------- Staff reads ----------
 
 function adminArticle(a: Doc<'news_articles'>) {
-	return { id: a.id, slug: a.slug, title: a.title, summary: a.summary, body: a.body, images: a.images, links: a.links, people: a.people,
+	return { id: a.id, slug: a.slug, title: a.title, author: a.author ?? null, summary: a.summary, body: a.body, images: a.images, links: a.links, people: a.people,
 		is_published: a.is_published, published_at: a.published_at, edit_revision: String(a.edit_revision), updated_at: a.updated_at };
 }
 function adminEvent(e: Doc<'events'>) {
@@ -312,7 +323,7 @@ export const feed = query({
 			rows.push(a);
 			if (rows.length === limit) break;
 		}
-		return await Promise.all(rows.map(async (a) => ({ id: a.id, slug: a.slug, title: a.title, summary: a.summary, published_at: a.published_at!,
+		return await Promise.all(rows.map(async (a) => ({ id: a.id, slug: a.slug, title: a.title, author: a.author ?? null, summary: a.summary, published_at: a.published_at!,
 			cover: (await imageCards(ctx, a.images.slice(0, 1)))[0] ?? null, event: await publishedEventOf(ctx, a.id) })));
 	}
 });
@@ -323,7 +334,7 @@ export const article = query({
 	handler: async (ctx, { slug }) => {
 		const a = await ctx.db.query('news_articles').withIndex('slug', (q) => q.eq('slug', slug)).first();
 		if (!a?.is_published) return null;
-		return { id: a.id, slug: a.slug, title: a.title, summary: a.summary, body: a.body, published_at: a.published_at!,
+		return { id: a.id, slug: a.slug, title: a.title, author: a.author ?? null, summary: a.summary, body: a.body, published_at: a.published_at!,
 			images: await imageCards(ctx, a.images), links: a.links, people: await people(ctx, a.people), event: await publishedEventOf(ctx, a.id) };
 	}
 });

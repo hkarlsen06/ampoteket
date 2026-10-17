@@ -65,7 +65,9 @@ try {
 	const event = page.getByRole('region', { name: m.event, exact: true });
 	await article.getByLabel(fieldLabel(m.titleLabel)).fill(articleTitle);
 	await article.getByLabel(fieldLabel(m.summary)).fill('Bring nothing; we have irons, solder and coffee.');
-	await article.getByLabel(fieldLabel(m.body)).fill('First paragraph.\n\nSecond paragraph.');
+	await expect(article.getByLabel(fieldLabel(m.author))).toHaveValue('News proof volunteer');
+	const body = article.getByLabel(fieldLabel(m.body));
+	await body.fill('First paragraph.\n\nSecond paragraph.');
 	await event.getByRole('button', { name: m.addEvent, exact: true }).click();
 	await expect(event.getByLabel(fieldLabel(m.titleLabel))).toHaveValue(articleTitle);
 	await event.getByLabel(fieldLabel(m.titleLabel)).fill(eventTitle);
@@ -84,6 +86,10 @@ try {
 	const alt = page.getByLabel(fieldLabel(m.imageAlt));
 	await expect(alt).toBeFocused();
 	await alt.fill('Two people soldering at a bench');
+	// Placed after the first paragraph, where the cursor was.
+	await body.focus(); await body.evaluate((field: HTMLTextAreaElement) => field.setSelectionRange(5, 5));
+	await page.getByRole('button', { name: m.insertImageN(1), exact: true }).click();
+	await expect(body).toHaveValue('First paragraph.\n\n[image 1]\n\nSecond paragraph.');
 	const [image] = await fixtures.rows<{ id: string; content_type: string; width: number; height: number }>('news_images');
 	expect(image).toMatchObject({ width: 1200, height: 800 });
 	expect(['image/webp', 'image/jpeg']).toContain(image.content_type);
@@ -108,12 +114,13 @@ try {
 	const saves = convex.sent('news:save', sentBefore);
 	expect(saves).toHaveLength(2);
 	expect(saves[1]).toEqual(saves[0]);
-	const [articleRow] = await fixtures.rows<{ id: string; slug: string; edit_revision: number }>('news_articles');
+	const [articleRow] = await fixtures.rows<{ id: string; slug: string; edit_revision: number; author: string; body: string }>('news_articles');
+	expect(articleRow).toMatchObject({ author: 'News proof volunteer', body: `First paragraph.\n\n[image:${image.id}]\n\nSecond paragraph.` });
 	const [eventRow] = await fixtures.rows<{ id: string; slug: string; article_id: string; starts_at: string }>('events');
 	expect(articleRow).toMatchObject({ slug: 'soldering-night-for-beginners', edit_revision: 1 });
 	expect(eventRow).toMatchObject({ slug: 'soldering-night', article_id: articleRow.id });
 	await expect(page).toHaveURL(`${origin}/en/admin/news/${articleRow.id}`);
-	console.log('PASS: editor: article and event created and linked in one save, image re-encoded and uploaded once, lost response resent unchanged');
+	console.log('PASS: editor: article and event created and linked in one save, image re-encoded, uploaded once and placed in the text, byline from the account, lost response resent unchanged');
 
 	// ---------- Public pages ----------
 	const visitor = await context.newPage();
@@ -124,6 +131,9 @@ try {
 	});
 	await geometry(visitor, `/en/news/${articleRow.slug}`, 'article', async (tab) => {
 		await expect(tab.getByRole('heading', { name: articleTitle, level: 1 })).toBeVisible();
+		await expect(tab.getByText(en.news.byline('News proof volunteer'))).toBeVisible();
+		// The image sits between the two paragraphs, not above the text as a cover.
+		await expect(tab.locator('article p:text-is("First paragraph.") + figure + p:text-is("Second paragraph.")')).toHaveCount(1);
 		const cover = tab.getByRole('img', { name: 'Two people soldering at a bench' }).first();
 		await expect.poll(() => cover.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
 		await expect(tab.getByRole('link', { name: 'Sign up' })).toBeVisible();
@@ -141,7 +151,7 @@ try {
 		await expect(tab.getByRole('region', { name: m.event, exact: true }).getByLabel(fieldLabel(m.titleLabel))).toHaveValue(eventTitle);
 	});
 	expect(await fetchImage(visitor, image.id)).toEqual({ status: 200, type: image.content_type, cache: 'public, max-age=3600' });
-	console.log('PASS: public: newsroom, article (image, link, person), calendar and event at 360 and 1280 px without horizontal scroll');
+	console.log('PASS: public: newsroom, article (byline, image between paragraphs, link, person), calendar and event at 360 and 1280 px without horizontal scroll');
 
 	// ---------- Unpublishing ----------
 	await page.setViewportSize({ width: 1280, height: 900 });

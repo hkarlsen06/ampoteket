@@ -11,7 +11,7 @@ export type NewsImage = { id: string; alt: string; width: number; height: number
 export type NewsLink = { label: string; url: string };
 export type NewsPerson = Omit<HelpContact, 'display_order'>;
 export type EventSummary = { slug: string; title: string; starts_at: string; ends_at: string | null; location: string | null };
-export type FeedEntry = { id: string; slug: string; title: string; summary: string | null; published_at: string; cover: NewsImage | null; event: EventSummary | null };
+export type FeedEntry = { id: string; slug: string; title: string; author: string | null; summary: string | null; published_at: string; cover: NewsImage | null; event: EventSummary | null };
 export type NewsArticle = Omit<FeedEntry, 'cover'> & { body: string; images: NewsImage[]; links: NewsLink[]; people: NewsPerson[] };
 export type CalendarEvent = { id: string; slug: string; title: string; location: string | null; starts_at: string; ends_at: string | null; cover: NewsImage | null; article: { slug: string; title: string } | null };
 export type EventDetail = Omit<CalendarEvent, 'cover' | 'article'> & {
@@ -67,12 +67,12 @@ const nullable = <T>(value: unknown, parse: (item: unknown) => T): T | null => v
 
 export function parseFeedEntry(value: unknown): FeedEntry {
 	const row = object(value);
-	return { id: identifier(row.id), slug: slug(row.slug), title: text(row.title, 160), summary: optionalText(row.summary, 300),
+	return { id: identifier(row.id), slug: slug(row.slug), title: text(row.title, 160), author: optionalText(row.author, 80), summary: optionalText(row.summary, 300),
 		published_at: timestamp(row.published_at), cover: nullable(row.cover, parseNewsImage), event: nullable(row.event, parseEventSummary) };
 }
 export function parseNewsArticle(value: unknown): NewsArticle {
 	const row = object(value);
-	return { id: identifier(row.id), slug: slug(row.slug), title: text(row.title, 160), summary: optionalText(row.summary, 300),
+	return { id: identifier(row.id), slug: slug(row.slug), title: text(row.title, 160), author: optionalText(row.author, 80), summary: optionalText(row.summary, 300),
 		body: body(row.body, 20000), published_at: timestamp(row.published_at), images: list(row.images, 8, parseNewsImage),
 		links: list(row.links, 10, parseNewsLink), people: list(row.people, 20, parsePerson), event: nullable(row.event, parseEventSummary) };
 }
@@ -134,6 +134,22 @@ export const newsImageUrl = (id: string) => `/api/news/images/${id}`;
 export function paragraphs(value: string): string[] {
 	return value.replace(/\r\n?/g, '\n').split(/\n[ \t]*\n+/).map(part => part.trim()).filter(Boolean);
 }
+
+// A paragraph of its own, `[image:<id>]`, places one of the article's images (convex/news.ts).
+const imageMarker = /^\[image:([^\]]*)\]$/;
+export type ArticleBlock = { type: 'text'; text: string } | { type: 'image'; image: NewsImage };
+/** An article body as paragraphs and placed images; a marker for an image the article lacks shows nothing. */
+export function articleBlocks(value: string, images: NewsImage[]): ArticleBlock[] {
+	return paragraphs(value).flatMap((paragraph): ArticleBlock[] => {
+		const id = imageMarker.exec(paragraph)?.[1];
+		if (id === undefined) return [{ type: 'text', text: paragraph }];
+		const image = images.find(item => item.id === id);
+		return image ? [{ type: 'image', image }] : [];
+	});
+}
+/** The ids an article body places. */
+export const placedImages = (value: string): Set<string> =>
+	new Set(paragraphs(value).flatMap(paragraph => imageMarker.exec(paragraph)?.[1] ?? []));
 
 /** A readable, permanent address from a title: æ, ø and å spelt out, at most 60 characters. */
 export function slugify(title: string): string {
@@ -237,9 +253,9 @@ export function formatEventShort(event: { starts_at: string; ends_at: string | n
 	const weekday = new Intl.DateTimeFormat(intlLocale(locale), { timeZone: OSLO, weekday: 'long' }).format(start);
 	return capitalize(`${weekday} ${formatEventHours(event, locale)}`);
 }
-/** «5. november 2026» */
-export function formatNewsDate(instant: string, locale: Locale): string {
-	return new Intl.DateTimeFormat(intlLocale(locale), { timeZone: OSLO, dateStyle: 'long' }).format(new Date(instant));
+/** «17. oktober 2026 kl. 21:40», «17 October 2026 at 21:40» */
+export function formatPublished(instant: string, locale: Locale): string {
+	return new Intl.DateTimeFormat(intlLocale(locale), { timeZone: OSLO, dateStyle: 'long', timeStyle: 'short' }).format(new Date(instant));
 }
 /** «Torsdag 5. november» for a `YYYY-MM-DD` day. */
 export function formatDay(day: string, locale: Locale): string {

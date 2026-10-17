@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import {
-	addMonths, eventDays, formatEventHours, formatEventShort, formatEventWhen, monthGrid, osloMidnight, paragraphs, parseMonth, parseNewsArticle,
+	addMonths, articleBlocks, eventDays, formatEventHours, formatEventShort, formatEventWhen, formatPublished, placedImages, monthGrid, osloMidnight, paragraphs, parseMonth, parseNewsArticle,
 	readEventCalendar, readNewsFeed, slugify, uniqueSlug
 } from './news';
 import { clearNewsCommand, newsError, readNewsCommand, saveNewsCommand, type NewsCommand } from './admin-news';
@@ -100,7 +100,7 @@ test('a save command survives a reload and is cleared only by its own request', 
 	const values = new Map<string, string>();
 	const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); }, removeItem: (key: string) => { values.delete(key); } };
 	const command: NewsCommand = { userId: event.id, requestId: '33333333-3333-4333-8333-333333333333', event: null, article: {
-		id: event.id, slug: 'post', title: 'Post', summary: null, body: 'Text', images: [], links: [], people: [], is_published: true, expected_revision: '4' } };
+		id: event.id, slug: 'post', title: 'Post', author: 'Kari Nordmann', summary: null, body: 'Text', images: [], links: [], people: [], is_published: true, expected_revision: '4' } };
 	expect(saveNewsCommand(storage, command)).toEqual(command);
 	expect(readNewsCommand(storage)).toEqual(command);
 	clearNewsCommand(storage, { ...command, requestId: '44444444-4444-4444-8444-444444444444' });
@@ -110,4 +110,13 @@ test('a save command survives a reload and is cleared only by its own request', 
 	expect(newsError(rejection('STALE_NEWS'), ['STALE_NEWS'])).toBe('STALE_NEWS');
 	expect(newsError(rejection('NEWS_IMAGE_NOT_FOUND', 'NEWS_IMAGE_NOT_FOUND: <id>'), ['STALE_NEWS', 'NEWS_IMAGE_NOT_FOUND'])).toBe('NEWS_IMAGE_NOT_FOUND');
 	expect(newsError(new Error('offline'), ['STALE_NEWS'])).toBeNull();
+});
+
+test('an article body places its own images between paragraphs and shows the publish time', () => {
+	const image = { id: '33333333-3333-4333-8333-333333333333', alt: 'Benken', width: 40, height: 30 };
+	const body = `Før.\n\n[image:${image.id}]\n\n[image:44444444-4444-4444-8444-444444444444]\n\nEtter [image:${image.id}] tekst.`;
+	expect(articleBlocks(body, [image])).toEqual([{ type: 'text', text: 'Før.' }, { type: 'image', image }, { type: 'text', text: `Etter [image:${image.id}] tekst.` }]);
+	expect(placedImages(body)).toEqual(new Set([image.id, '44444444-4444-4444-8444-444444444444']));
+	expect(formatPublished('2026-10-17T19:40:00Z', 'nb')).toBe('17. oktober 2026 kl. 21:40');
+	expect(formatPublished('2026-10-17T19:40:00Z', 'en')).toBe('17 October 2026 at 21:40');
 });

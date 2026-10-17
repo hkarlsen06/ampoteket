@@ -7,7 +7,7 @@ import { parseNewsLink, slugPattern, timestamp, type NewsLink } from './news';
 
 export type ImageRef = { id: string; alt: string };
 type Common = { id: string; slug: string; title: string; images: ImageRef[]; links: NewsLink[]; people: string[]; is_published: boolean; edit_revision: string; updated_at: string };
-export type AdminArticle = Common & { summary: string | null; body: string; published_at: string | null };
+export type AdminArticle = Common & { author: string | null; summary: string | null; body: string; published_at: string | null };
 export type AdminEvent = Common & { description: string; location: string | null; starts_at: string; ends_at: string | null; article_id: string | null };
 
 function imageRef(value: unknown): ImageRef {
@@ -30,7 +30,7 @@ function longText(value: unknown, max: number): string {
 }
 export function parseAdminArticle(value: unknown): AdminArticle {
 	const row = object(value);
-	return { ...common(row), summary: row.summary === null ? null : text(row.summary, 300), body: longText(row.body, 20000),
+	return { ...common(row), author: row.author === null ? null : text(row.author, 80), summary: row.summary === null ? null : text(row.summary, 300), body: longText(row.body, 20000),
 		published_at: row.published_at === null ? null : timestamp(row.published_at) };
 }
 export function parseAdminEvent(value: unknown): AdminEvent {
@@ -82,7 +82,7 @@ export async function uploadNewsImage(session: StaffSession, id: string, image: 
 	if (result !== id) throw new Error('Invalid image response');
 }
 
-export type ArticleWrite = { id: string; slug: string; title: string; summary: string | null; body: string; images: ImageRef[]; links: NewsLink[]; people: string[]; is_published: boolean; expected_revision: string | null };
+export type ArticleWrite = { id: string; slug: string; title: string; author: string | null; summary: string | null; body: string; images: ImageRef[]; links: NewsLink[]; people: string[]; is_published: boolean; expected_revision: string | null };
 export type EventWrite = { id: string; slug: string; title: string; description: string; location: string | null; starts_at: string; ends_at: string | null; article_id: string | null;
 	images: ImageRef[]; links: NewsLink[]; people: string[]; is_published: boolean; expected_revision: string | null };
 export type NewsCommand = { userId: string; requestId: string; article: ArticleWrite | null; event: EventWrite | null };
@@ -98,7 +98,9 @@ function optional(value: unknown, max: number): string | null { return value ===
 function parseArticleWrite(value: unknown): ArticleWrite {
 	const row = object(value);
 	if (typeof row.slug !== 'string' || !slugPattern.test(row.slug) || typeof row.is_published !== 'boolean') throw new Error('Invalid article');
-	return { id: identifier(row.id), slug: row.slug, title: text(row.title, 160), summary: optional(row.summary, 300), body: longText(row.body, 20000),
+	// A command saved before bylines existed has no author.
+	return { id: identifier(row.id), slug: row.slug, title: text(row.title, 160), author: row.author === undefined ? null : optional(row.author, 80),
+		summary: optional(row.summary, 300), body: longText(row.body, 20000),
 		images: list(row.images, 8, imageRef), links: list(row.links, 10, parseNewsLink), people: list(row.people, 20, identifier), is_published: row.is_published, expected_revision: revision(row.expected_revision) };
 }
 function parseEventWrite(value: unknown): EventWrite {
@@ -149,4 +151,46 @@ export async function saveNews(session: StaffSession, command: NewsCommand): Pro
 export function newsError<T extends string>(error: unknown, names: readonly T[]): T | null {
 	const code = errorCode(error);
 	return names.find(name => name === code) ?? null;
+}
+
+// ---------- Images in the article text ----------
+// Stored, an image in the text is a paragraph `[image:<id>]`; the editor shows it as
+// `[bilde 2]` (`[image 2]` in English), the image's number in the list, and converts back
+// on save. Either word is understood, whatever the interface language.
+
+const storedMarker = /^[ \t]*\[image:([^\]\n]*)\][ \t]*$/gm;
+const numberedMarker = /^[ \t]*\[(?:bilde|image) (\d{1,2})\][ \t]*$/gim;
+const tidy = (body: string) => body.replace(/\r\n?/g, '\n').replace(/\n[ \t]*\n(?:[ \t]*\n)+/g, '\n\n').trim();
+
+/** Stored markers as the editor shows them; a marker for an image no longer in the list is dropped. */
+export function numberMarkers(body: string, images: ImageRef[], word: string): string {
+	return tidy(body.replace(storedMarker, (_, id: string) => {
+		const index = images.findIndex(image => image.id === id);
+		return index < 0 ? '' : `\n\n[${word} ${index + 1}]\n\n`;
+	}));
+}
+/** The image numbers the editor's text places. */
+export const placedNumbers = (body: string): Set<number> => new Set([...body.matchAll(numberedMarker)].map(match => Number(match[1])));
+/** The editor's numbered markers as stored ones, each a paragraph of its own; null if one names a number with no image. */
+export function storeMarkers(body: string, images: ImageRef[]): string | null {
+	let missing = false;
+	const stored = body.replace(numberedMarker, (_, n: string) => {
+		const image = images[Number(n) - 1];
+		if (!image) missing = true;
+		return image ? `\n\n[image:${image.id}]\n\n` : '';
+	});
+	return missing ? null : tidy(stored);
+}
+/**
+ * Put a paragraph where the cursor is: before the line it starts, otherwise after the
+ * line it is in, so a sentence is never split. Returns the cursor after the paragraph.
+ */
+export function insertParagraph(body: string, at: number, paragraph: string): { body: string; cursor: number } {
+	const position = Math.max(0, Math.min(at, body.length));
+	const lineStart = position === 0 || body[position - 1] === '\n';
+	const lineEnd = body.indexOf('\n', position);
+	const cut = lineStart ? position : lineEnd < 0 ? body.length : lineEnd;
+	const before = body.slice(0, cut).trimEnd(), after = body.slice(cut).trimStart();
+	const head = before ? `${before}\n\n` : '';
+	return { body: `${head}${paragraph}${after ? `\n\n${after}` : ''}`, cursor: head.length + paragraph.length };
 }
