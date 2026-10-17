@@ -37,11 +37,14 @@ export async function requireValidation(sha: string, fetcher: Fetcher = fetch, p
 	throw new Error('Validation did not finish within 20 checks; retry after CI passes. Nothing deployed.');
 }
 
-/** A production deploy key names its deployment: `prod:<name>|<secret>` deploys to https://<name>.convex.cloud. */
-export function convexDeploymentUrl(deployKey: string | undefined): string {
+/**
+ * A production deploy key names its deployment: `prod:<name>|<secret>` deploys to
+ * https://<name>.convex.cloud, or https://<name>.<region>.convex.cloud outside the default region.
+ */
+export function isConvexDeploymentUrl(url: unknown, deployKey: string | undefined): boolean {
 	const name = /^prod:([a-z0-9-]+)\|/.exec(deployKey ?? '')?.[1];
 	if (!name) throw new Error('CONVEX_DEPLOY_KEY must be the production deploy key; nothing deployed.');
-	return `https://${name}.convex.cloud`;
+	return typeof url === 'string' && new RegExp(`^https://${name}(\\.[a-z0-9-]+)?\\.convex\\.cloud$`).test(url);
 }
 
 // Injectable process/network boundaries let tests exercise failures without contacting production.
@@ -63,8 +66,7 @@ export async function deployProduction(command = run, fetcher: Fetcher = fetch, 
 	const sha = committedRevision();
 	const config = unstable_readConfig({ env: 'production' });
 	if (config.name !== 'ampoteket') throw new Error(`Unexpected production Worker name ${config.name}`);
-	const convexUrl = convexDeploymentUrl(deployKey);
-	if (config.vars.PUBLIC_CONVEX_URL !== convexUrl) throw new Error(`The deploy key is for ${convexUrl}, but wrangler.jsonc names ${String(config.vars.PUBLIC_CONVEX_URL)}; nothing deployed.`);
+	if (!isConvexDeploymentUrl(config.vars.PUBLIC_CONVEX_URL, deployKey)) throw new Error(`The deploy key is for another deployment than ${String(config.vars.PUBLIC_CONVEX_URL)} in wrangler.jsonc; nothing deployed.`);
 	await requireValidation(sha, fetcher, pause);
 	if (committedRevision() !== sha) throw new Error('Release commit changed while waiting for CI; nothing deployed.');
 	command(['bun', 'run', 'build']);

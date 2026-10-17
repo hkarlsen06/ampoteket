@@ -49,10 +49,6 @@ check by hand:
 - `bunx --no-install wrangler whoami` shows the Cloudflare account that owns the
   `ampoteket.no` zone; record the account.
 
-Until the cutover sets it, `PUBLIC_CONVEX_URL` is the placeholder
-`https://set-at-cutover.convex.cloud`, which matches no deployment, so
-`deploy:production` refuses every deploy key on this code.
-
 ### Reaching the hosted project
 
 The Convex project `ampoteket`, production deployment named in
@@ -234,9 +230,9 @@ bun run deploy:production
 
 1. Refuses uncommitted changes, reads `env.production` and requires the Worker
    name `ampoteket`.
-2. Requires a production deploy key (`prod:<name>|…`) whose
-   `https://<name>.convex.cloud` equals `PUBLIC_CONVEX_URL`; otherwise nothing is
-   deployed.
+2. Requires a production deploy key (`prod:<name>|…`) for the deployment
+   `PUBLIC_CONVEX_URL` names (`https://<name>.convex.cloud`, or
+   `https://<name>.<region>.convex.cloud`); otherwise nothing is deployed.
 3. Checks up to 20 times, 45 seconds apart, through the public GitHub API without
    a token, for the **push-triggered Validation run on that exact commit** to
    succeed. Failed, cancelled or skipped CI, an API error (including rate limits)

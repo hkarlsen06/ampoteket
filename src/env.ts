@@ -5,7 +5,7 @@ import { defineEnvVars } from '@sveltejs/kit/env';
 const optional = (value: string | undefined) => value;
 
 export const variables = defineEnvVars({
-	// The Convex deployment URL (https://<name>.convex.cloud), used by browser and server.
+	// The Convex deployment URL (https://<name>.<region>.convex.cloud), used by browser and server.
 	PUBLIC_CONVEX_URL: { public: true, schema: optional },
 	// Shared with the Convex deployment's CHECKOUT_SERVER_KEY; proves checkout calls come from this Worker.
 	CHECKOUT_SERVER_KEY: { schema: optional },

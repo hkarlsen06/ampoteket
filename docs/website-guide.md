@@ -40,7 +40,7 @@ Worker secrets.
 
 | Worker variable | Used by | Notes |
 |---|---|---|
-| `PUBLIC_CONVEX_URL` | Browser + server | The Convex deployment URL, `https://<name>.convex.cloud`. Production holds a placeholder until the [cutover](runbook-cutover.md). |
+| `PUBLIC_CONVEX_URL` | Browser + server | The Convex deployment URL, `https://<name>.<region>.convex.cloud` (`<region>.` is absent in the default region). Production: `https://useful-bass-249.eu-west-1.convex.cloud`. |
 | `CHECKOUT_SERVER_KEY` | Worker secret | Same value as the Convex variable below, at least 32 characters. Proves that checkout calls come from this Worker. Missing or short: `/api/checkouts/…` answers `503 CHECKOUT_UNAVAILABLE`. Never in the browser bundle, repo, logs or URLs. |
 | `RESEND_API_KEY` | Worker secret | Sends buyer receipts and the staff copy (§4.2); never in logs or the browser bundle. Missing: receipts are unavailable. |
 | `CHECKOUT_ALLOWED_ORIGIN` | Checkout Worker | Exact HTTPS origin for checkout POSTs. Never derive trust from the request Host header. |

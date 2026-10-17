@@ -37,7 +37,7 @@
 			"vars": {
 				// The production Convex deployment. deploy:production refuses a deploy key for any other.
 				// Set at cutover (docs/runbook-cutover.md); this placeholder matches no deployment.
-				"PUBLIC_CONVEX_URL": "https://set-at-cutover.convex.cloud",
+				"PUBLIC_CONVEX_URL": "https://useful-bass-249.eu-west-1.convex.cloud",
 				"CHECKOUT_ALLOWED_ORIGIN": "https://ampoteket.no",
 				// Exactly "true" opens buying (docs/website-guide.md §1.1).
 				"SALES_OPEN": "false"

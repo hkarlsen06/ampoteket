@@ -8,8 +8,7 @@ products, placement, purchasing and counts with a full audit trail.
 SvelteKit 3 / Svelte 5 on Cloudflare Workers, Convex (data, functions and Auth),
 Bun, shadcn-svelte and Tailwind CSS 4. Norwegian at `/`, English at `/en`.
 
-**Status:** live at `ampoteket.no` with sales open since 2026-10-06. Production
-runs the earlier Supabase backend until the cutover
+**Status:** live at `ampoteket.no` on Convex since the 2026-10-17 cutover
 ([runbook-cutover.md](docs/runbook-cutover.md)). What is live right now is in
 [AGENTS.md](AGENTS.md#current-state); [VALIDATION.md](VALIDATION.md) lists what has
 been run and which launch checks are still open.

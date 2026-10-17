@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { unstable_readConfig } from 'wrangler';
-import { convexDeploymentUrl, deployProduction, requireValidation } from './deploy-production';
+import { isConvexDeploymentUrl, deployProduction, requireValidation } from './deploy-production';
 import type { Fetcher } from '../src/lib/api';
 
 const sha = 'a'.repeat(40);
@@ -74,7 +74,8 @@ test('failed CI never uploads; successful verification keeps the new release', a
 });
 
 test('a deploy key for another deployment, or none, deploys nothing; a failed Convex push leaves the Worker alone', async () => {
-	expect(convexDeploymentUrl('prod:happy-otter-123|abc')).toBe('https://happy-otter-123.convex.cloud');
+	for (const url of ['https://happy-otter-123.convex.cloud', 'https://happy-otter-123.eu-west-1.convex.cloud']) expect(isConvexDeploymentUrl(url, 'prod:happy-otter-123|abc')).toBe(true);
+	for (const url of ['https://happy-otter-1234.convex.cloud', 'https://evil.example/happy-otter-123.convex.cloud', 'https://happy-otter-123.convex.cloud/']) expect(isConvexDeploymentUrl(url, 'prod:happy-otter-123|abc')).toBe(false);
 	for (const key of [undefined, 'dev:happy-otter-123|abc', 'prod:someone-else-1|abc']) {
 		const probe = harness();
 		await expect(deployProduction(probe.command, probe.fetcher, noWait, key)).rejects.toThrow('nothing deployed');
