@@ -49,6 +49,10 @@ wrangler.local.toml
 secrets/
 service-account*.json
 
+# --- Supabase CLI (used only for the one-time export, docs/runbook-cutover.md) ---
+supabase/.temp/
+supabase/.branches/
+
 # --- Tester / coverage ---
 .venv-proof/
 coverage/

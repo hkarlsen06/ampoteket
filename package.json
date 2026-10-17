@@ -37,6 +37,7 @@
 		"eslint": "^10.11.0",
 		"eslint-plugin-svelte": "^3.23.0",
 		"globals": "^17.12.0",
+		"jose": "6.2.12",
 		"layerchart": "^2.5.0",
 		"oxlint": "^1.86.0",
 		"shadcn-svelte": "1.7.0",
