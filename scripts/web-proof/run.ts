@@ -4,27 +4,23 @@ import { resolve } from 'node:path';
 import { writeFile } from 'node:fs/promises';
 import { post, proofEnvironment } from './harness';
 
-const { directory, origin, api, publicKey, serviceKey, password, safe, sql, createUser, startWorker } = await proofEnvironment();
-const staffId = await createUser('staff@example.test');
+const { directory, origin, convexUrl, password, safe, fixtures, createStaff, createUser, startWorker } = await proofEnvironment();
+const { authUserId: staffId } = await createStaff('staff@example.test');
 await createUser('nonstaff@example.test');
-const loginProbe = await fetch(new URL('/auth/v1/token?grant_type=password', api), {
-	method: 'POST', headers: { apikey: publicKey, Authorization: `Bearer ${publicKey}`, 'Content-Type': 'application/json' },
-	body: JSON.stringify({ email: 'staff@example.test', password })
-});
-if (!loginProbe.ok) {
-	const raw = await loginProbe.text();
-	const safe = [serviceKey, publicKey, password].reduce((text, secret) => text.replaceAll(secret, '[redacted]'), raw);
-	throw new Error(`Local Auth preflight failed (${loginProbe.status}): ${safe.slice(0, 500)}`);
-}
-await loginProbe.body?.cancel();
-const signupProbe = await fetch(new URL('/auth/v1/signup', api), {
-	method: 'POST', headers: { apikey: publicKey, 'Content-Type': 'application/json' },
-	body: JSON.stringify({ email: 'uninvited@example.test', password })
-});
-assert.equal(signupProbe.ok, false);
-assert.equal((await signupProbe.json() as { error_code: string }).error_code, 'signup_disabled');
-await sql(await Bun.file('scripts/web-proof/fixtures.sql').text(), ['-v', `staff_id=${staffId}`]);
-await sql("NOTIFY pgrst, 'reload schema';");
+// Proof inventory sits in its own cabinet, apart from the seeded wall.
+const cabinet = '74000000-0000-4000-8000-000000000001', bin = '75000000-0000-4000-8000-000000000001';
+await fixtures.insert('cabinets', [{ id: cabinet, code: 'PROOF-CAB', outer_row: 3, outer_col: 1, inner_rows: 2, inner_cols: 2, label: null, is_archived: false }]);
+await fixtures.insert('bins', [{ id: bin, code: 'PROOF-BIN', cabinet_id: cabinet, inner_row: 1, inner_col: 1, row_span: 1, col_span: 1, label: null, is_archived: false }]);
+const now = new Date().toISOString().replace('Z', '000Z');
+const product = (n: number, code: string, name_nb: string, name_en: string, price: string) => ({
+	id: `73000000-0000-4000-8000-00000000000${n}`, code, name_nb, name_en, description: null, category_id: null, bin_id: bin, location_note: null,
+	unit_code: 'pcs', stock_step: '1', sale_step: '1', sale_unit_price_nok: price, minimum_stock: '0', datasheet_url: null, purchase_url: null,
+	is_active: true, metadata_revision: 1, created_at: now, updated_at: now });
+await fixtures.insert('products', [product(1, 'CAP-00001', 'Bevis-kondensator', 'Proof capacitor', '999999999998.999999'),
+	product(2, 'LED-00001', 'Bevis-LED', 'Proof LED', '0'), product(3, 'RES-00001', 'Bevis-motstand', 'Proof resistor', '0.005')]);
+await fixtures.insert('attribute_definitions', [{ id: '76000000-0000-4000-8000-000000000001', code: 'capacitance', label: 'Capacitance', value_type: 'number', canonical_unit: 'F' }]);
+await fixtures.insert('product_attributes', [{ product_id: '73000000-0000-4000-8000-000000000001', attribute_id: '76000000-0000-4000-8000-000000000001',
+	number_value: '0.000000000005', number_max: null, text_value: null, boolean_value: null }]);
 
 const bundle = await Bun.build({ entrypoints: ['scripts/web-proof/browser.ts'], outdir: `${directory}/assets`, target: 'browser' });
 if (!bundle.success) throw new Error('Browser probe build failed');
@@ -33,7 +29,7 @@ let context: BrowserContext | undefined;
 const { ready, close } = await startWorker(() => context, {
 	name: 'ampoteket-disposable-proof', main: resolve('scripts/web-proof/worker.ts'), compatibility_date: '2026-09-18',
 	assets: { directory: `${directory}/assets`, binding: 'ASSETS', run_worker_first: true },
-	vars: { API_URL: api.origin, PUBLISHABLE_KEY: publicKey }, workers_dev: false
+	vars: { CONVEX_URL: convexUrl }, workers_dev: false
 });
 try {
 	await ready('/proof/config');
@@ -41,7 +37,7 @@ try {
 	const page = await context.newPage();
 	await page.goto(origin);
 	await page.waitForFunction(() => 'proof' in window);
-	// Probe objects contain public data only; tokens stay inside the Auth client.
+	// Probe objects contain public data only; tokens stay inside the Auth session.
 	const call = (method: string, args: unknown[] = []) => page.evaluate(async ({ method, args }) => {
 		const proof = (window as unknown as { proof: Record<string, (...args: unknown[]) => Promise<unknown>> }).proof;
 		return proof[method](...args);
@@ -54,25 +50,26 @@ try {
 	await page.reload();
 	await page.waitForFunction(() => 'proof' in window);
 	assert.equal((await call('membership') as { authUserId: string }).authUserId, staffId);
-	console.log('PASS: real password sign-in with public signup disabled, nonstaff denial, token refresh and reload');
+	console.log('PASS: real password sign-in with sign-up impossible, nonstaff denial, token refresh and reload');
 
-	const firstPage = await call('catalogPage') as { products: unknown[]; complete: boolean };
+	const firstPage = await call('catalogPage', [2]) as { products: unknown[]; complete: boolean };
 	assert.equal(firstPage.products.length, 2);
 	assert.equal(firstPage.complete, false);
 	const workerPage = await page.evaluate(async () => (await fetch('/proof/catalog')).json());
-	assert.equal(workerPage.products[0].sale_unit_price_nok, '999999999998.999999');
 	assert.equal(workerPage.products.length, 2);
+	assert.ok(workerPage.products.some((p: { sale_unit_price_nok: string }) => p.sale_unit_price_nok === '999999999998.999999'));
 	const products = await call('catalog') as Array<{ code: string; sale_unit_price_nok: string; attributes: { capacitance?: { value: string } } }>;
-	assert.equal(products.length, 3); // PostgREST is deliberately capped to two rows.
-	assert.equal(products[0].sale_unit_price_nok, '999999999998.999999');
-	assert.equal(products[0].attributes.capacitance?.value, '0.000000000005');
+	assert.equal(products.length, 3);
+	const capacitor = products.find((p) => p.code === 'CAP-00001')!;
+	assert.equal(capacitor.sale_unit_price_nok, '999999999998.999999');
+	assert.equal(capacitor.attributes.capacitance?.value, '0.000000000005');
 	assert.equal((await call('product', ['RES-00001']) as { code: string }).code, 'RES-00001');
 	const updated = await call('updatePrice', ['73000000-0000-4000-8000-000000000001', '1', '999999999998.999998']) as Array<{ sale_unit_price_nok: string; metadata_revision: string }>;
 	assert.equal(updated[0].sale_unit_price_nok, '999999999998.999998');
 	assert.equal(updated[0].metadata_revision, '2');
-	const verified = await sql("SELECT sale_unit_price_nok::text FROM app.products WHERE code='CAP-00001';", ['-t', '-A']);
-	assert.equal(verified, '999999999998.999998');
-	console.log('PASS: capped browser/Worker catalog reads, complete traversal, direct lookup and exact browser → database price round trip');
+	const [stored] = await fixtures.rows<{ sale_unit_price_nok: string }>('products', { code: 'CAP-00001' });
+	assert.equal(stored.sale_unit_price_nok, '999999999998.999998');
+	console.log('PASS: browser and Worker catalog reads, complete traversal, direct lookup and exact browser → database price round trip');
 
 	const initialized = await post(page, '/proof/session');
 	assert.equal(initialized.status, 200);
@@ -92,7 +89,7 @@ try {
 	await page.waitForFunction(() => 'proof' in window);
 	assert.equal((await post(page, '/proof/binding', { requestId, fingerprint })).status, 200);
 
-	await sql("UPDATE app.staff_members SET is_active=false WHERE auth_user_id=:'staff_id';", ['-v', `staff_id=${staffId}`]);
+	await fixtures.patch('staff_members', { auth_user_id: staffId }, { is_active: false });
 	assert.equal(await call('membership'), null);
 	assert.deepEqual(await call('staffProducts'), []);
 	assert.deepEqual(await call('updatePrice', ['73000000-0000-4000-8000-000000000001', '2', '1']), []);

@@ -1,34 +1,18 @@
 /** Test-only fixture. Never imported by SvelteKit or deployed as the shop. */
 import { newCheckoutSessionSecret, checkoutSessionFingerprint, checkoutTokenForAttempt } from '../../src/lib/server/checkout-credentials';
+import { ConvexHttpClient } from 'convex/browser';
 import { readCatalogPage } from '../../src/lib/catalog';
 
-type ProofEnv = { API_URL: string; PUBLISHABLE_KEY: string; ASSETS: { fetch(request: Request): Promise<Response> } };
+type ProofEnv = { CONVEX_URL: string; ASSETS: { fetch(request: Request): Promise<Response> } };
 const cookieName = '__Host-amp_checkout';
 const headers = { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' };
 
 export default {
 	async fetch(request: Request, env: ProofEnv) {
 		const url = new URL(request.url);
-		if (url.pathname.startsWith('/auth/v1/') || url.pathname.startsWith('/rest/v1/')) {
-			// This isolated same-origin proxy needs no service key. Forward the
-			// browser's own Auth/public credential to its disposable local API.
-			const target = new URL(env.API_URL);
-			if (target.hostname !== '127.0.0.1' || target.protocol !== 'http:') throw new Error('Nonlocal proof API');
-			target.pathname = url.pathname;
-			target.search = url.search;
-			const forwarded = new Headers(request.headers);
-			forwarded.delete('cookie');
-			forwarded.delete('host');
-			const response = await fetch(target, { method: request.method, headers: forwarded, body: request.body, redirect: 'manual' });
-			if (response.status >= 300 && response.status < 400) return new Response(null, { status: 502, headers });
-			const result = new Response(response.body, response);
-			result.headers.set('Cache-Control', 'no-store');
-			return result;
-		}
-		if (url.pathname === '/proof/config') return Response.json({ url: url.origin, publishableKey: env.PUBLISHABLE_KEY }, { headers });
-		if (url.pathname === '/proof/catalog') return Response.json(await readCatalogPage({
-			url: env.API_URL, publishableKey: env.PUBLISHABLE_KEY
-		}), { headers });
+		// The browser talks to the disposable Convex backend directly, as the shop does.
+		if (url.pathname === '/proof/config') return Response.json({ url: env.CONVEX_URL }, { headers });
+		if (url.pathname === '/proof/catalog') return Response.json(await readCatalogPage(new ConvexHttpClient(env.CONVEX_URL, { logger: false }), { limit: 2 }), { headers });
 		if (url.pathname === '/proof/session' || url.pathname === '/proof/binding') {
 			if (request.method !== 'POST') return new Response(null, { status: 405, headers });
 			if (request.headers.get('Origin') !== url.origin) return new Response(null, { status: 403, headers });

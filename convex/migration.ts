@@ -125,12 +125,12 @@ export const stockByCode = internalQuery({
 
 /**
  * Rehearsal only: empty every application and Auth table. Refuses unless the
- * deployment has ALLOW_MIGRATION_RESET=true, which production never sets.
+ * deployment has ALLOW_TEST_FIXTURES=true, which production never sets.
  */
 export const resetForRehearsal = internalMutation({
 	args: { table: v.string() },
 	handler: async (ctx, { table }) => {
-		if (process.env.ALLOW_MIGRATION_RESET !== 'true') throw new Error('MIGRATION_RESET_FORBIDDEN');
+		if (process.env.ALLOW_TEST_FIXTURES !== 'true') throw new Error('MIGRATION_RESET_FORBIDDEN');
 		const rows = await ctx.db.query(table as AppTable).take(4000);
 		for (const row of rows) await ctx.db.delete(row._id);
 		return rows.length;

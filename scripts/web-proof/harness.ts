@@ -1,6 +1,8 @@
 import { expect, type BrowserContext, type Page } from '@playwright/test';
 import { strict as assert } from 'node:assert';
 import { writeFile } from 'node:fs/promises';
+import { ConvexHttpClient } from 'convex/browser';
+import { makeFunctionReference } from 'convex/server';
 
 /**
  * Exact label text for getByLabel(). Playwright reads the label's full text, including
@@ -40,7 +42,16 @@ export async function captureFailure(page: Page, artifacts: string, name: string
 	if (!page.url().includes('/login')) await writeFile(`${artifacts}/failure-${name}.txt`, await page.locator(root).ariaSnapshot().catch(() => 'Unavailable'));
 }
 
-/** Services and credentials belong to the disposable project created by test-web.sh. */
+type Row = Record<string, unknown>;
+export type Email = { to: string[]; subject: string; html: string; text: string };
+/** The single-use password link in an invitation or reset email. */
+export function passwordLink(email: Email): URL {
+	const href = /href="([^"]*token_hash[^"]*)"/.exec(email.html)?.[1];
+	assert.ok(href, 'Email contains a password link');
+	return new URL(href.replaceAll('&amp;', '&').replaceAll('&#38;', '&'));
+}
+
+/** Services and credentials belong to the disposable backend created by test-web.sh. */
 export async function proofEnvironment() {
 	const [directory, port, inspectorPort] = process.argv.slice(2);
 	assert.match(directory ?? '', /^\/tmp\/ampoteket-web\.[A-Za-z0-9]{8}$/);
@@ -49,54 +60,60 @@ export async function proofEnvironment() {
 		assert.ok(Number(value) > 0 && Number(value) <= 65535, 'Use scripts/test-web.sh');
 	}
 	const origin = `https://localhost:${port}`;
-	const status = await Bun.file(`${directory}/status.json`).json();
-	const api = new URL(status.API_URL);
-	const database = new URL(status.DB_URL);
-	assert.ok(api.protocol === 'http:' && api.hostname === '127.0.0.1'
-		&& database.protocol === 'postgresql:' && database.hostname === '127.0.0.1', 'Proof refuses nonlocal services');
-	const publicKey: string = status.PUBLISHABLE_KEY ?? status.ANON_KEY;
-	const serviceKey: string = status.SERVICE_ROLE_KEY;
-	const anonKey: string = status.ANON_KEY;
-	const gatewayKey: string = status.SECRET_KEY ?? serviceKey;
-	for (const key of [publicKey, anonKey, serviceKey, gatewayKey]) assert.ok(typeof key === 'string' && key.length > 0);
+	const status = await Bun.file(`${directory}/status.json`).json() as { convexUrl: string; adminKey: string; serverKey: string; emailPort: number };
+	const convexUrl = new URL(status.convexUrl);
+	assert.ok(convexUrl.protocol === 'http:' && convexUrl.hostname === '127.0.0.1', 'Proof refuses a nonlocal backend');
+	const { adminKey, serverKey } = status;
 	const password = crypto.randomUUID() + '!Aa7';
-	const secrets = [publicKey, serviceKey, gatewayKey, password, decodeURIComponent(database.password)].filter(Boolean);
+	const secrets = [adminKey, serverKey, password];
 	const safe = (value: string) => secrets.reduce((text, secret) => text.replaceAll(secret, '[redacted]'), value)
 		.replace(/[a-f0-9]{64}/g, '[redacted]').replace(/eyJ[A-Za-z0-9_.-]+/g, '[redacted]');
 	const ca = await Bun.file(`${directory}/ca.pem`).text();
-	const environment = { ...process.env };
-	for (const key of Object.keys(environment)) if (key.startsWith('PG')) delete environment[key];
-	async function sql(input: string, variables: string[] = []): Promise<string> {
-		const command = Bun.spawn(['psql', '-X', '-At', '-v', 'ON_ERROR_STOP=1', ...variables], {
-			stdin: new Blob([input]), stdout: 'pipe', stderr: 'pipe',
-			env: { ...environment, PGHOST: database.hostname, PGPORT: database.port, PGDATABASE: database.pathname.slice(1),
-				PGUSER: decodeURIComponent(database.username), PGPASSWORD: decodeURIComponent(database.password), PGSSLMODE: 'disable' }
-		});
-		const [code, output, error] = await Promise.all([command.exited, new Response(command.stdout).text(), new Response(command.stderr).text()]);
-		if (code) throw new Error(`Disposable fixture failed: ${safe(error)}`);
-		return output.trim();
+
+	const admin = new ConvexHttpClient(convexUrl.origin, { logger: false });
+	(admin as unknown as { setAdminAuth(key: string): void }).setAdminAuth(adminKey);
+	/** Call an internal function by name (`seed:staff`), as `convex run` does. */
+	async function run<T = unknown>(kind: 'query' | 'mutation', name: string, args: Row = {}): Promise<T> {
+		const call = admin[kind] as (fn: never, args: Row) => Promise<T>;
+		try { return await call.call(admin, makeFunctionReference(name) as never, args); }
+		catch (error) { throw new Error(`Disposable fixture ${name} failed: ${safe(String(error))}`); }
 	}
+	/** Test-only table access (convex/fixtures.ts); never available in production. */
+	const fixtures = {
+		insert: (table: string, rows: Row[]) => run<number>('mutation', 'fixtures:insert', { table, rows }),
+		rows: <T extends Row = Row>(table: string, where?: Row) => run<T[]>('query', 'fixtures:rows', { table, ...(where ? { where } : {}) }),
+		patch: (table: string, where: Row, changes: Row) => run<number>('mutation', 'fixtures:patch', { table, where, changes }),
+		remove: (table: string, where: Row) => run<number>('mutation', 'fixtures:remove', { table, where })
+	};
+	/** A staff member who signs in with `password`. */
+	async function createStaff(email: string, displayName = 'Proof volunteer', active = true) {
+		return await run<{ staffId: string; authUserId: string }>('mutation', 'seed:staff', { email, password, displayName, active });
+	}
+	/** A signed-in user without membership. */
 	async function createUser(email: string) {
-		const response = await fetch(`${api.origin}/auth/v1/admin/users`, {
-			method: 'POST', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json' },
-			body: JSON.stringify({ email, password, email_confirm: true })
-		});
-		assert.ok(response.ok, 'Temporary Auth identity created');
-		const { id } = await response.json() as { id: string };
-		assert.match(id, /^[a-f0-9-]{36}$/);
-		return id;
+		return (await run<{ authUserId: string }>('mutation', 'fixtures:user', { email, password })).authUserId;
 	}
+
+	/** Captures invitation and reset email instead of sending it (Resend stand-in). */
+	const outbox: Email[] = [];
+	let emailServer: ReturnType<typeof Bun.serve> | undefined;
+	function startEmail() {
+		emailServer ??= Bun.serve({ port: status.emailPort, hostname: '127.0.0.1', async fetch(request) {
+			outbox.push(await request.json() as Email);
+			return Response.json({ id: `proof-${outbox.length}` });
+		} });
+		return outbox;
+	}
+
 	async function startWorker(getContext: () => BrowserContext | undefined, config?: Record<string, unknown>) {
 		await writeFile(`${directory}/wrangler-proof.json`, JSON.stringify(config ?? {
 			name: 'ampoteket-site-proof', main: `${directory}/site/cloudflare/_worker.js`,
 			compatibility_date: '2026-09-18', compatibility_flags: ['nodejs_als'], workers_dev: false,
 			assets: { directory: `${directory}/site/cloudflare`, binding: 'ASSETS' },
-			vars: { PUBLIC_SUPABASE_URL: api.origin, PUBLIC_SUPABASE_PUBLISHABLE_KEY: publicKey,
-				SUPABASE_SECRET_KEY: gatewayKey, CHECKOUT_ALLOWED_ORIGIN: origin, SALES_OPEN: 'true' },
+			vars: { PUBLIC_CONVEX_URL: convexUrl.origin, CHECKOUT_SERVER_KEY: serverKey, CHECKOUT_ALLOWED_ORIGIN: origin, SALES_OPEN: 'true' },
 			ratelimits: [
 				{ name: 'CHECKOUT_SESSION_LIMIT', namespace_id: '4732201', simple: { limit: 20, period: 60 } },
-				{ name: 'CHECKOUT_OPERATION_LIMIT', namespace_id: '4732202', simple: { limit: 120, period: 60 } },
-				{ name: 'ADMIN_INVITATION_LIMIT', namespace_id: '4732203', simple: { limit: 10, period: 60 } }
+				{ name: 'CHECKOUT_OPERATION_LIMIT', namespace_id: '4732202', simple: { limit: 120, period: 60 } }
 			]
 		}));
 		// Never read the repository's .env/.dev.vars or hosted Cloudflare credentials.
@@ -129,6 +146,7 @@ export async function proofEnvironment() {
 				try { await getContext()?.close(); }
 				finally {
 					worker.kill(); await worker.exited;
+					emailServer?.stop(true);
 					for (const signal of ['SIGINT', 'SIGTERM'] as const) process.off(signal, interrupted);
 				}
 			})();
@@ -141,5 +159,5 @@ export async function proofEnvironment() {
 		}
 		return { ready, close, restart };
 	}
-	return { directory, origin, api, publicKey, anonKey, serviceKey, password, secrets, safe, ca, sql, createUser, startWorker };
+	return { directory, origin, convexUrl: convexUrl.origin, serverKey, password, secrets, safe, ca, run, fixtures, createStaff, createUser, startEmail, outbox, startWorker };
 }

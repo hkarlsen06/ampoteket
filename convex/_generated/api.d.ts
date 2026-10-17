@@ -12,6 +12,7 @@ import type * as auditLog from "../auditLog.js";
 import type * as auth from "../auth.js";
 import type * as catalog from "../catalog.js";
 import type * as checkout from "../checkout.js";
+import type * as fixtures from "../fixtures.js";
 import type * as help from "../help.js";
 import type * as http from "../http.js";
 import type * as lib_archivedBins from "../lib/archivedBins.js";
@@ -49,6 +50,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   catalog: typeof catalog;
   checkout: typeof checkout;
+  fixtures: typeof fixtures;
   help: typeof help;
   http: typeof http;
   "lib/archivedBins": typeof lib_archivedBins;
