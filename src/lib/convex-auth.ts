@@ -92,13 +92,15 @@ export class ConvexAuthSession {
 			if (refreshToken === null) { this.#store(null); return null; }
 			for (let attempt = 0; ; attempt++) {
 				try {
+					// Convex Auth answers an ended session (signed out elsewhere or expired) with `tokens: null`.
 					const result = await this.http.action(api.auth.signIn, { refreshToken });
 					this.#store(result.tokens ?? null);
 					return this.#token;
 				} catch (error) {
-					// A rejected refresh token means the session ended (signed out elsewhere or expired).
-					if (!isNetworkError(error)) { this.#store(null); throw error; }
-					if (attempt >= RETRY_BACKOFF.length) throw error;
+					// The page is unloading and the browser cancelled the request: nothing to report, nothing to end.
+					if (error instanceof Error && error.name === 'AbortError') return this.#token;
+					// A thrown error is a failed request (server error, or cut off by navigation), not an ended session: keep it.
+					if (!isNetworkError(error) || attempt >= RETRY_BACKOFF.length) throw error;
 					await this.sleep(RETRY_BACKOFF[attempt] + Math.random() * 100);
 				}
 			}

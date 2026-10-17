@@ -140,9 +140,9 @@ via the exact-first fallback in [catalog matching](page-catalog.md#3-url-and-mat
 scanned and pasted addresses use exact lookup. Manual paths never loosen what the
 camera accepts.
 
-Resolve the code only through `amp_catalog(p_code)`. Never navigate to, fetch,
-prefetch or link the scanned URL. All product facts come from that response. A valid
-but unknown code is a normal result.
+Resolve the code only through the public query `catalog.product`
+(`lookupCatalogProduct`). Never navigate to, fetch, prefetch or link the scanned URL.
+All product facts come from that response. A valid but unknown code is a normal result.
 
 Printed labels keep the human-readable code and the compact QR borders specified by
 [product labels](page-labels.md#label-and-sheet), including its separate tape geometry.
@@ -164,9 +164,9 @@ Setup:
   certificate works: a tunnel, or a private network name with a real certificate,
   behind a reverse proxy to the dev server. The original developer used a tailnet
   name behind Caddy as one example.
-- Without `PUBLIC_SUPABASE_URL`, `bun run development` serves the disposable API
-  through the dev server's own origin, so the phone needs only that one HTTPS
-  origin. Set `CHECKOUT_ALLOWED_ORIGIN` to it for payment rehearsals
+- `bun run development` serves its disposable local Convex backend through the dev
+  server's own origin (`/convex`, `CONVEX_DEV_PROXY`), so the phone needs only that
+  one HTTPS origin. Set `CHECKOUT_ALLOWED_ORIGIN` to it for payment rehearsals
   ([README](../README.md#https-checkout-and-camera)). The launcher and
   `vite.config.ts` default to the original developer's host name
   (`dev.ampoteket.no`); replace it with yours.

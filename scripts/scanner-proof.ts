@@ -1,20 +1,22 @@
 /**
- * Actual production scanner, local Supabase and the real QR WASM decoder.
+ * Actual production scanner, a disposable Convex backend and the real QR WASM decoder.
  * Only camera hardware is substituted: generated label pixels enter through
  * canvas.captureStream(). This proves application behavior, never phone cameras.
  */
-import { firefox, webkit, expect, type Browser, type BrowserContext, type Page, type Route } from '@playwright/test';
+import { firefox, webkit, expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { strict as assert } from 'node:assert';
 import { resolve } from 'node:path';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { fieldLabel, proofEnvironment } from './web-proof/harness';
+import { watchConvex } from './web-proof/convex-socket';
 import { prepareZXingModule, writeBarcode } from 'zxing-wasm/writer';
-import { generateSeedSql, seedProductId, seedProductCode } from './seed-test-data';
+import { seedDemoData, seedProductId, seedProductCode } from './seed-test-data';
 import { en } from '../src/lib/i18n/en';
 
-const { directory, origin, api, ca, sql, startWorker } = await proofEnvironment();
-await sql("SET ampoteket.test_seed = 'disposable-only';\n" + generateSeedSql());
-await sql(`UPDATE app.products SET name_nb='220 ohm motstand med et langt produktnavn for smale skjermer', name_en='220 ohm resistor with a long product name to exercise narrow screen wrapping' WHERE id='${seedProductId(0)}';`);
+const { directory, origin, convexUrl, ca, run, fixtures, startWorker } = await proofEnvironment();
+await seedDemoData(run);
+await fixtures.patch('products', { id: seedProductId(0) }, { name_nb: '220 ohm motstand med et langt produktnavn for smale skjermer', name_en: '220 ohm resistor with a long product name to exercise narrow screen wrapping' });
+const saleCount = async () => (await fixtures.rows('sales')).length;
 
 // Use the pinned writer's local WASM, including the quiet zone. No QR-generation
 // service or external network is involved, and production only ships the reader.
@@ -211,17 +213,16 @@ try {
 	page.on('console', (message) => { if (message.type() === 'error') browserDiagnostics.push(message.text()); });
 	page.on('requestfailed', (request) => { if (request.url().startsWith(origin)) browserDiagnostics.push(`${new URL(request.url()).pathname}: ${request.failure()?.errorText}`); });
 	page.on('request', (request) => requests.push(request.url()));
-	const lookupCodes: string[] = [];
+	// Product lookups are Convex query subscriptions on the page's WebSocket. A failed
+	// result stands in for the aborted request: the outcome carries no domain code.
+	const convex = await watchConvex(context);
+	const lookupCodes = { get length() { return convex.of('catalog:product').length; } };
 	let lookupMode: 'normal' | 'hold' | 'fail' = 'normal';
 	const held: (() => void)[] = [];
-	await page.route('**/rest/v1/rpc/amp_catalog', async (route: Route) => {
-		const code = route.request().postDataJSON()?.p_code;
-		if (typeof code === 'string') {
-			lookupCodes.push(code);
-			if (lookupMode === 'hold') await new Promise<void>((resume) => held.push(resume));
-			if (lookupMode === 'fail') { await route.abort('failed'); return; }
-		}
-		try { await route.continue(); } catch { /* A cancelled lookup may already be detached. */ }
+	convex.rule((call) => {
+		if (call.path !== 'catalog:product' || call.update > 0) return;
+		if (lookupMode === 'hold') return new Promise<void>((resume) => held.push(resume));
+		if (lookupMode === 'fail') return 'fail';
 	});
 	for (const locale of ['', '/en']) for (const width of [320, 641, 768, 1280]) {
 		await page.setViewportSize({ width, height: 900 });
@@ -444,7 +445,7 @@ try {
 	}
 	await rearm(page); await paint(page, 'unknown'); await state(page, 'missing');
 	await action(page, 'Cancel').click();
-	assert.ok(requests.every((url) => [origin, api.origin].includes(new URL(url).origin)), 'No QR URL or third-party CDN is fetched');
+	assert.ok(requests.every((url) => [origin, convexUrl].includes(new URL(url).origin)), 'No QR URL or third-party CDN is fetched');
 	console.log('PASS: real decoder crop/center choice with two labels; malformed, plain, foreign and unknown payloads; no payload navigation or external requests');
 
 	await rearm(page); await paint(page, 'first'); await product(page);
@@ -566,9 +567,9 @@ try {
 	}
 	// Maximum supported names may need the explicit overflow fallback. Its
 	// region scrolls by keyboard while confirmation controls stay in the footer.
-	const previousName = await sql(`SELECT name_en FROM app.products WHERE id='${seedProductId(0)}'`);
+	const [{ name_en: previousName }] = await fixtures.rows<{ name_en: string }>('products', { id: seedProductId(0) });
 	try {
-		await sql(`UPDATE app.products SET name_en=repeat('W',200) WHERE id='${seedProductId(0)}'`);
+		await fixtures.patch('products', { id: seedProductId(0) }, { name_en: 'W'.repeat(200) });
 		await page.goto(`${origin}/en/cart`); await open(page);
 		await scannerDialog(page).getByLabel(fieldLabel('Part code')).fill(seedProductCode(0));
 		await action(page, 'Find part').click(); await product(page);
@@ -584,7 +585,7 @@ try {
 		}
 		await fits(page); await action(page, 'Close scanner').click(); await camera(page, 'closed');
 	} finally {
-		await sql(`UPDATE app.products SET name_en='${previousName.replaceAll("'", "''")}' WHERE id='${seedProductId(0)}'`);
+		await fixtures.patch('products', { id: seedProductId(0) }, { name_en: previousName });
 	}
 	console.log('PASS: scanner long-name overflow is named and keyboard-scrollable, with Add/Scan outside it');
 	await page.setViewportSize({ width: 1280, height: 900 });
@@ -607,7 +608,7 @@ try {
 	await page.goto(checkoutUrl);
 	await page.getByRole('button', { name: 'I have paid, register purchase', exact: true }).click();
 	await expect(page.getByText('Purchase registered.', { exact: true })).toBeVisible();
-	assert.equal(await sql('SELECT count(*) FROM app.sales'), '1');
+	assert.equal(await saleCount(), 1);
 	await expect.poll(() => quantity(page)).toBeNull();
 	await page.setViewportSize({ width: 360, height: 640 });
 	await expect(page.locator('.header-cart [data-slot=badge]')).toHaveCount(0);
@@ -622,7 +623,7 @@ try {
 	await expect(page.getByRole('link', { name: 'Open Vipps', exact: true })).toHaveCount(0);
 	await page.getByRole('button', { name: 'Complete purchase', exact: true }).click();
 	await expect(page.getByText('Purchase registered.', { exact: true })).toBeVisible();
-	assert.equal(await sql('SELECT count(*) FROM app.sales'), '2');
+	assert.equal(await saleCount(), 2);
 	assert.deepEqual(errors, [], 'No browser runtime errors');
 	console.log('PASS: both locales/themes fit 360/1280 px; actual scan → basket → saved payment controls → registration and a free collection each post one disposable sale');
 	// CI sometimes stalled from here until its 30-minute limit, on calls Playwright never
@@ -638,7 +639,7 @@ try {
 	await context.close(); context = undefined;
 	webkitStep = 'launching WebKit';
 
-	// Desktop WebKit blocks the local HTTPS page's loopback HTTP API. A test-only
+	// Desktop WebKit blocks the local HTTPS page's loopback Convex WebSocket. A test-only
 	// loopback HTTP transport forwards the identical production app/assets with
 	// verified TLS upstream. localhost remains a secure camera context; this is
 	// neither a production proxy nor evidence for a physical iPhone/Safari.

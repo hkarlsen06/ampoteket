@@ -16,7 +16,7 @@ after the workshop.
 Hard constraints:
 
 - **No API reads before the first byte.** The server renders without reading the
-  database, and the response is cacheable (no `no-store`, so the back/forward cache
+  backend, and the response is cacheable (no `no-store`, so the back/forward cache
   works). The shelf picker and its code load in the browser on first open. The
   homepage shows no quantities or prices.
 - **Readable and navigable without JavaScript**, including the language picker.
@@ -24,8 +24,9 @@ Hard constraints:
   webfont. The hero photograph is the only eager image (`fetchpriority="high"`); every
   photograph sits in a CSS-sized box so nothing shifts. The 3D viewer and the gzipped
   models load only when the equipment models are within one viewport height, and not
-  at all with Data Saver on. Guests never download the Auth client: the layout loads
-  supabase-js only on admin routes or when a staff session is stored.
+  at all with Data Saver on. Guests never start a staff session: the layout creates
+  the Convex client for every page, but public pages start Auth and the `members.me`
+  subscription only when a staff session is stored (`mayHaveSession`).
 - **Payment is never described as verified. Scanning never buys.** Static copy never
   contains a payment recipient or Vipps number; checkout is the only source.
 - **Facts must be sourced** from the OsloMet story linked on the page (§2.2–§2.4).

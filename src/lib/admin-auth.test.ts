@@ -86,16 +86,30 @@ describe('Convex Auth session', () => {
 		expect(calls).toEqual([]);
 	});
 
-	test('a rejected refresh signs out; a network failure keeps the session for a later retry', async () => {
-		const rejected = harness(memoryStorage({ [keys.jwt]: 'jwt-1', [keys.refresh]: 'refresh-1' }), async () => { throw new Error('Invalid refresh token'); });
+	test('a rejected refresh signs out; a failed request keeps the session for a later retry', async () => {
+		const rejected = harness(memoryStorage({ [keys.jwt]: 'jwt-1', [keys.refresh]: 'refresh-1' }), async () => ({ tokens: null }));
 		rejected.session.load();
-		await expect(rejected.session.fetchAccessToken({ forceRefreshToken: true })).rejects.toThrow();
+		expect(await rejected.session.fetchAccessToken({ forceRefreshToken: true })).toBeNull();
 		expect(rejected.storage.values).toEqual({});
 		expect(rejected.session.token).toBeNull();
+		const failing = harness(memoryStorage({ [keys.jwt]: 'jwt-1', [keys.refresh]: 'refresh-1' }), async () => { throw new Error('Server Error'); });
+		failing.session.load();
+		await expect(failing.session.fetchAccessToken({ forceRefreshToken: true })).rejects.toThrow();
+		expect(failing.storage.values).toEqual({ [keys.jwt]: 'jwt-1', [keys.refresh]: 'refresh-1' });
+		expect(failing.session.token).toBe('jwt-1');
+		expect(failing.calls.filter((name) => name === 'auth:signIn')).toHaveLength(1);
 		const offline = harness(memoryStorage({ [keys.jwt]: 'jwt-1', [keys.refresh]: 'refresh-1' }), async () => { throw new TypeError('Failed to fetch'); });
 		offline.session.load();
 		await expect(offline.session.fetchAccessToken({ forceRefreshToken: true })).rejects.toThrow();
 		expect(offline.storage.values[keys.refresh]).toBe('refresh-1');
 		expect(offline.calls.filter((name) => name === 'auth:signIn')).toHaveLength(3);
+	});
+
+	test('a refresh the browser aborts on unload keeps the session and reports nothing', async () => {
+		const aborted = harness(memoryStorage({ [keys.jwt]: 'jwt-1', [keys.refresh]: 'refresh-1' }),
+			async () => { throw new DOMException('The operation was aborted. ', 'AbortError'); });
+		aborted.session.load();
+		expect(await aborted.session.fetchAccessToken({ forceRefreshToken: true })).toBe('jwt-1');
+		expect(aborted.storage.values[keys.refresh]).toBe('refresh-1');
 	});
 });

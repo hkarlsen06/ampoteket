@@ -1,24 +1,34 @@
-/** Run against the local disposable seed: bun scripts/admin-sidebar-proof.ts */
-import { chromium, expect } from '@playwright/test';
-import { fieldLabel } from './web-proof/harness';
+/** Admin sidebar on the built Worker and a disposable Convex backend: ./scripts/test-web.sh --sidebar */
+import { firefox, expect, type BrowserContext } from '@playwright/test';
+import { captureFailure, proofEnvironment, signIn } from './web-proof/harness';
+import { interceptConvex } from './web-proof/convex-socket';
 import { mkdir } from 'node:fs/promises';
 import { en } from '../src/lib/i18n/en';
 import { nb } from '../src/lib/i18n/nb';
 
-const origin = 'http://localhost:5174';
+const { directory, origin, password, safe, fixtures, createStaff, startWorker } = await proofEnvironment();
+const staffEmail = 'sidebar-staff@example.test';
+const { authUserId } = await createStaff(staffEmail, 'Sidebar proof volunteer');
 const artifacts = 'test-results/admin-sidebar';
 await mkdir(artifacts, { recursive: true });
-const browser = await chromium.launch();
-const context = await browser.newContext();
-const page = await context.newPage();
-const errors: string[] = [];
-page.on('pageerror', error => errors.push(error.message));
+let context: BrowserContext | undefined;
+const { ready, close } = await startWorker(() => context);
 try {
-	await page.goto(`${origin}/en/admin/login`);
-	await page.getByLabel(fieldLabel('Email address')).fill('test@test.no');
-	await page.getByLabel(fieldLabel('Password')).fill('test');
-	await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-	await expect(page.getByRole('navigation', { name: en.admin.navigation })).toBeVisible();
+	await ready();
+	context = await firefox.launchPersistentContext(`${directory}/profile`, { headless: true, ignoreHTTPSErrors: false });
+	const convex = await interceptConvex(context);
+	const page = await context.newPage();
+	const errors: string[] = [];
+	page.on('pageerror', error => errors.push(error.message));
+	// The editor tidies a name when focus leaves it, so the draft has no trailing space.
+	const longDraft = 'Long product name '.repeat(10).trim();
+	// A new product chooses its category first and the name fields grow in below;
+	// microcontroller names carry no locked category prefix.
+	const chooseCategory = () => page.locator('#product-category-mcu').click();
+	page.on('console', message => { if (message.type() === 'error' || message.type() === 'warning') console.error(`[browser ${message.type()}] ${safe(message.text())}`); });
+	await signIn(page, origin, staffEmail, password);
+	// Sign-in verifies a bcrypt hash in a mutation; a loaded test machine needs longer than the default.
+	await expect(page.getByRole('navigation', { name: en.admin.navigation })).toBeVisible({ timeout: 30_000 });
 	await page.goto(`${origin}/en/admin`);
 	await expect(page.getByRole('heading', { name: en.admin.overview, exact: true })).toBeVisible();
 
@@ -32,8 +42,9 @@ try {
 			const trigger = page.getByRole('button', { name: messages.admin.toggleSidebar });
 			const firstLink = nav.locator('a').first();
 			const input = page.locator('#product-name-en');
+			await chooseCategory();
 			await expect(input).toBeEditable();
-			await input.fill('Long product name '.repeat(10));
+			await input.fill(longDraft);
 			if (width < 768) {
 				await expect(firstLink).toBeHidden();
 				await trigger.click();
@@ -55,7 +66,7 @@ try {
 				const active = document.activeElement as HTMLElement;
 				const css = getComputedStyle(active);
 				return { visible: active.matches(':focus-visible') && parseFloat(css.outlineWidth) >= 2,
-					rect: active.getBoundingClientRect().toJSON() };
+					rect: active.getBoundingClientRect().toJSON(), ring: [...css.outlineColor.matchAll(/\d+/g)].slice(0, 3).map(Number) };
 			});
 			expect(focused.visible).toBe(true);
 			// Inspect rendered pixels: a later row used to paint over the lower focus ring.
@@ -71,9 +82,16 @@ try {
 				return [rect.y - 3, rect.y + rect.height + 3].map(y =>
 					Array.from(ctx.getImageData(Math.floor(rect.x + rect.width / 2), Math.floor(y), 1, 1).data));
 			}, { png: keyboardShot.toString('base64'), rect: focused.rect });
-			expect(ringPixels).toEqual([[255, 220, 0, 255], [255, 220, 0, 255]]);
-			expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
-			expect(await nav.evaluate(element => [...element.querySelectorAll('a, button')].filter(control => control.getBoundingClientRect().height > 0).every(control => control.getBoundingClientRect().height >= 44))).toBe(true);
+			// The ring follows the --ring token of the current colour scheme.
+			expect(focused.ring).toHaveLength(3);
+			expect(ringPixels).toEqual([[...focused.ring, 255], [...focused.ring, 255]]);
+			expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), 'No horizontal page scroll').toBe(true);
+			// Sidebar buttons are 44px for touch and 36px under a fine pointer (sidebar-menu-button.svelte).
+			expect(await nav.evaluate(element => {
+				const minimum = matchMedia('(pointer: fine)').matches ? 36 : 44;
+				return [...element.querySelectorAll('a, button')].filter(control => control.getBoundingClientRect().height > 0)
+					.filter(control => control.getBoundingClientRect().height < minimum).map(control => control.textContent);
+			}), 'Sidebar targets below their minimum height').toEqual([]);
 			// The ordinary preview should show the selected page, not the keyboard-test focus.
 			await page.locator('[data-sidebar="header"]').click({ position: { x: 4, y: 4 } });
 			await page.screenshot({ path: `${artifacts}/${locale}-${colorScheme}-${width}.png` });
@@ -81,7 +99,7 @@ try {
 				await page.keyboard.press('Escape');
 				await expect(trigger).toBeFocused();
 				await expect(firstLink).toBeHidden();
-				await expect(input).toHaveValue('Long product name '.repeat(10));
+				await expect(input).toHaveValue(longDraft);
 				await trigger.click();
 			} else {
 				await trigger.click();
@@ -107,18 +125,24 @@ try {
 	// A membership read failure must keep the same editor and sidebar in place.
 	await page.goto(`${origin}/en/admin/products/new`);
 	const input = page.locator('#product-name-en');
+	await chooseCategory();
 	await expect(input).toBeEditable();
 	await input.fill('Unsaved sidebar regression draft');
 	const before = await input.boundingBox();
-	await page.route('**/rest/v1/amp_staff_members*', route => route.abort('failed'));
-	await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+	// Membership is a live read: a change to the member re-runs it, and that result fails.
+	convex.fail('members:me');
+	await fixtures.patch('staff_members', { auth_user_id: authUserId }, { display_name: 'Sidebar proof volunteer, renamed' });
 	await expect(page.getByText(en.admin.accessUnavailable, { exact: true })).toBeVisible();
 	await expect(input).toHaveValue('Unsaved sidebar regression draft');
 	expect(await input.boundingBox()).toEqual(before);
 	expect(await page.getByRole('navigation', { name: en.admin.navigation, includeHidden: true }).evaluate(element => Boolean(element.closest('[inert]')))).toBe(true);
-	await page.unroute('**/rest/v1/amp_staff_members*');
+	convex.restore('members:me');
 	await page.getByRole('button', { name: en.admin.retry, exact: true }).click();
+	// toBeEditable ignores `inert`, so check that the blocked state really ended.
+	await expect(page.getByText(en.admin.accessUnavailable, { exact: true })).toHaveCount(0);
+	expect(await page.getByRole('navigation', { name: en.admin.navigation }).evaluate(element => Boolean(element.closest('[inert]')))).toBe(false);
 	await expect(input).toBeEditable();
+	await expect(input).toHaveValue('Unsaved sidebar regression draft');
 	// Admin is its own workspace: no public footer follows the page.
 	await expect(page.locator('.site-footer')).toHaveCount(0);
 	await page.getByRole('button', { name: en.admin.signOut, exact: true }).click();
@@ -126,6 +150,19 @@ try {
 	await expect(page.locator('[data-sidebar="sidebar"]')).toHaveCount(0);
 	expect(errors).toEqual([]);
 	console.log('PASS: sidebar geometry, links, phone drawer and desktop collapse, focus, retained drafts and sign-out; nb/en, light/dark, 360/768/1280px');
+} catch (error) {
+	for (const [index, tab] of (context?.pages() ?? []).entries()) {
+		console.error(`Open tab ${index}: ${tab.url()}`);
+		await captureFailure(tab, artifacts, `sidebar-${index}`);
+	}
+	const raw = await Bun.file(`${directory}/worker-error.log`).text() + await Bun.file(`${directory}/worker.log`).text();
+	const backend = (await Bun.file(`${directory}/convex.log`).text().catch(() => '')).split('\n').filter((line) => /error|fail|timed out/i.test(line));
+	if (backend.length) console.error(safe(backend.slice(-20).join('\n')));
+	const redacted = safe(raw);
+	if (redacted.trim()) console.error(redacted.slice(-4000));
+	// Playwright's own dump includes accessibility snapshots, which can hold the filled password.
+	console.error(safe(error instanceof Error ? error.stack ?? error.message : String(error)));
+	process.exitCode = 1;
 } finally {
-	await browser.close();
+	await close();
 }

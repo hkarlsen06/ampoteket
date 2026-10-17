@@ -33,8 +33,8 @@ no fixed purchase bar or nested panel.
 ## 2. Route and public data
 
 - Validate the code grammar and uppercase it; reject invalid codes without a query.
-- Fetch one product with `amp_catalog(p_code)` via `requestApiJson`, never by catalog
-  traversal. If missing, apply the compact-code fallback
+- Fetch one product with the public query `catalog.product` (`lookupCatalogProduct`),
+  never by catalog traversal. If missing, apply the compact-code fallback
   ([catalog rules](page-catalog.md#3-url-and-matching-rules)) and redirect.
 - A valid empty response means no active product at that code: show a localized
   not-found page. The public API has no inactive-product detail.
@@ -43,9 +43,11 @@ no fixed purchase bar or nested panel.
   failed refresh, keep the old data readable, marked unavailable, and disable Add.
 - The page renders server-side and reads without JavaScript; cart controls say they
   need JavaScript and storage. The only refresh controls are contextual retries.
-- Re-read product facts on tab return and reconnect, keeping quantity drafts and
-  focus. A failed read keeps the previous product visible with an unavailable state
-  and contextual retry; Add waits for a successful read.
+- With JavaScript, a live Convex subscription (`useQuery` on `catalog.product`, seeded
+  with the server's read) keeps stock, price and placement current, keeping quantity
+  drafts and focus. A subscription error keeps the previous product visible with an
+  unavailable state and contextual retry; Add waits for a successful read. A product
+  deactivated meanwhile keeps its last details but can no longer be added.
 - Escape saved text. Link a datasheet only if it is an absolute HTTP(S) URL without
   credentials.
 - Canonical, alternate and social URLs are the localized path without query
@@ -78,8 +80,10 @@ Catalog coordinates show a location before the map loads. A product without a dr
 shows one «Plassering» chip with its staff note, or «Spør en frivillig»; its map
 highlights nothing and never reports it as moved.
 
-On mount, fetch `amp_shelf_map()` into reserved space so purchase controls never
-shift. Revalidate on focus, visibility and reconnect (no refresh button or polling),
+The server reads the topology (`catalog.shelfMap`) with the product, within three
+seconds; if that read fails, the map fetches it on mount into reserved space so
+purchase controls never shift. Drawer contents come from `catalog.page` filtered to
+one drawer. Revalidate the topology on focus, visibility and reconnect (no refresh button or polling),
 keeping the map, selection, contents and focus. A failed read keeps the old map marked
 unavailable, with a retry. Cancel reads and listeners when leaving.
 
@@ -105,8 +109,8 @@ unavailable, with a retry. Cancel reads and listeners when leaving.
 ## 5. Admin shortcuts (not built)
 
 Signed-in admins are meant to get shortcuts to edit, adjust, count and move, working on
-admin screens with their own JWT. Public layout and data stay the same; no service key,
-staff record, cost or history enters the public load. Membership, not client
+admin screens with their own Convex Auth session. Public layout and data stay the same;
+no checkout server key, staff record, cost or history enters the public load. Membership, not client
 visibility, authorizes.
 
 ## 6. Acceptance

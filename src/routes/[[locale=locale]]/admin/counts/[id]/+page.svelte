@@ -41,9 +41,14 @@
 	let resubscribing = $state(false);
 	const live = useQuery(api.stock.countDetail, () => admin.status === 'ready' && uuidPattern.test(batchId) && !resubscribing
 		? { batchId, ...(pendingProductId ? { productId: pendingProductId } : {}) } : 'skip', { keepPreviousData: true });
+	// A failed update leaves data undefined; keep the last good read on screen beside the
+	// error, so a count being typed survives until Retry.
+	let lastRead = $state.raw<typeof live.data>(undefined);
+	$effect(() => { if (live.data !== undefined) lastRead = live.data; });
+	const read = $derived(live.error ? lastRead : live.data);
 	// undefined while unknown, null when missing; never another batch's data while the next one loads.
-	const current = $derived(!uuidPattern.test(batchId) ? null : live.data === null ? (live.isStale ? undefined : null)
-		: live.data?.batch.id === batchId ? live.data : undefined);
+	const current = $derived(!uuidPattern.test(batchId) ? null : read === null ? (live.isStale ? undefined : null)
+		: read?.batch.id === batchId ? read : undefined);
 	const failed = $derived(Boolean(live.error) && !resubscribing);
 	const loading = $derived(current === undefined && !failed);
 	const batch = $derived(current?.batch ?? null); const owners = $derived(current?.owners ?? []);

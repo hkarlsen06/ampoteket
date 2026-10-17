@@ -1,15 +1,16 @@
 /** Unsaved drafts survive reload, a closed sheet and a sign-in round trip (website-guide.md §5). */
 import { firefox, expect, type BrowserContext, type Page } from '@playwright/test';
 import { fieldLabel, signIn, proofEnvironment } from './web-proof/harness';
-import { generateSeedSql, seedProductCode, seedProductId } from './seed-test-data';
+import { seedDemoData, seedProductCode, seedProductId } from './seed-test-data';
 import { en } from '../src/lib/i18n/en';
 
-const { directory, origin, password, sql, createUser, startWorker } = await proofEnvironment();
+const { directory, origin, password, run, fixtures, createStaff, startWorker } = await proofEnvironment();
 const staffEmail = 'draft-staff@example.test';
-const staffId = await createUser(staffEmail);
-await sql(`INSERT INTO app.staff_members(auth_user_id,display_name) VALUES ('${staffId}', 'Draft operator');`);
-await sql("SET ampoteket.test_seed = 'disposable-only';\n" + generateSeedSql());
-const cabinetId = await sql('SELECT id FROM app.cabinets WHERE NOT is_archived ORDER BY outer_row,outer_col LIMIT 1');
+await createStaff(staffEmail, 'Draft operator');
+await seedDemoData(run);
+type Cabinet = { id: string; outer_row: number; outer_col: number; is_archived: boolean };
+const [{ id: cabinetId }] = (await fixtures.rows<Cabinet>('cabinets', { is_archived: false }))
+	.sort((a, b) => a.outer_row - b.outer_row || a.outer_col - b.outer_col);
 let context: BrowserContext | undefined;
 const { ready, close } = await startWorker(() => context);
 const m = en.adminOrders;
@@ -98,7 +99,9 @@ try {
 	await page.locator('#product-price').fill('123');
 	await page.reload();
 	await expect(page.locator('#product-price')).toHaveValue('123');
-	await sql(`UPDATE app.products SET minimum_stock = minimum_stock + 1 WHERE id='${seedProductId(2)}'`);
+	// Another edit saved meanwhile: a new revision, as products.save would record it.
+	const [current] = await fixtures.rows<{ minimum_stock: string; metadata_revision: number }>('products', { id: seedProductId(2) });
+	await fixtures.patch('products', { id: seedProductId(2) }, { minimum_stock: String(Number(current.minimum_stock) + 1), metadata_revision: current.metadata_revision + 1 });
 	await page.reload();
 	await expect(page.locator('#product-price')).not.toHaveValue('123');
 	console.log('PASS: product draft restores only onto the revision it was typed against');

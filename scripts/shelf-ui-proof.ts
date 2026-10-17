@@ -1,19 +1,41 @@
-/** Spatial shelf editing against disposable Auth/PostgREST and the production Worker. */
-import { firefox, expect, type BrowserContext, type Locator, type Page } from '@playwright/test';
+/** Spatial shelf editing against a disposable Convex backend and the production Worker. */
+import { firefox, expect as baseExpect, type BrowserContext, type Locator, type Page } from '@playwright/test';
 import { strict as assert } from 'node:assert';
 import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { fieldLabel, captureFailure, proofEnvironment } from './web-proof/harness';
+import { captureFailure, proofEnvironment, signIn } from './web-proof/harness';
+import { convexSocket } from './web-proof/convex-faults';
 import { en } from '../src/lib/i18n/en';
 import { nb } from '../src/lib/i18n/nb';
 
-const { directory, origin, password, sql, createUser, startWorker } = await proofEnvironment();
-const email = 'shelf-ui@example.test', staffId = await createUser(email);
-await sql(`INSERT INTO app.staff_members(auth_user_id,display_name) VALUES ('${staffId}', 'Shelf UI operator')`);
-const cabinetId = await sql('SELECT id FROM app.cabinets WHERE inner_rows=12 AND inner_cols=4 AND NOT is_archived ORDER BY outer_row,outer_col LIMIT 1');
-const binId = async (row: number, col: number) => sql(`SELECT id FROM app.bins WHERE cabinet_id='${cabinetId}' AND inner_row=${row} AND inner_col=${col} AND NOT is_archived`);
+// Sign-in and reads share a disposable backend with parallel proofs; allow for a loaded machine.
+const expect = baseExpect.configure({ timeout: 15_000 });
+
+const { directory, origin, convexUrl, password, fixtures, createStaff, startWorker } = await proofEnvironment();
+const email = 'shelf-ui@example.test';
+await createStaff(email, 'Shelf UI operator');
+type Cabinet = { id: string; outer_row: number | null; outer_col: number | null; inner_rows: number; inner_cols: number; is_archived: boolean };
+type Bin = { id: string; cabinet_id: string | null; inner_row: number | null; inner_col: number | null; row_span: number; col_span: number; label: string | null; is_archived: boolean };
+const [{ id: cabinetId }] = (await fixtures.rows<Cabinet>('cabinets', { inner_rows: 12, inner_cols: 4, is_archived: false }))
+  .sort((a, b) => a.outer_row! - b.outer_row! || a.outer_col! - b.outer_col!);
+const bin = async (id: string) => { const [row] = await fixtures.rows<Bin>('bins', { id }); assert.ok(row); return row; };
+const binId = async (row: number, col: number) => {
+  const [found] = await fixtures.rows<Bin>('bins', { cabinet_id: cabinetId, inner_row: row, inner_col: col, is_archived: false });
+  assert.ok(found); return found.id;
+};
+const ids = (rows: { id: string }[]) => rows.map(row => row.id).sort();
+/** Rows of the two swapped drawers, from one read. */
+const swapRows = async () => { const bins = await fixtures.rows<Bin>('bins'); return [swapFirst, swapSecond].map(id => bins.find(row => row.id === id)?.inner_row); };
 const first = await binId(1, 1), swapFirst = await binId(1, 4), swapSecond = await binId(2, 4);
+// Two identical empty drawers do not swap (a slipped drag changes nothing visible); a label tells these apart.
+await fixtures.patch('bins', { id: swapFirst }, { label: 'Shelf proof' });
+const product = (code: string, binId: string) => {
+  const now = new Date().toISOString().replace('Z', '000Z');
+  return { id: randomUUID(), code, name_nb: 'Testdel', name_en: 'Test part', description: null, category_id: null, bin_id: binId, location_note: null,
+    unit_code: 'pcs', stock_step: '1', sale_step: '1', sale_unit_price_nok: '0', minimum_stock: '0', datasheet_url: null, purchase_url: null,
+    is_active: true, metadata_revision: 1, created_at: now, updated_at: now };
+};
 let context: BrowserContext | undefined;
 const { ready, close } = await startWorker(() => context);
 const artifacts = resolve('test-results/shelf');
@@ -65,12 +87,12 @@ async function dragSwap(page: Page, source: Locator, target: Locator) {
 try {
   await ready();
   context = await firefox.launchPersistentContext(`${directory}/profile`, { headless: true, ignoreHTTPSErrors: false, hasTouch: true });
+  // Shelf writes travel over the app's one Convex WebSocket, which HTTP routes cannot see.
+  const socket = await convexSocket(context, convexUrl);
+  const swaps = () => socket.sent('shelf:swapBins');
   context.on('page', tab => tab.on('pageerror', error => errors.push(error.message)));
   const page = await context.newPage();
-  await page.goto(`${origin}/en/admin/login`);
-  await page.getByLabel(fieldLabel('Email address')).fill(email);
-  await page.getByLabel(fieldLabel('Password')).fill(password);
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await signIn(page, origin, email, password);
   await expect(page.getByRole('heading', { name: en.admin.overview, exact: true })).toBeVisible();
   await page.goto(`${origin}/en/admin/shelf`);
   await page.locator(`[data-item-id="${cabinetId}"]`).click();
@@ -88,8 +110,12 @@ try {
   await expect(rows).toHaveAttribute('aria-valuenow', '12');
   await expect(editor.getByText(m.grid(12, 4), { exact: true })).toBeVisible();
   await rows.evaluate(element => element.setAttribute('data-proof-persistent', 'true'));
-  const refreshed = Promise.all(['amp_cabinets', 'amp_bins', 'amp_products'].map(table => page.waitForResponse(response => response.url().includes(`/${table}?`) && response.ok())));
-  await page.evaluate(() => window.dispatchEvent(new Event('focus'))); await refreshed;
+  // A product placed meanwhile in another drawer shows once the tab regains focus, without remounting the editor.
+  const topDrawer = editor.locator(`[data-item-id="${await binId(12, 1)}"]`), emptyFace = new RegExp(` · ${m.emptyDrawer}$`);
+  await expect(topDrawer).toHaveAttribute('aria-label', emptyFace);
+  await fixtures.insert('products', [product('SHELF-FOCUS', await binId(12, 1))]);
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(topDrawer).not.toHaveAttribute('aria-label', emptyFace);
   await expect(rows).toBeEnabled();
   await expect(rows).toHaveAttribute('data-proof-persistent', 'true');
   const frameLocator = editor.locator('.cabinet-frame');
@@ -126,19 +152,18 @@ try {
   await editor.locator(`[data-item-id="${first}"]`).click();
   const width = editor.getByRole('slider', { name: m.resizeHandle, exact: true });
   await width.focus(); await page.keyboard.press('ArrowRight'); await expect(width).toHaveAttribute('aria-valuenow', '2');
-  expect(await sql(`SELECT col_span FROM app.bins WHERE id='${first}'`)).toBe('1');
+  expect((await bin(first)).col_span).toBe(1);
   await expect(page.getByRole('button', { name: m.newCabinet, exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: en.shelfMap.showWall, exact: true })).toBeDisabled();
   await dragSwap(page, editor.locator(`[data-item-id="${swapFirst}"]`), editor.locator(`[data-item-id="${swapSecond}"]`)); await page.mouse.up(); await expect(page.locator('[data-drawer-drag-preview]')).toHaveCount(0);
   await expect(editor.getByText(m.saveBeforeSwap, { exact: true })).toBeVisible();
   await expect(page.getByRole('alertdialog')).toHaveCount(0);
-  const savedLayout = page.waitForResponse(response => response.url().includes('/rpc/amp_save_shelf_layout') && response.ok());
-  await editor.getByRole('button', { name: m.save, exact: true }).click(); await savedLayout;
+  await editor.getByRole('button', { name: m.save, exact: true }).click();
+  await expect.poll(async () => (await bin(first)).col_span).toBe(2);
+  await expect(editor.getByRole('button', { name: m.discardChanges, exact: true })).toBeHidden();
   await expect(editor).toBeVisible();
   await expect(rows).toHaveAttribute('aria-valuenow', '12');
-  expect(await sql(`SELECT col_span FROM app.bins WHERE id='${first}'`)).toBe('2');
-  await expect(editor.getByRole('button', { name: m.discardChanges, exact: true })).toBeHidden();
-  console.log('PASS: inline editor; keyboard/pointer grid resizing and cancellation; drawer widening saves through real layout RPC without closing editor');
+  console.log('PASS: inline editor; keyboard/pointer grid resizing and cancellation; drawer widening saves through the real layout mutation without closing editor');
 
   await page.locator(`[data-item-id="${first}"]`).click();
   await page.getByRole('slider', { name: m.resizeHandle, exact: true }).focus(); await page.keyboard.press('ArrowRight');
@@ -147,7 +172,7 @@ try {
   await editor.getByRole('button', { name: m.discardChanges, exact: true }).click(); await expect(editor).toBeVisible();
   await editor.locator(`[data-item-id="${first}"]`).click();
   await expect(editor.getByRole('slider', { name: m.resizeHandle, exact: true })).toHaveAttribute('aria-valuenow', '2');
-  expect(await sql(`SELECT col_span FROM app.bins WHERE id='${first}'`)).toBe('2');
+  expect((await bin(first)).col_span).toBe(2);
   await expect(editor.getByRole('button', { name: m.discardChanges, exact: true })).toBeHidden();
   const source = page.locator(`[data-item-id="${swapFirst}"]`), target = page.locator(`[data-item-id="${swapSecond}"]`);
   const beforeTouchViewport = page.viewportSize()!;
@@ -161,43 +186,37 @@ try {
   await page.keyboard.press('Escape'); await page.mouse.up();
   await expect(page.locator('[data-drawer-drag-preview]')).toHaveCount(0);
   await page.setViewportSize(beforeTouchViewport);
-  const swaps: unknown[] = [];
-  page.on('request', request => { if (request.url().includes('/rpc/amp_swap_bins') && request.method() === 'POST') swaps.push(request.postDataJSON()); });
   await dragSwap(page, source, target); await page.keyboard.press('Escape'); await page.mouse.up(); await expect(page.locator('[data-drawer-drag-preview]')).toHaveCount(0);
-  await expect(page.getByRole('alertdialog')).toHaveCount(0); expect(swaps).toHaveLength(0);
+  await expect(page.getByRole('alertdialog')).toHaveCount(0); expect(swaps()).toHaveLength(0);
   await dragSwap(page, source, target); await source.dispatchEvent('pointercancel', { pointerId: 1, pointerType: 'mouse' }); await page.mouse.up(); await expect(page.locator('[data-drawer-drag-preview]')).toHaveCount(0);
-  await expect(page.getByRole('alertdialog')).toHaveCount(0); expect(swaps).toHaveLength(0);
+  await expect(page.getByRole('alertdialog')).toHaveCount(0); expect(swaps()).toHaveLength(0);
   await dragSwap(page, source, target); await page.mouse.up(); await expect(page.locator('[data-drawer-drag-preview]')).toHaveCount(0);
   const confirm = page.getByRole('alertdialog'); await expect(confirm).toBeVisible();
   await confirm.getByRole('button', { name: m.cancelAction, exact: true }).click();
-  expect(swaps).toHaveLength(0); await expect(page.getByText(m.positionsSwapped, { exact: true })).toHaveCount(0);
+  expect(swaps()).toHaveLength(0); await expect(page.getByText(m.positionsSwapped, { exact: true })).toHaveCount(0);
   await dragSwap(page, source, target); await page.mouse.up(); await expect(page.locator('[data-drawer-drag-preview]')).toHaveCount(0);
-  let acknowledge!: () => void, reached!: () => void;
-  const ack = new Promise<void>(resolve => acknowledge = resolve), committed = new Promise<void>(resolve => reached = resolve);
-  await page.route('**/rpc/amp_swap_bins', async route => { const response = await route.fetch(); reached(); await ack; await route.fulfill({ response }); });
-  const savedSwap = page.waitForResponse(response => response.url().includes('/rpc/amp_swap_bins') && response.ok());
-  await confirm.getByRole('button', { name: m.confirmAction, exact: true }).click();
-  await committed; await expect(page.getByText(m.positionsSwapped, { exact: true })).toHaveCount(0); acknowledge(); await savedSwap;
-  await page.unroute('**/rpc/amp_swap_bins'); await expect(page.getByText(m.positionsSwapped, { exact: true })).toBeVisible();
-  await expect(confirm).toHaveCount(0); expect(swaps).toHaveLength(1);
-  expect(await sql(`SELECT inner_row FROM app.bins WHERE id='${swapFirst}'`)).toBe('2');
-  expect(await sql(`SELECT inner_row FROM app.bins WHERE id='${swapSecond}'`)).toBe('1');
+  // Committed but not yet acknowledged: no success toast until the reply arrives.
+  const swapReply = socket.hold('shelf:swapBins');
+  await confirm.getByRole('button', { name: m.swap, exact: true }).click();
+  await expect.poll(swapRows).toEqual([2, 1]);
+  await expect(page.getByText(m.positionsSwapped, { exact: true })).toHaveCount(0);
+  swapReply.release();
+  await expect(page.getByText(m.positionsSwapped, { exact: true })).toBeVisible();
+  await expect(confirm).toHaveCount(0); expect(swaps()).toHaveLength(1);
   await source.click(); await page.locator('.drawer-move-handle').focus(); await page.keyboard.press('Enter');
   await expect(picker).toHaveCount(0); await expect(editor.getByText(m.chooseSwap, { exact: true })).toBeVisible();
   await page.keyboard.press('Escape'); await expect(editor.getByText(m.chooseSwap, { exact: true })).toBeHidden();
   const moveHandle = await center(page.locator('.drawer-move-handle')); await page.touchscreen.tap(moveHandle.x, moveHandle.y);
   await expect(picker).toHaveCount(0); await expect(editor.getByText(m.chooseSwap, { exact: true })).toBeVisible();
   await target.click(); await expect(confirm).toBeVisible();
-  await confirm.getByRole('button', { name: m.cancelAction, exact: true }).click(); expect(swaps).toHaveLength(1);
+  await confirm.getByRole('button', { name: m.cancelAction, exact: true }).click(); expect(swaps()).toHaveLength(1);
   await page.keyboard.press('Escape');
   const editorSource = editor.locator(`[data-item-id="${swapFirst}"]`), editorTarget = editor.locator(`[data-item-id="${swapSecond}"]`);
   await dragSwap(page, editorSource, editorTarget); await page.mouse.up(); await expect(page.locator('[data-drawer-drag-preview]')).toHaveCount(0);
   await expect(confirm).toBeVisible();
-  const editorSwap = page.waitForResponse(response => response.url().includes('/rpc/amp_swap_bins') && response.ok());
-  await confirm.getByRole('button', { name: m.confirmAction, exact: true }).click(); await editorSwap;
-  await expect(editor).toBeVisible(); expect(swaps).toHaveLength(2);
-  expect(await sql(`SELECT inner_row FROM app.bins WHERE id='${swapFirst}'`)).toBe('1');
-  expect(await sql(`SELECT inner_row FROM app.bins WHERE id='${swapSecond}'`)).toBe('2');
+  await confirm.getByRole('button', { name: m.swap, exact: true }).click();
+  await expect.poll(swapRows).toEqual([1, 2]);
+  await expect(editor).toBeVisible(); expect(swaps()).toHaveLength(2);
   console.log('PASS: drawer drag target outline, Escape/pointer cancellation, confirmation cancel/commit, persisted swap and keyboard/touch inline target selection');
 
   await source.click(); await moveDrawer.click();
@@ -210,7 +229,7 @@ try {
   await expect(anotherCabinet).toBeEnabled(); await anotherCabinet.click();
   await expect(editor.getByText(m.chooseSwap, { exact: true })).toBeVisible();
   await editor.locator('[data-item-id]').first().click(); await expect(confirm).toBeVisible();
-  await confirm.getByRole('button', { name: m.cancelAction, exact: true }).click(); expect(swaps).toHaveLength(2);
+  await confirm.getByRole('button', { name: m.cancelAction, exact: true }).click(); expect(swaps()).toHaveLength(2);
   await page.keyboard.press('Escape'); await page.getByRole('button', { name: en.shelfMap.showWall, exact: true }).click();
   await page.locator(`[data-item-id="${cabinetId}"]`).click(); await source.click();
   await expect(editor.getByText(m.noProducts, { exact: true })).toBeVisible();
@@ -220,9 +239,9 @@ try {
   await expect(moveDrawer).toBeDisabled(); await expect(archiveDrawer).toBeDisabled();
   await editor.getByRole('button', { name: m.discardChanges, exact: true }).click();
   await source.click(); await expect(archiveDrawer).toBeEnabled();
-  await sql(`INSERT INTO app.products(code,name_nb,name_en,unit_code,stock_step,sale_step,sale_unit_price_nok,bin_id) VALUES ('SHELF-PROOF','Testdel','Test part','pcs',1,1,0,'${swapFirst}')`);
-  const occupiedRead = Promise.all(['amp_cabinets', 'amp_bins', 'amp_products'].map(table => page.waitForResponse(response => response.url().includes(`/${table}?`) && response.ok())));
-  await page.evaluate(() => window.dispatchEvent(new Event('focus'))); await occupiedRead;
+  await fixtures.insert('products', [product('SHELF-PROOF', swapFirst)]);
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(source).not.toHaveAttribute('aria-label', emptyFace);
   await expect(source).toBeEnabled(); await source.click();
   await expect(archiveDrawer).toBeDisabled();
   await expect(editor.getByRole('button', { name: m.narrowDrawer, exact: true })).toBeDisabled();
@@ -230,22 +249,21 @@ try {
   console.log('PASS: drawer actions beside the selected drawer: move, draft guard, contents and occupied archive guard');
 
   const vacantBin = await binId(3, 4);
-  const contentsBeforeMove = await sql(`SELECT coalesce(jsonb_agg(id ORDER BY id), '[]') FROM app.products WHERE bin_id='${swapFirst}'`);
+  const contentsBeforeMove = ids(await fixtures.rows<{ id: string }>('products', { bin_id: swapFirst }));
   await editor.locator(`[data-item-id="${vacantBin}"]`).click();
   await archiveDrawer.click(); await expect(confirm).toBeVisible();
-  const archived = page.waitForResponse(response => response.url().includes('/amp_bins?') && response.request().method() === 'PATCH' && response.ok());
-  await confirm.getByRole('button', { name: m.confirmAction, exact: true }).click(); await archived;
+  await confirm.getByRole('button', { name: m.confirmAction, exact: true }).click();
+  await expect.poll(async () => (await bin(vacantBin)).is_archived).toBe(true);
   await expect(editor.locator(`[data-item-id="${vacantBin}"]`)).toHaveCount(0);
-  expect(await sql(`SELECT is_archived FROM app.bins WHERE id='${vacantBin}'`)).toBe('t');
   await source.click(); await moveDrawer.click();
   await editor.locator('[data-item-id="vacant:3:4"]').click(); await expect(confirm).toBeVisible();
   await expect(picker).toHaveCount(0);
-  const moved = page.waitForResponse(response => response.url().includes('/amp_bins?') && response.request().method() === 'PATCH' && response.ok());
-  await confirm.getByRole('button', { name: m.confirmAction, exact: true }).click(); await moved;
+  await confirm.getByRole('button', { name: m.confirmAction, exact: true }).click();
+  await expect.poll(async () => { const moved = await bin(swapFirst); return [moved.cabinet_id, moved.inner_row, moved.inner_col, moved.is_archived]; })
+    .toEqual([cabinetId, 3, 4, false]);
   await expect(editor.getByText(m.chooseSwap, { exact: true })).toBeHidden();
-  expect(await sql(`SELECT inner_row=3 AND inner_col=4 AND NOT is_archived FROM app.bins WHERE id='${swapFirst}'`)).toBe('t');
-  expect(await sql(`SELECT coalesce(jsonb_agg(id ORDER BY id), '[]') FROM app.products WHERE bin_id='${swapFirst}'`)).toBe(contentsBeforeMove);
-  expect(await sql(`SELECT count(*) FROM app.bins WHERE cabinet_id='${cabinetId}' AND inner_row=1 AND inner_col=4 AND NOT is_archived`)).toBe('0');
+  expect(ids(await fixtures.rows<{ id: string }>('products', { bin_id: swapFirst }))).toEqual(contentsBeforeMove);
+  expect(await fixtures.rows('bins', { cabinet_id: cabinetId, inner_row: 1, inner_col: 4, is_archived: false })).toHaveLength(0);
   console.log('PASS: archive empty drawer then move assigned drawer into vacant position, preserving identity and products');
 
   for (const locale of ['nb', 'en'] as const) for (const colorScheme of ['light', 'dark'] as const) for (const width of [360, 1280]) {
@@ -269,35 +287,35 @@ try {
   console.log('PASS: localized light/dark inline cabinet editors at 360/1280px with no page or editor horizontal overflow');
 
   const retiringCabinet = randomUUID(), retiringBins = [randomUUID(), randomUUID()];
-  await sql(`INSERT INTO app.cabinets(id,code,outer_row,outer_col,inner_rows,inner_cols) VALUES ('${retiringCabinet}','C-${retiringCabinet}',3,1,1,2)`);
-  for (const [index, id] of retiringBins.entries()) {
-    await sql(`INSERT INTO app.bins(id,code,cabinet_id,inner_row,inner_col) VALUES ('${id}','B-${id}','${retiringCabinet}',1,${index + 1})`);
-  }
+  await fixtures.insert('cabinets', [{ id: retiringCabinet, code: `C-${retiringCabinet}`, outer_row: 3, outer_col: 1, inner_rows: 1, inner_cols: 2, label: null, is_archived: false }]);
+  await fixtures.insert('bins', retiringBins.map((id, index) => ({ id, code: `B-${id}`, cabinet_id: retiringCabinet, inner_row: 1, inner_col: index + 1,
+    row_span: 1, col_span: 1, label: null, is_archived: false })));
   await page.reload();
   await page.locator(`[data-shelf-wall] [data-item-id="${retiringCabinet}"]`).click();
   await page.getByRole('button', { name: m.archiveCabinetWithDrawers, exact: true }).click();
   await expect(confirm).toContainText(m.archiveCabinetWithDrawersConfirm(2));
-  const cabinetArchived = page.waitForResponse(response => response.url().includes('/rpc/amp_archive_empty_cabinet') && response.ok());
-  await confirm.getByRole('button', { name: m.confirmAction, exact: true }).click(); await cabinetArchived;
+  await confirm.getByRole('button', { name: m.confirmAction, exact: true }).click();
+  await expect.poll(async () => (await fixtures.rows<Cabinet>('cabinets', { id: retiringCabinet }))[0].is_archived).toBe(true);
   await expect(page.locator(`[data-shelf-wall] [data-item-id="${retiringCabinet}"]`)).toHaveCount(0);
-  expect(await sql(`SELECT is_archived FROM app.cabinets WHERE id='${retiringCabinet}'`)).toBe('t');
-  expect(await sql(`SELECT count(*) FROM app.bins WHERE id IN ('${retiringBins.join("','")}') AND is_archived`)).toBe('2');
-  console.log('PASS: cabinet and two empty drawers archive through one confirmed RPC');
+  expect(await Promise.all(retiringBins.map(async id => (await bin(id)).is_archived))).toEqual([true, true]);
+  console.log('PASS: cabinet and two empty drawers archive through one confirmed mutation');
 
   // Move cabinet: the wall picker offers vacant positions as well as cabinets to swap with.
-  const binsBeforeMove = await sql(`SELECT coalesce(jsonb_agg(id ORDER BY id), '[]') FROM app.bins WHERE cabinet_id='${cabinetId}' AND NOT is_archived`);
+  const liveBins = async () => ids(await fixtures.rows<Bin>('bins', { cabinet_id: cabinetId, is_archived: false }));
+  const binsBeforeMove = await liveBins();
   await page.locator(`[data-shelf-wall] [data-item-id="${cabinetId}"]`).click();
   await page.getByRole('button', { name: m.moveCabinet, exact: true }).click();
   const mover = page.getByRole('dialog', { name: m.moveCabinet, exact: true });
   await mover.getByRole('button', { name: `A3 · ${m.emptyDrawer}`, exact: true }).click();
   await expect(mover).toContainText(m.cabinet('A3'));
-  const cabinetMoved = page.waitForResponse(response => response.url().includes('/amp_cabinets?') && response.request().method() === 'PATCH' && response.ok());
   await mover.getByRole('button', { name: m.move, exact: true }).click();
-  await confirm.getByRole('button', { name: m.confirmAction, exact: true }).click(); await cabinetMoved;
+  await confirm.getByRole('button', { name: m.confirmAction, exact: true }).click();
+  await expect.poll(async () => { const [moved] = await fixtures.rows<Cabinet>('cabinets', { id: cabinetId }); return [moved.outer_row, moved.outer_col]; }).toEqual([3, 1]);
   await expect(mover).toBeHidden();
-  await expect(editor.getByRole('heading', { name: m.cabinet('A3'), exact: true })).toBeVisible();
-  expect(await sql(`SELECT outer_row=3 AND outer_col=1 FROM app.cabinets WHERE id='${cabinetId}'`)).toBe('t');
-  expect(await sql(`SELECT coalesce(jsonb_agg(id ORDER BY id), '[]') FROM app.bins WHERE cabinet_id='${cabinetId}' AND NOT is_archived`)).toBe(binsBeforeMove);
+  // The zoomed stage names the cabinet at its new position above its open editor.
+  await expect(page.locator('[data-shelf-stage]').getByRole('heading', { name: m.cabinet('A3'), exact: true, level: 2 })).toBeVisible();
+  await expect(editor).toBeVisible();
+  expect(await liveBins()).toEqual(binsBeforeMove);
   expect(errors).toEqual([]);
   console.log('PASS: cabinet moves to a vacant wall position through the wall picker, keeping its drawers');
 } catch (error) {

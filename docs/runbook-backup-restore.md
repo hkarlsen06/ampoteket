@@ -1,9 +1,15 @@
 # Ampoteket backup and restore runbook
 
 A restore must keep original rows, identities, timestamps, revisions, audit
-images, retry results and sequence state. Never replay a data-only dump into an
-initialized app with triggers enabled: they would reset metadata and invent
-audit history.
+images, retry results and sequence state. On Convex, a snapshot export holds every
+table as it was at one moment, including the Auth tables, `counters` (the gap-free
+movement and audit sequences) and `stock_levels`, and a snapshot import puts them
+back unchanged. Never rebuild data by re-entering it through the application: that
+would invent audit history and new revisions.
+
+Until the cutover ([cutover runbook](runbook-cutover.md)) production runs on
+Supabase; its backup procedure is in git history
+(`git show b83c41e:docs/runbook-backup-restore.md`).
 
 ## 1. Decisions required before launch
 
@@ -17,128 +23,138 @@ shop can be down. Choose them before choosing backup frequency or a plan.
 | Decision | Required record |
 | --- | --- |
 | Responsible people | Hjalmar Karlsen is primary; name an independent secondary operator and escalation path, then both verify access |
-| Recovery point (RPO) | Maximum acceptable data loss; backup frequency must meet it |
+| Recovery point (RPO) | Maximum acceptable data loss; snapshot frequency must meet it |
 | Recovery time (RTO) | Maximum acceptable outage; measured restore time must meet it |
 | Backup storage | Independent location, encryption key custody, retention, restore/delete access |
-| Scheduled checks | Backup frequency, failed/overdue alert recipient, drill schedule and owner |
-| External services | Supabase/Cloudflare/domain billing, recovery and succession of access |
+| Scheduled checks | Snapshot frequency, failed/overdue alert recipient, drill schedule and owner |
+| External services | Convex/Cloudflare/Resend/domain billing, recovery and succession of access |
 
 Suggested, **not adopted**: 24-hour RPO and RTO; a monitored daily encrypted
-off-platform backup; two admins who can each restore it; a full drill before
-launch, each semester and after major schema or operator changes. Provider
-[backups](https://supabase.com/docs/guides/platform/backups) depend on the plan.
-A backup without an accessible key, tested reader or alert recipient does not
-count. Recheck owners at every handover.
+owner-held snapshot; two admins who can each restore it; a full drill before
+launch, each semester and after major schema or operator changes. Convex also
+keeps its own backups (dashboard, Backups); what it keeps depends on the plan, and
+the owner-held snapshot is ours. A backup without an accessible key, tested reader
+or alert recipient does not count. Recheck owners at every handover.
 
-## 2. Contents and consistency
+## 2. Contents and sensitivity
 
-Include `app`, public API objects, Auth records with original UUIDs,
-`supabase_migrations`, sequences, policies/grants, and the repository revision
-and migration hashes. Record project, PostgreSQL/CLI versions, UTC cutoff,
-checksums and manifests with each backup.
+A snapshot is one ZIP with a folder per table. It holds buyer contacts, staff email
+addresses, bcrypt password hashes, session and refresh-token records and checkout
+token digests: treat it like a password store. It does not hold the deployed
+functions or the deployment's environment variables; those come from the
+repository commit and the deployment record.
 
-Dumps are sensitive (Auth data, buyer contacts). Erased contacts survive in
-older backups: track erasures and reapply them after a restore.
+Record with each snapshot: UTC time, source deployment name, repository commit
+deployed at that time, file size and SHA-256.
 
-Separate dump commands only match if nothing writes in between. For a release
-checkpoint, use the [cutover barrier](runbook-deploy.md#enforced-cutover-barrier),
-pause Auth and owner administration, and keep it until reopening. The Data API
-toggle does not stop Auth sign-in; if that cannot be stopped, use a provider
-backup and take its manifest from an isolated restored copy.
+Erased contacts survive in older snapshots. After a restore, reapply every
+erasure made after the snapshot (§5).
 
-## 3. Back up and restore
+## 3. Take a snapshot
 
-Follow the [Supabase CLI procedure](https://supabase.com/docs/guides/platform/migrating-within-supabase/backup-restore).
-Check the dump `--dry-run` output lists the Auth and app tables and sequences.
-Never echo credentials or enable shell tracing. Link the source project, freeze
-it (§2), then, with the source's `PG*` login from
-[reaching the hosted project](runbook-deploy.md#reaching-the-hosted-project) (role
-`postgres`, read-only):
+With the production deploy key read as in
+[reaching the hosted project](runbook-deploy.md#reaching-the-hosted-project),
+write outside the repository, readable only by you:
 
 ```sh
-umask 077
-supabase db dump --linked --role-only --file roles.sql
-supabase db dump --linked --file schema.sql
-supabase db dump --linked --data-only --use-copy --file data.sql
-supabase db dump --linked --schema supabase_migrations --file history-schema.sql
-supabase db dump --linked --schema supabase_migrations --data-only --use-copy --file history-data.sql
-python3 scripts/database-manifest.py > source-manifest.json
-sha256sum roles.sql schema.sql data.sql history-schema.sql history-data.sql source-manifest.json > SHA256SUMS
+(
+  read -rs CONVEX_DEPLOY_KEY && export CONVEX_DEPLOY_KEY
+  umask 077 && mkdir -p ~/ampoteket-exports
+  file=~/ampoteket-exports/"$(date -u +%Y-%m-%dT%H%M%SZ)-convex-snapshot.zip"
+  bunx --no-install convex export --path "$file"
+  sha256sum "$file"
+)
 ```
 
-Restore into an empty, separate Supabase project. Do **not** run Ampoteket's
-initializer first. Keep any role-ownership edits beside the original dumps.
-Never ignore SQL errors or accept a missing table. Point the `PG*` variables only
-at the destination, for example the same recipe run from a separate checkout
-linked to the destination project, without the read-only option. Never re-link
-the main checkout away from production in the middle of a restore:
+The export only reads; sales and staff work continue. Encrypt the file with a key
+the owner holds, move the encrypted copy to the agreed storage (§1), check that it
+decrypts, and delete the plain file. Never commit, share or attach a snapshot.
 
-```sh
-psql -X --single-transaction -v ON_ERROR_STOP=1 \
-  -f roles.sql -f schema.sql -f history-schema.sql \
-  -c 'SET LOCAL session_replication_role = replica' \
-  -f data.sql -f history-data.sql \
-  -c 'SET LOCAL session_replication_role = origin'
-```
+## 4. Restore
 
-This also skips foreign-key checks, so §5 is mandatory before reopening. If the
-restore fails, keep diagnostics and rebuild the destination from scratch.
-Provider [restore-to-new-project](https://supabase.com/docs/guides/platform/clone-project)
-is an alternative; it needs manual settings recovery and the same checks.
+Always restore into a separate rehearsal deployment first (a development
+deployment of the `ampoteket` project, as in the
+[cutover rehearsal](runbook-cutover.md)), never straight into production. Give
+the rehearsal deployment its own `JWT_PRIVATE_KEY`, `JWKS` and `SITE_URL`
+(`bun scripts/convex-cutover/auth-keys.ts` prints a key pair) and leave
+`RESEND_API_KEY` unset so no email leaves it.
 
-## 4. Identity and configuration recovery
+1. Decrypt the snapshot into a private directory and check its SHA-256 against
+   the record.
+2. In one subshell with the **target's** deploy key read as in §3, deploy the
+   functions of the commit recorded with the snapshot, so the target's schema
+   matches the data, then import, replacing everything in the target:
 
-Keep Auth UUIDs; historical staff IDs never change. If an Auth account cannot be
-restored:
+   ```sh
+   bunx --no-install convex deploy
+   bunx --no-install convex import --replace-all '<snapshot.zip>'
+   ```
+
+   `--replace-all` deletes the target's existing data, including tables missing
+   from the snapshot; it asks for confirmation first. Never pass `--yes` against
+   production.
+3. Run the checks in §5 on the target.
+
+Restoring production itself is the owner's decision, made only after the
+rehearsal passes. Close sales (`SALES_OPEN` `"false"` in `wrangler.jsonc`, push)
+and pause staff work first; every write since the snapshot is lost. If the
+restore goes into a new deployment instead, it needs the production environment
+variables ([deploy runbook](runbook-deploy.md) §3), `PUBLIC_CONVEX_URL` in
+`wrangler.jsonc` and the GitHub secret `CONVEX_DEPLOY_KEY` must change to it, and
+admins sign in again.
+
+### Identity recovery
+
+Staff identities restore with the data: `staff_members.auth_user_id` refers to
+`users.auth_user_id`, which the snapshot keeps. Historical staff IDs never change.
+If one person's account cannot be restored:
 
 1. Verify the person explicitly; a display name or date is not proof.
 2. Record `old staff ID / old Auth UUID → new Auth UUID`, evidence, reason,
    approver and UTC time in the access record.
-3. With access disabled, relink in a transaction that checks the old value and
-   changes exactly one row.
-4. Re-enable only that person and test the real login.
+3. Keep that membership deactivated until the relink is reviewed. No function
+   relinks a membership; never edit `auth_user_id` in the dashboard data view,
+   which bypasses the audit log. The owner decides how to apply it.
+4. Re-enable only that person and test the real sign-in.
 
 Never give a new volunteer a departed person's staff identity.
 
-Restore and review: public-only API exposure, disabled signup, Auth URLs and
-mail, Worker endpoint and secret, DNS, deployed revision, rate/origin limits and
-backup alerts. Record secret names, not values. A new project has new keys; test
-staff, non-staff and guest access before cutover.
+## 5. Checks before reopening
 
-## 5. Reconciliation before reopening
-
-Keep writers stopped. The manifest holds counts, row hashes and sequence state,
-no personal data. Review any Auth difference individually. With `PG*` still
-pointing at the destination:
+Keep sales closed and staff paused. With the target's deploy key:
 
 ```sh
-python3 scripts/database-manifest.py > restored-manifest.json
-diff -u source-manifest.json restored-manifest.json
-psql -X -v ON_ERROR_STOP=1 -f supabase/tests/permissions.sql
-psql -X -v ON_ERROR_STOP=1 -f supabase/tests/protections.sql
-psql -X -v ON_ERROR_STOP=1 -f supabase/tests/v1-invariants.sql
+bunx --no-install convex run migration:verifyStockLevels
 ```
 
-Require exact rows, staff/Auth mappings and sequences. Compare schema and
-history with the migration files. Reconcile stock per product, order progress
-per line and checkout totals per checkout.
+It must print `[]`: every product's stock level and revision match its ledger. For
+each application table, `bunx --no-install convex run migration:tableDigest
+'{"table":"products"}'` gives the row count and a digest; the counts must equal the
+line counts of `<table>/documents.jsonl` in the snapshot. Then:
 
-In a drill, also test: staff login; non-staff refusal; an old request retry;
-checkout retry and resume with saved tokens (synthetic, never logged); one new
-stock operation and edit (exactly one new ledger/audit entry); ledger edits
-rejected.
+- An admin signs in with their existing password; a deactivated member gets no
+  admin access; the change log, a product's stock history, the shelf map and orders
+  show the expected data.
+- In a drill, also test an old request retry (returns its stored result), a
+  checkout retry and resume with saved tokens (synthetic, never logged), one new
+  stock operation and edit (exactly one new movement and audit entry).
+- Reapply contact erasures made after the snapshot: the source's change log, if
+  still readable, lists them as `CONTACT_CLEARED` entries after the snapshot time;
+  otherwise use the erasure requests on record. Erase each again at
+  `/admin/purchases`. Expired contacts are cleared by the next nightly retention
+  run ([contact retention](runbook-contact-retention.md)).
+- Check the Convex environment variable names, the Worker vars and secrets, DNS and
+  the deployed commit against the record. Record names, not values.
 
-Then record elapsed time, cutoff and writes after it. Reapply contact erasures,
-restore configuration and reopen only once verified. Keep the old environment
-until recovery is accepted.
+Record elapsed time, snapshot time and the writes lost after it. Reopen only once
+verified. Keep the old deployment until recovery is accepted.
 
 ## 6. Drills
 
-`./scripts/test-backup-restore.sh` runs a full local backup, restore and
-comparison with synthetic Auth. It does not prove real Auth or platform
-settings. Finish a full-stack drill after the opening-stock import and before
-launch, then on the agreed schedule.
-
-| UTC date | Operator / reviewer | Backup ID / source revision | Route / target | Row / identity checks | Duration / RPO-RTO met | Open actions |
-| --- | --- | --- | --- | --- | --- | --- |
-| `<first full-stack drill required before launch>` | | | | | | |
+No restore drill has been executed on Convex. The cutover import's verification
+([cutover runbook](runbook-cutover.md)) is not a drill of this procedure. Finish a
+full drill, from a real production snapshot into a rehearsal deployment, before
+relying on it, then on the agreed schedule. Executed evidence belongs in
+[VALIDATION.md](../VALIDATION.md); record each drill there with operator, snapshot
+time and source commit, target, check results, duration and whether RPO/RTO were
+met.

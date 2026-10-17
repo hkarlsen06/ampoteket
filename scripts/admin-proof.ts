@@ -1,31 +1,86 @@
-/** Actual pages and gateway, disposable PostgreSQL/Auth, trusted HTTPS and real browser storage. */
-import { firefox, expect, type BrowserContext, type Page, type Locator } from '@playwright/test';
+/** Actual pages and gateway, disposable Convex backend and Auth, trusted HTTPS and real browser storage. */
+import { firefox, expect as baseExpect, type BrowserContext, type Page, type Locator } from '@playwright/test';
 import { strict as assert } from 'node:assert';
 import { resolve } from 'node:path';
 import { mkdir } from 'node:fs/promises';
+import { ConvexHttpClient } from 'convex/browser';
+import { ConvexError } from 'convex/values';
+import { api } from '../convex/_generated/api';
 import { fieldLabel, signIn, fits, captureFailure, proofEnvironment } from './web-proof/harness';
-import { generateSeedSql } from './seed-test-data';
+import { convexSocket } from './web-proof/convex-faults';
+import { seedDemoData, seedProductId } from './seed-test-data';
 import { en } from '../src/lib/i18n/en';
 import { nb } from '../src/lib/i18n/nb';
 import { productTypes } from '../src/lib/admin-products';
 import { standardSpecifications } from '../src/lib/product-specifications';
 import { currencySymbol, formatMeasurement, measurementInput } from '../src/lib/format';
 
-const { directory, origin, api, publicKey, anonKey, serviceKey, password, secrets, sql, createUser, startWorker } = await proofEnvironment();
+const { directory, origin, convexUrl, password, secrets, run, fixtures, createStaff, createUser, startWorker } = await proofEnvironment();
+// Pages boot their live Convex subscriptions after sign-in, which on a shared runner can exceed the default 5 s.
+const expect = baseExpect.configure({ timeout: 15_000 });
 const staffEmail = 'admin-staff@example.test';
 const nonstaffEmail = 'admin-nonstaff@example.test';
-const staffId = await createUser(staffEmail);
+const { authUserId: staffId } = await createStaff(staffEmail, 'Browser operator');
 await createUser(nonstaffEmail);
 const otherEmail = 'admin-other@example.test';
-const otherId = await createUser(otherEmail);
-await sql(`INSERT INTO app.staff_members(auth_user_id,display_name) VALUES ('${staffId}', 'Browser operator'), ('${otherId}', 'Other operator');`);
+const { authUserId: otherId } = await createStaff(otherEmail, 'Other operator');
+// Someone who edits a product while the change log is open (created now, so only that edit is new there).
+const auditEmail = 'admin-audit@example.test', auditName = 'Audit proof operator';
+await createStaff(auditEmail, auditName);
 let context: BrowserContext | undefined;
 const { ready, close } = await startWorker(() => context);
 const artifacts = resolve('test-results/admin');
 await mkdir(artifacts, { recursive: true });
 
-const literal = (value: string) => `'${value.replaceAll("'", "''")}'`;
+// Fixture reads replace the SQL of the Supabase proof; rows carry their schema types.
+type ProductRow = { id: string; code: string; name_en: string; category_id: string | null; bin_id: string | null; is_active: boolean;
+  description: string | null; sale_unit_price_nok: string | null; stock_step: string; metadata_revision: number };
+type BinRow = { id: string; cabinet_id: string | null; inner_row: number; inner_col: number; row_span: number; col_span: number; label: string | null; is_archived: boolean };
+type AttributeRow = { number_value: string | null; number_max: string | null; text_value: string | null; boolean_value: boolean | null };
+/** Fixture reads scan whole tables; on a busy machine one can outlast Convex's 1 s query limit, so retry those. */
+async function rows<T extends Record<string, unknown> = Record<string, unknown>>(table: string, where?: Record<string, unknown>): Promise<T[]> {
+  for (let attempt = 0; ; attempt++) {
+    try { return await fixtures.rows<T>(table, where); }
+    catch (error) { if (attempt >= 4 || !/timed out/.test(String(error))) throw error; }
+  }
+}
+const countRows = async (table: string, where?: Record<string, unknown>) => (await rows(table, where)).length;
+async function one<T extends Record<string, unknown>>(table: string, where: Record<string, unknown>): Promise<T> {
+  const found = await rows<T>(table, where);
+  assert.equal(found.length, 1, `Exactly one ${table} row matches ${JSON.stringify(where)}`);
+  return found[0];
+}
+const product = (id: string) => one<ProductRow>('products', { id });
+const definitionId = async (code: string) => (await one<{ id: string }>('attribute_definitions', { code })).id;
+const attribute = (productId: string, attributeId: string) => one<AttributeRow>('product_attributes', { product_id: productId, attribute_id: attributeId });
+const quantity = async (productId: string) => (await one<{ quantity: string }>('stock_levels', { product_id: productId })).quantity;
+const timestamp = () => new Date().toISOString().replace('Z', '000Z');
+/** Another person's metadata edit: a new revision, as products.save records it (fixtures bypass the audit). */
+async function editProduct(id: string, changes: Partial<ProductRow>) {
+  const current = await product(id);
+  await fixtures.patch('products', { id }, { ...changes, metadata_revision: current.metadata_revision + 1, updated_at: timestamp() });
+}
+const bin = (id: string) => one<BinRow>('bins', { id });
+const binAt = async (cabinet: string, row: number, col: number) => (await one<BinRow>('bins', { cabinet_id: cabinet, inner_row: row, inner_col: col, is_archived: false })).id;
+const byId = (a: { id: string }, b: { id: string }) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+/** A separate session for work another tab or person does meanwhile (the native Convex client, as the app uses). */
+async function signedInClient(email: string) {
+  const client = new ConvexHttpClient(convexUrl, { logger: false });
+  const tokens = await client.action(api.session.signIn, { email, password });
+  secrets.push(tokens.token, tokens.refreshToken);
+  client.setAuth(tokens.token);
+  return client;
+}
+/** A metadata edit through the real staff API, as another person's open editor would save it. */
+async function describeProduct(client: ConvexHttpClient, id: string, description: string) {
+  const current = await client.query(api.products.get, { id });
+  assert.ok(current, 'Product exists');
+  const { metadata_revision, created_at, ...payload } = current;
+  await client.mutation(api.products.save, { revision: metadata_revision, payload: { ...payload, description } });
+}
+const rejectionCode = (error: unknown) => error instanceof ConvexError ? (error.data as { code?: string }).code : String(error);
 const diagnostics: string[] = [];
+let socket!: Awaited<ReturnType<typeof convexSocket>>;
 // Specification fields are labelled by their translated name, with the unit in an
 // sr-only span. Svelte trims the space before it, so match the accessible name
 // (which spaces the positioned span) rather than the label's raw text.
@@ -38,7 +93,7 @@ function specField(scope: Locator, code: string, messages: typeof en = en) {
   return specInput(scope, definition.canonical_unit ? `${label} (${definition.canonical_unit})` : label, definition.value_type === 'boolean');
 }
 async function chooseDrawer(scope: Locator, binId: string) {
-  const cabinetId = await sql(`SELECT cabinet_id FROM app.bins WHERE id=${literal(binId)}`);
+  const cabinetId = (await bin(binId)).cabinet_id;
   const drawer = scope.locator(`[data-item-id="${binId}"]`);
   // The picker zooms into one cabinet at a time; return to the wall when another is open.
   if (!await drawer.count()) {
@@ -53,9 +108,9 @@ async function chooseDrawer(scope: Locator, binId: string) {
 async function openShelfCabinet(page: Page, address: string) {
   const wall = page.getByRole('button', { name: new RegExp(`^(${nb.shelfMap.showWall}|${en.shelfMap.showWall})$`) });
   await expect(async () => {
-    if (await wall.count()) await wall.click({ timeout: 1000 });
+    if (await wall.count()) await wall.click({ timeout: 5000 });
     // The admin wall names each cabinet by its address, then how many drawers have products.
-    await page.locator('[data-shelf-wall]').getByRole('button', { name: new RegExp(`^${address}( · |$)`) }).click({ timeout: 1000 });
+    await page.locator('[data-shelf-wall]').getByRole('button', { name: new RegExp(`^${address}( · |$)`) }).click({ timeout: 5000 });
   }).toPass({ timeout: 30_000 });
   // Geometry is measured after the zoom settles, not mid-scale.
   await expect(page.locator('[data-cabinet-editor]')).toBeVisible();
@@ -66,26 +121,24 @@ async function chooseLayoutDrawer(scope: Locator, binId: string) {
   await drawer.click();
   await expect(drawer).toHaveAttribute('aria-pressed', 'true');
 }
-async function lostResponse(page: Page, endpoint: string, method: string, action: () => Promise<void>, holdRetry = false) {
-  const commands: string[] = [];
-  let release = () => {};
-  const released = holdRetry ? new Promise<void>((resolve) => { release = resolve; }) : Promise.resolve();
-  const pattern = `${api.origin}/rest/v1/${endpoint}*`;
-  await page.route(pattern, async (route) => {
-    if (route.request().method() !== method) { await route.continue(); return; }
-    commands.push(route.request().postData() ?? '');
-    if (commands.length === 1) {
-      const response = await route.fetch();
-      expect(response.ok(), 'The mutation committed before its acknowledgement was lost').toBe(true);
-      await route.abort('failed');
-    } else { await released; await route.continue(); }
-  });
+/**
+ * The first `path` mutation commits on the backend, but its reply is lost: the
+ * page sees an unknown outcome. With `holdRetry`, the reply to the next attempt
+ * waits for `release()`. `commands` are the argument lists sent from here on.
+ */
+async function lostResponse(path: string, action: () => Promise<void>, holdRetry = false) {
+  const start = socket.sent(path).length;
+  const lost = socket.lose(path);
   await action();
-  return { commands, release, stop: () => page.unroute(pattern) };
+  await expect.poll(() => lost.sent.length, { message: `${path} was sent` }).toBe(1);
+  lost.stop();
+  const held = holdRetry ? socket.hold(path) : null;
+  return { get commands() { return socket.sent(path).slice(start); }, release: () => held?.release() };
 }
 try {
   await ready();
   context = await firefox.launchPersistentContext(`${directory}/profile`, { headless: true, ignoreHTTPSErrors: false });
+  socket = await convexSocket(context, convexUrl);
   context.on('page', (tab) => tab.on('pageerror', (error) => diagnostics.push(error.message)));
   const page = await context.newPage();
   await signIn(page, origin, nonstaffEmail, password);
@@ -93,11 +146,11 @@ try {
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await signIn(page, origin, staffEmail, password);
   await expect(page.getByRole('heading', { name: en.admin.overview, exact: true })).toBeVisible();
-  expect(await sql('SELECT count(*) FROM app.cabinets WHERE NOT is_archived')).toBe('12');
-  expect(await sql('SELECT count(*) FROM app.bins WHERE NOT is_archived')).toBe('492');
+  expect(await countRows('cabinets', { is_archived: false })).toBe(12);
+  expect(await countRows('bins', { is_archived: false })).toBe(492);
   const m = en.adminProducts;
   // Standard choices work before any categories or catalog fixtures exist.
-  expect(await sql('SELECT count(*) FROM app.categories')).toBe('0');
+  expect(await countRows('categories')).toBe(0);
   await page.goto(`${origin}/en/admin/products/new`);
   // A new product picks its category on cards; a saved one changes it in a select.
   const categoryPicker = page.getByRole('combobox', { name: m.category, exact: true });
@@ -111,37 +164,40 @@ try {
   await categoryCard(m.typeNames.MIS).click();
   await page.getByLabel(fieldLabel(m.nameNb)).fill('Diverse del for nettlesertest');
   await page.getByLabel(fieldLabel(m.nameEn)).fill('Miscellaneous browser test part');
-  // A membership transport failure must block writes without remounting this draft.
+  // A membership read failure must block writes without remounting this draft.
+  // Membership is a live subscription: its next update (a renamed member) fails.
   const draftGeometry = await page.locator('#product-name-en').boundingBox();
-  const membershipRead = `${api.origin}/rest/v1/amp_staff_members*`;
-  await page.route(membershipRead, route => route.abort('failed'));
-  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  const membershipRead = socket.failReads('members:me');
+  await fixtures.patch('staff_members', { auth_user_id: staffId }, { display_name: 'Browser operator (renamed)' });
   await expect(page.getByText(en.admin.accessUnavailable, { exact: true })).toBeVisible();
   await expect(page.locator('#product-name-en')).toHaveValue('Miscellaneous browser test part');
   expect(await page.locator('#product-name-en').evaluate(element => Boolean(element.closest('[inert]')))).toBe(true);
   expect(await page.locator('#product-name-en').boundingBox()).toEqual(draftGeometry);
   await page.locator('#product-name-en').evaluate(element => (element as HTMLInputElement).form!.requestSubmit());
-  expect(await sql('SELECT count(*) FROM app.products')).toBe('0');
-  await page.unroute(membershipRead);
+  expect(await countRows('products')).toBe(0);
+  membershipRead.stop();
   await page.getByRole('button', { name: en.admin.retry, exact: true }).click();
   await expect(page.getByLabel(fieldLabel(m.nameEn))).toHaveValue('Miscellaneous browser test part');
+  await fixtures.patch('staff_members', { auth_user_id: staffId }, { display_name: 'Browser operator' });
   // A forgotten price is a field error, never a free product.
   await page.getByRole('button', { name: m.save, exact: true }).click();
   await expect(page.getByText(m.priceRequired, { exact: true })).toBeVisible();
   await expect(page.getByLabel(fieldLabel(`${m.price} (NOK)`))).toBeFocused();
-  expect(await sql('SELECT count(*) FROM app.products')).toBe('0');
+  expect(await countRows('products')).toBe(0);
   await page.getByLabel(fieldLabel(`${m.price} (NOK)`)).fill('0.0000001');
   await page.getByRole('button', { name: m.save, exact: true }).click();
   await expect(page.getByText(m.invalidPrice, { exact: true })).toBeVisible();
   await expect(page.getByLabel(fieldLabel(`${m.price} (NOK)`))).toBeFocused();
   await expect(page.getByLabel(fieldLabel(`${m.price} (NOK)`))).toHaveAttribute('aria-invalid', 'true');
-  expect(await sql('SELECT count(*) FROM app.products')).toBe('0');
+  expect(await countRows('products')).toBe(0);
   await page.getByRole('switch', { name: m.freeLabel, exact: true }).check();
   await expect(page.getByLabel(fieldLabel(`${m.price} (NOK)`))).toHaveCount(0);
   console.log('PASS: temporary access-check failure preserves draft and blocks writes; missing and invalid prices identify and focus their field; Free hides the amount');
-  const categoryCreated = await lostResponse(page, 'amp_categories', 'POST', () => page.getByRole('button', { name: m.save, exact: true }).click());
+  // The standard category is created in the product's own transaction, so a lost
+  // reply leaves both saved or neither; here the transaction committed.
+  const categoryCreated = await lostResponse('products:save', () => page.getByRole('button', { name: m.save, exact: true }).click());
   await expect(page.getByText(m.unknown, { exact: true })).toBeVisible();
-  expect(await sql('SELECT count(*) FROM app.products')).toBe('0');
+  expect(await countRows('products')).toBe(1);
   const frozen = await page.evaluate(() => JSON.parse(sessionStorage.getItem('ampoteket:admin-product:v1')!));
   expect(frozen.payload.code).toMatch(/^MIS-[A-F0-9]{5}$/);
   await page.reload();
@@ -149,19 +205,22 @@ try {
   await expect(page).toHaveURL(`${origin}/en/admin/products/${frozen.payload.id}`);
   await page.reload();
   await expect(page.getByLabel(fieldLabel(m.nameEn))).toHaveValue('Miscellaneous browser test part');
-  expect(categoryCreated.commands).toHaveLength(1);
-  await categoryCreated.stop();
-  expect(await sql("SELECT count(*) FROM app.categories WHERE name='Miscellaneous'")).toBe('1');
-  expect(await sql(`SELECT category_id FROM app.products WHERE id=${literal(frozen.payload.id)}`)).toBe(frozen.payload.category_id);
+  // Retry Save replays the identical command, which the backend answers without writing again.
+  expect(categoryCreated.commands).toHaveLength(2);
+  expect(categoryCreated.commands[1]).toBe(categoryCreated.commands[0]);
+  expect(await countRows('products')).toBe(1);
+  expect(await countRows('categories', { name: 'Miscellaneous' })).toBe(1);
+  expect((await product(frozen.payload.id)).category_id).toBe(frozen.payload.category_id);
   await page.goto(`${origin}/en/admin/products/${frozen.payload.id}`);
-  expect(await sql('SELECT count(*) FROM app.attribute_definitions')).toBe('0');
+  expect(await countRows('attribute_definitions')).toBe(0);
   const freshSpecs = page.locator('.specifications');
   const currentDefinition = standardSpecifications.find(definition => definition.code === 'current')!;
   await specField(freshSpecs, 'current').fill('0.02');
-  const definitionCreated = await lostResponse(page, 'amp_attribute_definitions', 'POST', () => page.getByRole('button', { name: m.save, exact: true }).click());
+  // A standard specification's definition is created in its first value's own transaction.
+  const definitionCreated = await lostResponse('products:setAttribute', () => page.getByRole('button', { name: m.save, exact: true }).click());
   await expect(freshSpecs.getByText(m.unknown, { exact: true })).toBeVisible();
   await expect(page.getByText(m.specificationsNotSaved, { exact: true })).toBeVisible();
-  expect(await sql('SELECT count(*) FROM app.product_attributes')).toBe('0');
+  expect(await countRows('product_attributes')).toBe(1);
   await page.reload();
   // Number fields show stored values in engineering units (0.02 A reads 20 mA).
   // The frozen attempt locks its field and is resolved by the next Save.
@@ -169,18 +228,19 @@ try {
   await expect(specField(freshSpecs, 'current')).toBeDisabled();
   await page.getByRole('button', { name: m.save, exact: true }).click();
   await expect(page.getByText(m.saved, { exact: true })).toBeVisible();
-  expect(definitionCreated.commands).toHaveLength(1);
-  await definitionCreated.stop();
-  expect(await sql('SELECT count(*) FROM app.attribute_definitions')).toBe('1');
-  expect(await sql(`SELECT number_value FROM app.product_attributes WHERE product_id=${literal(frozen.payload.id)} AND attribute_id='${currentDefinition.id}'`)).toBe('0.02');
+  expect(definitionCreated.commands).toHaveLength(2);
+  expect(definitionCreated.commands[1]).toBe(definitionCreated.commands[0]);
+  expect(await countRows('attribute_definitions')).toBe(1);
+  expect((await attribute(frozen.payload.id, currentDefinition.id)).number_value).toBe('0.02');
   console.log('PASS: predefined specifications without definition rows and lost first-definition response recovery');
   await categoryPicker.selectOption({ label: m.typeNames.BJT });
   await page.getByRole('button', { name: m.save, exact: true }).click();
   await expect(page.getByText(m.saved, { exact: true })).toBeVisible();
-  expect(await sql(`SELECT code FROM app.products WHERE id=${literal(frozen.payload.id)}`)).toBe(frozen.payload.code);
-  expect(await sql(`SELECT c.name FROM app.products p JOIN app.categories c ON c.id=p.category_id WHERE p.id=${literal(frozen.payload.id)}`)).toBe('Bipolar transistors');
+  expect((await product(frozen.payload.id)).code).toBe(frozen.payload.code);
+  expect((await one<{ name: string }>('categories', { id: (await product(frozen.payload.id)).category_id })).name).toBe('Bipolar transistors');
   const legacyId = crypto.randomUUID();
-  await sql(`INSERT INTO app.categories(id,name) VALUES ('${legacyId}', 'Legacy parts'); UPDATE app.products SET category_id='${legacyId}' WHERE id=${literal(frozen.payload.id)};`);
+  await fixtures.insert('categories', [{ id: legacyId, name: 'Legacy parts' }]);
+  await editProduct(frozen.payload.id, { category_id: legacyId });
   await page.goto(`${origin}/en/admin/products/${frozen.payload.id}`);
   await expect(categoryPicker).toHaveValue(legacyId);
   await expect(page.getByRole('switch', { name: m.freeLabel, exact: true })).toBeChecked();
@@ -188,24 +248,24 @@ try {
   await page.getByLabel(fieldLabel(`${m.price} (NOK)`)).fill('2');
   await page.getByRole('button', { name: m.save, exact: true }).click();
   await expect(page.getByText(m.saved, { exact: true })).toBeVisible();
-  expect(await sql(`SELECT category_id FROM app.products WHERE id=${literal(frozen.payload.id)}`)).toBe(legacyId);
+  expect((await product(frozen.payload.id)).category_id).toBe(legacyId);
   await categoryPicker.selectOption({ label: m.typeNames.MIS });
   await categoryPicker.selectOption(legacyId); // An unsaved selection can be undone.
-  await sql(`UPDATE app.products SET category_id=NULL WHERE id=${literal(frozen.payload.id)}`);
+  await editProduct(frozen.payload.id, { category_id: null });
   await page.reload();
   await expect(categoryPicker).toHaveValue('');
   await page.getByLabel(fieldLabel(`${m.price} (NOK)`)).fill('3');
   await page.getByRole('button', { name: m.save, exact: true }).click();
   await expect(page.getByText(m.saved, { exact: true })).toBeVisible();
-  expect(await sql(`SELECT category_id IS NULL AND code=${literal(frozen.payload.code)} FROM app.products WHERE id=${literal(frozen.payload.id)}`)).toBe('t');
+  expect(await product(frozen.payload.id)).toMatchObject({ category_id: null, code: frozen.payload.code });
   console.log('PASS: standard categories in empty database, automatic MIS prefix, lost category reply recovery, immutable codes and legacy/uncategorized preservation');
-  await sql("SET ampoteket.test_seed = 'disposable-only';\n" + generateSeedSql());
-  expect(await sql('SELECT count(*) FROM app.cabinets WHERE NOT is_archived')).toBe('12');
-  expect(await sql('SELECT count(*) FROM app.bins WHERE NOT is_archived')).toBe('492');
+  await seedDemoData(run);
+  expect(await countRows('cabinets', { is_archived: false })).toBe(12);
+  expect(await countRows('bins', { is_archived: false })).toBe(492);
   // A definite rejection ends the frozen attempt. The same unsaved UUID can
   // then choose another category and must receive that category's prefix.
   const resumedId = crypto.randomUUID();
-  const resistorCategoryId = await sql("SELECT id FROM app.categories WHERE name='Resistors'");
+  const resistorCategoryId = (await one<{ id: string }>('categories', { name: 'Resistors' })).id;
   const rejectedDraft = { userId: staffId, revision: null, payload: { id: resumedId, code: 'RES-A3F09', name_nb: 'Gjenopprettet utkast', name_en: 'Recovered draft', description: null, category_id: resistorCategoryId, bin_id: null, unit_code: 'missing_unit', stock_step: '1', sale_step: '1', sale_unit_price_nok: '0', minimum_stock: '0', datasheet_url: null, is_active: false } };
   await page.evaluate(command => sessionStorage.setItem('ampoteket:admin-product:v1', JSON.stringify(command)), rejectedDraft);
   await page.goto(`${origin}/en/admin/products/${resumedId}`);
@@ -215,10 +275,10 @@ try {
   await categoryCard(m.typeNames.MIS).click();
   await page.getByRole('button', { name: m.save, exact: true }).click();
   await expect(page.getByText(m.saved, { exact: true })).toBeVisible();
-  expect(await sql(`SELECT code FROM app.products WHERE id='${resumedId}'`)).toMatch(/^MIS-[A-F0-9]{5}$/);
+  expect((await product(resumedId)).code).toMatch(/^MIS-[A-F0-9]{5}$/);
   console.log('PASS: rejected resumed creation changes prefix with category while retaining product UUID');
   const longName = 'Browser acceptance resistor with a deliberately long descriptive name for a narrow phone screen';
-  const binId = await sql("SELECT id FROM app.bins WHERE NOT is_archived ORDER BY id LIMIT 1");
+  const binId = (await rows<BinRow>('bins', { is_archived: false })).sort(byId)[0].id;
   await page.goto(`${origin}/en/admin/products`);
   await expect(page.getByLabel(fieldLabel(m.search))).toBeEnabled();
   const references = page.getByRole('region', { name: m.referenceRecovery, exact: true });
@@ -231,7 +291,7 @@ try {
   await expect(references.getByRole('button', { name: m.newDefinition, exact: true })).toHaveCount(0);
   await references.getByRole('button', { name: m.retrySave, exact: true }).click();
   await expect(references.getByText(m.referenceSaved, { exact: true })).toBeVisible();
-  expect(await sql("SELECT canonical_unit FROM app.attribute_definitions WHERE code='browser_test_voltage'")).toBe('V');
+  expect((await one<{ canonical_unit: string | null }>('attribute_definitions', { code: 'browser_test_voltage' })).canonical_unit).toBe('V');
   await page.getByRole('link', { name: m.newProduct, exact: true }).click();
   await categoryCard(m.typeNames.CAP).click();
   await page.getByLabel(fieldLabel(m.nameNb)).fill('Motstand for nettlesertest med langt navn på en smal mobilskjerm');
@@ -240,29 +300,26 @@ try {
   await chooseDrawer(page.getByRole('group', { name: m.placement, exact: true }), binId);
   await page.getByRole('switch', { name: m.activeLabel, exact: true }).check();
   const draftSpecs = page.locator('.specifications');
-  const draftSpecIds = {
-    numeric: await sql("SELECT id FROM app.attribute_definitions WHERE code='capacitance'"),
-    boolean: await sql("SELECT id FROM app.attribute_definitions WHERE code='polarised'"),
-    text: await sql("SELECT id FROM app.attribute_definitions WHERE code='package'")
-  };
+  const draftSpecIds = { numeric: await definitionId('capacitance'), boolean: await definitionId('polarised'), text: await definitionId('package') };
   await specField(draftSpecs, 'capacitance').fill('0.000000000005');
   await specField(draftSpecs, 'polarised').selectOption('false');
   await specField(draftSpecs, 'package').fill('Radial');
-  const created = await lostResponse(page, 'amp_products', 'POST', () => page.getByRole('button', { name: m.save, exact: true }).click());
+  const created = await lostResponse('products:save', () => page.getByRole('button', { name: m.save, exact: true }).click());
   await expect(page.getByText(m.unknown, { exact: true })).toBeVisible();
-  const createdBody = JSON.parse(created.commands[0]);
+  const createdBody = JSON.parse(created.commands[0])[0].payload;
   const productId: string = createdBody.id;
   expect(createdBody.code).toMatch(/^CAP-[A-F0-9]{5}$/);
   await page.reload();
   await page.getByRole('button', { name: m.retrySave, exact: true }).click();
   await expect(page).toHaveURL(`${origin}/en/admin/products/${productId}`);
-  expect(created.commands).toHaveLength(1);
-  await created.stop();
-  expect(await sql(`SELECT count(*) FROM app.products WHERE id=${literal(productId)}`)).toBe('1');
-  expect(await sql(`SELECT sale_unit_price_nok FROM app.products WHERE id=${literal(productId)}`)).toBe('999999999998.999999');
-  expect(await sql(`SELECT number_value FROM app.product_attributes WHERE product_id=${literal(productId)} AND attribute_id='${draftSpecIds.numeric}'`)).toBe('0.000000000005');
-  expect(await sql(`SELECT boolean_value FROM app.product_attributes WHERE product_id=${literal(productId)} AND attribute_id='${draftSpecIds.boolean}'`)).toBe('f');
-  expect(await sql(`SELECT text_value FROM app.product_attributes WHERE product_id=${literal(productId)} AND attribute_id='${draftSpecIds.text}'`)).toBe('Radial');
+  // The specifications ride in the creation command, so its identical replay is the only retry.
+  expect(created.commands).toHaveLength(2);
+  expect(created.commands[1]).toBe(created.commands[0]);
+  expect(await countRows('products', { id: productId })).toBe(1);
+  expect((await product(productId)).sale_unit_price_nok).toBe('999999999998.999999');
+  expect((await attribute(productId, draftSpecIds.numeric)).number_value).toBe('0.000000000005');
+  expect((await attribute(productId, draftSpecIds.boolean)).boolean_value).toBe(false);
+  expect((await attribute(productId, draftSpecIds.text)).text_value).toBe('Radial');
   console.log('PASS: numeric, false boolean and text specifications staged before product creation survive lost response and reload');
 
   await page.goto(`${origin}/en/admin/products/${productId}`);
@@ -276,7 +333,7 @@ try {
   await expect(page.locator('[aria-current="page"]').filter({ hasText: createdBody.code })).toBeVisible();
   await expect(page.getByRole('link', { name: m.back, exact: true })).toHaveCount(0);
   const placement = page.getByRole('group', { name: m.placement, exact: true });
-  const otherBinId = await sql(`SELECT id FROM app.bins WHERE cabinet_id=(SELECT cabinet_id FROM app.bins WHERE id=${literal(binId)}) AND id<>${literal(binId)} ORDER BY id LIMIT 1`);
+  const otherBinId = (await rows<BinRow>('bins', { cabinet_id: (await bin(binId)).cabinet_id })).filter(row => row.id !== binId).sort(byId)[0].id;
   const originalDrawer = placement.locator(`[data-item-id="${binId}"]`);
   const targetDrawer = placement.locator(`[data-item-id="${otherBinId}"]`);
   const moveDialog = page.getByRole('alertdialog', { name: m.moveTitle, exact: true });
@@ -295,19 +352,19 @@ try {
   await expect(moveDialog).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(targetDrawer).toBeFocused();
-  expect(await sql(`SELECT bin_id FROM app.products WHERE id=${literal(productId)}`)).toBe(binId);
+  expect((await product(productId)).bin_id).toBe(binId);
   await targetDrawer.click();
   await moveDialog.getByRole('button', { name: m.confirmMove, exact: true }).click();
   await expect(targetDrawer).toBeFocused();
-  expect(await sql(`SELECT bin_id FROM app.products WHERE id=${literal(productId)}`)).toBe(binId);
+  expect((await product(productId)).bin_id).toBe(binId);
   await page.getByRole('button', { name: m.save, exact: true }).click();
   await expect(page.getByText(m.saved, { exact: true })).toBeVisible();
-  expect(await sql(`SELECT bin_id FROM app.products WHERE id=${literal(productId)}`)).toBe(otherBinId);
+  expect((await product(productId)).bin_id).toBe(otherBinId);
   await originalDrawer.click();
   await moveDialog.getByRole('button', { name: m.confirmMove, exact: true }).click();
   await page.getByRole('button', { name: m.save, exact: true }).click();
   await expect(page.getByText(m.saved, { exact: true })).toBeVisible();
-  expect(await sql(`SELECT bin_id FROM app.products WHERE id=${literal(productId)}`)).toBe(binId);
+  expect((await product(productId)).bin_id).toBe(binId);
   console.log('PASS: drawer move confirmation, Cancel/Escape focus return and draft-only confirmation until product save');
 
   const rival = await context.newPage();
@@ -332,7 +389,7 @@ try {
   await page.getByRole('button', { name: m.clearPlacement, exact: true }).click();
   await page.getByRole('button', { name: m.save, exact: true }).click();
   await expect(page.getByText(m.saved, { exact: true })).toBeVisible();
-  expect(await sql(`SELECT NOT is_active AND bin_id IS NULL FROM app.products WHERE id=${literal(productId)}`)).toBe('t');
+  expect(await product(productId)).toMatchObject({ is_active: false, bin_id: null });
   await chooseDrawer(page.getByRole('group', { name: m.placement, exact: true }), binId);
   await page.getByRole('switch', { name: m.activeLabel, exact: true }).check();
   await page.getByRole('button', { name: m.save, exact: true }).click();
@@ -341,12 +398,12 @@ try {
   await page.getByRole('button', { name: m.save, exact: true }).click();
   await expect(page.getByText(m.saved, { exact: true })).toBeVisible();
   const specs = page.locator('.specifications');
-  const attributeIds = { numeric: await sql("SELECT id FROM app.attribute_definitions WHERE code='capacitance'"),
-    boolean: await sql("SELECT id FROM app.attribute_definitions WHERE code='polarised'"), text: await sql("SELECT id FROM app.attribute_definitions WHERE code='package'") };
-  const specValue = (id: string, column: string) => sql(`SELECT ${column} FROM app.product_attributes WHERE product_id='${productId}' AND attribute_id='${id}'`);
+  const attributeIds = draftSpecIds;
+  const specValue = async (id: string, column: keyof AttributeRow) => (await attribute(productId, id))[column];
+  const specCount = (id: string) => countRows('product_attributes', { product_id: productId, attribute_id: id });
   await expect(specField(specs, 'capacitance')).toHaveValue(measurementInput('0.000000000005', 'F', 'en'));
   await specField(specs, 'capacitance').fill('0.000000000009');
-  await sql(`UPDATE app.product_attributes SET number_value=0.000000000007 WHERE product_id='${productId}' AND attribute_id='${attributeIds.numeric}'`);
+  await fixtures.patch('product_attributes', { product_id: productId, attribute_id: attributeIds.numeric }, { number_value: '0.000000000007' });
   await page.getByRole('button', { name: m.save, exact: true }).click();
   await expect(specs.getByText(m.attributeChanged(formatMeasurement('0.000000000007', 'F', 'en')), { exact: true })).toBeVisible();
   await expect(page.getByText(m.specificationsNotSaved, { exact: true })).toBeVisible();
@@ -365,12 +422,12 @@ try {
   await specField(specs, 'polarised').selectOption('');
   await page.getByRole('button', { name: m.save, exact: true }).click();
   await expect(page.getByText(m.saved, { exact: true })).toBeVisible();
-  expect(await sql(`SELECT count(*) FROM app.product_attributes WHERE product_id='${productId}' AND attribute_id='${attributeIds.boolean}'`)).toBe('0');
+  expect(await specCount(attributeIds.boolean)).toBe(0);
   await specField(specs, 'polarised').selectOption('false');
   await specField(specs, 'package').fill('SMD 0805');
   await page.getByRole('button', { name: m.save, exact: true }).click();
   await expect(page.getByText(m.saved, { exact: true })).toBeVisible();
-  expect(await specValue(attributeIds.boolean, 'boolean_value')).toBe('f');
+  expect(await specValue(attributeIds.boolean, 'boolean_value')).toBe(false);
   expect(await specValue(attributeIds.text, 'text_value')).toBe('SMD 0805');
   // Min–max splits a number field; a range needs both bounds, and Single value keeps Min.
   const fieldOf = (input: Locator) => input.locator('xpath=ancestor::*[@data-slot="field"][1]');
@@ -386,14 +443,14 @@ try {
   await voltageMax.fill('0.4k');
   await page.getByRole('button', { name: m.save, exact: true }).click();
   await expect(page.getByText(m.saved, { exact: true })).toBeVisible();
-  const voltageId = await sql("SELECT id FROM app.attribute_definitions WHERE code='voltage'");
-  expect(await sql(`SELECT number_value||'..'||number_max FROM app.product_attributes WHERE product_id='${productId}' AND attribute_id='${voltageId}'`)).toBe('250..400');
+  const voltageId = await definitionId('voltage');
+  expect(await attribute(productId, voltageId)).toMatchObject({ number_value: '250', number_max: '400' });
   await expect(voltageMax).toHaveValue('400');
   await fieldOf(voltageMax).getByRole('button', { name: m.singleValue, exact: true }).click();
   await expect(specField(specs, 'voltage')).toHaveValue('250');
   await page.getByRole('button', { name: m.save, exact: true }).click();
   await expect(page.getByText(m.saved, { exact: true })).toBeVisible();
-  expect(await sql(`SELECT number_value||'..'||coalesce(number_max::text,'single') FROM app.product_attributes WHERE product_id='${productId}' AND attribute_id='${voltageId}'`)).toBe('250..single');
+  expect(await attribute(productId, voltageId)).toMatchObject({ number_value: '250', number_max: null });
   console.log('PASS: a range saves both bounds through the staff API, an incomplete one stops on Max, and Single value keeps Min');
   await page.getByRole('combobox', { name: m.category, exact: true }).selectOption({ label: m.typeNames.RES });
   await page.getByRole('button', { name: m.save, exact: true }).click();
@@ -402,7 +459,7 @@ try {
   await specField(specs, 'capacitance').fill('');
   await page.getByRole('button', { name: m.save, exact: true }).click();
   await expect(page.getByText(m.saved, { exact: true })).toBeVisible();
-  expect(await sql(`SELECT count(*) FROM app.product_attributes WHERE product_id='${productId}' AND attribute_id='${attributeIds.numeric}'`)).toBe('0');
+  expect(await specCount(attributeIds.numeric)).toBe(0);
   console.log('PASS: invalid values are marked before any write; cleared fields remove values and recorded fields survive recategorization');
 
   await specs.getByRole('button', { name: m.newDefinition, exact: true }).click();
@@ -422,51 +479,53 @@ try {
   // The value type is a segmented choice (number/text/yes-no), not a select.
   await newType.getByLabel(fieldLabel(m.valueType)).getByText(m.numberType, { exact: true }).click();
   await newType.getByLabel(fieldLabel(m.canonicalUnit)).fill('Hz');
-  const customCreated = await lostResponse(page, 'amp_attribute_definitions', 'POST', () => newType.getByRole('button', { name: m.saveReference, exact: true }).click());
+  const customCreated = await lostResponse('products:createDefinition', () => newType.getByRole('button', { name: m.saveReference, exact: true }).click());
   await expect(newType.getByText(m.unknown, { exact: true })).toBeVisible();
   await page.reload();
   await specs.getByRole('button', { name: m.referenceRecovery, exact: true }).click();
   await expect(newType.getByLabel(fieldLabel(m.definitionLabel))).toHaveValue('Browser custom frequency');
   await newType.getByRole('button', { name: m.retrySave, exact: true }).click();
   await expect(newType).not.toBeVisible();
-  expect(customCreated.commands).toHaveLength(1);
-  await customCreated.stop();
-  const customTypeId = await sql("SELECT id FROM app.attribute_definitions WHERE label='Browser custom frequency'");
-  expect(await sql("SELECT count(*) FROM app.attribute_definitions WHERE label='Browser custom frequency'")).toBe('1');
+  expect(customCreated.commands).toHaveLength(2);
+  expect(customCreated.commands[1]).toBe(customCreated.commands[0]);
+  const customTypeId = (await one<{ id: string }>('attribute_definitions', { label: 'Browser custom frequency' })).id;
   await specInput(specs, 'Browser custom frequency (Hz)').fill('123.000000001');
   await page.getByRole('button', { name: m.save, exact: true }).click();
   await expect(page.getByText(m.saved, { exact: true })).toBeVisible();
-  expect(await sql(`SELECT number_value FROM app.product_attributes WHERE product_id='${productId}' AND attribute_id='${customTypeId}'`)).toBe('123.000000001');
+  expect(await specValue(customTypeId, 'number_value')).toBe('123.000000001');
   console.log('PASS: inline specification type creation recovers a lost response after reload and immediately accepts a value');
 
+  // A product and its first specifications are one transaction (products.save), so a
+  // partial save cannot happen. A value the backend refuses rolls back the product
+  // and its standard category with it; the draft stays for the next Save.
   await page.goto(`${origin}/en/admin/products/new`);
   await categoryCard(m.typeNames.CAP).click();
   await page.getByLabel(fieldLabel(m.nameNb)).fill('Delvis spesifikasjonslagring');
   await page.getByLabel(fieldLabel(m.nameEn)).fill('Partial specification save');
   await page.getByRole('switch', { name: m.freeLabel, exact: true }).check();
   await specField(specs, 'capacitance').fill('0.000000000003');
-  const rejectedAttribute = `${api.origin}/rest/v1/amp_product_attributes*`;
-  await page.route(rejectedAttribute, route => route.request().method() === 'POST'
-    ? route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ code: '23514', message: 'Injected specification rejection' }) })
-    : route.continue());
+  const partialName = `${en.categories.capacitors} · Partial specification save`;
+  const productsBefore = await countRows('products');
+  // Just before the command arrives, the definition stops accepting numbers, so the
+  // backend itself refuses the value inside the product's transaction.
+  const capacitance = await one<{ value_type: string }>('attribute_definitions', { id: draftSpecIds.numeric });
+  const refusedValue = socket.before('products:save', async () => { await fixtures.patch('attribute_definitions', { id: draftSpecIds.numeric }, { value_type: 'text' }); });
   await page.getByRole('button', { name: m.save, exact: true }).click();
-  await expect(page.getByText(m.specificationsIncomplete, { exact: true })).toBeVisible();
-  const partialId = await sql(`SELECT id FROM app.products WHERE name_en=${literal(`${en.categories.capacitors} · Partial specification save`)}`);
-  expect(partialId).toMatch(/^[0-9a-f-]{36}$/);
-  expect(await sql(`SELECT count(*) FROM app.product_attributes WHERE product_id='${partialId}'`)).toBe('0');
-  await page.unroute(rejectedAttribute);
-  await sql(`UPDATE app.products SET description='Metadata changed after creation' WHERE id='${partialId}'`);
-  await page.reload();
-  await page.getByRole('button', { name: m.reviewSpecifications, exact: true }).click();
-  await expect(page.getByText(m.specificationMetadataKept, { exact: true })).toBeVisible();
+  await expect(page.getByText(m.failed, { exact: true })).toBeVisible();
+  refusedValue.stop();
+  await fixtures.patch('attribute_definitions', { id: draftSpecIds.numeric }, { value_type: capacitance.value_type });
+  expect(refusedValue.sent).toHaveLength(1);
+  expect(await countRows('products')).toBe(productsBefore);
+  expect(await countRows('products', { name_en: partialName })).toBe(0);
+  await expect(page).toHaveURL(`${origin}/en/admin/products/new`);
   await expect(specField(specs, 'capacitance')).toHaveValue(measurementInput('0.000000000003', 'F', 'en'));
   await specField(specs, 'capacitance').fill('0.000000000004');
-  await page.getByRole('button', { name: m.saveReviewedSpecifications, exact: true }).click();
-  await expect(page).toHaveURL(`${origin}/en/admin/products/${partialId}`);
-  expect(await sql(`SELECT description FROM app.products WHERE id='${partialId}'`)).toBe('Metadata changed after creation');
-  expect(await sql(`SELECT number_value FROM app.product_attributes WHERE product_id='${partialId}' AND attribute_id='${draftSpecIds.numeric}'`)).toBe('0.000000000004');
-  expect(await sql(`SELECT count(*) FROM app.products WHERE name_en=${literal(`${en.categories.capacitors} · Partial specification save`)}`)).toBe('1');
-  console.log('PASS: partial specification failure survives reload and explicit correction preserves current product metadata');
+  await page.getByRole('button', { name: m.save, exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`^${origin}/en/admin/products/[0-9a-f-]{36}$`));
+  const partialId = (await one<{ id: string }>('products', { name_en: partialName })).id;
+  expect(page.url()).toBe(`${origin}/en/admin/products/${partialId}`);
+  expect((await attribute(partialId, draftSpecIds.numeric)).number_value).toBe('0.000000000004');
+  console.log('PASS: a refused specification rolls back the whole new product; the kept draft saves product and specification together');
 
   await page.goto(`${origin}/en/admin/products/new`);
   await categoryCard(m.typeNames.RES).click();
@@ -474,38 +533,38 @@ try {
   await page.getByLabel(fieldLabel(m.nameEn)).fill('Code collision proof');
   await page.getByRole('switch', { name: m.freeLabel, exact: true }).check();
   await page.getByLabel(m.openingStock, { exact: false }).fill('7');
-  const collisionBodies: { id: string; code: string }[] = [];
-  const productEndpoint = `${api.origin}/rest/v1/amp_products*`;
-  await page.route(productEndpoint, async (route) => {
-    if (route.request().method() === 'POST') {
-      const body = route.request().postDataJSON(); collisionBodies.push(body);
-      if (collisionBodies.length === 1) await sql(`INSERT INTO app.products(code,name_nb,name_en,unit_code,stock_step,sale_step,sale_unit_price_nok) VALUES (${literal(body.code)},'Opptatt kode','Occupied code','pcs',1,1,0)`);
-    }
-    await route.continue();
+  // Someone else takes the generated code just before the first attempt arrives.
+  const collision = socket.before('products:save', async (args) => {
+    if (collision.sent.length !== 1) return;
+    const { payload } = args as { payload: { code: string } };
+    const now = timestamp();
+    await fixtures.insert('products', [{ id: crypto.randomUUID(), code: payload.code, name_nb: 'Opptatt kode', name_en: 'Occupied code', description: null, category_id: null,
+      bin_id: null, location_note: null, unit_code: 'pcs', stock_step: '1', sale_step: '1', sale_unit_price_nok: '0', minimum_stock: '0', datasheet_url: null,
+      purchase_url: null, is_active: true, metadata_revision: 1, created_at: now, updated_at: now }]);
   });
   await page.getByRole('button', { name: m.save, exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`^${origin}/en/admin/products/[0-9a-f-]{36}$`));
-  await page.unroute(productEndpoint);
+  collision.stop();
+  const collisionBodies = collision.sent.map(args => (JSON.parse(args)[0] as { payload: { id: string; code: string } }).payload);
   expect(collisionBodies).toHaveLength(2); expect(collisionBodies[1].id).toBe(collisionBodies[0].id); expect(collisionBodies[1].code).not.toBe(collisionBodies[0].code);
-  expect(await sql(`SELECT count(*) FROM app.products WHERE name_en=${literal(`${en.categories.resistors} · Code collision proof`)}`)).toBe('1');
-  const openedId = await sql(`SELECT id FROM app.products WHERE name_en=${literal(`${en.categories.resistors} · Code collision proof`)}`);
+  const openedId = (await one<{ id: string }>('products', { name_en: `${en.categories.resistors} · Code collision proof` })).id;
   await expect(page.locator('.product-stock').getByText('7 pieces', { exact: true })).toBeVisible();
-  expect(await sql(`SELECT quantity||'/'||(last_counted_at IS NOT NULL) FROM app.inventory WHERE product_id=${literal(openedId)}`)).toBe('7/true');
+  expect(await one('stock_levels', { product_id: openedId })).toMatchObject({ quantity: '7', last_counted_at: expect.any(String) });
   await page.goto(`${origin}/en/admin/products/new`);
   await categoryCard(m.typeNames.RES).click();
   await page.getByLabel(fieldLabel(m.nameNb)).fill('Tapt svar med lager');
   await page.getByLabel(fieldLabel(m.nameEn)).fill('Lost reply with stock');
   await page.getByRole('switch', { name: m.freeLabel, exact: true }).check();
   await page.getByLabel(m.openingStock, { exact: false }).fill('3');
-  const openedLost = await lostResponse(page, 'amp_products', 'POST', () => page.getByRole('button', { name: m.save, exact: true }).click());
+  const openedLost = await lostResponse('products:save', () => page.getByRole('button', { name: m.save, exact: true }).click());
   await expect(page.getByText(m.unknown, { exact: true })).toBeVisible();
-  const openedLostId: string = JSON.parse(openedLost.commands[0]).id;
+  const openedLostId: string = JSON.parse(openedLost.commands[0])[0].payload.id;
   await page.reload();
   await expect(page.getByLabel(m.openingStock, { exact: false })).toHaveValue('3');
   await page.getByRole('button', { name: m.retrySave, exact: true }).click();
   await expect(page).toHaveURL(`${origin}/en/admin/products/${openedLostId}`);
-  await openedLost.stop();
-  expect(await sql(`SELECT quantity||'/'||(SELECT count(*) FROM app.stock_counts WHERE product_id=${literal(openedLostId)}) FROM app.inventory WHERE product_id=${literal(openedLostId)}`)).toBe('3/1');
+  expect(await quantity(openedLostId)).toBe('3');
+  expect(await countRows('stock_counts', { product_id: openedLostId })).toBe(1);
   console.log('PASS: opening stock entered on a new product is posted once as its first count, also after a lost creation reply and reload');
   await page.goto(`${origin}/en/admin/products/${productId}`);
   await expect(page.getByLabel(fieldLabel(m.nameEn))).toHaveValue(`${longName} reviewed`);
@@ -516,7 +575,7 @@ try {
   await count.getByLabel(c.observed, { exact: false }).fill('10');
   await count.getByLabel(fieldLabel(c.note)).fill('Physical opening count in the disposable browser proof');
   await count.getByLabel(fieldLabel(c.pauseConfirmed)).check();
-  const counted = await lostResponse(page, 'rpc/amp_record_single_count', 'POST', () => count.getByRole('button', { name: c.saveCount, exact: true }).click(), true);
+  const counted = await lostResponse('stock:recordSingleCount', () => count.getByRole('button', { name: c.saveCount, exact: true }).click(), true);
   await expect(count.getByText(c.unknown, { exact: true })).toBeVisible();
   await page.reload();
   await count.getByRole('button', { name: c.retryCount, exact: true }).click();
@@ -525,36 +584,36 @@ try {
   counted.release();
   await expect(count.getByRole('button', { name: c.countAgain, exact: true })).toBeVisible();
   expect(counted.commands).toHaveLength(2); expect(counted.commands[1]).toBe(counted.commands[0]);
-  await counted.stop();
-  expect(await sql(`SELECT count(*) FROM app.stock_counts WHERE product_id=${literal(productId)}`)).toBe('1');
+  expect(await countRows('stock_counts', { product_id: productId })).toBe(1);
   await count.getByRole('button', { name: c.countAgain, exact: true }).click();
   await count.getByLabel(c.observed, { exact: false }).fill('10');
   await count.getByLabel(fieldLabel(c.pauseConfirmed)).check();
   await count.getByRole('button', { name: c.saveCount, exact: true }).click();
   await expect(count.getByRole('button', { name: c.countAgain, exact: true })).toBeVisible();
-  expect(await sql(`SELECT count(*) FROM app.stock_counts WHERE product_id=${literal(productId)}`)).toBe('2');
-  expect(await sql(`SELECT count(*) FROM app.inventory_movements WHERE product_id=${literal(productId)}`)).toBe('1');
+  expect(await countRows('stock_counts', { product_id: productId })).toBe(2);
+  expect(await countRows('inventory_movements', { product_id: productId })).toBe(1);
   await count.getByRole('button', { name: c.countAgain, exact: true }).click();
   await count.getByLabel(c.observed, { exact: false }).fill('11');
   await count.getByLabel(fieldLabel(c.pauseConfirmed)).check();
-  await sql(`SELECT set_config('request.jwt.claims', '${JSON.stringify({ sub: staffId, role: 'authenticated' })}', false); SET ROLE authenticated;
-    SELECT public.amp_adjust_stock('${crypto.randomUUID()}', '[{"product_id":"${productId}","quantity_delta":"1"}]', 'Registered movement after the count form opened');`);
+  // The same staff member registers a movement from another session after the count form opened.
+  const staffApi = await signedInClient(staffEmail);
+  await staffApi.mutation(api.stock.adjust, { requestId: crypto.randomUUID(), items: [{ productId, quantityDelta: '1' }], reason: 'Registered movement after the count form opened' });
   await count.getByRole('button', { name: c.saveCount, exact: true }).click();
   await expect(count.getByText(c.stale, { exact: true })).toBeVisible();
-  expect(await sql(`SELECT count(*) FROM app.stock_counts WHERE product_id=${literal(productId)}`)).toBe('2');
+  expect(await countRows('stock_counts', { product_id: productId })).toBe(2);
   await count.getByRole('button', { name: c.recount, exact: true }).click();
   await expect(count.getByLabel(c.observed, { exact: false })).toHaveValue('');
   await count.getByLabel(c.observed, { exact: false }).fill('12');
   await count.getByLabel(fieldLabel(c.pauseConfirmed)).check();
   await count.getByRole('button', { name: c.saveCount, exact: true }).click();
   await expect(count.getByRole('button', { name: c.countAgain, exact: true })).toBeVisible();
-  expect(await sql(`SELECT quantity FROM app.inventory WHERE product_id=${literal(productId)}`)).toBe('12');
+  expect(await quantity(productId)).toBe('12');
   console.log('PASS: single count lost acknowledgement/reload, zero-difference history and mandatory fresh recount');
 
   count = page.locator('.count-section');
   await page.goto(`${origin}/en/admin/counts`);
   await page.getByLabel(fieldLabel(c.batchTitle)).fill('Browser batch with several recorded observations');
-  const started = await lostResponse(page, 'rpc/amp_start_count_batch', 'POST', () => page.getByRole('button', { name: c.start, exact: true }).click(), true);
+  const started = await lostResponse('stock:startCountBatch', () => page.getByRole('button', { name: c.start, exact: true }).click(), true);
   await expect(page.getByText(c.unknownStart, { exact: true })).toBeVisible();
   await page.reload();
   await page.getByRole('button', { name: c.retryStart, exact: true }).click();
@@ -564,24 +623,23 @@ try {
   started.release();
   await expect(page.getByRole('combobox', { name: en.adminOrders.product, exact: true })).toBeVisible();
   expect(started.commands).toHaveLength(2); expect(started.commands[1]).toBe(started.commands[0]);
-  await started.stop();
   const batchId = page.url().split('/').at(-1)!;
   // Count detail picks products with the shared order combobox (search by code, then choose).
-  const productCode = await sql(`SELECT code FROM app.products WHERE id=${literal(productId)}`);
+  const productCode = (await product(productId)).code;
   await page.getByRole('combobox', { name: en.adminOrders.product, exact: true }).click();
   await page.getByRole('combobox', { name: en.adminOrders.searchProduct, exact: true }).fill(productCode);
   await page.getByRole('option').filter({ hasText: productCode }).click();
   await count.getByRole('button', { name: c.beginCount, exact: true }).click();
   await count.getByLabel(c.observed, { exact: false }).fill('0');
   await count.getByLabel(fieldLabel(c.note)).fill('Keep this physical observation during a failed refresh');
-  const historyRead = `${api.origin}/rest/v1/amp_stock_counts*`;
-  await page.route(historyRead, route => route.abort('failed'));
-  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  // The batch is a live subscription: its next update (a retitled batch) fails.
+  const historyRead = socket.failReads('stock:countDetail');
+  await fixtures.patch('count_batches', { id: batchId }, { title: 'Browser batch, retitled during a failed read' });
   await expect(page.getByText(c.detailLoadFailed, { exact: true })).toBeVisible();
   await expect(count.getByLabel(c.observed, { exact: false })).toHaveValue('0');
   await expect(count.getByLabel(fieldLabel(c.note))).toHaveValue('Keep this physical observation during a failed refresh');
   await expect(count.getByRole('button', { name: c.saveCount, exact: true })).toBeDisabled();
-  await page.unroute(historyRead);
+  historyRead.stop();
   await page.getByRole('button', { name: c.retryLoad, exact: true }).click();
   await expect(page.getByText(c.detailLoadFailed, { exact: true })).toHaveCount(0);
   await expect(count.getByLabel(c.observed, { exact: false })).toHaveValue('0');
@@ -590,10 +648,10 @@ try {
   await count.getByLabel(fieldLabel(c.pauseConfirmed)).check();
   await count.getByRole('button', { name: c.saveCount, exact: true }).click();
   await expect(page.locator('.observations [data-slot="item"]')).toHaveCount(1);
-  expect(await sql(`SELECT quantity FROM app.inventory WHERE product_id=${literal(productId)}`)).toBe('0');
+  expect(await quantity(productId)).toBe('0');
   // Finishing confirms in the shared AlertDialog; its action sends the command.
   await page.getByRole('button', { name: c.finish, exact: true }).click();
-  const finished = await lostResponse(page, 'rpc/amp_finish_count_batch', 'POST', () => page.getByRole('alertdialog').getByRole('button', { name: c.finish, exact: true }).click(), true);
+  const finished = await lostResponse('stock:finishCountBatch', () => page.getByRole('alertdialog').getByRole('button', { name: c.finish, exact: true }).click(), true);
   await expect(page.getByText(c.unknownFinish, { exact: true })).toBeVisible();
   await page.reload();
   await page.getByRole('button', { name: c.retryFinish, exact: true }).click();
@@ -602,21 +660,23 @@ try {
   finished.release();
   await expect(page.locator('.finish-section')).toHaveCount(0);
   expect(finished.commands).toHaveLength(2); expect(finished.commands[1]).toBe(finished.commands[0]);
-  await finished.stop();
-  expect(await sql(`SELECT finished_at IS NOT NULL FROM app.count_batches WHERE id=${literal(batchId)}`)).toBe('t');
-  expect(await sql(`SELECT quantity FROM app.inventory WHERE product_id=${literal(productId)}`)).toBe('0');
+  expect((await one<{ finished_at: string | null }>('count_batches', { id: batchId })).finished_at).not.toBeNull();
+  expect(await quantity(productId)).toBe('0');
 
-  const abandoned = (await sql(`SELECT set_config('request.jwt.claims', '${JSON.stringify({ sub: otherId, role: 'authenticated' })}', false); SET ROLE authenticated; SELECT public.amp_start_count_batch('${crypto.randomUUID()}', 'Other owner batch')->>'batch_id';`)).split('\n').at(-1)!;
+  const otherApi = await signedInClient(otherEmail);
+  const abandoned = (await otherApi.mutation(api.stock.startCountBatch, { requestId: crypto.randomUUID(), title: 'Other owner batch' })).batch_id;
   await page.goto(`${origin}/en/admin/counts/${abandoned}`);
   await expect(page.getByText(c.ownerOnly, { exact: true })).toBeVisible();
   await expect(page.locator('.finish-section')).toHaveCount(0);
-  await sql(`UPDATE app.staff_members SET is_active=false WHERE auth_user_id='${otherId}';`);
+  await fixtures.patch('staff_members', { auth_user_id: otherId }, { is_active: false });
   await page.reload();
   await page.getByLabel(fieldLabel(c.closureReason)).fill('Original operator left; retain all previous observations.');
   await page.getByRole('button', { name: c.closeAbandoned, exact: true }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: c.closeAbandoned, exact: true }).click();
   await expect(page.locator('.finish-section')).toHaveCount(0);
-  expect(await sql(`SELECT b.owner_id<>b.finished_by AND b.finish_reason IS NOT NULL AND b.finished_at IS NOT NULL FROM app.count_batches b WHERE id='${abandoned}'`)).toBe('t');
+  const closed = await one<{ owner_id: string; finished_by: string | null; finish_reason: string | null; finished_at: string | null }>('count_batches', { id: abandoned });
+  expect(closed.finished_by).not.toBe(closed.owner_id);
+  expect(closed.finish_reason).not.toBeNull(); expect(closed.finished_at).not.toBeNull();
   console.log('PASS: batch start/count/finish with original retries, immediate zero count and eligible abandoned-owner closure');
   const sh = en.adminShelf;
   const layout = page.locator('.layout-editor');
@@ -646,7 +706,7 @@ try {
     await page.mouse.move(x + frame.width / columns, y, { steps: 8 });
     await page.mouse.up();
   }
-  const liveBinIds = async (cabinet: string): Promise<string[]> => JSON.parse(await sql(`SELECT coalesce(jsonb_agg(id ORDER BY id),'[]') FROM app.bins WHERE cabinet_id='${cabinet}' AND NOT is_archived`));
+  const liveBinIds = async (cabinet: string): Promise<string[]> => (await rows<BinRow>('bins', { cabinet_id: cabinet, is_archived: false })).sort(byId).map(row => row.id);
   await page.goto(`${origin}/en/admin/shelf`);
   await expect(page.locator('[data-shelf-wall]').getByRole('button')).toHaveCount(12);
   await openShelfCabinet(page, 'C2');
@@ -676,58 +736,47 @@ try {
   console.log('PASS: accepted dense shelf layout retains touch targets and local keyboard panning without page overflow or document scrolling');
   await previewSize('4', '4');
   await expect(layout.locator('[data-item-id]')).toHaveCount(16);
-  const layoutCreated = await lostResponse(page, 'rpc/amp_save_shelf_layout', 'POST', () => page.getByRole('button', { name: sh.save, exact: true }).click());
+  const layoutCreated = await lostResponse('shelf:saveLayout', () => page.getByRole('button', { name: sh.save, exact: true }).click());
   await expect(page.getByText(sh.unknown, { exact: true })).toBeVisible();
-  const newLayout = JSON.parse(layoutCreated.commands[0]);
-  const cabinetId: string = newLayout.p_cabinet.id;
-  expect(newLayout.p_before).toBeNull(); expect(newLayout.p_before_bins).toEqual([]);
-  expect(newLayout.p_bins).toHaveLength(16);
+  const newLayout = JSON.parse(layoutCreated.commands[0])[0];
+  const cabinetId: string = newLayout.cabinet.id;
+  expect(newLayout.before).toBeNull(); expect(newLayout.beforeBins).toEqual([]);
+  expect(newLayout.bins).toHaveLength(16);
   const initialBins = await liveBinIds(cabinetId);
-  expect(initialBins).toEqual(newLayout.p_bins.map((bin: { id: string }) => bin.id).sort());
+  expect(initialBins).toEqual(newLayout.bins.map((row: { id: string }) => row.id).sort());
   await page.reload();
   await page.getByRole('button', { name: sh.finishChange, exact: true }).click();
   await expect(page.getByText(sh.saved, { exact: true })).toBeVisible();
   expect(layoutCreated.commands).toHaveLength(2);
-  expect(layoutCreated.commands[1]).toBe(layoutCreated.commands[0]); await layoutCreated.stop();
+  expect(layoutCreated.commands[1]).toBe(layoutCreated.commands[0]);
   expect(await liveBinIds(cabinetId)).toEqual(initialBins);
-  expect(await sql(`SELECT count(*) FROM app.bins WHERE cabinet_id='${cabinetId}' AND row_span=1 AND col_span=1`)).toBe('16');
-  // Privileged RPCs are tested over HTTP with real Auth credentials, not SQL alone.
-  const authResponse = await fetch(`${api.origin}/auth/v1/token?grant_type=password`, {
-    method: 'POST', headers: { apikey: publicKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: nonstaffEmail, password })
-  });
-  assert.ok(authResponse.ok, 'Temporary nonstaff Auth session created');
-  const nonstaffSession = await authResponse.json() as { access_token: string; refresh_token: string };
-  assert.ok(typeof nonstaffSession.access_token === 'string' && typeof nonstaffSession.refresh_token === 'string');
-  secrets.push(nonstaffSession.access_token, nonstaffSession.refresh_token);
+  expect(await countRows('bins', { cabinet_id: cabinetId, row_span: 1, col_span: 1 })).toBe(16);
+  // Privileged mutations are tested through the native Convex client with real Auth
+  // credentials. Public functions have no service-role bypass on Convex; internal
+  // functions answer only the deployment's admin key.
   const deniedCabinetId = crypto.randomUUID();
   const deniedLayout = structuredClone(newLayout);
-  deniedLayout.p_request_id = crypto.randomUUID();
-  deniedLayout.p_cabinet = { ...deniedLayout.p_cabinet, id: deniedCabinetId, code: `C-${deniedCabinetId}`, outer_row: 29, outer_col: 10 };
-  deniedLayout.p_bins = deniedLayout.p_bins.map((bin: Record<string, unknown>) => {
-    const id = crypto.randomUUID(); return { ...bin, id, code: `B-${id}`, cabinet_id: deniedCabinetId };
+  deniedLayout.requestId = crypto.randomUUID();
+  deniedLayout.cabinet = { ...deniedLayout.cabinet, id: deniedCabinetId, code: `C-${deniedCabinetId}`, outer_row: 29, outer_col: 10 };
+  deniedLayout.bins = deniedLayout.bins.map((row: Record<string, unknown>) => {
+    const id = crypto.randomUUID(); return { ...row, id, code: `B-${id}`, cabinet_id: deniedCabinetId };
   });
-  for (const [kind, key, token] of [
-    ['nonstaff', publicKey, nonstaffSession.access_token],
-    ['anonymous', publicKey, anonKey],
-    ['service role', serviceKey, serviceKey]
+  for (const [kind, client] of [
+    ['nonstaff', await signedInClient(nonstaffEmail)],
+    ['anonymous', new ConvexHttpClient(convexUrl, { logger: false })]
   ] as const) {
-    const response = await fetch(`${api.origin}/rest/v1/rpc/amp_save_shelf_layout`, {
-      method: 'POST', headers: { apikey: key, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(deniedLayout)
-    });
-    expect([401, 403], `${kind} cannot save a shelf layout`).toContain(response.status);
-    if (kind === 'nonstaff') expect((await response.json() as { message: string }).message).toBe('STAFF_REQUIRED');
-    expect(await sql(`SELECT count(*) FROM app.cabinets WHERE id='${deniedCabinetId}'`)).toBe('0');
-    expect(await sql(`SELECT count(*) FROM app.bins WHERE cabinet_id='${deniedCabinetId}'`)).toBe('0');
+    const refusal = await client.mutation(api.shelf.saveLayout, deniedLayout).then(() => null, (error: unknown) => error);
+    expect(rejectionCode(refusal), `${kind} cannot save a shelf layout`).toBe('STAFF_REQUIRED');
+    expect(await countRows('cabinets', { id: deniedCabinetId })).toBe(0);
+    expect(await countRows('bins', { cabinet_id: deniedCabinetId })).toBe(0);
   }
-  console.log('PASS: real HTTP shelf-layout permission boundary for staff, nonstaff, anonymous and service role');
-  const firstBin = await sql(`SELECT id FROM app.bins WHERE cabinet_id='${cabinetId}' AND inner_row=1 AND inner_col=1`);
-  const secondBin = await sql(`SELECT id FROM app.bins WHERE cabinet_id='${cabinetId}' AND inner_row=2 AND inner_col=1`);
-  const occupiedNeighbor = await sql(`SELECT id FROM app.bins WHERE cabinet_id='${cabinetId}' AND inner_row=1 AND inner_col=3`);
-  await sql(`UPDATE app.products SET is_active=false,bin_id='${firstBin}' WHERE id='${productId}';
-    UPDATE app.products SET is_active=false,bin_id='${occupiedNeighbor}' WHERE id='${frozen.payload.id}';`);
-  expect(await sql(`SELECT quantity FROM app.inventory WHERE product_id='${productId}'`)).toBe('0');
+  console.log('PASS: real shelf-layout permission boundary for staff, signed-in nonstaff and anonymous callers');
+  const firstBin = await binAt(cabinetId, 1, 1);
+  const secondBin = await binAt(cabinetId, 2, 1);
+  const occupiedNeighbor = await binAt(cabinetId, 1, 3);
+  await editProduct(productId, { is_active: false, bin_id: firstBin });
+  await editProduct(frozen.payload.id, { is_active: false, bin_id: occupiedNeighbor });
+  expect(await quantity(productId)).toBe('0');
   // No standing refresh button (design-system §4.2); the map re-reads when the tab regains focus.
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await openShelfCabinet(page, 'F7');
@@ -748,7 +797,7 @@ try {
   await expect(preview.getByRole('button', { name: 'A1', exact: true })).not.toHaveClass(/\bempty\b/);
   await dragOneColumnWider();
   await expect(layout.getByRole('slider', { name: sh.resizeHandle, exact: true })).toHaveAttribute('aria-valuenow', '2');
-  expect(await sql(`SELECT col_span FROM app.bins WHERE id='${firstBin}'`)).toBe('1');
+  expect((await bin(firstBin)).col_span).toBe(1);
   await page.getByRole('button', { name: sh.widenDrawer, exact: true }).click();
   await expect(layout.getByText(sh.notEmpty, { exact: true })).toBeVisible();
   await expect(preview.getByRole('button', { name: 'A1–B1', exact: true })).not.toHaveClass(/\bempty\b/);
@@ -775,64 +824,64 @@ try {
   await expect(layout.getByRole('slider', { name: sh.resizeHandle, exact: true })).toHaveAttribute('aria-valuenow', '2');
   await page.getByRole('button', { name: sh.save, exact: true }).click();
   await expect(page.getByText(sh.saved, { exact: true })).toBeVisible();
-  expect(await sql(`SELECT count(*) FROM app.bins WHERE cabinet_id='${cabinetId}' AND col_span=2`)).toBe('2');
-  expect(await sql(`SELECT bin_id FROM app.products WHERE id='${productId}'`)).toBe(firstBin);
-  expect(await sql(`SELECT bin_id FROM app.products WHERE id='${frozen.payload.id}'`)).toBe(occupiedNeighbor);
+  expect(await countRows('bins', { cabinet_id: cabinetId, col_span: 2 })).toBe(2);
+  expect((await product(productId)).bin_id).toBe(firstBin);
+  expect((await product(frozen.payload.id)).bin_id).toBe(occupiedNeighbor);
   expect(await liveBinIds(cabinetId)).toHaveLength(14);
   console.log('PASS: selectable muted empty drawers, zero-stock/inactive assignments remain occupied, pointer/tap/keyboard width changes, cancelled drags, source identity and assigned-neighbour protection');
   // Fixture: two physical drawers have been taken out, providing a destination for a move.
-  await sql(`UPDATE app.bins SET is_archived=true WHERE cabinet_id='${cabinetId}' AND inner_row=3 AND inner_col IN (1,2)`);
+  // An archived drawer leaves the wall: it keeps its identity but no placement, as shelf.updateBin archives it.
+  const takenOut = { is_archived: true, cabinet_id: null, inner_row: null, inner_col: null };
+  for (const col of [1, 2]) await fixtures.patch('bins', { cabinet_id: cabinetId, inner_row: 3, inner_col: col }, takenOut);
   // No standing refresh button (design-system §4.2); the map re-reads when the tab regains focus.
-  // Wait for a drawer read that starts after the change, as a returning admin would.
-  const reread = page.waitForResponse(response => response.url().includes('/rest/v1/amp_bins') && response.request().method() === 'GET');
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await reread;
   await expect(page.locator('[data-cabinet-editor]').getByRole('button', { name: 'A3', exact: true })).toHaveCount(0);
   await page.locator('[data-cabinet-editor]').getByRole('button', { name: 'A1–B1', exact: true }).click();
   await expect(page.getByRole('link', { name: `${en.categories.resistors} · ${longName} reviewed`, exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: sh.archiveBin, exact: true })).toBeDisabled();
   await page.getByRole('button', { name: sh.moveDrawer, exact: true }).click();
   await layout.locator('[data-item-id="vacant:3:1"]').click();
-  const moved = await lostResponse(page, 'amp_bins', 'PATCH', () => page.getByRole('alertdialog').getByRole('button', { name: sh.confirmAction, exact: true }).click());
+  const moved = await lostResponse('shelf:updateBin', () => page.getByRole('alertdialog').getByRole('button', { name: sh.confirmAction, exact: true }).click());
   await expect(page.getByText(sh.unknown, { exact: true })).toBeVisible();
   await page.reload();
   await page.getByRole('button', { name: sh.finishChange, exact: true }).click();
   await expect(page.getByText(sh.saved, { exact: true })).toBeVisible();
-  expect(moved.commands).toHaveLength(1); await moved.stop();
-  expect(await sql(`SELECT inner_row=3 AND col_span=2 FROM app.bins WHERE id='${firstBin}'`)).toBe('t');
-  expect(await sql(`SELECT bin_id FROM app.products WHERE id='${productId}'`)).toBe(firstBin);
-  expect(await sql(`SELECT count(*) FROM app.bins WHERE cabinet_id='${cabinetId}' AND inner_row=1 AND inner_col IN (1,2)`)).toBe('0');
+  // The move is a compare-and-set, so Finish resends it unchanged and the backend sees it already applied.
+  expect(moved.commands).toHaveLength(2); expect(moved.commands[1]).toBe(moved.commands[0]);
+  expect(await bin(firstBin)).toMatchObject({ inner_row: 3, col_span: 2 });
+  expect((await product(productId)).bin_id).toBe(firstBin);
+  expect((await rows<BinRow>('bins', { cabinet_id: cabinetId, inner_row: 1 })).filter(row => row.inner_col <= 2)).toHaveLength(0);
   expect(await liveBinIds(cabinetId)).toHaveLength(12);
   await openShelfCabinet(page, 'F7');
   await page.locator('[data-cabinet-editor]').getByRole('button', { name: 'A3–B3', exact: true }).click();
   await page.getByRole('button', { name: sh.moveDrawer, exact: true }).click();
   await layout.locator(`[data-item-id="${secondBin}"]`).click();
-  const swapped = await lostResponse(page, 'rpc/amp_swap_bins', 'POST', () => page.getByRole('alertdialog').getByRole('button', { name: sh.swap, exact: true }).click());
+  const swapped = await lostResponse('shelf:swapBins', () => page.getByRole('alertdialog').getByRole('button', { name: sh.swap, exact: true }).click());
   await expect(page.getByText(sh.unknown, { exact: true })).toBeVisible();
   await page.getByRole('button', { name: sh.finishChange, exact: true }).click();
   const drawerSwapToast = page.locator('[data-sonner-toast]').filter({ has: page.getByText(
     sh.swapPreview(`${sh.cabinet('F7')} · ${sh.bin('A3–B3')}`, `${sh.cabinet('F7')} · ${sh.bin('A2–B2')}`), { exact: true }
   ) });
   await expect(drawerSwapToast.getByText(sh.positionsSwapped, { exact: true })).toBeVisible();
-  expect(swapped.commands).toHaveLength(2); expect(swapped.commands[1]).toBe(swapped.commands[0]); await swapped.stop();
-  expect(await sql(`SELECT inner_row FROM app.bins WHERE id='${firstBin}'`)).toBe('2');
-  expect(await sql(`SELECT inner_row FROM app.bins WHERE id='${secondBin}'`)).toBe('3');
-  expect(await sql(`SELECT bin_id FROM app.products WHERE id='${productId}'`)).toBe(firstBin);
+  expect(swapped.commands).toHaveLength(2); expect(swapped.commands[1]).toBe(swapped.commands[0]);
+  expect((await bin(firstBin)).inner_row).toBe(2);
+  expect((await bin(secondBin)).inner_row).toBe(3);
+  expect((await product(productId)).bin_id).toBe(firstBin);
   expect(await liveBinIds(cabinetId)).toHaveLength(12);
   // Two empty drawers of one size look identical everywhere, so a drop between them is a no-op.
-  const twins = (await sql(`SELECT a.id||','||b.id FROM app.bins a JOIN app.bins b ON b.cabinet_id=a.cabinet_id AND b.id>a.id
-    AND b.row_span=a.row_span AND b.col_span=a.col_span AND b.label IS NOT DISTINCT FROM a.label AND NOT b.is_archived
-    WHERE a.cabinet_id='${cabinetId}' AND NOT a.is_archived AND NOT EXISTS (SELECT 1 FROM app.products p WHERE p.bin_id IN (a.id,b.id))
-    ORDER BY a.id, b.id LIMIT 1`)).split(',');
+  const occupied = new Set((await rows<ProductRow>('products')).map(row => row.bin_id));
+  const vacant = (await rows<BinRow>('bins', { cabinet_id: cabinetId, is_archived: false })).filter(row => !occupied.has(row.id)).sort(byId);
+  const twins = vacant.flatMap(a => vacant.filter(b => b.id > a.id && b.row_span === a.row_span && b.col_span === a.col_span && b.label === a.label)
+    .map(b => [a.id, b.id]))[0];
   expect(twins).toHaveLength(2);
-  const twinPositions = `SELECT string_agg(inner_row||':'||inner_col, ' ' ORDER BY id) FROM app.bins WHERE id IN ('${twins[0]}','${twins[1]}')`;
-  const twinsBefore = await sql(twinPositions);
+  const twinPositions = async () => (await Promise.all(twins.map(bin))).map(row => `${row.inner_row}:${row.inner_col}`).join(' ');
+  const twinsBefore = await twinPositions();
   await layout.locator(`[data-item-id="${twins[0]}"]`).click();
   await page.getByRole('button', { name: sh.moveDrawer, exact: true }).click();
   await layout.locator(`[data-item-id="${twins[1]}"]`).click();
   await expect(page.getByRole('alertdialog')).toHaveCount(0);
   await expect(page.getByRole('button', { name: sh.moveDrawer, exact: true })).toBeEnabled();
-  expect(await sql(twinPositions)).toBe(twinsBefore);
+  expect(await twinPositions()).toBe(twinsBefore);
   console.log('PASS: generated grid with one atomic save, identical lost-response replay, configured spans, drawer moves/swaps preserve products and vacancies');
 
   const beforeGrowth = await liveBinIds(cabinetId);
@@ -842,8 +891,8 @@ try {
   await expect(page.getByText(sh.saved, { exact: true })).toBeVisible();
   const grown = await liveBinIds(cabinetId);
   expect(grown).toHaveLength(18); expect(grown).toEqual(expect.arrayContaining(beforeGrowth));
-  expect(await sql(`SELECT bin_id FROM app.products WHERE id='${productId}'`)).toBe(firstBin);
-  expect(await sql(`SELECT count(*) FROM app.bins WHERE cabinet_id='${cabinetId}' AND inner_row=1 AND inner_col IN (1,2)`)).toBe('2');
+  expect((await product(productId)).bin_id).toBe(firstBin);
+  expect((await rows<BinRow>('bins', { cabinet_id: cabinetId, inner_row: 1 })).filter(row => row.inner_col <= 2)).toHaveLength(2);
   await expect(page.locator('[data-cabinet-editor]')).toBeVisible();
   await previewSize('1', '5');
   await expect(layout.getByText(sh.notEmpty, { exact: true })).toBeVisible();
@@ -856,14 +905,14 @@ try {
   await page.getByRole('button', { name: sh.splitLayout, exact: true }).click();
   await previewSize('3', '5');
   // A competing physical move after opening the layout must invalidate its full snapshot.
-  const concurrentlyMoved = await sql(`SELECT id FROM app.bins WHERE cabinet_id='${cabinetId}' AND inner_row=1 AND inner_col=4`);
-  await sql(`UPDATE app.bins SET is_archived=true WHERE cabinet_id='${cabinetId}' AND inner_row=1 AND inner_col=1;
-    UPDATE app.bins SET inner_col=1 WHERE id='${concurrentlyMoved}'`);
+  const concurrentlyMoved = await binAt(cabinetId, 1, 4);
+  await fixtures.patch('bins', { cabinet_id: cabinetId, inner_row: 1, inner_col: 1 }, takenOut);
+  await fixtures.patch('bins', { id: concurrentlyMoved }, { inner_col: 1 });
   await page.getByRole('button', { name: sh.save, exact: true }).click();
   await expect(page.getByText(sh.stale, { exact: true })).toBeVisible();
-  expect(await sql(`SELECT inner_col FROM app.bins WHERE id='${concurrentlyMoved}'`)).toBe('1');
-  expect(await sql(`SELECT inner_rows FROM app.cabinets WHERE id='${cabinetId}'`)).toBe('4');
-  expect(await sql(`SELECT col_span FROM app.bins WHERE id='${secondBin}'`)).toBe('2');
+  expect((await bin(concurrentlyMoved)).inner_col).toBe(1);
+  expect((await one<{ inner_rows: number }>('cabinets', { id: cabinetId })).inner_rows).toBe(4);
+  expect((await bin(secondBin)).col_span).toBe(2);
   // The map re-reads by itself after a stale rejection; the admin reviews the fresh layout.
   await page.getByRole('button', { name: sh.reviewLayout, exact: true }).click();
   await expect(layout.getByRole('slider', { name: sh.resizeRows, exact: true })).toHaveAttribute('aria-valuenow', '4');
@@ -874,10 +923,10 @@ try {
   await previewSize('3', '5');
   await page.getByRole('button', { name: sh.save, exact: true }).click();
   await expect(page.getByText(sh.saved, { exact: true })).toBeVisible();
-  expect(await sql(`SELECT inner_rows=3 AND inner_cols=5 FROM app.cabinets WHERE id='${cabinetId}'`)).toBe('t');
-  expect(await sql(`SELECT inner_row=3 AND inner_col=1 AND col_span=1 FROM app.bins WHERE id='${secondBin}'`)).toBe('t');
-  expect(await sql(`SELECT sum(row_span*col_span) FROM app.bins WHERE cabinet_id='${cabinetId}' AND NOT is_archived`)).toBe('15');
-  expect(await sql(`SELECT bin_id FROM app.products WHERE id='${productId}'`)).toBe(firstBin);
+  expect(await one('cabinets', { id: cabinetId })).toMatchObject({ inner_rows: 3, inner_cols: 5 });
+  expect(await bin(secondBin)).toMatchObject({ inner_row: 3, inner_col: 1, col_span: 1 });
+  expect((await rows<BinRow>('bins', { cabinet_id: cabinetId, is_archived: false })).reduce((sum, row) => sum + row.row_span * row.col_span, 0)).toBe(15);
+  expect((await product(productId)).bin_id).toBe(firstBin);
   console.log('PASS: explicit layout adjustment fills vacancies, preserves identities, blocks occupied shrink, and requires current review after a stale snapshot');
 
   // Larger drawers can also be configured before the cabinet's first save.
@@ -890,9 +939,9 @@ try {
   await expect(layout.locator('[data-item-id]')).toHaveCount(3);
   await page.getByRole('button', { name: sh.save, exact: true }).click();
   await expect(page.getByText(sh.saved, { exact: true })).toBeVisible();
-  const secondCabinet = await sql('SELECT id FROM app.cabinets WHERE outer_row=7 AND outer_col=7 AND NOT is_archived');
+  const secondCabinet = (await one<{ id: string }>('cabinets', { outer_row: 7, outer_col: 7, is_archived: false })).id;
   expect(await liveBinIds(secondCabinet)).toHaveLength(3);
-  expect(await sql(`SELECT count(*) FROM app.bins WHERE cabinet_id='${secondCabinet}' AND col_span=2`)).toBe('1');
+  expect(await countRows('bins', { cabinet_id: secondCabinet, col_span: 2 })).toBe(1);
   await openShelfCabinet(page, 'F7');
   await expect(page.locator('[data-cabinet-editor]')).toBeVisible();
   await expect(page.getByRole('button', { name: sh.archiveCabinetWithDrawers, exact: true })).toBeDisabled();
@@ -904,12 +953,12 @@ try {
     sh.swapPreview(sh.cabinet('F7'), sh.cabinet('G7')), { exact: true }
   ) });
   await expect(cabinetSwapToast.getByText(sh.positionsSwapped, { exact: true })).toBeVisible();
-  expect(await sql(`SELECT outer_col FROM app.cabinets WHERE id='${cabinetId}'`)).toBe('7');
-  expect(await sql(`SELECT outer_col FROM app.cabinets WHERE id='${secondCabinet}'`)).toBe('6');
-  expect(await sql(`SELECT bin_id FROM app.products WHERE id='${productId}'`)).toBe(firstBin);
+  expect((await one<{ outer_col: number }>('cabinets', { id: cabinetId })).outer_col).toBe(7);
+  expect((await one<{ outer_col: number }>('cabinets', { id: secondCabinet })).outer_col).toBe(6);
+  expect((await product(productId)).bin_id).toBe(firstBin);
   console.log('PASS: initial spanning layout and whole-cabinet swap retain drawer contents');
   // Placement cases deliberately unpublish this product; publish it again for public-label checks.
-  await sql(`UPDATE app.products SET bin_id='${binId}',is_active=true WHERE id='${productId}'`);
+  await editProduct(productId, { bin_id: binId, is_active: true });
   const geometry = await context.newPage();
   await geometry.addInitScript(() => Object.defineProperty(navigator.mediaDevices, 'getUserMedia', {
     configurable: true, value: async () => { throw new DOMException('Denied for responsive proof', 'NotAllowedError'); }
@@ -1033,16 +1082,16 @@ try {
   const productCards = page.locator('.products > li');
   await expect(productCards.first()).toBeVisible();
   const productOrder = await productCards.locator('h2 a').evaluateAll(links => links.map(link => link.getAttribute('href')));
-  const inventoryOnly = `${api.origin}/rest/v1/amp_inventory?*`;
-  await page.route(inventoryOnly, route => route.abort('failed'));
+  // Stock is a live subscription: its next update (a stock change elsewhere) fails.
+  const inventoryOnly = socket.failReads('stock:inventory');
   const searchProducts = page.getByLabel(fieldLabel(en.adminProducts.search));
   await searchProducts.focus();
-  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await staffApi.mutation(api.stock.adjust, { requestId: crypto.randomUUID(), items: [{ productId: seedProductId(0), quantityDelta: '1' }], reason: 'Stock change during a failed inventory read' });
   await expect(page.getByText(en.adminProducts.inventoryUnavailable, { exact: true })).toBeVisible();
   expect(await productCards.locator('h2 a').evaluateAll(links => links.map(link => link.getAttribute('href')))).toEqual(productOrder);
   await expect(searchProducts).toBeFocused();
   await expect(productCards.first().getByText(en.shop.unavailable, { exact: true })).toBeVisible();
-  await page.unroute(inventoryOnly);
+  inventoryOnly.stop();
   await page.getByRole('button', { name: en.adminProducts.retry, exact: true }).click();
   await expect(page.getByText(en.adminProducts.inventoryUnavailable, { exact: true })).toHaveCount(0);
   console.log('PASS: partial inventory failure preserves product order and focus and offers contextual retry');
@@ -1059,19 +1108,19 @@ try {
   await recordStock.click();
   await expect(stockQuantity).toBeFocused();
   await expect(stockQuantity).toHaveAttribute('aria-invalid', 'true');
-  const stockStep = await sql(`SELECT stock_step FROM app.products WHERE id=${literal(productId)}`);
+  const stockStep = (await product(productId)).stock_step;
   await expect(stockForm.getByText(en.adminStock.invalidQuantity(stockStep, false), { exact: true })).toBeVisible();
   await stockQuantity.fill(stockStep);
   const stockHistory = page.locator('section[aria-labelledby="stock-history-title"]');
   const previousHistory = await stockHistory.textContent();
-  const inventoryRead = `${api.origin}/rest/v1/amp_inventory?*`;
-  await page.route(inventoryRead, route => route.abort('failed'));
+  // The stock page re-reads when the browser comes back online; that read fails.
+  const inventoryRead = socket.failReads('stock:detail');
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
   await expect(page.getByText(en.adminStock.unavailable, { exact: true })).toBeVisible();
   await expect(recordStock).toBeDisabled();
   await expect(stockQuantity).toHaveValue(stockStep); await expect(stockQuantity).toBeFocused();
   expect(await stockHistory.textContent()).toBe(previousHistory);
-  await page.unroute(inventoryRead);
+  inventoryRead.stop();
   await page.getByRole('button', { name: en.adminStock.retry, exact: true }).click();
   await expect(recordStock).toBeEnabled();
   await expect(stockReason).toHaveValue('Design consistency validation');
@@ -1081,7 +1130,9 @@ try {
   await page.goto(`${origin}/en/admin/audit`);
   const auditRows = page.locator('section[aria-labelledby^="audit-"] > [role="list"] > [role="listitem"]');
   await expect(auditRows.first()).toBeVisible();
-  const [entryCount, dayCount] = (await sql(`SELECT count(*) || ',' || count(DISTINCT (recorded_at AT TIME ZONE 'Europe/Oslo')::date) FROM app.audit_log`)).split(',').map(Number);
+  const auditTimes = (await rows<{ recorded_at: string }>('audit_log')).map(row => row.recorded_at);
+  const osloDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Oslo', year: 'numeric', month: '2-digit', day: '2-digit' });
+  const [entryCount, dayCount] = [auditTimes.length, new Set(auditTimes.map(time => osloDay.format(new Date(time)))).size];
   // A day loads whole, so a single day of entries needs no further page.
   if (dayCount === 1) await expect(page.getByRole('button', { name: en.adminAudit.more, exact: true })).toHaveCount(0);
   const rowsBefore = await auditRows.count();
@@ -1095,12 +1146,15 @@ try {
   await disclosure.click(); await disclosure.focus();
   await expect(disclosure).toHaveAttribute('aria-expanded', 'true');
   const originalText = await originalRow.innerText();
-  await sql(`UPDATE app.products SET description='Design audit refresh proof' WHERE id=${literal(productId)}`);
-  const changedCode = await sql(`SELECT code FROM app.products WHERE id=${literal(productId)}`);
-  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  // The log is a live subscription. Fixture writes bypass the audit on Convex, so
+  // another staff member edits the product through the real API instead.
+  const auditApi = await signedInClient(auditEmail);
+  await describeProduct(auditApi, productId, 'Design audit refresh proof');
+  const changedCode = (await product(productId)).code;
+  const editor = `${en.adminAudit.actor}: ${auditName}`;
   await expect(auditRows.first()).toContainText(changedCode);
-  await expect(auditRows.first()).toContainText(systemActor);
-  // The edit joins the System row for this product if one is already open in time, otherwise it adds one row above.
+  await expect(auditRows.first()).toContainText(editor);
+  // The edit joins this person's row for the product if one is already open in time, otherwise it adds one row above.
   const rowsAfter = await auditRows.count();
   expect([rowsBefore, rowsBefore + 1]).toContain(rowsAfter);
   const movedRow = auditRows.nth(originalIndex + rowsAfter - rowsBefore);
@@ -1108,13 +1162,13 @@ try {
   const movedDisclosure = movedRow.locator('[aria-expanded]').first();
   await expect(movedDisclosure).toHaveAttribute('aria-expanded', 'true');
   await expect(movedDisclosure).toBeFocused();
-  const auditRead = `${api.origin}/rest/v1/amp_audit_log?*`;
-  await page.route(auditRead, route => route.abort('failed'));
-  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  // The next live update (another edit) fails.
+  const auditRead = socket.failReads('auditLog:page');
+  await describeProduct(auditApi, productId, 'Design audit refresh proof, during a failed read');
   await expect(page.getByText(en.adminAudit.unavailable, { exact: true })).toBeVisible();
   await expect(auditRows).toHaveCount(rowsAfter);
   await expect(movedDisclosure).toBeFocused();
-  await page.unroute(auditRead);
+  auditRead.stop();
   await page.getByRole('button', { name: en.adminAudit.retry, exact: true }).click();
   await expect(page.getByText(en.adminAudit.unavailable, { exact: true })).toHaveCount(0);
   await fits(page);
@@ -1122,8 +1176,8 @@ try {
   await page.goto(`${origin}/en/admin/shelf`);
   // Revoked (not merely no access) needs the reloaded page to have admitted this user first.
   await expect(page.getByRole('button', { name: sh.newCabinet, exact: true })).toBeVisible();
-  await sql(`UPDATE app.staff_members SET is_active=false WHERE auth_user_id='${staffId}'`);
-  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  // Membership is live: revocation shows without any focus or reload.
+  await fixtures.patch('staff_members', { auth_user_id: staffId }, { is_active: false });
   await expect(page.getByText(en.admin.revoked, { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: sh.newCabinet, exact: true })).toHaveCount(0);
   console.log('PASS: both locales and themes at 360/1280, long-copy geometry, keyboard focus and access revocation');

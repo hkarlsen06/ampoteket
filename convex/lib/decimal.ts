@@ -17,7 +17,7 @@ export const MAX_COMMAND = '999999999999';
 
 export function parseDecimal(value: string): Decimal {
 	const match = typeof value === 'string' && value.length <= 2000 ? pattern.exec(value) : null;
-	if (!match) throw new Error('INVALID_DECIMAL');
+	if (!match) fail('INVALID_DECIMAL');
 	const fraction = match[3] ?? '';
 	const units = BigInt(match[2] + fraction);
 	return { units: match[1] ? -units : units, scale: fraction.length };

@@ -20,7 +20,13 @@ export class ConvexAuthClient {
 		this.#session.subscribe((token) => { this.token = token; });
 	}
 
-	get isAuthenticated() { return this.token !== null; }
+	/**
+	 * Derived, so a token refresh that keeps the user signed in changes nothing here.
+	 * The `provider` getter feeds convex-svelte's `setAuth` effect; if it tracked the
+	 * token itself, each refresh would re-run `setAuth`, whose confirmation fetches
+	 * a fresh token again: an endless refresh loop that re-runs every query.
+	 */
+	readonly isAuthenticated = $derived(this.token !== null);
 	/** What convex-svelte's `setupAuth` reads. */
 	get provider() {
 		return { isLoading: this.isLoading, isAuthenticated: this.isAuthenticated, fetchAccessToken: this.#session.fetchAccessToken };

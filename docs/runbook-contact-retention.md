@@ -1,40 +1,53 @@
 # Optional checkout-contact retention
 
-Optional contacts on unconfirmed checkouts are cleared after 90 × 24 hours.
-Confirmed checkouts are outside this rule; individual erasure uses
-`amp_clear_checkout_contact`. Checkouts and stock history are kept.
+Buyers may leave an optional contact detail with a checkout. On an unconfirmed
+checkout it is deleted 90 × 24 hours after the checkout was made. Confirmed
+checkouts are outside this rule; staff erase those on request. Checkouts, sales
+and stock history are kept. Until the cutover ([cutover runbook](runbook-cutover.md))
+production runs on Supabase, where this was a manual procedure (git history,
+`git show b83c41e:docs/runbook-contact-retention.md`).
 
-Use the owner connection from
-[reaching the hosted project](runbook-deploy.md#reaching-the-hosted-project),
-without the read-only option, since this writes. Check
-the target and that **your own** Auth UUID is an active staff member. Never use
-another volunteer's UUID or invent one; it is the audit record of who ran it.
+## Automatic clearing
 
-```sh
-psql -X -v ON_ERROR_STOP=1 \
-  -v operator_auth_user_id='<your verified active Auth UUID>' \
-  -f scripts/clear-expired-contacts.sql
-```
+`convex/crons.ts` runs `retention.clearExpiredContacts` every day at 02:15 UTC (at
+night in Oslo). Each run deletes up to 100 expired contacts, each on a checkout
+without a sale and created more than 90 × 24 hours earlier, and schedules the next
+batch at once when it cleared a full 100, until none are left. Each batch is one
+transaction: an interrupted batch changes nothing, and finished batches stay done.
+A contact that expires after tonight's run is cleared the next night, so the delay
+past 90 days is at most about a day.
 
-Each run clears up to 100 and prints the count.
+Each deletion is audited in the same transaction as `CONTACT_CLEARED` on
+`checkout_contacts` with the checkout ID, actor empty (the system, database role
+`convex`) and no contact text. Nobody needs to run anything.
 
-- Rerun until it prints `0`.
-- A timeout or error exit is a failed batch, not completion.
-- `CONTACT_RETENTION_RETRY_REQUIRED` or a lock timeout (five seconds): rerun.
-- After an interruption, just rerun; finished batches stay committed.
+## Checking that it ran
 
-It is safe alongside checkout confirmation and recovery. Each clearance is
-audited as `CONTACT_CLEARED` without the text.
+- Convex dashboard, production deployment: the cron job "clear expired checkout
+  contacts" under Schedules shows its last runs, and Logs shows each
+  `retention:clearExpiredContacts` execution and any error. From a shell, with the
+  deploy key as in [reaching the hosted project](runbook-deploy.md#reaching-the-hosted-project):
+  `bunx --no-install convex logs --history 200 --success`.
+- The admin change log (`/admin/audit`) shows the clearances as "Contact detail
+  cleared" without a person.
 
-This is manual. **Hjalmar Karlsen** is the operator, assigned on 2026-10-02.
-Before launch, agree the schedule (daily keeps the delay to about a day) and set
-a reminder. Log every run, including
-zero results, without contact text or checkout IDs:
+A run that fails is retried by the next night's run, which picks up everything
+still expired. If failures repeat, the operator (**Hjalmar Karlsen**, assigned on
+2026-10-02) investigates from the logs; running
+`bunx --no-install convex run retention:clearExpiredContacts` with the deploy key
+starts the same batch chain by hand and prints the first batch's count.
 
-| UTC due / run time | Reviewed target | Operator | Batch counts and total | Exit status / retry or escalation |
-| --- | --- | --- | --- | --- |
-|  |  |  |  |  |
+## Individual erasure
 
-A failed batch needs follow-up. After restoring an older backup, reapply later
-erasures before reopening. The regression test is
-`supabase/tests/contact-retention.py`.
+When a buyer asks, staff find the checkout at `/admin/purchases` and use **Erase
+contact detail**, which calls `checkout.clearContact`. It works on confirmed and
+unconfirmed checkouts, keeps the purchase, and is audited as `CONTACT_CLEARED`
+with the staff member as actor and without the text. Never copy contacts into
+notes, logs or URLs.
+
+## After a restore
+
+An older snapshot still holds contacts that were cleared after it was taken.
+Before reopening, erase again every contact cleared by staff after the snapshot,
+and let the next nightly run (or a manual run, above) clear the expired ones
+([restore runbook](runbook-backup-restore.md) §5).

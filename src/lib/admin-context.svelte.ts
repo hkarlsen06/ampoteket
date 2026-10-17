@@ -22,7 +22,7 @@ export class AdminContext {
 	#unsubscribe: (() => void) | null = null;
 	#stopAuth: (() => void) | null = null;
 
-	constructor(readonly config: ConvexConfig | null, readonly callbackOrigin: string | null,
+	constructor(readonly config: ConvexConfig | null,
 		readonly client: ConvexClient | null, readonly auth: ConvexAuthClient | null,
 		/** Server-confirmed auth from convex-svelte's `useAuth()`. */
 		private readonly serverAuth: { readonly isLoading: boolean; readonly isAuthenticated: boolean } | null) {}
@@ -53,6 +53,9 @@ export class AdminContext {
 		this.#stopAuth = this.auth.start();
 		this.#phase = 'started';
 		this.#unsubscribe = this.client.onUpdate(api.members.me, {}, (me) => {
+			// A result after a failure ends it: on a retry the client may first replay the
+			// cached failure, and the backend's answer follows on the same subscription.
+			if (this.#phase === 'failed') this.#phase = 'started';
 			this.#me = me;
 			if (me?.membership) this.#admittedUser = me.authUserId;
 		}, () => { this.#phase = 'failed'; });

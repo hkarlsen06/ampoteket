@@ -13,8 +13,9 @@ type UuidTable = 'staff_members' | 'help_contacts' | 'categories' | 'cabinets' |
 /** The row with this UUID, or null. Invalid UUIDs find nothing. */
 export async function byUuid<T extends UuidTable>(ctx: QueryCtx, table: T, id: string | null | undefined): Promise<Doc<T> | null> {
 	if (!isUuid(id)) return null;
-	// Every UuidTable has a `uuid` index on `id`; the generic query needs the cast.
-	return await (ctx.db.query(table) as any).withIndex('uuid', (q: any) => q.eq('id', id)).unique();
+	// Every UuidTable has a `uuid` index on `id`; TypeScript cannot prove that for a generic table.
+	type ByUuid = { withIndex(name: 'uuid', range: (q: { eq(field: 'id', value: string): unknown }) => unknown): { unique(): Promise<Doc<T> | null> } };
+	return await (ctx.db.query(table) as unknown as ByUuid).withIndex('uuid', (q) => q.eq('id', id)).unique();
 }
 export async function requireUuid<T extends UuidTable>(ctx: QueryCtx, table: T, id: string | null | undefined, code: string): Promise<Doc<T>> {
 	return (await byUuid(ctx, table, id)) ?? fail(code, id ?? undefined);

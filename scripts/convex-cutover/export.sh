@@ -4,9 +4,10 @@
 # readable only by you: it holds buyer contacts and password hashes. Delete it
 # once the cutover is verified.
 #
-# Connection: either the linked Supabase CLI's temporary login
-# (docs/runbook-deploy.md "Reaching the hosted project"), or a connection string
-# in AMPOTEKET_EXPORT_DATABASE_URL (Supabase dashboard → Connect → Session pooler).
+# Connection (docs/runbook-cutover.md §1): either the Supabase CLI linked to the
+# project (`supabase link --project-ref mqzcbdorjuefefzvuefa`), whose temporary
+# login this script reads itself, or a connection string in
+# AMPOTEKET_EXPORT_DATABASE_URL (Supabase dashboard → Connect → Session pooler).
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 umask 077

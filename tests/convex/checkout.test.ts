@@ -86,10 +86,10 @@ describe.skipIf(!enabled)('contact retention', () => {
 		await guest().mutation(api.checkout.confirm, { serverKey, checkoutId: oldConfirmed.checkout_id, token: oldConfirmed.secret });
 		const longAgo = new Date(Date.now() - 91 * 86_400_000).toISOString().replace('Z', '000Z');
 		for (const c of [old, oldConfirmed]) await internal('mutation', 'fixtures:patch', { table: 'checkouts', where: { id: c.checkout_id }, changes: { created_at: longAgo } });
-		expect(await internal('mutation', 'retention:clearExpiredContacts')).toBe(1);
+		expect(await internal<number>('mutation', 'retention:clearExpiredContacts')).toBe(1);
 		expect(await client.query(api.checkout.staffContact, { checkoutId: old.checkout_id })).toBeNull();
 		expect(await client.query(api.checkout.staffContact, { checkoutId: oldConfirmed.checkout_id })).toBe('kept@example.no');
 		expect(await client.query(api.checkout.staffContact, { checkoutId: recent.checkout_id })).toBe('recent@example.no');
-		expect(await internal('mutation', 'retention:clearExpiredContacts')).toBe(0);
+		expect(await internal<number>('mutation', 'retention:clearExpiredContacts')).toBe(0);
 	});
 });

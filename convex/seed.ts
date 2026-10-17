@@ -47,10 +47,11 @@ export const base = internalMutation({
 	}
 });
 
-/** A staff member who can sign in with this password (development and tests only). */
+/** A staff member who can sign in with this password (development and tests only; refused without ALLOW_TEST_FIXTURES). */
 export const staff = internalMutation({
 	args: { email: v.string(), password: v.string(), displayName: v.string(), active: v.optional(v.boolean()) },
 	handler: async (ctx, args) => {
+		if (process.env.ALLOW_TEST_FIXTURES !== 'true') throw new Error('TEST_FIXTURES_FORBIDDEN');
 		const email = args.email.trim().toLowerCase();
 		const authUserId = newUuid();
 		const userId = await ctx.db.insert('users', { email, auth_user_id: authUserId, emailVerificationTime: Date.now() });

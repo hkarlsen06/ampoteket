@@ -25,8 +25,9 @@ returning from a cabinet reveal its controls within that region.
 - Each saved product in a selected drawer gets exactly one label, including unpublished
   products and zero or negative stock. Empty drawers and archived storage add nothing.
 - The page says unpublished products must be published before buyers can find them.
-- Reads are complete staff reads with the operator's JWT. A missing or failed page
-  blocks export, never an empty result. Generation re-reads current data; the preview
+- Data comes from staff queries under the operator's own session (`products.list`,
+  `products.references` with `catalog.shelfMap`, `products.attributes`), each complete
+  in one read. A failed read blocks export, never an empty result. Generation re-reads current data; the preview
   is the export snapshot.
 - Background revalidation keeps controls stable; generation waits for an ongoing
   read before starting. One live region announces selection and generation results.

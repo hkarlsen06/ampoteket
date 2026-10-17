@@ -10,7 +10,7 @@
 	import * as Popover from '#lib/components/ui/popover/index.js';
 	import * as RadioGroup from '#lib/components/ui/radio-group/index.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { useQuery } from 'convex-svelte';
 	import { api } from '#lib/convex.js';
 	import { goto } from '$app/navigation';
@@ -33,10 +33,12 @@
 	const fieldId = $props.id();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.adminProducts);
 	// Live subscriptions: products, stock and specifications stay current without re-reading.
-	const live = () => admin.status === 'ready' ? {} : 'skip' as const;
-	const productRows = useQuery(api.products.list, live); const referenceRows = useQuery(api.products.references, live);
-	const shelfRows = useQuery(api.catalog.shelfMap, live); const attributeRows = useQuery(api.products.attributes, live);
-	const inventoryRows = useQuery(api.stock.inventory, live);
+	// Retry resubscribes only the failed part, so the list stays in place while stock reloads.
+	let resubscribing = $state({ catalog: false, stock: false });
+	const live = (part: 'catalog' | 'stock') => () => admin.status === 'ready' && !resubscribing[part] ? {} : 'skip' as const;
+	const productRows = useQuery(api.products.list, live('catalog')); const referenceRows = useQuery(api.products.references, live('catalog'));
+	const shelfRows = useQuery(api.catalog.shelfMap, live('catalog')); const attributeRows = useQuery(api.products.attributes, live('catalog'));
+	const inventoryRows = useQuery(api.stock.inventory, live('stock'));
 	const catalog = $derived.by(() => {
 		if (!productRows.data || !referenceRows.data || !shelfRows.data || !attributeRows.data) return null;
 		try {
@@ -45,8 +47,12 @@
 			return { products: items, references: refs, searchTexts: adminSearchTexts(items, refs, productAttributes(attributeRows.data)) };
 		} catch { return 'invalid' as const; }
 	});
+	// A failed or restarting stock read keeps the last known stock, so the list keeps its order and cards say Unavailable.
+	let lastInventory = $state.raw<typeof inventoryRows.data>(undefined);
+	$effect(() => { if (inventoryRows.data !== undefined) lastInventory = inventoryRows.data; });
+	const inventory = $derived(inventoryRows.data ?? lastInventory);
 	const stock = $derived.by(() => {
-		try { return inventoryRows.data ? new Map(inventoryStock(inventoryRows.data).map(s => [s.product_id, s])) : null; }
+		try { return inventory ? new Map(inventoryStock(inventory).map(s => [s.product_id, s])) : null; }
 		catch { return 'invalid' as const; }
 	});
 	const products = $derived(catalog && catalog !== 'invalid' ? catalog.products : null);
@@ -55,6 +61,8 @@
 	const failed = $derived(catalog === 'invalid' || Boolean(productRows.error || referenceRows.error || shelfRows.error || attributeRows.error));
 	const stockFailed = $derived(stock === 'invalid' || Boolean(inventoryRows.error));
 	const busy = $derived(products === null && !failed);
+	// A failed subscription stays failed until its data changes, so a failure offers a fresh one.
+	async function retry() { resubscribing = { catalog: failed, stock: stockFailed }; await tick(); resubscribing = { catalog: false, stock: false }; }
 	$effect(() => { for (const result of [productRows, referenceRows, shelfRows, attributeRows, inventoryRows]) if (result.error) void admin.permissionFailure(result.error); });
 	let query = $state(''); let lowStock = $state(false); let activity = $state('all'); let sort = $state<keyof typeof sorters>('attention'); let sortOpen = $state(false); let bins = $state<string[]>([]); let locationsOpen = $state(false); let pending = $state<ProductCommand | null>(null);
 	// Products load in code order and sorting is stable, so code breaks every tie.
@@ -153,7 +161,7 @@
 		</Popover.Content>
 	</Popover.Root>
 </Field.Group>
-{#if failed || stockFailed}<Alert.Message appearance="inline" variant="destructive" role="alert">{failed ? m.unavailable : m.inventoryUnavailable}</Alert.Message>{/if}
+{#if failed || stockFailed}<Alert.Message appearance="inline" variant="destructive" role="alert">{failed ? m.unavailable : m.inventoryUnavailable}</Alert.Message><Button type="button" variant="outline" class="mb-6" onclick={retry}>{m.retry}</Button>{/if}
 {#if products === null && busy}
 	<span class="sr-only" role="status">{m.loading}</span>
 	<div class={[cardGrid, 'min-h-80 content-start']} aria-busy={busy}>

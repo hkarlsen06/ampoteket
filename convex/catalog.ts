@@ -17,14 +17,20 @@ import { fail } from './lib/errors';
 import { isUuid } from './lib/ids';
 import { stockLevel } from './lib/inventory';
 
+type SortKey = { rank: number; category: string; missing: boolean; number: string; text: string };
 type Loaded = {
 	product: Doc<'products'>; category: string | null; values: Map<string, Doc<'product_attributes'>>;
-	attributes: Record<string, CatalogAttribute>; row: CatalogProduct;
+	attributes: Record<string, CatalogAttribute>; key: SortKey;
+	/** Public fields except stock and placement, which `publish` adds for the rows a call returns. */
+	row: CatalogProduct;
 };
 const collator = new Intl.Collator('en');
 const sortEntries = new Map(catalogSort.map(([category, primary, ordered], index) => [category, { rank: index + 1, primary, ordered }]));
 
-/** Every active product with its public fields, in catalog order. */
+/**
+ * Every active product with what search, filters and ordering need, in catalog
+ * order. Reads scale with the catalog, so stock and drawers are left to `publish`.
+ */
 async function activeCatalog(ctx: QueryCtx): Promise<Loaded[]> {
 	const definitions = new Map((await ctx.db.query('attribute_definitions').collect()).map((d) => [d.id, d]));
 	const categories = new Map((await ctx.db.query('categories').collect()).map((c) => [c.id, c.name]));
@@ -41,35 +47,47 @@ async function activeCatalog(ctx: QueryCtx): Promise<Loaded[]> {
 				: d.value_type === 'text' ? { label: d.label, unit: null, value_type: 'text', value: value.text_value! }
 				: { label: d.label, unit: null, value_type: 'boolean', value: value.boolean_value! };
 		}
+		const category = product.category_id ? categories.get(product.category_id) ?? null : null;
+		const row = {
+			product_id: product.id, code: product.code, name_nb: product.name_nb, name_en: product.name_en, description: product.description,
+			category_name: category, unit_code: product.unit_code, unit_symbol: units.get(product.unit_code) ?? product.unit_code,
+			sale_step: product.sale_step, sale_unit_price_nok: product.sale_unit_price_nok, quantity: '0', last_counted_at: null,
+			datasheet_url: product.datasheet_url, attributes, distinguishing: [],
+			cabinet_code: null, outer_row: null, outer_col: null, inner_rows: null, inner_cols: null, bin_code: null, bin_label: null,
+			inner_row: null, inner_col: null, row_span: null, col_span: null, location_note: product.location_note
+		} as CatalogProduct;
+		const item = { product, category, values, attributes, row } as Loaded;
+		item.key = sortKey(item);
+		loaded.push(item);
+	}
+	return loaded.sort(compareCatalogOrder);
+}
+
+/** Add stock and placement to the rows being returned (a page, or one product). */
+async function publish(ctx: QueryCtx, items: Loaded[], rows: CatalogProduct[]): Promise<CatalogProduct[]> {
+	return await Promise.all(items.map(async (item, index) => {
+		const product = item.product;
+		const stock = await stockLevel(ctx, product.id);
 		const bin = product.bin_id ? await ctx.db.query('bins').withIndex('uuid', (q) => q.eq('id', product.bin_id!)).unique() : null;
 		const cabinet = bin?.cabinet_id ? await ctx.db.query('cabinets').withIndex('uuid', (q) => q.eq('id', bin.cabinet_id!)).unique() : null;
-		const stock = await stockLevel(ctx, product.id);
-		const category = product.category_id ? categories.get(product.category_id) ?? null : null;
 		const placement = bin && cabinet && !bin.is_archived && !cabinet.is_archived
 			? { cabinet_code: cabinet.code, outer_row: cabinet.outer_row!, outer_col: cabinet.outer_col!, inner_rows: cabinet.inner_rows, inner_cols: cabinet.inner_cols,
 				bin_code: bin.code, bin_label: bin.label, inner_row: bin.inner_row!, inner_col: bin.inner_col!, row_span: bin.row_span, col_span: bin.col_span, location_note: null }
 			: { cabinet_code: null, outer_row: null, outer_col: null, inner_rows: null, inner_cols: null, bin_code: null, bin_label: null,
 				inner_row: null, inner_col: null, row_span: null, col_span: null, location_note: product.location_note };
-		const row = {
-			product_id: product.id, code: product.code, name_nb: product.name_nb, name_en: product.name_en, description: product.description,
-			category_name: category, unit_code: product.unit_code, unit_symbol: units.get(product.unit_code) ?? product.unit_code,
-			sale_step: product.sale_step, sale_unit_price_nok: product.sale_unit_price_nok, quantity: stock.quantity, last_counted_at: stock.last_counted_at,
-			datasheet_url: product.datasheet_url, attributes, distinguishing: [], ...placement
-		} as CatalogProduct;
-		loaded.push({ product, category, values, attributes, row });
-	}
-	return loaded.sort(compareCatalogOrder);
+		return { ...rows[index], quantity: stock.quantity, last_counted_at: stock.last_counted_at, ...placement } as CatalogProduct;
+	}));
 }
 
 /** Listed categories first by their primary value (missing last), others by name, uncategorised last; then name and code. */
-function sortKey(item: Loaded) {
+function sortKey(item: Omit<Loaded, 'key'>): SortKey {
 	const entry = item.category === null ? undefined : sortEntries.get(item.category);
 	const value = entry?.primary ? item.values.get(entry.primary) : undefined;
 	return { rank: entry?.rank ?? (item.category === null ? Number.MAX_SAFE_INTEGER : Number.MAX_SAFE_INTEGER - 1), category: item.category ?? '',
 		missing: !value || (value.number_value === null && value.text_value === null), number: value?.number_value ?? '0', text: value?.text_value ?? '' };
 }
 function compareCatalogOrder(a: Loaded, b: Loaded): number {
-	const x = sortKey(a), y = sortKey(b);
+	const x = a.key, y = b.key;
 	return x.rank - y.rank || collator.compare(x.category, y.category) || Number(x.missing) - Number(y.missing)
 		|| compareDecimals(x.number, y.number) || collator.compare(x.text, y.text)
 		|| collator.compare(a.product.name_nb, b.product.name_nb) || collator.compare(a.product.code, b.product.code);
@@ -202,7 +220,8 @@ export const page = query({
 			const cabinet = bin?.cabinet_id ? await ctx.db.query('cabinets').withIndex('uuid', (x) => x.eq('id', bin.cabinet_id!)).unique() : null;
 			if (!bin || bin.is_archived || !cabinet || cabinet.is_archived) fail('INVALID_CATALOG_FILTER');
 		}
-		for (const bin of await ctx.db.query('bins').collect()) if (bin.cabinet_id) binCabinets.set(bin.id, bin.cabinet_id);
+		// Drawer-to-cabinet only matters for a cabinet filter.
+		if (cabinetIds.length) for (const bin of await ctx.db.query('bins').collect()) if (bin.cabinet_id) binCabinets.set(bin.id, bin.cabinet_id);
 		let start = 0;
 		if (args.afterCode !== undefined) {
 			const index = all.findIndex((item) => item.product.code === args.afterCode);
@@ -218,7 +237,7 @@ export const page = query({
 			return matchesConditions(item, conditions) && (!terms.length || matchesSearch(catalogSearchText(item.row), terms));
 		});
 		const listed = matches.slice(0, limit);
-		return { products: withDistinguishing(all, listed), complete: matches.length <= limit, nextAfterCode: listed.at(-1)?.product.code ?? null };
+		return { products: await publish(ctx, listed, withDistinguishing(all, listed)), complete: matches.length <= limit, nextAfterCode: listed.at(-1)?.product.code ?? null };
 	}
 });
 
@@ -228,7 +247,7 @@ export const product = query({
 	handler: async (ctx, args) => {
 		const all = await activeCatalog(ctx);
 		const item = all.find((entry) => entry.product.code === args.code);
-		return item ? withDistinguishing(all, [item])[0] : null;
+		return item ? (await publish(ctx, [item], withDistinguishing(all, [item])))[0] : null;
 	}
 });
 

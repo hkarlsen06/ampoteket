@@ -1,33 +1,40 @@
-/** Actual SvelteKit/Cloudflare UI acceptance against an owned seeded database. */
+/** Actual SvelteKit/Cloudflare UI acceptance against an owned, seeded disposable Convex backend. */
 import { firefox, expect, type BrowserContext, type Page, type Locator } from '@playwright/test';
 import { strict as assert } from 'node:assert';
 import { resolve } from 'node:path';
 import { mkdir } from 'node:fs/promises';
+import { ConvexHttpClient } from 'convex/browser';
 import { fieldLabel, captureFailure, proofEnvironment, waitForHydration } from './web-proof/harness';
-import { generateSeedSql, seedProductId, seedProductCode, seedBinId } from './seed-test-data';
+import { watchConvex } from './web-proof/convex-socket';
+import { seedDemoData, seedProductId, seedProductCode, seedBinId } from './seed-test-data';
 import { readCompleteCatalog } from '../src/lib/catalog';
 import { en } from '../src/lib/i18n/en';
 import { nb } from '../src/lib/i18n/nb';
 
-const { directory, origin, api, publicKey, safe, sql, startWorker } = await proofEnvironment();
-await sql("SET ampoteket.test_seed = 'disposable-only';\n" + generateSeedSql(1000));
-// Keep all 1,000 active catalog fixtures while leaving one real cabinet unassigned
-// for the public map's known-empty selection and no-unnecessary-fetch checks.
-await sql(`UPDATE app.products SET bin_id='${seedBinId(0)}' WHERE bin_id IN (
-	SELECT b.id FROM app.bins b JOIN app.cabinets c ON c.id=b.cabinet_id WHERE c.outer_row=2 AND c.outer_col=1
-);`);
-await sql(`UPDATE app.products SET name_nb='220 ohm motstand med et bevisst svært langt komponentnavn for tilgjengelig brytning på smale skjermer og en fullstendig lesbar produktidentitet', name_en='220 ohm resistor with a deliberately long component name for accessible narrow-screen wrapping and a complete, readable product identity' WHERE id='${seedProductId(0)}';`);
-const catalogCabinetId = await sql(`SELECT cabinet_id FROM app.bins WHERE id='${seedBinId(0)}'`);
-const emptyCabinetId = await sql('SELECT id FROM app.cabinets WHERE outer_row=2 AND outer_col=1');
-const topologyUrl = `${api.origin}/rest/v1/rpc/amp_shelf_map`;
+const { directory, origin, convexUrl, safe, run, fixtures, startWorker } = await proofEnvironment();
+await seedDemoData(run, 1000);
+await fixtures.patch('products', { id: seedProductId(0) }, { name_nb: '220 ohm motstand med et bevisst svært langt komponentnavn for tilgjengelig brytning på smale skjermer og en fullstendig lesbar produktidentitet', name_en: '220 ohm resistor with a deliberately long component name for accessible narrow-screen wrapping and a complete, readable product identity' });
+// Drawer B1 holds more parts than one 200-row catalog page, so its contents are
+// read in several pages. Seeded part n sits in drawer n % 30; moving whole drawers
+// of resistors, diodes and an LED family leaves drawer A1 with its thirty-four
+// 220 ohm resistors and puts no capacitor in it.
+const crowdedBin = seedBinId(1);
+for (const drawer of [2, 3, 4, 10, 11, 12]) await fixtures.patch('products', { bin_id: seedBinId(drawer) }, { bin_id: crowdedBin });
+const [{ cabinet_id: catalogCabinetId }] = await fixtures.rows<{ cabinet_id: string }>('bins', { id: seedBinId(0) });
+// Cabinet A2 stays unassigned for the public map's known-empty selection and no-unnecessary-fetch checks.
+const [{ id: emptyCabinetId }] = await fixtures.rows<{ id: string }>('cabinets', { outer_row: 2, outer_col: 1 });
+const binCode = async (id: string) => (await fixtures.rows<{ code: string }>('bins', { id }))[0].code;
+const shelfMap = 'catalog:shelfMap', catalogPage = 'catalog:page';
+const readCatalog = () => readCompleteCatalog(new ConvexHttpClient(convexUrl, { logger: false }));
 // The browser must show the API's complete traversal in order, with every row
-// once; supabase/tests own the sort rule (category, primary value, name, code).
-async function catalogCodes(indices?: number[]): Promise<string[]> {
-	const codes = (await readCompleteCatalog({ url: api.origin, publishableKey: publicKey })).map(product => product.code);
+// once; tests/convex own the sort rule (category, primary value, name, code).
+async function catalogCodes(binId?: string): Promise<string[]> {
+	const products = await readCatalog();
+	const codes = products.map(product => product.code);
 	assert.equal(new Set(codes).size, codes.length, 'The API traversal repeats no part');
-	if (!indices) return codes;
-	const selected = new Set(indices.map(index => seedProductCode(index)));
-	return codes.filter(code => selected.has(code));
+	if (!binId) return codes;
+	const code = await binCode(binId);
+	return products.filter(product => product.bin_code === code).map(product => product.code);
 }
 let context: BrowserContext | undefined;
 const { ready, close } = await startWorker(() => context);
@@ -43,6 +50,14 @@ async function documentBox(locator: Locator) {
 	});
 }
 
+/**
+ * A refresh fired just after a read can be answered from the Convex client's cache
+ * of that read, which is still current, without reaching the backend. Repeat the
+ * lifecycle event until a refresh reaches it and the expected state shows.
+ */
+async function untilShown(trigger: () => Promise<unknown>, shown: Locator) {
+	await expect(async () => { await trigger(); await expect(shown).toBeVisible({ timeout: 1000 }); }).toPass({ timeout: 15000 });
+}
 async function fits(page: Page) {
 	const size = await page.evaluate(() => ({ viewport: document.documentElement.clientWidth, content: document.documentElement.scrollWidth }));
 	assert.ok(size.content <= size.viewport, `Page overflow at ${size.viewport}px: ${size.content}`);
@@ -50,28 +65,29 @@ async function fits(page: Page) {
 try {
 	await ready();
 	context = await firefox.launchPersistentContext(`${directory}/profile`, { headless: true, ignoreHTTPSErrors: false });
+	// Catalog and shelf reads are Convex query subscriptions on the page's WebSocket.
+	const convex = await watchConvex(context);
 	const page = await context.newPage();
 	const errors: string[] = [];
 	const scannerAssets: string[] = [];
-	const catalogReads: unknown[] = [];
+	const catalogReads = () => convex.of(catalogPage).map(call => call.args);
 	page.on('request', (request) => {
 		const path = new URL(request.url()).pathname;
-		if (path === '/rest/v1/rpc/amp_catalog') catalogReads.push(request.postDataJSON());
 		if (/decoder\.worker-|zxing_reader.*\.wasm$/.test(path)) scannerAssets.push(path);
 	});
 	page.on('pageerror', (error) => {
 		errors.push(error.message);
-		console.error('Browser runtime error:', error.message.replaceAll(publicKey, '[redacted]').replace(/eyJ[A-Za-z0-9_.-]+/g, '[redacted]'));
+		console.error('Browser runtime error:', safe(error.message));
 	});
 	await page.setViewportSize({ width: 1280, height: 900 });
 	await page.goto(`${origin}/en/p`);
 	await expect(page.locator('.search-submit')).toBeEnabled({ timeout: 30000 });
 	assert.deepEqual(scannerAssets, [], 'Ordinary catalog browsing loads neither the scanner worker nor WASM');
 	await expect(page.locator('.filter-toggle')).toBeEnabled();
-	assert.deepEqual(catalogReads, [], 'Search is available from the first SSR page without a background catalog traversal');
+	assert.deepEqual(catalogReads(), [], 'Search is available from the first SSR page without a background catalog traversal');
 	const cards = page.locator('ul[aria-label=Parts] > li > [data-slot=card]');
-	// Browsing starts with one capped page; only scrolling requests another page.
-	await expect(cards).toHaveCount(37);
+	// Browsing starts with one 50-part page; only scrolling requests another page.
+	await expect(cards).toHaveCount(50);
 	const firstCard = await cards.first().elementHandle();
 	assert.ok(firstCard);
 	const initialCodes = await cards.locator('.product-meta .font-mono').allTextContents();
@@ -81,13 +97,13 @@ try {
 		window.scrollTo(0, pagination.getBoundingClientRect().top + window.scrollY - window.innerHeight + 100);
 		return { scroll: window.scrollY, firstTop: document.querySelector('.cards [data-slot=card]')!.getBoundingClientRect().top + window.scrollY };
 	});
-	await expect(cards).toHaveCount(74);
+	await expect(cards).toHaveCount(100);
 	const afterAppend = await page.evaluate(() => ({
 		scroll: window.scrollY, firstTop: document.querySelector('.cards [data-slot=card]')!.getBoundingClientRect().top + window.scrollY
 	}));
 	assert.deepEqual(afterAppend, beforeAppend, 'Automatic append preserves the reading position');
 	assert.equal(await firstCard.evaluate((element) => element.isConnected), true, 'Existing cards are retained');
-	assert.deepEqual((await cards.locator('.product-meta .font-mono').allTextContents()).slice(0, 37), initialCodes);
+	assert.deepEqual((await cards.locator('.product-meta .font-mono').allTextContents()).slice(0, 50), initialCodes);
 	assert.equal(page.url(), catalogUrl, 'Automatic append does not navigate or change the URL');
 	const appendedPart = cards.nth(50).locator('h2 a');
 	await appendedPart.scrollIntoViewIfNeeded();
@@ -96,17 +112,17 @@ try {
 	await appendedPart.click();
 	await expect(page).toHaveURL(origin + appendedHref);
 	await page.goBack();
-	await expect(cards).toHaveCount(74);
+	await expect(cards).toHaveCount(100);
 	await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(returnScroll);
-	// Comparing every row catches skipped or duplicated rows at each 37-row API boundary.
+	// Comparing every row catches skipped or duplicated rows at each 50-row page boundary.
 	const expectedCodes = await catalogCodes();
 	assert.equal(expectedCodes.length, 1000);
-	for (let count = 74; count < expectedCodes.length;) {
+	for (let count = 100; count < expectedCodes.length;) {
 		await page.evaluate(() => {
 			const pagination = document.querySelector('.pagination')!;
 			window.scrollTo(0, pagination.getBoundingClientRect().top + window.scrollY - window.innerHeight + 100);
 		});
-		count = Math.min(count + 37, expectedCodes.length);
+		count = Math.min(count + 50, expectedCodes.length);
 		await expect(cards).toHaveCount(count);
 	}
 	assert.deepEqual(await cards.locator('.product-meta .font-mono').allTextContents(), expectedCodes);
@@ -119,9 +135,9 @@ try {
 	await filterDialog.getByRole('button', { name: 'Show results', exact: true }).click();
 	await expect(filterDialog).toBeHidden();
 	await expect(page).toHaveURL(`${origin}/en/p?category=Resistors&category=Capacitors`);
-	await expect(cards).toHaveCount(37);
+	await expect(cards).toHaveCount(50);
 	assert.deepEqual(await cards.locator('.product-meta .font-mono').allTextContents(),
-		expectedCodes.filter((code) => code.startsWith('RES-') || code.startsWith('CAP-')).slice(0, 37));
+		expectedCodes.filter((code) => code.startsWith('RES-') || code.startsWith('CAP-')).slice(0, 50));
 	console.log('PASS: infinite scrolling retains SSR rows, order, URL and reading position, including Back; reaches all 1,000 parts; filtering resets the visible batch');
 
 	await page.goto(`${origin}/en/p?category=Capacitors&eq.capacitance=0.000000000005`);
@@ -134,6 +150,8 @@ try {
 	await page.locator('.filter-toggle').click();
 	const shortDialog = page.getByRole('dialog', { name: en.catalog.filterTitle, exact: true });
 	const shortApply = shortDialog.getByRole('button', { name: en.catalog.applyFilters, exact: true });
+	// Specification facets arrive after hydration; measure the dialog once they are drawn.
+	await expect(shortDialog.locator('#max-capacitance')).toBeAttached();
 	const shortApplyBox = await shortApply.boundingBox();
 	assert.ok(shortApplyBox && shortApplyBox.y >= 0 && shortApplyBox.y + shortApplyBox.height <= 640,
 		'Filter actions remain visible at 360x640');
@@ -161,19 +179,19 @@ try {
 	console.log('PASS: short phone filters keep actions visible, scroll by keyboard, announce exact slider values and restore cancelled drafts/focus');
 	// A shared cabinet link still pages and restores through Back.
 	await page.goto(`${origin}/en/p?cabinet=${catalogCabinetId}`);
-	await expect(cards).toHaveCount(37);
+	await expect(cards).toHaveCount(50);
 	await page.evaluate(() => {
 		const pagination = document.querySelector('.pagination')!;
 		window.scrollTo(0, pagination.getBoundingClientRect().top + window.scrollY - window.innerHeight + 100);
 	});
-	await expect(cards).toHaveCount(74);
-	assert.deepEqual(await cards.locator('.product-meta .font-mono').allTextContents(), expectedCodes.slice(0, 74));
-	expect(catalogReads.at(-1)).toMatchObject({ p_cabinet_ids: [catalogCabinetId] });
+	await expect(cards).toHaveCount(100);
+	assert.deepEqual(await cards.locator('.product-meta .font-mono').allTextContents(), expectedCodes.slice(0, 100));
+	expect(catalogReads().at(-1)).toMatchObject({ cabinetIds: [catalogCabinetId] });
 	await cards.nth(50).locator('h2 a').click();
 	await expect(page).toHaveURL(`${origin}/en/p/${expectedCodes[50]}`);
 	await page.goBack();
 	await expect(page).toHaveURL(`${origin}/en/p?cabinet=${catalogCabinetId}`);
-	await expect(cards).toHaveCount(74);
+	await expect(cards).toHaveCount(100);
 	// Tapping a drawer is a new search by placement: no checkboxes, no apply step.
 	await page.goto(`${origin}/en/p?q=transistor&category=Resistors`);
 	const locationDialog = page.getByRole('dialog', { name: en.catalog.location, exact: true });
@@ -189,7 +207,8 @@ try {
 	await locationDialog.locator(`[data-item-id='${seedBinId(0)}']`).click();
 	await expect(locationDialog).toBeHidden();
 	await expect(page).toHaveURL(`${origin}/en/p?bin=${seedBinId(0)}`);
-	const drawerCodes = await catalogCodes(Array.from({ length: 1000 }, (_, index) => index).filter(index => index % 30 === 0));
+	const drawerCodes = await catalogCodes(seedBinId(0));
+	assert.equal(drawerCodes.length, 34, 'Drawer A1 holds every thirtieth seeded part');
 	await expect(cards).toHaveCount(drawerCodes.length);
 	assert.deepEqual(await cards.locator('.product-meta .font-mono').allTextContents(), drawerCodes);
 	await expect(page.locator('.location-toggle')).toHaveText(en.catalog.locationSelected(1));
@@ -215,10 +234,10 @@ try {
 	await page.goto(`${origin}/en/p?bin=ffffffff-ffff-4fff-8fff-ffffffffffff`);
 	await expect(page.getByText(en.catalog.noMatches, { exact: true })).toHaveCount(0);
 	await page.goto(`${origin}/en/p`);
-	await page.route(topologyUrl, route => route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }));
+	const failTopology = convex.rule(call => call.path === shelfMap ? 'fail' : undefined);
 	await page.locator('.location-toggle').click();
 	await expect(locationDialog.getByText(en.shelfMap.unavailable, { exact: true })).toBeVisible();
-	await page.unroute(topologyUrl);
+	failTopology();
 	await locationDialog.getByRole('button', { name: en.catalog.retry, exact: true }).click();
 	await expect(locationDialog.getByRole('button', { name: en.adminLabels.cabinet('A1'), exact: true })).toBeEnabled();
 	await page.keyboard.press('Escape');
@@ -283,7 +302,6 @@ try {
 
 	const mapMessages = en.shelfMap;
 	const browser = context.browser()!;
-	const drawerCatalogUrl = `${api.origin}/rest/v1/rpc/amp_catalog`;
 	for (const [locale, messages] of [['', nb], ['/en', en]] as const) for (const reducedMotion of ['reduce', 'no-preference'] as const) {
 		await page.emulateMedia({ reducedMotion });
 		for (const viewport of [{ width: 667, height: 375 }, { width: 844, height: 390 }]) {
@@ -328,17 +346,18 @@ try {
 	console.log('PASS: landscape and enlarged-text hero copy/actions remain reachable; motion eligibility returns after font restoration');
 	// The home picker has no current product. Its contents come from a complete
 	// drawer-scoped catalog read only after a visitor selects an assigned drawer.
-	const homeDrawerCodes = await catalogCodes(Array.from({ length: 1000 }, (_, index) => index).filter(index => index % 30 === 0));
+	const homeDrawerCodes = await catalogCodes(crowdedBin);
+	assert.ok(homeDrawerCodes.length > 200, 'Drawer B1 needs more than one catalog page');
 	for (const locale of ['', '/en']) for (const colour of ['light', 'dark'] as const) for (const width of [360, 1280]) {
 		const messages = locale ? en : nb;
 		const height = width === 360 ? 640 : 900;
 		const homeContext = await browser.newContext({ viewport: { width, height }, colorScheme: colour });
+		const homeConvex = await watchConvex(homeContext);
 		const homePage = await homeContext.newPage();
 		homePage.on('pageerror', error => errors.push(error.message));
-		const homeCatalogRequests: string[] = [];
-		homePage.on('request', request => { if (request.url() === drawerCatalogUrl) homeCatalogRequests.push(request.postData() ?? ''); });
+		const homeCatalogRequests = () => homeConvex.of(catalogPage);
 		const exerciseRecovery = !locale && colour === 'light' && width === 360;
-		if (exerciseRecovery) await homeContext.route(topologyUrl, route => route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }));
+		let failHomeTopology = exerciseRecovery ? homeConvex.rule(call => call.path === shelfMap ? 'fail' : undefined) : () => {};
 		try {
 			await homePage.goto(origin + (locale || '/'));
 			const homeMap = homePage.locator('.shelf-map');
@@ -362,25 +381,25 @@ try {
 				await expect(homeMap.getByText(messages.shelfMap.previousRead, { exact: true })).toHaveCount(0);
 				await expect(homeMap.getByText(messages.shelfMap.noProducts, { exact: true })).toHaveCount(0);
 				await expect(homePage.getByRole('button', { name: messages.home.find.codeSubmit, exact: true, includeHidden: true })).toBeEnabled();
-				await homeContext.unroute(topologyUrl);
+				failHomeTopology();
 				await homeMap.getByRole('button', { name: messages.shelfMap.retry, exact: true }).click();
 			}
 			const homeWall = homeMap.getByRole('group', { name: messages.shelfMap.wall, exact: true });
 			await expect(homeWall.getByRole('button')).toHaveCount(12);
 			if (exerciseRecovery) {
 				// A later failed refresh must retain the successfully loaded wall.
-				await homeContext.route(topologyUrl, route => route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }));
-				await homePage.evaluate(() => window.dispatchEvent(new Event('online')));
-				await expect(homeMap.getByText(messages.shelfMap.previousRead, { exact: true })).toBeVisible();
+				failHomeTopology = homeConvex.rule(call => call.path === shelfMap ? 'fail' : undefined);
+				await untilShown(() => homePage.evaluate(() => window.dispatchEvent(new Event('online'))),
+					homeMap.getByText(messages.shelfMap.previousRead, { exact: true }));
 				await expect(homeMap.getByText(messages.shelfMap.unavailable, { exact: true })).toHaveCount(0);
 				await expect(homeWall.getByRole('button')).toHaveCount(12);
-				await homeContext.unroute(topologyUrl);
+				failHomeTopology();
 				await homeMap.getByRole('button', { name: messages.shelfMap.retry, exact: true }).click();
 				await expect(homeMap.getByText(messages.shelfMap.previousRead, { exact: true })).toHaveCount(0);
 			}
 			await expect(homeMap.locator('.drawer-contents, .loc, [aria-current], [aria-pressed="true"]')).toHaveCount(0);
 			await expect(homeMap.getByText(messages.shelfMap.locationUnavailable, { exact: true })).toHaveCount(0);
-			assert.deepEqual(homeCatalogRequests, [], 'The homepage reads topology without traversing the catalog');
+			assert.deepEqual(homeCatalogRequests(), [], 'The homepage reads topology without traversing the catalog');
 			// The stage shows one level at a time: record wall geometry before zooming in.
 			const wallDiagramBox = await documentBox(homeWall);
 			const wallFrameBox = await documentBox(homeWall.locator('.cabinet-frame'));
@@ -398,13 +417,13 @@ try {
 			await homeEmpty.getByRole('button', { name: `A1 · ${messages.shelfMap.emptyDrawer}`, exact: true }).click();
 			await expect(homeMap.getByText(messages.shelfMap.noProducts, { exact: true })).toBeVisible();
 			await expect(homeMap.locator('.drawer-contents').getByRole('heading')).toBeInViewport();
-			assert.deepEqual(homeCatalogRequests, [], 'A known empty homepage drawer needs no catalog read');
+			assert.deepEqual(homeCatalogRequests(), [], 'A known empty homepage drawer needs no catalog read');
 			await showWall.click();
 			await expect(homeWall.getByRole('button', { name: 'A2', exact: true })).toBeFocused();
 			await expect(homeMap.locator('.drawer-contents')).toHaveCount(0);
 			await homeWall.getByRole('button', { name: 'A1', exact: true }).click();
 			const homeCabinet = homeMap.getByRole('group', { name: messages.shelfMap.cabinet('A1'), exact: true });
-			const homeDrawer = homeCabinet.getByRole('button', { name: 'A1', exact: true });
+			const homeDrawer = homeCabinet.getByRole('button', { name: 'B1', exact: true });
 			await homeCabinet.getByRole('button').first().focus();
 			const beforeArrowScroll = await homePage.evaluate(() => window.scrollY);
 			await homePage.keyboard.press('End');
@@ -415,16 +434,14 @@ try {
 			}), 'Roving keyboard focus stays visible inside the shelf scroll region');
 			assert.equal(await homePage.evaluate(() => window.scrollY), beforeArrowScroll,
 				'Roving drawer focus scrolls the shelf body without moving the document');
-			if (exerciseRecovery) await homeContext.route(drawerCatalogUrl, async route => {
-				if (route.request().postDataJSON().p_after_code) await route.fulfill({ status: 503, contentType: 'application/json', body: '{}' });
-				else await route.continue();
-			});
+			// The first contents page arrives; a later one fails, so no partial list is shown.
+			const failLaterPages = exerciseRecovery ? homeConvex.rule(call => call.path === catalogPage && call.args.afterCode ? 'fail' : undefined) : () => {};
 			await homeDrawer.click();
 			if (exerciseRecovery) {
 				await expect(homeMap.getByText(messages.shelfMap.productsUnavailable, { exact: true })).toBeVisible();
 				await expect(homeMap.getByText(messages.shelfMap.noProducts, { exact: true })).toHaveCount(0);
 				await expect(homeMap.locator('.product-list')).toHaveCount(0);
-				await homeContext.unroute(drawerCatalogUrl);
+				failLaterPages();
 				await homeMap.getByRole('button', { name: messages.shelfMap.retryProducts, exact: true }).click();
 			}
 			const homeProducts = homeMap.locator('.product-list a');
@@ -436,9 +453,9 @@ try {
 			assert.equal(await homePage.evaluate(() => window.scrollY), selectionPageScroll,
 				'Loaded drawer contents scroll into the sheet without moving the document');
 			assert.deepEqual(await homeProducts.evaluateAll(links => links.map(link => link.getAttribute('href'))),
-				homeDrawerCodes.map(code => `${locale}/p/${code}`), 'Every assigned product is linked in catalog order, including products beyond the API cap');
+				homeDrawerCodes.map(code => `${locale}/p/${code}`), 'Every assigned product is linked in catalog order, including products beyond the first page');
 			await expect(homeProducts.first()).toContainText(locale ? 'resistor' : 'motstand');
-			for (const [index, code] of homeDrawerCodes.entries()) await expect(homeProducts.nth(index)).toContainText(code);
+			assert.deepEqual((await homeProducts.allInnerTexts()).map((text, index) => text.includes(homeDrawerCodes[index])), homeDrawerCodes.map(() => true));
 			await expect(homeProducts.locator('svg[aria-hidden="true"]')).toHaveCount(homeDrawerCodes.length);
 			await expect(homeDrawer).toHaveAttribute('aria-pressed', 'true');
 			await expect(homeMap.locator('[aria-current]')).toHaveCount(0);
@@ -469,24 +486,26 @@ try {
 				await homeDrawer.focus();
 				const focusedDrawer = await homeDrawer.elementHandle();
 				const beforeRefreshScroll = await shelfBody.evaluate(element => element.scrollTop);
-				let releaseHomeRefresh!: () => void, homeRefreshRequests = 0;
+				let releaseHomeRefresh!: () => void, homeRefreshResults = 0, contentsResults = 0;
 				const homeRefreshGate = new Promise<void>(resolve => { releaseHomeRefresh = resolve; });
-				await homeContext.route(topologyUrl, async route => {
-					homeRefreshRequests++;
-					const response = await route.fetch();
-					await homeRefreshGate;
-					await route.fulfill({ response });
+				const topologyBefore = homeConvex.of(shelfMap).length;
+				const holdHomeRefresh = homeConvex.rule(call => {
+					if (call.path === catalogPage && call.args.binId && call.update === 0) contentsResults++;
+					if (call.path !== shelfMap || call.update > 0) return;
+					homeRefreshResults++;
+					return homeRefreshGate;
 				});
 				try {
 					await homePage.evaluate(() => { window.dispatchEvent(new Event('focus')); window.dispatchEvent(new Event('online')); });
-					await expect.poll(() => homeRefreshRequests).toBe(1);
+					await expect.poll(() => homeConvex.of(shelfMap).length - topologyBefore).toBe(1);
+					await expect.poll(() => homeRefreshResults).toBe(1);
 					await expect(homeDrawer).toBeFocused();
 					assert.equal(await homeMap.locator('.product-list').innerText(), contentsBefore);
-					const homeRefreshed = homePage.waitForResponse(topologyUrl);
-					const contentsRefreshed = homePage.waitForResponse(response => response.url() === drawerCatalogUrl
-						&& response.request().postDataJSON().p_after_code === homeDrawerCodes.at(-1));
-					releaseHomeRefresh(); await homeRefreshed;
-					await (await contentsRefreshed).finished();
+					// The delivered topology refreshes the open drawer's contents: every page again.
+					const pages = Math.ceil(homeDrawerCodes.length / 200);
+					releaseHomeRefresh();
+					await expect.poll(() => contentsResults).toBe(pages);
+					await homePage.evaluate(() => new Promise(requestAnimationFrame));
 					await homePage.evaluate(() => new Promise(requestAnimationFrame));
 					await expect(homeDrawer).toHaveAttribute('aria-pressed', 'true');
 					await expect(homeDrawer).toBeFocused();
@@ -495,7 +514,7 @@ try {
 					assert.equal(await shelfBody.evaluate(element => element.scrollTop), beforeRefreshScroll,
 						'Background topology and contents refreshes preserve the sheet reading position');
 					assert.equal(await homePage.evaluate(() => window.scrollY), selectionPageScroll);
-				} finally { releaseHomeRefresh(); await homeContext.unroute(topologyUrl); }
+				} finally { releaseHomeRefresh(); holdHomeRefresh(); }
 			}
 			assert.ok(await shelfBody.evaluate(element => element.scrollWidth <= element.clientWidth),
 				'The shelf scroll region has no horizontal overflow');
@@ -534,10 +553,10 @@ try {
 					'Reselecting the cabinet leaves the document in place');
 				let releaseContents!: () => void, pendingContents = false;
 				const contentsGate = new Promise<void>(resolve => { releaseContents = resolve; });
-				await homeContext.route(drawerCatalogUrl, async route => {
-					const response = await route.fetch(); pendingContents = true;
-					await contentsGate;
-					await route.fulfill({ response });
+				const holdContents = homeConvex.rule(call => {
+					if (call.path !== catalogPage || call.update > 0) return;
+					pendingContents = true;
+					return contentsGate;
 				});
 				try {
 					await homeDrawer.click();
@@ -562,7 +581,7 @@ try {
 					assert.equal(await shelfBody.evaluate(element => element.scrollTop), 0,
 						'Closing the sheet cancels pending selection scrolling, including results arriving after reopening');
 					assert.equal(await homePage.evaluate(() => window.scrollY), selectionPageScroll);
-				} finally { releaseContents(); await homeContext.unroute(drawerCatalogUrl); }
+				} finally { releaseContents(); holdContents(); }
 			}
 			await fits(homePage);
 			await shelfBody.focus();
@@ -590,15 +609,15 @@ try {
 	// Hold a topology revalidation; the exact initial wall geometry is rendered on the server.
 	for (const width of [360, 1280]) {
 		const delayed = await browser.newContext({ viewport: { width, height: 900 } });
+		const delayedConvex = await watchConvex(delayed);
 		const delayedPage = await delayed.newPage();
 		delayedPage.on('pageerror', error => errors.push(error.message));
 		let release!: () => void, intercepted = false;
 		const responseGate = new Promise<void>(resolve => { release = resolve; });
-		await delayed.route(topologyUrl, async route => {
+		delayedConvex.rule(call => {
+			if (call.path !== shelfMap || call.update > 0) return;
 			intercepted = true;
-			const response = await route.fetch();
-			await responseGate;
-			await route.fulfill({ response }).catch(() => { /* Navigation may cancel this held response. */ });
+			return responseGate;
 		});
 		try {
 			await delayedPage.goto(`${origin}/en/p/${seedProductCode(0)}`);
@@ -612,8 +631,9 @@ try {
 			const quantityBefore = await documentBox(quantity), addBefore = await documentBox(add);
 			await expect(delayedPage.locator('.shelf-map .stage .shelf-diagram')).toBeVisible();
 			const stageBefore = await documentBox(delayedPage.locator('.shelf-map .stage'));
-			const refreshed = delayedPage.waitForResponse(topologyUrl);
-			release(); await refreshed;
+			// The held topology is delivered once released; let it render before measuring.
+			release(); await delayedPage.waitForTimeout(500);
+			await delayedPage.evaluate(() => new Promise(requestAnimationFrame));
 			await expect(delayedPage.locator('.shelf-map .stage [data-item-id][aria-current="true"]')).toHaveCount(1);
 			for (const [before, after] of [[quantityBefore, await documentBox(quantity)], [addBefore, await documentBox(add)], [stageBefore, await documentBox(delayedPage.locator('.shelf-map .stage'))]]) {
 				for (const key of ['x', 'y', 'width', 'height'] as const) expect(after[key]).toBeCloseTo(before[key], 2);
@@ -625,10 +645,10 @@ try {
 	console.log('PASS: automatic shelf-map loading preserves quantity and Add geometry while real topology is delayed at phone and desktop widths');
 
 	const interactive = await browser.newContext({ hasTouch: true, viewport: { width: 360, height: 900 } });
+	const mapConvex = await watchConvex(interactive);
 	const mapPage = await interactive.newPage();
 	mapPage.on('pageerror', error => errors.push(error.message));
-	const drawerCatalogRequests: string[] = [];
-	mapPage.on('request', request => { if (request.url() === `${api.origin}/rest/v1/rpc/amp_catalog`) drawerCatalogRequests.push(request.url()); });
+	const drawerCatalogRequests = { get length() { return mapConvex.of(catalogPage).length; } };
 	await mapPage.goto(`${origin}/en/p/${seedProductCode(0)}`);
 	const publicMap = mapPage.locator('.shelf-map');
 	const wall = publicMap.getByRole('group', { name: mapMessages.wall, exact: true });
@@ -684,13 +704,13 @@ try {
 	const drawerBefore = await documentBox(nextDrawer);
 	await mapPage.getByLabel(fieldLabel(en.product.quantity)).fill('3');
 	await nextDrawer.focus();
-	let releaseRefresh!: () => void, refreshRequests = 0;
+	let releaseRefresh!: () => void, refreshResults = 0;
 	const refreshGate = new Promise<void>(resolve => { releaseRefresh = resolve; });
-	await interactive.route(topologyUrl, async route => {
-		refreshRequests++;
-		const response = await route.fetch();
-		await refreshGate;
-		await route.fulfill({ response });
+	const topologyBefore = mapConvex.of(shelfMap).length;
+	const holdRefresh = mapConvex.rule(call => {
+		if (call.path !== shelfMap || call.update > 0) return;
+		refreshResults++;
+		return refreshGate;
 	});
 	try {
 		await mapPage.evaluate(() => {
@@ -698,38 +718,38 @@ try {
 			window.dispatchEvent(new Event('focus'));
 			window.dispatchEvent(new Event('online'));
 		});
-		await expect.poll(() => refreshRequests).toBe(1);
+		// Three lifecycle events share one read.
+		await expect.poll(() => refreshResults).toBe(1);
+		assert.equal(mapConvex.of(shelfMap).length - topologyBefore, 1);
 		await expect(nextDrawer).toBeFocused();
 		await expect(nextDrawer).toHaveAttribute('aria-pressed', 'true');
 		assert.equal(await publicMap.locator('.product-list').innerText(), contentsBefore);
 		assert.deepEqual(await documentBox(nextDrawer), drawerBefore);
-		const refreshed = mapPage.waitForResponse(topologyUrl);
-		releaseRefresh(); await refreshed;
+		releaseRefresh(); await mapPage.waitForTimeout(500);
 		await expect(nextDrawer).toBeFocused();
 		await expect(nextDrawer).toHaveAttribute('aria-pressed', 'true');
 		assert.equal(await selectedBefore!.evaluate(element => element.isConnected), true, 'Automatic refresh retains the focused drawer node');
 		await expect(mapPage.getByLabel(fieldLabel(en.product.quantity))).toHaveValue('3');
-	} finally { releaseRefresh(); await interactive.unroute(topologyUrl); }
-	await interactive.route(topologyUrl, route => route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }));
-	await mapPage.evaluate(() => window.dispatchEvent(new Event('focus')));
-	await expect(publicMap.getByText(mapMessages.previousRead, { exact: true })).toBeVisible();
+	} finally { releaseRefresh(); holdRefresh(); }
+	const failMapTopology = mapConvex.rule(call => call.path === shelfMap ? 'fail' : undefined);
+	await untilShown(() => mapPage.evaluate(() => window.dispatchEvent(new Event('focus'))),
+		publicMap.getByText(mapMessages.previousRead, { exact: true }));
 	await expect(nextDrawer).toBeFocused();
 	await expect(nextDrawer).toHaveAttribute('aria-pressed', 'true');
-	await interactive.unroute(topologyUrl);
+	failMapTopology();
 	await publicMap.getByRole('button', { name: mapMessages.retry, exact: true }).click();
 	await expect(publicMap.getByText(mapMessages.previousRead, { exact: true })).toHaveCount(0);
 	await expect(publicMap.locator('button:not([data-item-id]):not([aria-expanded])')).toHaveCount(1);
 	// A real placement change must reach the map/address without losing the
 	// separately selected drawer or requiring a product reload.
-	const selectedCabinet = `(SELECT cabinet_id FROM app.bins WHERE id='${seedBinId(0)}')`;
-	await sql(`UPDATE app.cabinets SET outer_col=7 WHERE id=${selectedCabinet};`);
+	await fixtures.patch('cabinets', { id: catalogCabinetId }, { outer_col: 7 });
 	try {
 		await mapPage.evaluate(() => window.dispatchEvent(new Event('online')));
 		const movedCabinet = publicMap.getByRole('group', { name: mapMessages.cabinet('G1'), exact: true });
 		await expect(movedCabinet.getByRole('button', { name: 'B1', exact: true })).toHaveAttribute('aria-pressed', 'true');
 		await expect(publicMap.locator('.loc').getByText('G1', { exact: true })).toBeVisible();
 		await expect(publicMap.locator('.refresh-product')).toHaveCount(0);
-	} finally { await sql(`UPDATE app.cabinets SET outer_col=1 WHERE id=${selectedCabinet};`); }
+	} finally { await fixtures.patch('cabinets', { id: catalogCabinetId }, { outer_col: 1 }); }
 	await mapPage.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
 	await expect(occupiedCabinet).toBeVisible();
 	await fits(mapPage);
@@ -738,12 +758,14 @@ try {
 	console.log('PASS: automatic map refresh preserves selection, contents, focus and quantity; overlapping lifecycle events share a read, and failure retains the map with contextual retry');
 
 	const recoverable = await browser.newContext();
+	const recoverableConvex = await watchConvex(recoverable);
 	const recoveryPage = await recoverable.newPage();
 	recoveryPage.on('pageerror', error => errors.push(error.message));
 	let unavailableOnce = true;
-	await recoverable.route(topologyUrl, async route => {
-		if (unavailableOnce) { unavailableOnce = false; await route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }); }
-		else await route.continue();
+	recoverableConvex.rule(call => {
+		if (call.path !== shelfMap || call.update > 0 || !unavailableOnce) return;
+		unavailableOnce = false;
+		return 'fail';
 	});
 	await recoveryPage.goto(`${origin}/en/p/${seedProductCode(0)}`);
 	const recoveryMap = recoveryPage.locator('.shelf-map');
@@ -756,24 +778,22 @@ try {
 	await recoverable.close();
 
 	const navigating = await browser.newContext();
+	const navigationConvex = await watchConvex(navigating);
 	const navigationPage = await navigating.newPage();
 	navigationPage.on('pageerror', error => errors.push(error.message));
-	let releaseOld!: () => void, oldFinished!: () => void, held = false;
+	let releaseOld!: () => void, held = false;
 	const oldResponseGate = new Promise<void>(resolve => { releaseOld = resolve; });
-	const oldSettled = new Promise<void>(resolve => { oldFinished = resolve; });
-	await navigating.route(topologyUrl, async route => {
-		if (held) { await route.continue(); return; }
+	// The old product's topology result is delivered only after the next product shows.
+	const oldSettled = oldResponseGate.then(() => Bun.sleep(500));
+	navigationConvex.rule(call => {
+		if (call.path !== shelfMap || call.update > 0 || held) return;
 		held = true;
-		try {
-			const response = await route.fetch();
-			await oldResponseGate;
-			await route.fulfill({ response }).catch(() => { /* The old product request was deliberately interrupted. */ });
-		} finally { oldFinished(); }
+		return oldResponseGate;
 	});
 	// The first catalog page part in another drawer than the one being left.
-	const catalog = await readCompleteCatalog({ url: api.origin, publishableKey: publicKey });
+	const catalog = await readCatalog();
 	const start = catalog.find(product => product.code === seedProductCode(0))!;
-	const target = catalog.slice(0, 37).find(product => product.bin_code !== null && product.bin_code !== start.bin_code)!;
+	const target = catalog.slice(0, 50).find(product => product.bin_code !== null && product.bin_code !== start.bin_code)!;
 	assert.ok(target?.bin_code !== null && target.inner_col <= 26, 'The first catalog page has a part in another drawer');
 	const targetCabinet = `${String.fromCharCode(64 + target.outer_col)}${target.outer_row}`;
 	try {
@@ -996,8 +1016,7 @@ try {
 	await expect(plain).toHaveURL(`${origin}/en/p/${seedProductCode(999)}`);
 	await noJs.close();
 	const failedFacets = await context.browser()!.newContext();
-	await failedFacets.route(`${api.origin}/rest/v1/rpc/amp_catalog_facets`, route =>
-		route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }));
+	(await watchConvex(failedFacets)).rule(call => call.path === 'catalog:facets' ? 'fail' : undefined);
 	const facetPage = await failedFacets.newPage();
 	await facetPage.goto(`${origin}/en/p?category=Capacitors&eq.capacitance=0.000000000005`);
 	await expect(facetPage.locator(`a[href='/en/p/${seedProductCode(5)}']`)).toBeVisible();
@@ -1020,24 +1039,20 @@ try {
 	const manualPage = await manual.newPage();
 	await manualPage.goto(`${origin}/en/p`);
 	await expect(manualPage.locator('.search-submit')).toBeEnabled({ timeout: 30000 });
-	await expect(manualPage.locator('.cards > li')).toHaveCount(37);
+	await expect(manualPage.locator('.cards > li')).toHaveCount(50);
 	const showMore = manualPage.getByRole('link', { name: 'Show more', exact: true });
 	await showMore.focus();
 	const manualScroll = await manualPage.evaluate(() => window.scrollY);
 	await showMore.press('Enter');
-	await expect(manualPage.locator('.cards > li')).toHaveCount(74);
+	await expect(manualPage.locator('.cards > li')).toHaveCount(100);
 	await expect(manualPage).toHaveURL(`${origin}/en/p`);
 	assert.equal(await manualPage.evaluate(() => window.scrollY), manualScroll, 'Keyboard append preserves scroll');
-	assert.deepEqual(await manualPage.locator('.cards .product-meta .font-mono').allTextContents(), expectedCodes.slice(0, 74));
+	assert.deepEqual(await manualPage.locator('.cards .product-meta .font-mono').allTextContents(), expectedCodes.slice(0, 100));
 	await expect(showMore).toBeFocused();
 	await manual.close();
 	console.log('PASS: keyboard Show more appends ordered parts when IntersectionObserver is unavailable');
 	const failing = await context.browser()!.newContext();
-	await failing.route(`${api.origin}/rest/v1/rpc/amp_catalog`, async (route) => {
-		const body = route.request().postDataJSON();
-		if (body.p_after_code) await route.fulfill({ status: 503, contentType: 'application/json', body: '{}' });
-		else await route.continue();
-	});
+	const failNextPages = (await watchConvex(failing)).rule(call => call.path === catalogPage && call.args.afterCode ? 'fail' : undefined);
 	const failedPage = await failing.newPage();
 	await failedPage.goto(`${origin}/en/p`);
 	await expect(failedPage.locator('.search-submit')).toBeEnabled();
@@ -1046,10 +1061,10 @@ try {
 	await expect(failedPage.locator('.search-submit')).toBeEnabled();
 	await expect(failedPage.locator('ul[aria-label=Parts] li').first()).toBeVisible();
 	await expect(failedPage.getByText('No parts match', { exact: false })).toHaveCount(0);
-	await expect(failedPage.locator('.cards > li')).toHaveCount(37);
-	await failing.unroute(`${api.origin}/rest/v1/rpc/amp_catalog`);
+	await expect(failedPage.locator('.cards > li')).toHaveCount(50);
+	failNextPages();
 	await failedPage.getByRole('button', { name: 'Try again', exact: true }).click();
-	await expect(failedPage.locator('.cards > li')).toHaveCount(74);
+	await expect(failedPage.locator('.cards > li')).toHaveCount(100);
 	await failing.close();
 	const denied = await context.browser()!.newContext();
 	await denied.addInitScript(() => { Storage.prototype.setItem = () => { throw new DOMException('Disabled for test', 'SecurityError'); }; });
@@ -1072,43 +1087,45 @@ try {
 	await expect(silentPage.locator('.header-cart [data-slot=badge]')).toHaveText('1');
 	assert.equal(await silentPage.evaluate(() => JSON.parse(localStorage.getItem('ampoteket:cart') ?? '[]')[0]?.quantity), '1');
 	await silent.close();
-	// Real price/sale-step changes revalidate on return without replacing drafts.
+	// Real price/sale-step changes reach the product page through its live subscription
+	// and the cart on return, without replacing drafts.
 	const freshContext = await context.browser()!.newContext();
+	const freshConvex = await watchConvex(freshContext);
 	const freshPage = await freshContext.newPage();
 	const changedId = seedProductId(0), changedCode = seedProductCode(0);
-	const previous = JSON.parse(await sql(`SELECT json_build_object('step',sale_step::text,'price',sale_unit_price_nok::text) FROM app.products WHERE id='${changedId}'`)) as { step: string; price: string };
+	const [previous] = await fixtures.rows<{ sale_step: string; sale_unit_price_nok: string }>('products', { id: changedId });
+	const productReads = () => freshConvex.of('catalog:product', args => args.code === changedCode).length;
 	try {
 		await freshPage.goto(`${origin}/en/p/${changedCode}`);
 		const input = freshPage.getByLabel(fieldLabel(en.product.quantity));
 		const add = freshPage.getByRole('button', { name: en.product.add, exact: true });
 		await expect(add).toBeEnabled();
 		await input.fill('3');
-		await sql(`UPDATE app.products SET sale_step=2,sale_unit_price_nok=13.37 WHERE id='${changedId}'`);
-		let releaseProduct!: () => void, productRefreshes = 0;
+		// Hold the first pushed change: the draft and the old facts stay while it is pending.
+		let releaseProduct!: () => void, productUpdates = 0;
 		const productGate = new Promise<void>(resolve => { releaseProduct = resolve; });
-		await freshPage.route(drawerCatalogUrl, async route => {
-			if (route.request().postDataJSON().p_code === changedCode && ++productRefreshes === 1) await productGate;
-			await route.continue();
+		const holdProduct = freshConvex.rule(call => {
+			if (call.path !== 'catalog:product' || call.args.code !== changedCode || call.update === 0) return;
+			if (++productUpdates === 1) return productGate;
 		});
-		await freshPage.evaluate(() => window.dispatchEvent(new Event('focus')));
-		await expect.poll(() => productRefreshes).toBe(1);
-		await freshPage.evaluate(() => window.dispatchEvent(new Event('online')));
+		await fixtures.patch('products', { id: changedId }, { sale_step: '2', sale_unit_price_nok: '13.37' });
+		await expect.poll(() => productUpdates).toBe(1);
+		await expect(freshPage.locator('.product-summary')).not.toContainText('13.37 NOK');
+		await expect(input).toHaveValue('3'); await expect(input).toBeFocused();
 		releaseProduct();
-		await expect.poll(() => productRefreshes).toBe(2);
 		await expect(freshPage.locator('.product-summary')).toContainText('13.37 NOK');
 		await expect(add).toBeEnabled();
 		await expect(input).toHaveValue('3'); await expect(input).toBeFocused();
-		await freshPage.unroute(drawerCatalogUrl);
-		await freshPage.route(drawerCatalogUrl, async route => {
-			if (route.request().postDataJSON().p_code === changedCode) await route.abort('failed');
-			else await route.continue();
-		});
-		await freshPage.evaluate(() => window.dispatchEvent(new Event('online')));
+		holdProduct();
+		// A failed live result keeps the old facts and blocks adding until the next result arrives.
+		const failProduct = freshConvex.rule(call => call.path === 'catalog:product' && call.args.code === changedCode && call.update > 0 ? 'fail' : undefined);
+		await fixtures.patch('products', { id: changedId }, { sale_unit_price_nok: '13.38' });
 		await expect(freshPage.locator('.product-summary').getByText(en.product.unavailable, { exact: true })).toBeVisible();
 		await expect(add).toBeDisabled(); await expect(input).toHaveValue('3');
 		await expect(freshPage.locator('.product-summary')).toContainText('13.37 NOK');
-		await freshPage.unroute(drawerCatalogUrl);
-		await freshPage.locator('.product-summary').getByRole('button', { name: en.product.retry, exact: true }).click();
+		failProduct();
+		await fixtures.patch('products', { id: changedId }, { sale_unit_price_nok: '13.37' });
+		await expect(freshPage.locator('.product-summary').getByText(en.product.unavailable, { exact: true })).toHaveCount(0);
 		await expect(add).toBeEnabled();
 		await freshPage.evaluate(({ product_id, code }) => localStorage.setItem('ampoteket:cart', JSON.stringify([{ product_id, code, quantity: '1' }])), { product_id: changedId, code: changedCode });
 		await freshPage.goto(`${origin}/en/cart`);
@@ -1117,38 +1134,45 @@ try {
 		await expect(freshPage.locator('.cart-line')).toContainText(en.cart.step('2', 'pieces'));
 		await expect(freshPage.getByRole('button', { name: en.checkout.proceed, exact: true })).toBeDisabled();
 		await quantityInput.fill('');
-		await sql(`UPDATE app.products SET sale_step=1,sale_unit_price_nok=22 WHERE id='${changedId}'`);
-		let releaseCart!: () => void, cartRefreshes = 0;
+		await fixtures.patch('products', { id: changedId }, { sale_step: '1', sale_unit_price_nok: '22' });
+		// The cart reads its facts once per return; an event during a pending read queues
+		// one more read instead of starting a second. That queued read follows at once, so
+		// the Convex client may answer it from its cache of the read that just finished.
+		let releaseCart!: () => void, cartResults = 0;
 		const cartGate = new Promise<void>(resolve => { releaseCart = resolve; });
-		await freshPage.route(drawerCatalogUrl, async route => {
-			if (++cartRefreshes === 1) await cartGate;
-			await route.continue();
+		const cartBefore = productReads();
+		const holdCart = freshConvex.rule(call => {
+			if (call.path !== 'catalog:product' || call.update > 0) return;
+			if (++cartResults === 1) return cartGate;
 		});
 		await freshPage.evaluate(() => window.dispatchEvent(new Event('focus')));
-		await expect.poll(() => cartRefreshes).toBe(1);
+		await expect.poll(() => productReads() - cartBefore).toBe(1);
 		await freshPage.evaluate(() => window.dispatchEvent(new Event('online')));
+		await freshPage.evaluate(() => new Promise(requestAnimationFrame));
+		assert.equal(productReads() - cartBefore, 1, 'No second read starts while one is pending');
 		releaseCart();
-		await expect.poll(() => cartRefreshes).toBe(2);
 		await expect(freshPage.locator('.cart-line')).toContainText('22.00 NOK');
 		await expect(quantityInput).toHaveValue(''); await expect(quantityInput).toBeFocused();
-		await freshPage.unroute(drawerCatalogUrl);
+		holdCart();
 		await quantityInput.fill('2');
 		await expect(freshPage.getByRole('button', { name: en.checkout.proceed, exact: true })).toBeEnabled();
-		await freshPage.route(drawerCatalogUrl, route => route.abort('failed'));
+		const failCart = freshConvex.rule(call => call.path === 'catalog:product' ? 'fail' : undefined);
 		await freshPage.evaluate(() => window.dispatchEvent(new Event('online')));
 		await expect(freshPage.getByText(en.cart.factsUnavailable, { exact: true })).toBeVisible();
 		await expect(freshPage.locator('.cart-line h2')).toContainText('220');
 		await expect(quantityInput).toHaveValue('2'); await expect(quantityInput).toBeFocused();
 		await expect(freshPage.getByRole('button', { name: en.checkout.proceed, exact: true })).toBeDisabled();
+		failCart();
 	} finally {
-		await sql(`UPDATE app.products SET sale_step='${previous.step}',sale_unit_price_nok='${previous.price}' WHERE id='${changedId}'`);
+		await fixtures.patch('products', { id: changedId }, { sale_step: previous.sale_step, sale_unit_price_nok: previous.sale_unit_price_nok });
 		await freshContext.close();
 	}
 	console.log('PASS: product/cart refresh retains focused drafts and old facts on failure; changed sale steps get visible line errors; removal preserves keyboard focus; mobile placement stays visible');
 	// Valid long metadata and sparse wide topology must remain usable inside the
 	// phone filter and location dialogs, where the page container cannot supply text wrapping.
 	const longCategory = 'W'.repeat(100);
-	await sql(`UPDATE app.categories SET name='${longCategory}' WHERE name='Resistors'; UPDATE app.cabinets SET outer_col=16 WHERE id='${catalogCabinetId}';`);
+	await fixtures.patch('categories', { name: 'Resistors' }, { name: longCategory });
+	await fixtures.patch('cabinets', { id: catalogCabinetId }, { outer_col: 16 });
 	try {
 		await page.setViewportSize({ width: 360, height: 640 });
 		await page.goto(`${origin}/en/p`);
@@ -1181,7 +1205,8 @@ try {
 		await fits(page);
 		await locations.getByRole('button', { name: en.catalog.closeLocations, exact: true }).click();
 	} finally {
-		await sql(`UPDATE app.categories SET name='Resistors' WHERE name='${longCategory}'; UPDATE app.cabinets SET outer_col=1 WHERE id='${catalogCabinetId}';`);
+		await fixtures.patch('categories', { name: longCategory }, { name: 'Resistors' });
+		await fixtures.patch('cabinets', { id: catalogCabinetId }, { outer_col: 1 });
 	}
 	console.log('PASS: long category text wraps and a dense label wall retains 24px targets with local keyboard panning');
 	assert.deepEqual(errors, []);
@@ -1191,6 +1216,8 @@ try {
 	for (const [index, page] of (context?.browser()?.contexts().flatMap(context => context.pages()) ?? []).entries()) {
 		await captureFailure(page, artifacts, String(index));
 	}
+	const backend = await Bun.file(`${directory}/convex.log`).text().catch(() => '');
+	if (backend.trim()) console.error(safe(backend).slice(-3000));
 	const raw = await Bun.file(`${directory}/worker-error.log`).text() + await Bun.file(`${directory}/worker.log`).text();
 	const redacted = safe(raw);
 	if (redacted.trim()) console.error(redacted.slice(-3000));

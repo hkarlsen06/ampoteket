@@ -3,8 +3,8 @@
 `/admin/orders` records supplier orders already placed elsewhere and stock arriving
 without an order; `/admin/orders/[id]` shows lines, derived progress and history.
 Implemented in `src/routes/[[locale=locale]]/admin/orders/`,
-`src/lib/AdminOrderReceipt.svelte` and `src/lib/admin-orders.ts`, on the staff views
-and RPCs in [datamodell.md](datamodell.md).
+`src/lib/AdminOrderReceipt.svelte` and `src/lib/admin-orders.ts`, on the `orders.*`
+staff functions in [datamodell.md](datamodell.md).
 
 ## Orders
 
@@ -54,7 +54,7 @@ shelved from the sheet; a failed placement read only omits it.
 The full supplier name wraps in the scrolling receipt body; the short title, Close
 and confirmation action remain outside it, including in short landscape viewports.
 
-The database derives progress as ordered minus received minus net cancellations,
+The backend derives progress as ordered minus received minus net cancellations,
 floored at zero. Cancellation opens below a disclosure, needs a reason, is confirmed
 in an `AlertDialog` and changes only the commitment. A mistaken one is reversed
 once by a new audited record; its confirmation explains that the reversal cannot
@@ -64,8 +64,9 @@ No history is overwritten. Metadata edits are limited to the fields in
 
 ## Retry and conflicts
 
-- Before a stock- or commitment-changing RPC, persist its request ID, Auth user and
-  exact payload in browser storage. If storage is unavailable, disable these writes.
+- Before a stock- or commitment-changing mutation (`orders.recordOrder`,
+  `recordReceipt`, `cancelQuantities`, `reverseCancellation`), persist its request ID,
+  Auth user and exact payload in browser storage. If storage is unavailable, disable these writes.
 - An uncertain result keeps the command frozen for an identical retry; a timeout never
   becomes a second receipt. Warn only if the request ends without a confirmed result.
 - A successful receipt closes the sheet and refreshes the list.

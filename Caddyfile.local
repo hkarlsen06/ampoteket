@@ -12,10 +12,6 @@
 https://localhost:8443 {
 	bind 127.0.0.1
 	tls internal
-	@supabase path /auth/v1/* /rest/v1/*
-	handle @supabase {
-		reverse_proxy 127.0.0.1:54329
-	}
 	handle {
 		reverse_proxy 127.0.0.1:5174
 	}

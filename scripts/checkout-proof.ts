@@ -1,59 +1,51 @@
-/** Actual pages and gateway, disposable PostgreSQL/Auth, trusted HTTPS and real browser storage. */
+/** Actual pages and gateway, a disposable Convex backend with Auth, trusted HTTPS and real browser storage. */
 import { firefox, expect, type BrowserContext, type Page, type Route } from '@playwright/test';
 import { strict as assert } from 'node:assert';
 import { resolve } from 'node:path';
 import { mkdir } from 'node:fs/promises';
-import { post, proofEnvironment } from './web-proof/harness';
+import { ConvexHttpClient } from 'convex/browser';
+import { captureFailure, post, proofEnvironment } from './web-proof/harness';
+import { api } from '../convex/_generated/api';
 import type { ActiveAttempt } from '../src/lib/cart';
 import type { CheckoutSnapshot } from '../src/lib/checkout-contract';
 
 // Hooks the storage-failure cases below install in the page to undo their patches.
 declare global { interface Window { restoreStorage(): void; restoreIdb(): void; restoreRead(): void } }
 
-const { directory, origin, api, publicKey, serviceKey, password, secrets, safe, ca, sql, createUser, startWorker } = await proofEnvironment();
+const environment = await proofEnvironment();
+const { directory, origin, convexUrl, password, secrets, safe, ca, fixtures, createStaff, createUser, startEmail, startWorker } = environment;
 const staffEmail = 'checkout-staff@example.test';
 const nonstaffEmail = 'checkout-nonstaff@example.test';
-const staffId = await createUser(staffEmail);
+await createStaff(staffEmail);
 await createUser(nonstaffEmail);
-const mailpitPort = Number(process.argv[5]);
-assert.ok(Number.isInteger(mailpitPort) && mailpitPort > 0 && mailpitPort <= 65535, 'Use scripts/test-web.sh --checkout');
-const passwordReturn = `${origin}/en/admin/password?next=%2Fadmin`;
-async function inviteAuthUser(email: string): Promise<void> {
-	const response = await fetch(`${api.origin}/auth/v1/invite?redirect_to=${encodeURIComponent(passwordReturn)}`, {
-		method: 'POST', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json' },
-		body: JSON.stringify({ email })
-	});
-	assert.ok(response.ok, `Local Auth sends a disposable invitation (${response.status})`);
-	await response.body?.cancel();
+startEmail();
+/** A real staff session outside the browser, as another volunteer's device. */
+async function staffClient() {
+	const client = new ConvexHttpClient(convexUrl, { logger: false });
+	const { token } = await client.action(api.session.signIn, { email: staffEmail, password });
+	secrets.push(token); client.setAuth(token);
+	return client;
 }
-async function readAuthEmail(type: 'invite' | 'recovery', email: string): Promise<string> {
-	const mailbox = `http://127.0.0.1:${mailpitPort}/view/latest.html?query=${encodeURIComponent(`to:${email}`)}`;
-	for (let attempt = 0; attempt < 100; attempt++) {
-		const response = await fetch(mailbox);
-		if (response.ok) {
-			const html = await response.text();
-			const link = html.match(/<a href="([^"]+)"/)?.[1]?.replaceAll('&amp;', '&');
-			assert.ok(link, 'Rendered Auth email contains a password link');
-			const url = new URL(link);
-			assert.equal(url.origin, origin);
-			assert.equal(url.pathname, '/en/admin/password');
-			assert.equal(url.searchParams.get('next'), '/admin');
-			assert.equal(url.searchParams.get('type'), type);
-			const token = url.searchParams.get('token_hash');
-			assert.match(token ?? '', /^(?:pkce_)?[a-f0-9]{32,256}$/);
-			secrets.push(token!);
-			return url.href;
-		}
-		assert.equal(response.status, 404, 'Mailpit mailbox read');
-		await Bun.sleep(100);
-	}
-	throw new Error('Local Auth email was not delivered to Mailpit');
-}
-await sql((await Bun.file('scripts/web-proof/fixtures.sql').text()).replace(":'staff_id'", `'${staffId}'`));
-await sql(`INSERT INTO app.help_contacts(display_name,email,is_published)
- SELECT 'Proof volunteer ' || n, 'volunteer' || n || '@example.test', true FROM generate_series(1,5) n ORDER BY n;
- INSERT INTO app.help_contacts(display_name,email,is_published) VALUES ('Private directory draft','draft@example.test',false);
- NOTIFY pgrst, 'reload schema';`);
+// Proof inventory sits in its own cabinet, apart from the seeded wall (as in web-proof/run.ts).
+const now = new Date().toISOString().replace('Z', '000Z');
+const cabinet = '74000000-0000-4000-8000-000000000001', bin = '75000000-0000-4000-8000-000000000001';
+await fixtures.insert('cabinets', [{ id: cabinet, code: 'PROOF-CAB', outer_row: 3, outer_col: 1, inner_rows: 2, inner_cols: 2, label: null, is_archived: false }]);
+await fixtures.insert('bins', [{ id: bin, code: 'PROOF-BIN', cabinet_id: cabinet, inner_row: 1, inner_col: 1, row_span: 1, col_span: 1, label: null, is_archived: false }]);
+const product = (n: number, code: string, name_nb: string, name_en: string, price: string) => ({
+	id: `73000000-0000-4000-8000-00000000000${n}`, code, name_nb, name_en, description: null, category_id: null, bin_id: bin, location_note: null,
+	unit_code: 'pcs', stock_step: '1', sale_step: '1', sale_unit_price_nok: price, minimum_stock: '0', datasheet_url: null, purchase_url: null,
+	is_active: true, metadata_revision: 1, created_at: now, updated_at: now });
+await fixtures.insert('products', [product(1, 'CAP-00001', 'Bevis-kondensator', 'Proof capacitor', '999999999998.999999'),
+	product(2, 'LED-00001', 'Bevis-LED', 'Proof LED', '0'), product(3, 'RES-00001', 'Bevis-motstand', 'Proof resistor', '0.005')]);
+await fixtures.insert('attribute_definitions', [{ id: '76000000-0000-4000-8000-000000000001', code: 'capacitance', label: 'Capacitance', value_type: 'number', canonical_unit: 'F' }]);
+await fixtures.insert('product_attributes', [{ product_id: '73000000-0000-4000-8000-000000000001', attribute_id: '76000000-0000-4000-8000-000000000001',
+	number_value: '0.000000000005', number_max: null, text_value: null, boolean_value: null }]);
+const contact = (n: number, display_name: string, email: string, is_published: boolean) => ({
+	id: `77000000-0000-4000-8000-00000000000${n}`, display_name, email, phone: null, contact_url: null, display_order: n, is_published,
+	edit_revision: 1, created_at: now, updated_at: now, responsibility: null, discord: null });
+await fixtures.insert('help_contacts', [...[1, 2, 3, 4, 5].map((n) => contact(n, `Proof volunteer ${n}`, `volunteer${n}@example.test`, true)),
+	contact(6, 'Private directory draft', 'draft@example.test', false)]);
+const count = async (table: string, where: Record<string, unknown>) => (await fixtures.rows(table, where)).length;
 const bundle = await Bun.build({ entrypoints: ['scripts/checkout-browser-probe.ts'], outdir: `${directory}/probe`, target: 'browser' });
 assert.ok(bundle.success, 'Browser persistence probe builds');
 let context: BrowserContext | undefined;
@@ -122,7 +114,7 @@ try {
 	await probe(page);
 	const lost = await call<ActiveAttempt>(page, 'readActiveAttempt');
 	assert.equal(lost.state, 'preparing'); assert.equal(lost.checkoutId, undefined);
-	assert.equal(await sql(`SELECT count(*) FROM app.checkouts WHERE request_id='${lost.requestId}'`), '1');
+	assert.equal(await count('checkouts', { request_id: lost.requestId }), 1);
 	await expect(page.getByRole('link', { name: 'Open Vipps', exact: true })).toHaveCount(0);
 	// The other tab sees the same claim, but lacks the private frozen payload.
 	const other = await context.newPage(); await other.goto(`${origin}/en/cart`); await probe(other);
@@ -133,7 +125,7 @@ try {
 	await probe(page);
 	const prepared = await call<ActiveAttempt>(page, 'readActiveAttempt');
 	assert.ok(prepared.checkoutId);
-	assert.equal(await sql(`SELECT count(*) FROM app.checkouts WHERE request_id='${lost.requestId}'`), '1');
+	assert.equal(await count('checkouts', { request_id: lost.requestId }), 1);
 	const saved = await call<CheckoutSnapshot>(page, 'readCheckout', [prepared]);
 	assert.equal(saved.items[0].unit_price_nok, '999999999998.999999');
 	assert.equal(saved.total_nok, '999999999999.00');
@@ -157,10 +149,10 @@ try {
 	assert.deepEqual(await call(page, 'readActiveAttempt'), prepared);
 	assert.deepEqual(await call(page, 'readCheckout', [prepared]), saved);
 	assert.equal((await context.cookies()).find(cookie => cookie.name === rootCookie.name)?.value, rootCookie.value);
-	assert.equal(await sql(`SELECT count(*) FROM app.checkouts WHERE request_id='${prepared.requestId}'`), '1');
-	assert.equal(await sql(`SELECT count(*) FROM app.sales WHERE checkout_id='${prepared.checkoutId}'`), '0');
+	assert.equal(await count('checkouts', { request_id: prepared.requestId }), 1);
+	assert.equal(await count('sales', { checkout_id: prepared.checkoutId }), 0);
 	console.log('PASS: failed snapshot read retries successfully through the page with the original credential, saved amount and no registration');
-	await sql(`UPDATE app.products SET sale_unit_price_nok=1,name_en='Changed current name',is_active=false WHERE id='${paidProduct}'`);
+	await fixtures.patch('products', { id: paidProduct }, { sale_unit_price_nok: '1', name_en: 'Changed current name', is_active: false });
 	await page.goto(`${origin}/en/checkout/${prepared.checkoutId}`);
 	await expect(page.getByRole('link', { name: 'Open Vipps', exact: true })).toBeVisible();
 	await expect(page.getByText('Proof capacitor', { exact: true })).toBeVisible();
@@ -207,8 +199,9 @@ try {
 	await expect(page.getByText('Purchase registered.', { exact: true })).toBeVisible();
 	await probe(page);
 	await expect.poll(() => call<ActiveAttempt | null>(page, 'readActiveAttempt')).toBeNull();
-	assert.equal(await sql(`SELECT count(*) FROM app.sales WHERE checkout_id='${prepared.checkoutId}'`), '1');
-	assert.equal(await sql(`SELECT count(*) FROM app.inventory_movements m JOIN app.sales s ON s.event_id=m.event_id WHERE s.checkout_id='${prepared.checkoutId}'`), '1');
+	assert.equal(await count('sales', { checkout_id: prepared.checkoutId }), 1);
+	const [{ event_id: saleEvent }] = await fixtures.rows<{ event_id: string }>('sales', { checkout_id: prepared.checkoutId });
+	assert.equal(await count('inventory_movements', { event_id: saleEvent }), 1);
 	// Receipts: the proof Worker has no Resend key, so a valid address reaches the real 503.
 	const receiptEmail = page.getByLabel('Email for receipt', { exact: true });
 	const sendReceipt = page.getByRole('button', { name: 'Send receipt', exact: true });
@@ -220,9 +213,9 @@ try {
 	await sendReceipt.click();
 	await expect(page.getByRole('button', { name: 'Sent', exact: true })).toBeVisible();
 	await expect(page.getByRole('status').filter({ hasText: 'The receipt was sent to buyer@example.test.' })).toHaveCount(1);
-	assert.equal(await sql(`SELECT count(*) FROM app.checkout_contacts WHERE contact_text LIKE '%buyer@example.test%'`), '0');
+	assert.ok(!(await fixtures.rows<{ contact_text: string }>('checkout_contacts')).some((row) => row.contact_text.includes('buyer@example.test')));
 	console.log('PASS: actual cart/checkout, lost prepare and confirmation, exact frozen amounts, cross-tab payload ownership, Worker restart and one withdrawal');
-	await sql(`UPDATE app.products SET is_active=true WHERE id='${paidProduct}'`);
+	await fixtures.patch('products', { id: paidProduct }, { is_active: true });
 	// A registered old page must not remove a new active checkout or its basket.
 	const free = await begin(page, freeProduct);
 	await page.goto(`${origin}/en/checkout/${prepared.checkoutId}`);
@@ -235,7 +228,7 @@ try {
 	await probe(page); await probe(other);
 	const [a, b] = await Promise.all([call<CheckoutSnapshot>(page, 'confirmCheckout', [free]), call<CheckoutSnapshot>(other, 'confirmCheckout', [free])]);
 	assert.deepEqual(a, b); await call(page, 'finishRegistration', [free, a]);
-	assert.equal(await sql(`SELECT count(*) FROM app.sales WHERE checkout_id='${free.checkoutId}'`), '1');
+	assert.equal(await count('sales', { checkout_id: free.checkoutId }), 1);
 	console.log('PASS: zero-total checkout, duplicate tab confirmations, completed old checkout preserves newer basket');
 	// Read-back denial cannot expose payment; storage loss cannot silently start a replacement.
 	await basket(page);
@@ -251,7 +244,7 @@ try {
 	await fails(page, 'prepareCheckout', [denied]);
 	assert.equal((await call<ActiveAttempt>(page, 'readActiveAttempt')).checkoutId, undefined);
 	assert.equal(await call(page, 'canOpenPayment', [denied]), false);
-	const committedId = await sql(`SELECT id FROM app.checkouts WHERE request_id='${denied.requestId}'`);
+	const committedId = (await fixtures.rows<{ id: string }>('checkouts', { request_id: denied.requestId }))[0]?.id ?? '';
 	assert.match(committedId, /^[a-f0-9-]{36}$/, 'Prepare committed before its local acknowledgement failed');
 	assert.equal(await page.evaluate((id) => sessionStorage.getItem('ampoteket:prepare:' + id), denied.requestId), frozenPayload);
 	await page.evaluate(() => window.restoreIdb());
@@ -259,7 +252,7 @@ try {
 	assert.equal(restored.requestId, denied.requestId);
 	assert.equal(restored.fingerprint, denied.fingerprint);
 	assert.equal(restored.checkoutId, committedId);
-	assert.equal(await sql(`SELECT count(*) FROM app.checkouts WHERE request_id='${denied.requestId}'`), '1');
+	assert.equal(await count('checkouts', { request_id: denied.requestId }), 1);
 	await call(page, 'readCheckout', [restored]);
 	// A failed cart read after registration retains the active registered pointer.
 	const registered = await call<CheckoutSnapshot>(page, 'confirmCheckout', [restored]);
@@ -272,7 +265,7 @@ try {
 	assert.equal(await call(page, 'readActiveAttempt'), null);
 	assert.equal(await page.evaluate(() => localStorage.getItem('ampoteket:cart')), '[]');
 	assert.equal((await context.cookies()).find(cookie => cookie.name === rootCookie.name)?.value, rootCookie.value);
-	assert.equal(await sql(`SELECT count(*) FROM app.sales WHERE checkout_id='${restored.checkoutId}'`), '1');
+	assert.equal(await count('sales', { checkout_id: restored.checkoutId }), 1);
 	console.log('PASS: denied session payload, denied checkout-ID acknowledgement and denied cleanup retain safe recoverable state');
 	// Simultaneous starts arbitrate one immutable attempt across tabs.
 	await basket(page, freeProduct);
@@ -291,7 +284,7 @@ try {
 	await page.getByRole('button', { name: 'Continue this purchase', exact: true }).click();
 	await expect(page.getByRole('button', { name: 'Complete purchase', exact: true })).toBeVisible();
 	await complete(page, claimed);
-	assert.equal(await sql(`SELECT count(*) FROM app.checkouts WHERE request_id='${claimed.requestId}'`), '1');
+	assert.equal(await count('checkouts', { request_id: claimed.requestId }), 1);
 	console.log('PASS: simultaneous attempt claims converge; explicit unpaid/uncollected set-aside and resumption preserve identity');
 	// Persisted known ID still supports staff recovery after cookie eviction.
 	const recovery = await begin(page);
@@ -304,14 +297,25 @@ try {
 	await page.goto(`${origin}/en/contact`);
 	await expect(page.getByText('Proof volunteer 5', { exact: true })).toBeVisible();
 	await expect(page.getByText('Private directory draft', { exact: true })).toHaveCount(0);
-	console.log('PASS: missing cookie offers original-reference assistance; public directory traverses capped pages without drafts');
+	console.log('PASS: missing cookie offers original-reference assistance; public directory lists published contacts without drafts');
 	// Staff UI integration is kept in a focused module, sharing only this owned test lifecycle.
 	await context.addCookies([rootCookie]); // Restore the original test credential, never mint a replacement.
-	const { exerciseAdminHelp } = await import('./admin-help-proof');
-	await exerciseAdminHelp({ context, origin, api: api.origin, publicKey, staffEmail, nonstaffEmail, password,
-		checkoutId: recovery.checkoutId!, requestId: recovery.requestId, sql, inviteAuthUser, readAuthEmail });
+	const { exerciseAdminHelp, passwordEmail } = await import('./admin-help-proof');
+	const links = passwordEmail(environment, staffEmail);
+	await exerciseAdminHelp({ context, origin, convexUrl, staffEmail, nonstaffEmail, password,
+		checkoutId: recovery.checkoutId!, requestId: recovery.requestId, fixtures, invite: links.invite,
+		// Every emailed link returns to the fixed localized password page.
+		async readPasswordLink(email) {
+			const url = new URL(await links.readPasswordLink(email));
+			assert.equal(url.origin, origin);
+			assert.equal(url.pathname, '/en/admin/password');
+			assert.equal(url.searchParams.get('next'), '/admin');
+			assert.ok(['invite', 'recovery'].includes(url.searchParams.get('type') ?? ''));
+			assert.match(url.searchParams.get('token_hash') ?? '', /^[a-f0-9]{64}$/);
+			return url.href;
+		} });
 	console.log('PASS: staff/nonstaff login, directory edits/stale forms, lost staff recovery, revocation, rendered invitation/password emails and Auth logout preserving guest credentials');
-	assert.equal(await sql(`SELECT count(*) FROM app.sales WHERE checkout_id='${recovery.checkoutId}'`), '1');
+	assert.equal(await count('sales', { checkout_id: recovery.checkoutId }), 1);
 	await probe(page); assert.equal((await call<ActiveAttempt>(page, 'readActiveAttempt')).requestId, recovery.requestId);
 	await page.goto(`${origin}/en/cart`);
 	await probe(page); await expect.poll(() => call<ActiveAttempt | null>(page, 'readActiveAttempt')).toBeNull();
@@ -322,25 +326,15 @@ try {
 	// Real staff JWT and guest gateway overlap on the same natural sale identity.
 	const overlap = await begin(page, freeProduct);
 	await call(page, 'readCheckout', [overlap]);
-	const login = await fetch(`${api.origin}/auth/v1/token?grant_type=password`, {
-		method: 'POST', headers: { apikey: publicKey, 'Content-Type': 'application/json' },
-		body: JSON.stringify({ email: staffEmail, password })
-	});
-	assert.ok(login.ok);
-	const { access_token: staffToken } = await login.json() as { access_token: string };
-	secrets.push(staffToken);
-	const recoveryRequest = { p_request_id: crypto.randomUUID(), p_checkout_id: overlap.checkoutId, p_reason: 'Disposable real JWT overlap proof' };
+	const staff = await staffClient();
 	const [guestResult, staffResult] = await Promise.all([
 		call<CheckoutSnapshot>(page, 'confirmCheckout', [overlap]),
-		fetch(`${api.origin}/rest/v1/rpc/amp_recover_checkout`, {
-			method: 'POST', headers: { apikey: publicKey, Authorization: `Bearer ${staffToken}`, 'Content-Type': 'application/json' },
-			body: JSON.stringify(recoveryRequest)
-		})
+		staff.mutation(api.checkout.recover, { requestId: crypto.randomUUID(), checkoutId: overlap.checkoutId!, reason: 'Disposable real staff session overlap proof' })
 	]);
-	assert.ok(staffResult.ok); assert.equal(guestResult.status, 'confirmed');
-	assert.equal((await staffResult.json() as { checkout_id: string }).checkout_id, overlap.checkoutId);
+	assert.equal(guestResult.status, 'confirmed');
+	assert.equal(staffResult.checkout_id, overlap.checkoutId);
 	await call(page, 'finishRegistration', [overlap, guestResult]);
-	assert.equal(await sql(`SELECT count(*) FROM app.sales WHERE checkout_id='${overlap.checkoutId}'`), '1');
+	assert.equal(await count('sales', { checkout_id: overlap.checkoutId }), 1);
 	console.log('PASS: real staff recovery and guest confirmation converge on the same registered purchase');
 	// Staff registration has no local storage event in the buyer's browser.
 	// Reconcile on return/reconnect, and check remotely before leaving for Vipps.
@@ -351,18 +345,15 @@ try {
 		const remotelyRegistered = await begin(page);
 		await page.goto(`${origin}/en/checkout/${remotelyRegistered.checkoutId}`);
 		await expect(page.getByRole('link', { name: 'Open Vipps', exact: true })).toBeVisible();
-		const result = await fetch(`${api.origin}/rest/v1/rpc/amp_recover_checkout`, {
-			method: 'POST', headers: { apikey: publicKey, Authorization: `Bearer ${staffToken}`, 'Content-Type': 'application/json' },
-			body: JSON.stringify({ p_request_id: crypto.randomUUID(), p_checkout_id: remotelyRegistered.checkoutId, p_reason: 'Disposable buyer freshness proof' })
-		});
-		assert.ok(result.ok); await result.body?.cancel();
+		const result = await staff.mutation(api.checkout.recover, { requestId: crypto.randomUUID(), checkoutId: remotelyRegistered.checkoutId!, reason: 'Disposable buyer freshness proof' });
+		assert.equal(result.checkout_id, remotelyRegistered.checkoutId);
 		if (trigger === 'payment') await page.getByRole('link', { name: 'Open Vipps', exact: true }).click();
 		else await page.evaluate(event => window.dispatchEvent(new Event(event)), trigger);
 		await expect(page.getByText('Purchase registered.', { exact: true })).toBeVisible();
 		await expect(page.getByRole('link', { name: 'Open Vipps', exact: true })).toHaveCount(0);
 		await expect(page.getByRole('button', { name: 'Change cart', exact: true })).toHaveCount(0);
 		await probe(page); await expect.poll(() => call<ActiveAttempt | null>(page, 'readActiveAttempt')).toBeNull();
-		assert.equal(await sql(`SELECT count(*) FROM app.sales WHERE checkout_id='${remotelyRegistered.checkoutId}'`), '1');
+		assert.equal(await count('sales', { checkout_id: remotelyRegistered.checkoutId }), 1);
 	}
 	await probe(page);
 	const delayedPayment = await begin(page);
@@ -436,7 +427,7 @@ try {
 		items: initialA.cartLines, contact: null
 	});
 	assert.equal(rejected.status, 409); assert.equal(rejected.body.error, 'CHECKOUT_SESSION_CHANGED');
-	assert.equal(await sql(`SELECT count(*) FROM app.checkouts WHERE request_id='${initialA.requestId}'`), '0');
+	assert.equal(await count('checkouts', { request_id: initialA.requestId }), 0);
 	assert.equal(await call(page, 'canOpenPayment', [initialA]), false);
 	console.log('PASS: competing first cookie initializations strand safely at the original reference before any checkout/payment');
 	let limited = false;
@@ -453,6 +444,9 @@ try {
 	console.log('PASS: actual gateway origin/JSON/body/rate limits, no-store errors, no sensitive Worker logging');
 	console.log('PASS: milestone 3 disposable browser/Worker acceptance; physical phone/Vipps and production mail/provider checks remain separate');
 } catch (error) {
+	for (const [index, tab] of (context?.pages() ?? []).entries()) await captureFailure(tab, artifacts, String(index));
+	const backend = await Bun.file(`${directory}/convex.log`).text().catch(() => '');
+	if (backend.trim()) console.error(safe(backend).slice(-3000));
 	const logs = await Bun.file(`${directory}/worker-error.log`).text();
 	if (logs.trim()) console.error(safe(logs).replace(/[a-f0-9]{64}/g, '[redacted]').replace(/eyJ[A-Za-z0-9_.-]+/g, '[redacted]').slice(-3000));
 	// eslint-disable-next-line preserve-caught-error -- a cause would print the unredacted secrets.

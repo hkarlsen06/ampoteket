@@ -76,10 +76,12 @@ map with the real cabinet before editing again.
 - Contacts on unconfirmed checkouts are cleared after 90 days
   ([retention runbook](runbook-contact-retention.md)). Never copy contacts into
   notes, logs or URLs.
-- Run the read-only [invariant check](../supabase/tests/v1-invariants.sql) after
-  a restore, schema change or suspected data problem, and save its findings
-  before fixing anything. Also compare physical counts: a consistent database
-  can still hold a wrong entry.
+- After a restore, a backend change or a suspected data problem, run the
+  read-only stock check `bunx --no-install convex run migration:verifyStockLevels`
+  with the deploy key ([reaching the hosted project](runbook-deploy.md#reaching-the-hosted-project)).
+  It prints the codes of products whose stock level disagrees with their ledger
+  and must print `[]`. Save its findings before fixing anything. Also compare
+  physical counts: a consistent database can still hold a wrong entry.
 
 ## Volunteer directory
 

@@ -1,18 +1,18 @@
 # Ampoteket database design
 
-The database contract: model, invariants, precision, concurrency, permissions and RPCs. The migrations in `supabase/migrations/` are the final word on names, types, constraints and function bodies: where any document disagrees with them, the migration wins and the document has a bug. Appendix A is checked against the applied schema by `scripts/check-schema-docs.py`.
+The data contract: model, invariants, precision, concurrency, access and functions. `convex/schema.ts` and the Convex functions in `convex/` are the final word on tables, fields, checks and behaviour: where any document disagrees with them, the code wins and the document has a bug. Production runs on Supabase until the cutover ([runbook-cutover.md](runbook-cutover.md)); the Supabase-era schema and SQL are in git history (last pre-migration commit `b83c41e`).
 
 ## 1. Domain decisions
 
 - A product is a set of interchangeable components, not a supplier item. Staff curate product identity; equal names or values are not a safe uniqueness rule. Supplier SKU and purchase URL belong to the purchase line.
 - A product has at most one current bin; a bin can hold many products. A bin is a drawer inside a cabinet; a cabinet stands at one position on the wall. A product without a bin can still be sold and may carry a public `location_note`.
-- One operational staff role, individual Supabase Auth identities. Customers have no account and may give one optional, unverified contact string.
+- One operational staff role, individual Convex Auth identities. Customers have no account and may give one optional, unverified contact string.
 - There are no payment-verification, reconciliation, refund or return entities: payment is trust-based ([website-guide.md](website-guide.md#4-guest-checkout)).
 - Prices and costs are historical NOK. A purchase unit cost uses the product's sale unit. Order-level extra costs are stored separately, never folded into unit cost.
 - Purchase orders record orders already placed elsewhere; they reserve nothing and add no stock. Receipts can be partial or unplanned (donations are unplanned receipts). Outstanding quantity can be cancelled with a reason. A surplus delivery is a normal adjustment with a note.
 - Negative recorded stock is allowed.
 - Counts are open, not blind. Each count posts immediately; closing a batch posts nothing.
-- Nothing that history refers to is deleted. A `keep_records` trigger rejects `DELETE` on staff, help contacts, units, categories, cabinets, bins, products, attribute definitions, purchase orders and lines, and count batches; ledger and audit tables reject updates too. Retire a product with `is_active=false`, unpublish a contact, archive storage. A hard delete needs the owner's explicit request and a migration-level review, not a workaround.
+- Nothing that history refers to is deleted. No function deletes staff, help contacts, units, categories, cabinets, bins, products, attribute definitions, purchase orders and lines, count batches or any ledger or audit row, and ledger rows are never patched. The only deletes in application code are specification values (`product_attributes`, audited) and checkout contacts (erasure and retention, audited as `CONTACT_CLEARED`). Retire a product with `is_active=false`, unpublish a contact, archive storage. A hard delete needs the owner's explicit request and a reviewed one-off procedure, not a workaround.
 
 ## 2. Sources of truth
 
@@ -22,9 +22,9 @@ The database contract: model, invariants, precision, concurrency, permissions an
 - Checkout names and prices, and count expected/observed quantities, are historical facts, not caches of current values.
 - Customer contact data is separate from immutable history.
 
-Stock, latest purchase price/URL, last count, outstanding quantity, order status and checkout totals are never stored; views derive them. If summing movements ever proves too slow, add a rebuildable projection in a migration, not a second source of truth.
+Latest purchase price/URL, outstanding quantity, order status and checkout totals are never stored; queries derive them. Stock is the sum of the ledger. `stock_levels` holds a rebuildable projection of it (quantity, revision, last count), written in the same transaction as every movement ([§11](#11-read-models)); it is a cache of the ledger, not a second source of truth.
 
-JSON is used only for RPC request envelopes, idempotency results and audit images.
+Arbitrary JSON is stored only in idempotency results and audit images.
 
 ## 3. Relations at a glance
 
@@ -37,8 +37,9 @@ JSON is used only for RPC request envelopes, idempotency results and audit image
 | Purchasing | `purchase_orders`, `purchase_order_lines`, `purchase_order_cancellations` |
 | Checkout | `checkouts`, `checkout_lines`, `checkout_contacts`, `sales` |
 | Counting | `count_batches`, `stock_counts` |
-| Inventory | `inventory_events`, `inventory_movements`, `receipt_allocations`, `movement_corrections` |
-| Infrastructure | `command_requests`, `audit_log` |
+| Inventory | `inventory_events`, `inventory_movements`, `receipt_allocations`, `movement_corrections`, `stock_levels` |
+| Infrastructure | `command_requests`, `audit_log`, `counters`, `rate_limits` |
+| Accounts | Convex Auth tables (`users`, `authAccounts`, sessions and tokens), `password_tokens` |
 
 ```text
 cabinet 1 ---- many bins 1 ---- many products
@@ -52,45 +53,54 @@ checkout 1 ---- 0..1 sale ---- 1 inventory event
 count_batch 1 ---- many stock_counts ---- 1 inventory event
 inventory_event 1 ---- many movements (a matching count has zero movements)
 movement 1 ---- many later correction links
+product 1 ---- 0..1 stock_levels row
+staff_member 0..1 ---- 1 users row (by auth_user_id)
 ```
+
+Application rows refer to each other by the UUID in their `id` field, never by Convex `_id`; only `password_tokens` and the Convex Auth tables use `_id` references. There are no foreign-key constraints: the functions look up each referenced row before writing.
 
 ## 4. Units, quantities and rounding
 
 `products.unit_code` (`pcs`, `m` or `g`) is both the stock and the sale unit. Grams are for goods sold by weight, such as 3D printer filament. There is no pack conversion: a pack of 100 resistors is 100 pieces.
 
-Each product has a `stock_step` and a `sale_step` (for example cable stocked to 0.001 m, sold per 0.1 m). `sale_step` must be a whole multiple of `stock_step`; the database checks precision and step.
+Each product has a `stock_step` and a `sale_step` (for example cable stocked to 0.001 m, sold per 0.1 m). `sale_step` must be a whole multiple of `stock_step`, and a discrete unit (`pcs`) needs whole steps; `products.save` checks precision and step.
 
-Quantities and money are exact `numeric`, never float. The domains reject excess precision instead of rounding it:
+Quantities and money are exact decimal strings, never `number` or float. `convex/lib/decimal.ts` does the arithmetic with BigInt and rejects excess precision instead of rounding it:
 
-| Domain | Used for | Rule |
+| Helper | Used for | Rule |
 | --- | --- | --- |
-| `quantity`, `unit_price` | Command quantities and unit prices | At most 6 decimals, magnitude at most 999999999999. |
-| `stock_quantity` | Balances and count values | At most 6 decimals, finite, no magnitude bound. |
-| `nok_amount` | Extra costs | At most 2 decimals, same magnitude bound. |
+| `checkedQuantity` | Command quantities, steps, minimum stock | At most 6 decimals, magnitude at most 999999999999. |
+| `checkedUnitPrice` | Sale prices and purchase unit costs | At most 6 decimals, from 0 to 999999999999. |
+| `checkedStockQuantity` | Balances and count values | At most 6 decimals, no magnitude bound. |
+| `checkedNokAmount` | Extra costs | At most 2 decimals, from 0 to 999999999999. |
 
-Product code, unit and stock step are immutable; a change needs a migration or a new product. Name, price and sale step can change with audit; existing checkouts keep what they accepted.
+Every stored quantity is also a whole multiple of the product's stock step (`INVALID_QUANTITY_STEP`); cart quantities are multiples of the sale step.
+
+Product code, unit and stock step are immutable (`PRODUCT_IDENTITY_AND_STOCK_UNIT_ARE_IMMUTABLE`); a change needs a new product. Name, price and sale step can change with audit; existing checkouts keep what they accepted.
 
 ```text
 line total = round(quantity × saved unit price, 2)
 checkout total = sum(line totals)
 ```
 
-Round each line once (ties away from zero), then add. A checkout has one line per product. Unit prices may be below one øre.
+Round each line once (half away from zero, `roundDecimal`), then add. A checkout has one line per product. Unit prices may be below one øre.
 
-The database computes every amount. Clients carry quantities, money, bigint IDs and revisions as strings ([api-contract.md](api-contract.md#exact-json-values)).
+The backend computes every amount. Clients carry quantities, money, movement IDs and revisions as strings ([api-contract.md](api-contract.md#exact-json-values)).
+
+Timestamps are UTC ISO strings with six fractional digits (`convex/lib/time.ts`), so string order is time order. `Date.now()` is fixed for the whole of one mutation.
 
 ## 5. Stock, revisions and immutable history
 
-```sql
-quantity = coalesce(sum(inventory_movements.quantity_delta), 0)
-revision = coalesce(max(inventory_movements.id), 0)
+```text
+quantity = sum(inventory_movements.quantity_delta for the product), 0 if none
+revision = max(inventory_movements.id for the product), 0 if none
 ```
 
-The revision is an opaque per-product concurrency token. Every movement changes it, so a withdrawal plus a compensating receipt still invalidates an earlier count.
+Movement IDs come from a gap-free global sequence (`counters`, `convex/lib/sequence.ts`). The revision is an opaque per-product concurrency token. Every movement changes it, so a withdrawal plus a compensating receipt still invalidates an earlier count.
 
 A new product has zero **recorded** stock, which says nothing about the physical bin. Load opening stock through counts or documented adjustments.
 
-`recorded_at` is set by the database. Backdating `occurred_at` does not reorder history or the revision.
+`recorded_at` is set by the backend when the event is written. Backdating `occurred_at` (receipts only) does not reorder history or the revision.
 
 | Kind | Delta | Meaning |
 | --- | --- | --- |
@@ -100,9 +110,9 @@ A new product has zero **recorded** stock, which says nothing about the physical
 | `withdrawal` | Negative | Staff use, giveaway or disposal, with required reason. |
 | `adjustment` | Non-zero signed amount | Reasoned correction or exceptional adjustment. |
 
-Posted events, movements, links, allocations, counts, checkout snapshots, sales and cancellations reject `UPDATE`, `DELETE` and `TRUNCATE`, and API roles cannot write them directly. A correction is a new movement linked to the one it corrects. Correcting a receipt from 60 to 10 posts -50 allocated to the same order line, so order progress updates too. Unlinked adjustments never touch order progress.
+`convex/lib/inventory.ts` is the only writer of events, movements, correction links, receipt allocations and `stock_levels`; command modules insert counts, sales, checkout snapshots and cancellations. No function patches or deletes any of them. A correction is a new movement linked to the one it corrects. Correcting a receipt from 60 to 10 posts -50 allocated to the same order line, so order progress updates too. Unlinked adjustments never touch order progress.
 
-This stops application and accidental SQL changes, not a database owner, who can drop triggers. Restrict migration access and keep backups.
+Only the application enforces this. Anyone with the deployment admin key or dashboard access can write any table, and the test-only fixture functions can too where `ALLOW_TEST_FIXTURES=true`. Restrict that access and keep backups.
 
 ## 6. Orders and latest purchase
 
@@ -112,597 +122,377 @@ cancelled = sum(cancellations) - sum(cancellation reversals)
 outstanding = max(ordered - received - cancelled, 0)
 ```
 
-- Receipts and cancellations are aggregated separately before joining, to avoid row multiplication.
+- `lineProgress` in `convex/lib/inventory.ts` computes these per line on every read.
 - Cancelling never reduces stock or changes `ordered_quantity`. A cancellation can be reversed once, with a reason.
-- Order status is derived, never edited. "Receive everything" sends the remaining quantities, not the ordered ones.
-- `placed_at` may be at most one day after recording (`ORDER_PLACED_IN_FUTURE`; constraint `placed_at_not_in_future` on edits). A mistyped year would otherwise pin the wrong latest price.
-- Price, URL, supplier reference and extra cost can be corrected as audited metadata; ordered quantities and product links cannot.
+- Order status is derived, never edited. "Receive everything" sends the remaining quantities, not the ordered ones. A receipt line cannot exceed the line's outstanding quantity (`RECEIPT_EXCEEDS_OUTSTANDING_QUANTITY`).
+- `placed_at` may be at most one day after the order is recorded (`ORDER_PLACED_IN_FUTURE`, on recording and on edits). A mistyped year would otherwise pin the wrong latest price.
+- Supplier, reference, placement time, extra cost and note, and each line's cost, URL and SKU can be corrected as audited metadata; ordered quantities and product links cannot.
 
-Latest purchase is one line per product: newest `placed_at`, then recorded time, order ID and line number. A line counts if it has a positive cost and some quantity received or still expected. Donations never count. Price and URL come from the **same** line; if it has no URL, the result is null.
+Latest purchase is one line per product: newest `placed_at`, then recorded time, order ID and line number. A line counts if it has a positive cost and some quantity received or still expected. Donations never count. Price and URL come from the **same** line; if it has no URL, the result is null. No current query returns latest purchase; one that does must follow this definition.
 
 ## 7. Checkout and customer data
 
-The guest protocol and retries are owned by [checkout-recovery.md](checkout-recovery.md). Database rules:
+The guest protocol and retries are owned by [checkout-recovery.md](checkout-recovery.md). Data rules:
 
-- Proceeding to payment freezes one line per product, priced from the database under product locks. An inactive or borrow-only product raises `PRODUCT_NOT_FOR_SALE`. Show the returned snapshot before sending the buyer to Vipps.
+- Proceeding to payment freezes one line per product, priced from the product rows in the same transaction. An inactive or borrow-only product raises `PRODUCT_NOT_FOR_SALE`. Show the returned snapshot before sending the buyer to Vipps.
 - A checkout reserves no stock and never expires. Checkouts and retry records are kept forever. A `sales` row means registered (by staff when `recovered_by` and `recovery_reason` are set). No row means **unconfirmed**, not "unpaid".
-- Confirmation writes all movements and the sale in one transaction and returns the existing result on repeat. It does not re-read prices, reject deactivated products, require stock or verify payment. A zero-total checkout registers without a payment claim.
+- Confirmation writes all movements and the sale in one transaction and returns the existing result on repeat. It does not re-read prices, reject deactivated products, require stock or verify payment. A zero-total checkout registers without a payment claim (`payment_required` is false).
 - Payment is outside the transaction. Never tell a buyer to pay again because registration failed.
-- Customers cannot revise a registered purchase; staff use linked corrections. The staff checkout view shows the prepare `request_id`, so staff can find an attempt whose response was lost.
-- The database stores only the SHA-256 of the Worker's 64-hex-character checkout secret. Reading or confirming needs ID and secret. Guest RPCs are executable only by `service_role`. Keep secrets out of URLs and logs.
-- The contact string is optional, unverified and not authentication. Contacts on unconfirmed checkouts are cleared after 90 days; others can be erased on request. It never enters audit snapshots, command logs, notes or application logs. See [operating-procedures.md](operating-procedures.md).
+- Customers cannot revise a registered purchase; staff use linked corrections. `checkout.staffLookup` finds a checkout by its ID or its prepare request ID, so staff can find an attempt whose response was lost.
+- The backend stores only the SHA-256 of the Worker's 64-hex-character checkout token. Reading or confirming needs ID and token. The three guest functions require the Worker's `CHECKOUT_SERVER_KEY` ([§9](#9-access-and-permissions)). Keep tokens out of URLs and logs.
+- The contact string is optional, unverified and not authentication. Contacts on unconfirmed checkouts are cleared 90 × 24 hours after the checkout by a nightly job; others can be erased on request with `checkout.clearContact`. It never enters audit images, notes or application logs, and the retry record keeps only a digest of the input. See [runbook-contact-retention.md](runbook-contact-retention.md) and [operating-procedures.md](operating-procedures.md).
 
 ## 8. Atomic operations and concurrency
 
-- Each stock-changing action is one RPC and one transaction; an error rolls everything back. Separate REST calls do not share a transaction.
-- Inventory writers lock affected product rows `FOR NO KEY UPDATE` in sorted UUID order and read balances only after locking. Order operations lock the order first (several orders in sorted order), so receipts, cancellations and receipt corrections cannot race over outstanding amounts.
-- Stock RPCs, staff-access changes and direct bin/cabinet placement writes require `READ COMMITTED` (else `READ_COMMITTED_REQUIRED`): they must see rows committed while they waited. No transaction stays open while a person counts or pays.
+- Each command is one Convex mutation, a serializable transaction; an error rolls everything back. Separate function calls do not share a transaction. No transaction stays open while a person counts or pays.
+- Convex detects conflicting transactions and retries the loser, which then sees the winner's writes. Row locks, lock orders and isolation-level checks are therefore unnecessary; the rules they protected still hold:
+  - A count submits the revision it read. If stock has moved since, it raises `STALE_STOCK_COUNT`; the UI asks for a fresh count and never swaps in the new revision. A linked correction is checked the same way (`STALE_STOCK_CORRECTION`). Unregistered physical movements are invisible to this check, so pause the bin and settle pending registrations first ([operating-procedures.md](operating-procedures.md)).
+  - Receipts, cancellations and receipt corrections read the line's outstanding quantity in their own transaction, so they cannot overdraw it together.
+  - A checkout has at most one `sales` row: a repeated or concurrent confirmation, or a staff recovery, returns the existing registration.
+  - Nobody can deactivate themselves (`STAFF_SELF_DEACTIVATION`), and every access change re-reads the actor's own membership in its transaction, so two members cannot deactivate each other at once and a deactivated actor cannot finish an access change.
+- `command_requests` (`convex/lib/commands.ts`) stores command name, actor, the SHA-256 of the canonical JSON input and the result. The request ID must be a UUID (`REQUEST_ID_REQUIRED`). A retry with the same ID, command, actor and input returns the stored result; concurrent duplicates act once and get the same result. Reusing an ID with other input or another actor raises `IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_INPUT`.
+- Confirmation, finishing a batch and clearing a contact are repeat-safe by object identity. Metadata edits are compare-and-set against the values the editor showed: product saves against `metadata_revision` (separate from the stock revision, `STALE_PRODUCT`), help contacts against `edit_revision` (`STALE_HELP_CONTACT`), orders, lines, bins and cabinets against their before-image (result `'stale'`). A retry whose change already applied succeeds without writing again. Other commands take a `requestId`; reuse it on retry.
+- Directory moves compare the complete current order with the order the caller saw (`STALE_HELP_ORDER`); a retry that already matches the desired order changes nothing.
+- An error with a code (`fail` in `convex/lib/errors.ts`, read with `errorCode` from `src/lib/convex.ts`) proves the command rolled back. No code (network, timeout, server bug) means the outcome is unknown: keep the request ID and retry.
 
-```text
-idempotency request, where applicable
-    -> order / checkout / count-batch header, where applicable
-    -> affected products sorted by UUID
-    -> movements and related records
-```
+`tests/convex/concurrency.test.ts` runs overlapping commands in parallel against a real backend: two counts against the same revision (exactly one posts), duplicate confirmations (one sale), concurrent duplicates of one request ID (same result, acts once), many sales of one product (exact ledger) and two members deactivating each other (one succeeds). The case list is in [concurrency-tests.md](concurrency-tests.md).
 
-- A count submits the revision it read. If stock has moved since, it raises `STALE_STOCK_COUNT`; the UI asks for a fresh count and never swaps in the new revision. Unregistered physical movements are invisible to this check, so pause the bin and settle pending registrations first ([operating-procedures.md](operating-procedures.md)).
-- `command_requests` stores actor, input digest and result. Concurrent duplicates wait and get the same result. Reusing a key with other input or another actor fails.
-- Confirmation, finishing a batch and clearing a contact are repeat-safe by object identity. Other RPCs: reuse the same `p_request_id` on retry. Product edits filter by `metadata_revision` (separate from the stock revision) and require exactly one updated row.
-
-Staff-access changes take a `SHARE ROW EXCLUSIVE` lock on `staff_members` before the idempotency request and recheck the actor after waiting. This serializes invitations, reactivation and deactivation, including maintainer helpers; a deactivated actor cannot finish a waiting access change. No self-deactivation is allowed, so mutually revoking staff cannot remove every active account. Ordinary operations keep the lock order above.
-
-Directory moves lock contacts in UUID order at `READ COMMITTED`, then compare the complete current order with the caller's previous order. A stale move fails with `STALE_HELP_ORDER`; a retry that already matches the desired order makes no further changes.
-
-The two-connection cases are in [concurrency-tests.md](concurrency-tests.md).
-
-## 9. API and Supabase permissions
-
-Keep `app` out of the Data API's exposed schemas; `public` holds only the explicit `amp_*` views and RPCs. The migration enables RLS itself.
+## 9. Access and permissions
 
 | Caller | Permitted access |
 | --- | --- |
-| Public `anon` | `amp_catalog(...)`, `amp_catalog_facets(...)`, `amp_shelf_map()` and `amp_help_directory(...)` only. |
-| Logged-in non-staff | Catalogue/facets, shelf map and published help directory; no staff rows or staff operations. |
-| Active staff JWT | Staff read views, controlled master-data edits, membership management and authorised operational RPCs. |
-| Worker `service_role` | Catalogue/facets, shelf map, published help directory and the three guest checkout RPCs; no blanket app-table grants. |
-| Database maintainer | Migrations, first-staff bootstrap and emergency access recovery. Treat as privileged access outside ordinary operations. |
+| Anyone | `catalog.page`, `catalog.product`, `catalog.facets`, `catalog.shelfMap`, `catalog.helpDirectory`; `members.me` (null when signed out); sign-in (`session.signIn`, built on Convex Auth's own `auth.*` functions) and the password-link functions (`passwords.requestReset`, `passwords.checkLink`, `passwords.complete`). |
+| Signed-in non-staff | The same; `members.me` returns `membership: null` and every staff function raises `STAFF_REQUIRED`. |
+| Active staff | Every function that starts with `requireStaff`: staff reads, audited master-data edits, operational commands and membership changes. |
+| Worker gateway | `checkout.prepare`, `checkout.get`, `checkout.confirm`, with `serverKey`. |
+| Deployment admin key | Internal functions (`bunx convex run`): `migration.*`, `seed.*`, `fixtures.*`, `retention.*`, `members.grantAccess`, `passwords.storeToken`, `passwords.resetTarget`. Treat as privileged access outside ordinary operations. |
 
-- Staff views are `security_invoker=true`. Public reads are narrow `SECURITY DEFINER` functions.
-- Every grant is explicit, including for `service_role`; bypassing RLS does not grant object privileges.
-- Privileged functions have an empty `search_path` and schema-qualified names. Every function has explicit revoke/grant statements, because default privileges cannot remove `PUBLIC` execute. `supabase/tests/permissions.sql` rejects unreviewed grants; update its allowlist when adding an API.
-- The staff actor comes from `auth.uid()` via `staff_members`, never from the client. Staff RPCs use the staff member's own JWT, never the service key.
-- Grants do not replace the Worker's request-size limits, rate limiting, origin/CSRF checks and credential storage.
-- Runtime: PostgreSQL 17, UTF-8, bundled `und-x-icu` collation for Unicode search.
+- Public queries expose no costs, contacts, tokens, staff identities, checkout history or internal notes.
+- `requireStaff` (`convex/lib/staff.ts`) maps the caller's Convex Auth user to `users.auth_user_id` and then to an active `staff_members` row. The actor always comes from the signed-in identity, never from an argument.
+- The guest functions compare `serverKey` with the deployment's `CHECKOUT_SERVER_KEY` (at least 32 characters, constant-time) and raise `CHECKOUT_SERVER_REQUIRED` otherwise. Buyers never call Convex directly; the Worker keeps request-size limits, rate limiting, origin checks and the checkout cookie ([api-contract.md](api-contract.md)).
+- `fixtures.*`, `seed.demo` and `migration.resetForRehearsal` refuse unless the deployment sets `ALLOW_TEST_FIXTURES=true`, which production never does. `seed.base` (units and the 12-cabinet wall; refuses a deployment with cabinets) and `seed.staff` are for fresh development and test deployments.
+- Convex Auth (`convex/auth.ts`) uses the Password provider with bcrypt cost 10, so imported Supabase hashes keep working. Sign-up is refused (`SIGN_IN_ONLY`); passwords are 8 characters to 72 bytes (`PASSWORD_TOO_SHORT`, `PASSWORD_TOO_LONG`). `session.signIn` answers a wrong password, an unknown address and too many failed attempts alike with `INVALID_CREDENTIALS`.
+- A new public function is a deliberate API: add it to §10.
 
 ### Public volunteer directory
 
-`help_contacts` is deliberately public and grants no access. Never put buyer contact data in it. Publishing requires at least one valid Discord username, email, phone or HTTPS URL (DNS hostname; no credentials, whitespace, control characters or backslashes). Render fields as text and validate links in the frontend too. `amp_help_directory` exposes only published rows. Staff edit through `amp_help_contacts` with an `edit_revision` guard and arrange the list with `amp_reorder_help_contacts`; `display_order` is never typed ([protocol](api-contract.md#public-volunteer-directory)). Entries are unpublished, never deleted, and every change is audited.
+`help_contacts` is deliberately public and grants no access. Never put buyer contact data in it. Publishing requires at least one valid Discord username, email, phone or HTTPS URL (DNS hostname; no credentials, whitespace, control characters or backslashes) (`HELP_CONTACT_NOT_REACHABLE`). Render fields as text and validate links in the frontend too. `catalog.helpDirectory` returns only published rows. Staff edit through `help.save` with an `edit_revision` guard and arrange the list with `help.reorder`; `display_order` is never typed ([protocol](api-contract.md#public-volunteer-directory)). Entries are unpublished, never deleted, and every change is audited.
 
 ### Staff provisioning
 
-Active staff invite, reactivate and deactivate other members from the Admins page. The Worker validates the staff JWT, creates a missing Auth account, grants membership with that same JWT, then sends the invitation. Existing Auth accounts can be linked deliberately by email; invited users follow the email link to set their password. SMTP and the first account remain deployment tasks ([runbook-deploy.md](runbook-deploy.md)).
+Active staff invite, reactivate and deactivate other members from the Admins page ([protocol](api-contract.md#staff-membership-and-invitations)).
 
-- `amp_list_staff()` returns the complete membership directory as a JSON array: `id`, `auth_user_id`, `display_name`, `email`, `is_active`, `email_confirmed`. Only active staff may call it. Deleted Auth accounts have null identity/email and `email_confirmed=false`.
-- `amp_grant_staff_access(p_request_id,p_email,p_display_name,p_expected_staff_id DEFAULT NULL,p_expected_active DEFAULT NULL)` requires exactly one existing Auth account for the case-insensitive email, creates or reactivates its membership, and returns the staff UUID. An already-active membership is a no-op and keeps its current name. Reactivation preserves the ID and applies the supplied name. Resend/reactivation from an existing row supplies its staff ID; if the email now belongs to another identity, it raises `INVITATION_SUPERSEDED` before membership writes. An existing row also supplies its expected active state: true for resend, false for explicit reactivation; a mismatch raises `INVITATION_SUPERSEDED`, so a stale resend cannot undo revocation. A null expected ID is a deliberate email-based invitation. Retry keys bind the normalized email/name, expected staff ID/state and acting staff member.
-- `amp_deactivate_staff(p_request_id,p_staff_id)` returns the staff UUID and sets `is_active=false`. Repeated deactivation is a no-op. The caller cannot deactivate themselves (`STAFF_SELF_DEACTIVATION`); an unknown ID raises `STAFF_NOT_FOUND`. Access changes recheck the actor under the shared lock described in §8.
-- Both writes use `command_requests`, preserve historical foreign keys and audit the acting staff member. Neither anonymous users nor the Worker service key can execute these RPCs. A deleted Auth account nulls `auth_user_id`; recreating that email creates a new identity and never relinks old history automatically.
+- `members.list` returns every membership: `id`, `authUserId`, `displayName`, `email`, `isActive`, `emailConfirmed`, active members first. A membership whose Auth user is missing has null `authUserId` and `email`.
+- `members.invite` (action) takes `requestId`, `email`, `displayName`, `locale` (`nb`/`en`), `targetId` and `targetActive`. It first runs the internal mutation `members.grantAccess`, which re-reads the inviter's active membership (`STAFF_REQUIRED`), rate limits 10 invitations per minute per inviter (`RATE_LIMITED`), normalises the email (trimmed, lower case) and checks it (`STAFF_EMAIL_REQUIRED`) and the 1–120 character name (`STAFF_DISPLAY_NAME_REQUIRED`). In one transaction it creates the account without a password if the email has none, then creates or reactivates the membership. An already-active membership is a no-op and keeps its name; reactivation keeps the staff ID and applies the supplied name.
+- A resend or reactivation from an existing row passes its staff ID and active state as `targetId`/`targetActive` (true for resend, false for reactivation; both null or both set, else `INVALID_ADMIN_INVITATION`). If the email now belongs to another identity, the row's state changed, or the account is gone (`STAFF_USER_NOT_FOUND`), it fails before writing; `INVITATION_SUPERSEDED` means a stale resend cannot undo a revocation. A replay of a completed grant also raises `INVITATION_SUPERSEDED` once the member has been deactivated. A null `targetId` is a deliberate email-based invitation, which also links an existing account by email.
+- After the grant, a confirmed account keeps its password (result `existing_account`). Otherwise the action stores a single-use invitation link (7 days) and emails it through Resend; `INVITATION_EMAIL_FAILED` means access exists and the same request can be retried to send again.
+- `members.deactivate` takes `requestId` and `staffId`, returns the staff UUID and sets `is_active=false`. Repeated deactivation is a no-op. The caller cannot deactivate themselves (`STAFF_SELF_DEACTIVATION`); an unknown ID raises `STAFF_NOT_FOUND`.
+- Grants and deactivations use `command_requests`, keep historical references and audit the acting member. Staff rows are never deleted.
+- Password links: `passwords.requestReset` (action, `email`, `locale`) gives the same answer whether or not the address exists and is rate limited 20 per minute overall and 1 per minute per address. Links are `<SITE_URL>[/en]/admin/password?next=/admin&token_hash=<64 hex>&type=invite|recovery`; a reset is valid one hour, and a new link voids the user's earlier unused links. `passwords.checkLink` reports whether a link is usable; `passwords.complete` sets the password, consumes the link, marks the email confirmed and returns the email so the page can sign in. Used, expired or unknown links raise `INVALID_PASSWORD_LINK`.
 
-For the first member or emergency recovery, create the Auth user and run as a database maintainer:
+Production's members come from the Supabase import at cutover ([runbook-cutover.md](runbook-cutover.md)); `seed.staff` creates a member in development and test deployments. No function restores access when no active member remains; that recovery needs the deployment admin key and a deliberate plan.
 
-```sql
-SELECT app.grant_staff_access('person@example.no', 'Staff display name');
-SELECT app.revoke_staff_access('person@example.no');
-```
+## 10. Function contracts
 
-These helpers remain unavailable to API roles. Granting reactivates a revoked membership; an active membership raises `STAFF_ALREADY_ACTIVE`. Privileged revocation can remove the final member, so use it only with a deliberate recovery plan. Never delete staff rows.
+Functions are called as `module.function` (`api.stock.adjust` in clients, `stock:adjust` on the CLI). Arguments and results are in the code; quantities, prices, revisions and movement IDs are decimal strings. Every staff command below starts with `requireStaff`.
 
-## 10. RPC contracts
+| Function | Caller | Arguments | Result |
+| --- | --- | --- | --- |
+| `checkout.prepare` | Worker | `serverKey`, `requestId`, `token`, `contact`, `items[{productId, quantity}]` | Freeze a checkout; `{checkout_id}`. |
+| `checkout.get`, `checkout.confirm` | Worker | `serverKey`, `checkoutId`, `token` | Read, or register once; the buyer snapshot. |
+| `checkout.recover` | Staff | `requestId`, `checkoutId`, `reason` | Register the original checkout with a reason; converges with guest retries. |
+| `checkout.clearContact` | Staff | `checkoutId` | Remove the optional contact; repeat-safe. |
+| `orders.recordOrder` | Staff | `requestId`, `supplierName`, `placedAt`, `additionalCostNok`, `supplierReference`, `note`, `items[{productId, quantity, unitCostNok, purchaseUrl, supplierSku}]` | Record an already-placed order. |
+| `orders.recordReceipt` | Staff | `requestId`, `orderId`, `note`, `occurredAt`, `items[{productId, orderLineId, quantity}]` | Receive goods, with or without an order. |
+| `orders.cancelQuantities` | Staff | `requestId`, `orderId`, `reason`, `items[{orderLineId, quantity}]` | Cancel outstanding quantity. |
+| `orders.reverseCancellation` | Staff | `requestId`, `cancellationId`, `reason` | Reverse one cancellation. |
+| `orders.updateOrder`, `orders.updateOrderLine` | Staff | `id`, `expected`, `next` | Correct order metadata; `'saved'` or `'stale'`. |
+| `stock.adjust` | Staff | `requestId`, `items[{productId, quantityDelta, correctsMovementId?, expectedRevision?}]`, `reason` | Signed adjustments, optionally linked corrections. |
+| `stock.withdraw` | Staff | `requestId`, `items[{productId, quantity}]`, `reason` | Non-sale withdrawals; positive quantities. |
+| `stock.recordSingleCount` | Staff | `requestId`, `productId`, `expectedRevision`, `counted`, `note` | One count in its own finished batch. |
+| `stock.correctAndCount` | Staff | `requestId`, `correctsMovementId`, `expectedRevision`, `quantityDelta`, `counted`, `reason` | Linked correction plus fresh count, atomically. |
+| `stock.startCountBatch` | Staff | `requestId`, `title` | Open a batch owned by the caller. |
+| `stock.recordCount` | Batch owner | `requestId`, `batchId`, `productId`, `expectedRevision`, `counted`, `note` | Post one observation. |
+| `stock.finishCountBatch` | Batch owner | `batchId` | Close the batch; repeat-safe. |
+| `stock.closeAbandonedCountBatch` | Staff | `requestId`, `batchId`, `reason` | Close a batch whose owner is gone. |
+| `products.save` | Staff | `payload`, `revision`, `attributes?`, `attributeBefore?` | Create (`revision` null) or edit a product with its specifications. |
+| `products.setAttribute` | Staff | `productId`, `before`, `after` | Set or remove one specification. |
+| `products.rename` | Staff | `kind` (`category`/`definition`), `id`, `before`, `after` | Rename a category or relabel a specification. |
+| `products.createDefinition` | Staff | `id`, `code`, `label`, `value_type`, `canonical_unit` | A new specification type. |
+| `help.save`, `help.reorder` | Staff | `id`, `revision`, `fields`; `ids`, `expectedIds` | Edit or rearrange volunteer contacts. |
+| `members.invite`, `members.deactivate` | Staff | See [Staff provisioning](#staff-provisioning) | Add/reactivate or deactivate another member. |
+| `shelf.*` | Staff | See below | Layouts, moves, swaps and retirement. |
 
-All RPCs are in `public`; helpers in `app` are not client APIs. Signatures are in the migrations.
+Command rules:
 
-| Function | Caller | Result |
-| --- | --- | --- |
-| `amp_catalog`, `amp_catalog_facets` | Public | Product pages, by category and primary specification, and filter choices ([details](api-contract.md#catalog-and-topology)). |
-| `amp_shelf_map` | Public | Complete live cabinets and bins with `has_products`. |
-| `amp_help_directory` | Public | Published support contacts. |
-| `amp_admin_statistics` | Staff | Sales summary and overview ([response](api-contract.md#staff-statistics)). |
-| `amp_list_staff` | Staff | Complete membership directory and Auth invitation state. |
-| `amp_grant_staff_access`, `amp_deactivate_staff` | Staff | Add/reactivate or deactivate another member; returns their staff UUID. |
-| `amp_prepare_checkout`, `amp_get_checkout`, `amp_confirm_checkout` | Worker | Freeze, read and register a checkout. |
-| `amp_recover_checkout` | Staff | Register the original checkout with a reason; converges with guest retries. |
-| `amp_record_order` | Staff | Record an already-placed order. |
-| `amp_record_receipt` | Staff | Receive goods, with or without an order. |
-| `amp_cancel_order_quantities`, `amp_reverse_cancellation` | Staff | Cancel outstanding quantity; reverse one cancellation. |
-| `amp_adjust_stock`, `amp_withdraw_stock` | Staff | Signed adjustments; non-sale withdrawals. |
-| `amp_start_count_batch`, `amp_record_count`, `amp_finish_count_batch` | Owner | Batch counting. |
-| `amp_record_single_count` | Staff | One count in its own finished batch. |
-| `amp_correct_movement_and_count` | Staff | Linked correction plus fresh count, atomically. |
-| `amp_close_abandoned_count_batch` | Staff | Close a batch whose owner is gone. |
-| `amp_save_shelf_layout`, `amp_archive_empty_cabinet` | Staff | Save or retire a whole cabinet. |
-| `amp_swap_bins`, `amp_swap_cabinets` | Staff | Exchange two occupied positions. |
-| `amp_clear_checkout_contact` | Staff | Remove the optional contact. |
-| `amp_reorder_help_contacts` | Staff | Rearrange the volunteer contact list. |
-
-### JSON items
-
-```json
-{"product_id":"<uuid>","quantity":"0.5"}
-{"product_id":"<uuid>","quantity":"100","unit_cost_nok":"0.20","purchase_url":"https://example.invalid/item","supplier_sku":"SUPPLIER-123"}
-{"product_id":"<uuid>","order_line_id":"<uuid>","quantity":"60"}
-{"order_line_id":"<uuid>","quantity":"40"}
-{"product_id":"<uuid>","quantity_delta":"-90","corrects_movement_id":"123","expected_revision":"456"}
-```
-
-In order: cart line, order line, receipt line, cancellation, adjustment. A withdrawal is `{"product_id":"<uuid>","quantity":"3"}` with a positive quantity.
-
-- One receipt call covers one order or none. An unplanned receipt needs a note.
-- A linked correction needs the `expected_revision` read with the history (`STALE_STOCK_CORRECTION` if stale). If any count followed the target movement, it fails with `CORRECTION_REQUIRES_RECOUNT`; use `amp_correct_movement_and_count`.
+- Item lists hold 1–200 items (`INVALID_ITEM_COUNT`). Reasons are non-blank and at most 2000 characters (`REASON_REQUIRED`); an unplanned receipt needs a source note (`UNPLANNED_RECEIPT_REQUIRES_SOURCE_NOTE`).
+- One receipt call covers one order or none. With an order, every item names a line of that order and product (`RECEIPT_ORDER_LINE_REQUIRED`, `RECEIPT_ORDER_LINE_MISMATCH`); without one, no item may (`UNPLANNED_RECEIPT_CANNOT_HAVE_ORDER_LINE`).
+- A linked correction needs the `expectedRevision` read with the history (`STALE_STOCK_CORRECTION` if stale). If any count followed the target movement, it fails with `CORRECTION_REQUIRES_RECOUNT`; use `stock.correctAndCount`. A receipt correction inherits the receipt's order line and must keep received quantity between 0 and ordered minus cancelled (`RECEIPT_CORRECTION_OUT_OF_RANGE`).
 
 ### Shelf layouts and storage
 
 Coordinates and spans are described under `cabinets` and `bins` in Appendix A.
 
-- `amp_save_shelf_layout` takes the exact original cabinet and live drawers (null/empty for a new cabinet) plus the desired ones. Objects have exactly the table's columns; unexpected keys, coerced types, overlaps or duplicates raise `INVALID_SHELF_LAYOUT`. Any intervening change raises `STALE_SHELF_LAYOUT`: refresh and review, never resubmit with a new snapshot automatically.
+- `shelf.saveLayout` (`requestId`, `before`, `cabinet`, `beforeBins`, `bins`) takes the exact original cabinet and live drawers (null/empty for a new cabinet) plus the desired ones. The argument validators reject unexpected keys and wrong types; invalid coordinates, codes, overlaps, duplicates, more than 4096 drawers or cells, or a changed drawer code raise `INVALID_SHELF_LAYOUT`. Any intervening change raises `STALE_SHELF_LAYOUT`: refresh and review, never resubmit with a new snapshot automatically.
 - The client assigns drawer UUIDs and codes once and keeps them across retries. Retained drawers keep their identity; omitted drawers are archived.
-- An assigned drawer (inactive products count) can only grow at its anchor over whole unassigned neighbours. Removing, shrinking or moving it raises `LAYOUT_HAS_PRODUCTS`.
-- Move a bin or cabinet into free cells by updating `amp_bins`/`amp_cabinets` filtered by ID and the displayed position, and require one updated row. Swap two occupied positions with `amp_swap_bins` (positions and spans) or `amp_swap_cabinets`; stale forms raise `STALE_BIN_POSITION`/`STALE_CABINET_POSITION`. Moves leave vacant cells.
-- Retire storage with `is_archived=true`. A bin must have no assigned products; a cabinet no live bins. Archiving frees the position; the audit keeps it. `amp_archive_empty_cabinet` retires a cabinet and all its empty drawers at once (`BIN_STILL_HAS_PRODUCTS` if any is assigned). `amp_archived_bin_locations` shows where archived drawers used to be.
+- An assigned drawer (inactive products count) can only grow at its anchor over whole neighbours that the layout removes, and those must be unassigned. Removing, shrinking or moving it raises `LAYOUT_HAS_PRODUCTS`.
+- `shelf.updateBin` and `shelf.updateCabinet` (`before`, `after`) move or relabel one drawer or cabinet into free cells and return `'saved'`, or `'stale'` when the row no longer matches `before`. Collisions raise `BIN_POSITION_OCCUPIED`, `CABINET_POSITION_OCCUPIED` or `BIN_DOES_NOT_FIT_CABINET_GRID`; codes and IDs are immutable (`STORAGE_IDENTITY_IS_IMMUTABLE`). Spans and cabinet grids change only through `shelf.saveLayout`.
+- `shelf.swapBins` and `shelf.swapCabinets` (`requestId`, `first`, `second`) exchange two occupied positions; drawer spans travel with the drawers. Stale forms raise `STALE_BIN_POSITION`/`STALE_CABINET_POSITION`. Moves leave vacant cells.
+- Retire storage with `is_archived=true`. A bin must have no assigned products (`BIN_STILL_HAS_PRODUCTS`); a cabinet no live bins (`CABINET_STILL_HAS_BINS`). Archiving frees the position; the audit keeps it. `shelf.archiveCabinet` (`requestId`, `before`, `beforeBins`) retires a cabinet and all its empty drawers at once. `shelf.archivedBinLocations` (`binIds`) shows where archived drawers used to be.
 
 ### Count batches
 
-Only the owner can post to or finish a batch. If the owner is disabled or loses their Auth account, another staff member can call `amp_close_abandoned_count_batch` with a reason; this keeps `owner_id`, records who closed it and posts no stock. An active owner cannot be bypassed.
+Only the owner can post to or finish a batch (`COUNT_BATCH_BELONGS_TO_ANOTHER_STAFF_MEMBER`, `COUNT_BATCH_FINISHED`). If the owner is deactivated or has no Auth identity, another staff member can call `stock.closeAbandonedCountBatch` with a reason; this keeps `owner_id`, records who closed it and posts no stock. An active owner cannot be bypassed (`COUNT_BATCH_OWNER_STILL_ACTIVE`).
 
 ### Metadata edits
 
-The views `amp_help_contacts`, `amp_products`, `amp_bins`, `amp_cabinets`, `amp_categories`, `amp_attribute_definitions` and `amp_product_attributes` allow controlled CRUD, audited by triggers. Column grants block product code and unit changes. Use explicit inserts and updates, not an upsert of every returned column. Purchase corrections are limited to supplier, reference, placement, extra cost, note, line cost, URL and SKU.
+Master-data writes go through `convex/lib/audit.ts` (`insertAudited`, `patchAudited`, `deleteAudited`), which writes the before/after image to `audit_log` in the same transaction; a patch that changes nothing writes nothing. Product edits cannot change code, unit or stock step. A standard category or specification (from `src/lib/product-specifications.ts`) is created with its fixed ID on first use; an existing ID or code that means something else raises `DEFINITION_ID_TAKEN`, `DEFINITION_CODE_TAKEN` or `CATEGORY_NAME_TAKEN`.
 
 ## 11. Read models
 
-`app.inventory` (quantity, revision, last count), `app.purchase_line_progress`, `app.latest_purchase` and `app.checkout_totals` derive the stored-nowhere values from §2. Staff see matching `public.amp_*` views. Token digests and command requests are never exposed. The public catalogue never shows the ledger or incoming orders.
+| Query | Caller | Returns |
+| --- | --- | --- |
+| `catalog.page` | Public | One page (at most 200) of active products in catalog order with stock, last count, placement and specifications, filtered by search, categories, specifications, cabinets or bins ([details](api-contract.md#catalog-and-topology)). |
+| `catalog.product` | Public | One active product by exact code, or null. |
+| `catalog.facets` | Public | Categories with active products and the specification values within the selected ones. |
+| `catalog.shelfMap` | Public | Live cabinets and bins with `has_products` (any assigned product, active or not). |
+| `catalog.helpDirectory` | Public | Published support contacts in display order. |
+| `members.me` | Anyone | The signed-in user and their active membership, or null. |
+| `stock.inventory` | Staff | Quantity, revision and last count per product (from `stock_levels`). |
+| `stock.detail` | Staff | One product's balance, movements (newest first) with correction and order links, and counts. |
+| `stock.countBatches`, `stock.countDetail` | Staff | Grouped count batches and their owners; one batch with its observations and products. |
+| `orders.list`, `orders.detail` | Staff | Orders (open first) with line progress; one order with lines, cancellations, receipts and actors. |
+| `orders.outstandingByProduct`, `orders.unplannedReceipts` | Staff | Quantity still expected per product; receipts without an order. |
+| `products.list`, `products.get`, `products.createdSince`, `products.references`, `products.attributes` | Staff | Product master data, categories, definitions, units and specification values. |
+| `shelf.admin` | Staff | Every cabinet and drawer, archived too, and every product's drawer assignment. |
+| `help.list` | Staff | Every contact, drafts included, with `edit_revision`. |
+| `members.list` | Staff | The membership directory ([Staff provisioning](#staff-provisioning)). |
+| `checkout.staffLookup`, `checkout.staffContact` | Staff | A checkout by ID or prepare request ID; its contact, read only when staff choose to show it. |
+| `statistics.read` | Staff | Sales summary and overview ([response](api-contract.md#staff-statistics)). |
+| `auditLog.page`, `auditLog.productCreations` | Staff | 200 audit entries per page, newest first, with the names they refer to; product creations since a time. |
 
-Never add quantities across units. Staff statistics are defined in [api-contract.md](api-contract.md#staff-statistics). Add indexes or caching only after measuring query plans.
+`stock_levels` is the projection of §5: `quantity` and `revision` per product, plus `last_counted_at`, the `recorded_at` of the product's latest count (also a count with no movement). A product without a row has quantity 0, revision 0 and no count. `migration.verifyStockLevels` lists products whose row disagrees with the ledger (it must return nothing) and `migration.rebuildStockLevels` recomputes rows from the ledger.
+
+Order progress and checkout totals are computed on read from §6 and §4. Token digests, password tokens and command requests are never returned. The public catalogue never shows the ledger, costs or incoming orders.
+
+Never add quantities across units. Staff statistics are defined in [api-contract.md](api-contract.md#staff-statistics). Add indexes or caching only after measuring.
 
 ## 12. Testing
 
-`./scripts/test-database.sh` runs every database check, including `scripts/check-schema-docs.py` for Appendix A; see [README.md](../README.md) and [VALIDATION.md](../VALIDATION.md). SQL cannot prove the real REST boundary; see [concurrency-tests.md](concurrency-tests.md) §7.
+`./scripts/test-convex.sh` starts a disposable local Convex backend with a fresh instance secret, its own Auth keys, `ALLOW_TEST_FIXTURES=true` and an email stub, deploys `convex/` with type checking, runs `bun test tests/convex`, then deletes everything. The files are `accounts`, `checkout`, `concurrency`, `migration`, `orders`, `seed`, `shelf-and-help` and `stock` (`*.test.ts`, with `harness.ts`). Setup is in [README.md](../README.md) and executed evidence in [VALIDATION.md](../VALIDATION.md).
 
-The read-only `supabase/tests/v1-invariants.sql` diagnostic rechecks stored placement after restore, including live drawer overlap and cabinet bounds. Re-enabling triggers does not validate rows loaded while they were bypassed. Corruption probes in `supabase/tests/invariant-detector.py` exercise these checks with triggers restored before inspection.
+The backend suite calls the functions through the native client but cannot prove the Worker, the browser or real sign-ins; the browser proofs (`./scripts/test-web.sh`) and production acceptance cover those ([concurrency-tests.md](concurrency-tests.md), [VALIDATION.md](../VALIDATION.md)).
+
+After a restore or import, `bunx convex run migration:verifyStockLevels` must return an empty list.
 
 ## Appendix A. Complete table definitions
 
-Current table contracts; update them with any forward migration. Quantities and prices are in the product's unit; money is NOK. Foreign keys use the default `NO ACTION` unless stated.
+Current table contracts from `convex/schema.ts`; update them with any schema change. Field names match the former PostgreSQL columns. Quantities and prices are in the product's unit; money is NOK.
+
+Notation: `uuid` is a UUID string, the row identity in `id` (index `uuid`) and in every reference; `decimal` is an exact decimal string; `timestamp` is a UTC ISO string with six fractional digits; `int` is a Convex number holding an integer; `?` marks a field that holds explicit `null` when empty. Every table also has Convex's own `_id` and `_creationTime`, which clients never use. The schema enforces only these types; each check listed below lives in the named file.
 
 ### `units`
 
-Changed only through migrations.
+`code text, name text, symbol text, is_discrete boolean`
 
-```sql
-CREATE TABLE app.units (
-  code text PRIMARY KEY,
-  name text NOT NULL,
-  symbol text NOT NULL,
-  is_discrete boolean NOT NULL,
-  CHECK (code ~ '^[a-z][a-z0-9_]{0,23}$')
-);
-```
+Written only by `seed.base`, `seed.demo` and the import (`pcs`, `m`, `g`); no staff function changes units, and nothing checks the code format.
 
 ### `staff_members`
 
-Internal staff IDs survive Auth-account removal. Active staff manage access through audited RPCs; maintainers bootstrap or recover access (§9).
+`id uuid, auth_user_id uuid?, display_name text, is_active boolean, created_at timestamp`
 
-```sql
-CREATE TABLE app.staff_members (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  auth_user_id uuid UNIQUE REFERENCES auth.users(id) ON DELETE SET NULL,
-  display_name text NOT NULL CHECK (length(btrim(display_name)) BETWEEN 1 AND 120),
-  is_active boolean NOT NULL DEFAULT true,
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp()
-);
-```
+Internal staff IDs never change. `auth_user_id` is `users.auth_user_id`, the stable Auth UUID (imported from Supabase for existing accounts). `members.grantAccess` checks the trimmed name is 1–120 characters without control characters; one membership per Auth user. Active staff manage access through audited functions (§9).
 
 ### `help_contacts`
 
-Public volunteer directory (§9). Unpublish to remove an entry.
+`id uuid, display_name text, email text?, phone text?, contact_url text?, display_order int, is_published boolean, edit_revision int, created_at timestamp, updated_at timestamp, responsibility text?, discord text?`
 
-```sql
--- Public support contacts are independent of staff access and Auth identities.
--- These are intentionally publishable directory details, not buyer contact data.
-CREATE TABLE app.help_contacts (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  display_name text NOT NULL CHECK (length(btrim(display_name)) >= 1 AND length(btrim(display_name)) <= 120
-    AND display_name !~ '[[:cntrl:]]'),
-  email text CHECK (email IS NULL OR (length(email) <= 254
-    AND email ~ '^[A-Za-z0-9._%+-]+@[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,63}$')),
-  phone text CHECK (phone IS NULL OR (length(phone) >= 3 AND length(phone) <= 40
-    AND phone ~ '^\+?[0-9][0-9 ()-]*[0-9]$'
-    AND length(regexp_replace(phone,'[^0-9]','','g')) >= 3)),
-  contact_url text CHECK (contact_url IS NULL OR (length(contact_url) <= 500
-    AND contact_url ~ '^https://([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}(:[0-9]{1,5})?([/?#][^[:space:]\\]*)?$'
-    AND contact_url !~ '[[:cntrl:]]'
-    AND coalesce(substring(contact_url FROM '^https://[^/:?#]+:([0-9]+)')::integer,443) <= 65535)),
-  display_order integer NOT NULL DEFAULT 0 CHECK (display_order >= 0),
-  is_published boolean NOT NULL DEFAULT false,
-  edit_revision bigint NOT NULL DEFAULT 1 CHECK (edit_revision > 0),
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  responsibility text CHECK (responsibility IS NULL OR (length(btrim(responsibility)) >= 1 AND length(btrim(responsibility)) <= 80
-    AND responsibility !~ '[[:cntrl:]]')),
-  -- Current Discord usernames: 2–32 of a-z, 0-9, '_' and '.', never two periods in a row.
-  discord text CHECK (discord IS NULL OR (discord ~ '^[a-z0-9_.]{2,32}$' AND discord !~ '\.\.')),
-  CHECK (NOT is_published OR num_nonnulls(email,phone,contact_url,discord) > 0)
-);
-```
+Public volunteer directory (§9). Unpublish to remove an entry. Checks in `convex/help.ts` (`INVALID_HELP_CONTACT` with the field name):
+
+- `display_name`: 1–120 characters trimmed, no control characters. `responsibility`: 1–80 trimmed, no control characters.
+- `email`: at most 254 characters, `local@domain.tld` shape.
+- `phone`: 3–40 characters of digits, spaces, parentheses and hyphens, optional leading `+`, starting and ending with a digit, at least 3 digits.
+- `contact_url`: at most 500 characters, `https://` with a DNS hostname, optional port up to 65535, no whitespace, backslashes or control characters.
+- `discord`: current usernames, 2–32 of `a-z`, `0-9`, `_` and `.`, never two periods in a row.
+- A published entry needs at least one of email, phone, URL or Discord (`HELP_CONTACT_NOT_REACHABLE`).
+- `display_order` is assigned (last + 1 on create) and rewritten only by `help.reorder`; `edit_revision` starts at 1 and increases on each edit.
 
 ### `categories`
 
-```sql
-CREATE TABLE app.categories (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name text NOT NULL UNIQUE CHECK (length(btrim(name)) BETWEEN 1 AND 100)
-);
-```
+`id uuid, name text`
+
+Name 1–100 characters trimmed and unique (`INVALID_CATEGORY`, `CATEGORY_NAME_TAKEN`), checked by `products.rename` and when `products.save` creates a standard category.
 
 ### `cabinets`
+
+`id uuid, code text, outer_row int?, outer_col int?, inner_rows int, inner_cols int, label text?, is_archived boolean`
 
 One cabinet at an open-ended position on the single shelf wall. `inner_rows`/`inner_cols` give that cabinet's own drawer grid; cabinets may differ.
 
 Coordinates, on the wall and inside a cabinet, viewed from the front: row 1 is the bottom and rows increase upward; column 1 is the left. Columns display as A, B, …, Z, AA, … followed by the row, so `A1` is bottom-left at both levels. A new cabinet row above `A1–F2` becomes `A3–F3`; growing `inner_rows` adds positions on top. Existing coordinates never shift.
 
-The initial migration installs the physical wall from `Bok.xlsx`: 12 cabinets in two rows of six, 496 unit cells, 492 drawers. A1, B1, C1, D1, B2, D2, E2 and F2 are 12 rows × 4 columns; A2, E1 and F1 are 8 × 3; C2 is 10 × 4 with a full-width drawer at A1–D1 and a two-column drawer at C2–D2. It creates no staff, products, stock or audit rows. `supabase/tests/initial-layout.sql` checks it.
+The physical wall from `Bok.xlsx` (installed by `seed.base` in development and test, imported in production): 12 cabinets in two rows of six, 496 unit cells, 492 drawers. A1, B1, C1, D1, B2, D2, E2 and F2 are 12 rows × 4 columns; A2, E1 and F1 are 8 × 3; C2 is 10 × 4 with a full-width drawer at A1–D1 and a two-column drawer at C2–D2. `tests/convex/shelf-and-help.test.ts` checks it (12 cabinets, 492 drawers).
 
-```sql
-CREATE TABLE app.cabinets (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  code text NOT NULL UNIQUE,
-  outer_row integer CHECK (outer_row > 0),
-  outer_col integer CHECK (outer_col > 0),
-  inner_rows integer NOT NULL CHECK (inner_rows > 0),
-  inner_cols integer NOT NULL CHECK (inner_cols > 0),
-  label text,
-  is_archived boolean NOT NULL DEFAULT false,
-  CHECK ((is_archived AND outer_row IS NULL AND outer_col IS NULL)
-      OR (NOT is_archived AND outer_row IS NOT NULL AND outer_col IS NOT NULL)),
-  CONSTRAINT cabinets_position_key UNIQUE (outer_row, outer_col) DEFERRABLE INITIALLY IMMEDIATE,
-  CHECK (length(btrim(code)) BETWEEN 1 AND 64)
-);
-```
+Checks in `convex/shelf.ts`: code 1–64 characters trimmed and unique, never changed; positions and grid sizes are positive integers, at most 4096 cells per cabinet; two live cabinets never share a position (`CABINET_POSITION_OCCUPIED`). An archived cabinet has null `outer_row`/`outer_col`; a live one has both.
 
 ### `bins`
 
-One drawer or bulk position. `(inner_row, inner_col)` is the bottom-left unit cell; `row_span` extends upward and `col_span` rightward, so a 2×2 drawer at C3 covers C3–D4. Uncovered cells are vacant positions (`app.cabinet_free_cells`); moves do not refill them. The public map's `has_products` is true if any product, active or not, is assigned.
+`id uuid, code text, cabinet_id uuid?, inner_row int?, inner_col int?, row_span int, col_span int, label text?, is_archived boolean`
 
-```sql
-CREATE TABLE app.bins (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  code text NOT NULL UNIQUE CHECK (length(btrim(code)) BETWEEN 1 AND 64),
-  cabinet_id uuid REFERENCES app.cabinets(id),
-  inner_row integer CHECK (inner_row > 0),
-  inner_col integer CHECK (inner_col > 0),
-  row_span integer NOT NULL DEFAULT 1 CHECK (row_span > 0),
-  col_span integer NOT NULL DEFAULT 1 CHECK (col_span > 0),
-  label text,
-  is_archived boolean NOT NULL DEFAULT false,
-  CHECK ((is_archived AND cabinet_id IS NULL AND inner_row IS NULL AND inner_col IS NULL)
-      OR (NOT is_archived AND cabinet_id IS NOT NULL AND inner_row IS NOT NULL AND inner_col IS NOT NULL))
-);
-```
+One drawer or bulk position. `(inner_row, inner_col)` is the bottom-left unit cell; `row_span` extends upward and `col_span` rightward, so a 2×2 drawer at C3 covers C3–D4. Uncovered cells are vacant positions; moves do not refill them.
+
+Checks in `convex/shelf.ts`: code 1–64 characters trimmed and unique, never changed; coordinates and spans are positive integers; a live drawer lies inside its live cabinet's grid and overlaps no other live drawer. An archived bin has null `cabinet_id`, `inner_row` and `inner_col` and no assigned products; a live one has all three.
 
 ### `products`
 
-Stable identity and current master data. No stock or latest-purchase counters (§2).
+`id uuid, code text, name_nb text, name_en text, description text?, category_id uuid?, bin_id uuid?, location_note text?, unit_code text, stock_step decimal, sale_step decimal, sale_unit_price_nok decimal?, minimum_stock decimal, datasheet_url text?, purchase_url text?, is_active boolean, metadata_revision int, created_at timestamp, updated_at timestamp`
 
-```sql
-CREATE TABLE app.products (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  code text NOT NULL UNIQUE CHECK (code ~ '^[A-Z0-9][A-Z0-9-]{0,39}$'),
-  name_nb text NOT NULL CHECK (length(btrim(name_nb)) BETWEEN 1 AND 200),
-  name_en text NOT NULL CHECK (length(btrim(name_en)) BETWEEN 1 AND 200),
-  description text,
-  category_id uuid REFERENCES app.categories(id),
-  bin_id uuid REFERENCES app.bins(id),
-  location_note text CHECK (location_note IS NULL OR length(btrim(location_note)) BETWEEN 1 AND 200),
-  unit_code text NOT NULL REFERENCES app.units(code),
-  stock_step app.quantity NOT NULL CHECK (stock_step > 0),
-  sale_step app.quantity NOT NULL CHECK (sale_step > 0),
-  sale_unit_price_nok app.unit_price,
-  minimum_stock app.quantity NOT NULL DEFAULT 0 CHECK (minimum_stock >= 0),
-  datasheet_url text CHECK (datasheet_url IS NULL OR datasheet_url ~ '^https?://'),
-  purchase_url text CHECK (purchase_url IS NULL OR purchase_url ~ '^https?://'),
-  is_active boolean NOT NULL DEFAULT false,
-  metadata_revision bigint NOT NULL DEFAULT 1,
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  CHECK (mod(sale_step, stock_step) = 0),
-  CHECK (mod(minimum_stock, stock_step) = 0),
-  CHECK (bin_id IS NULL OR location_note IS NULL)
-);
-```
+Stable identity and current master data. No stock or latest-purchase fields (§2). Checks in `convex/products.ts` (`INVALID_PRODUCT` with the field):
+
+- `code` matches `^[A-Z0-9][A-Z0-9-]{0,39}$` and is unique (`PRODUCT_CODE_TAKEN`); `code`, `unit_code` and `stock_step` never change.
+- `name_nb`, `name_en`: 1–200 characters trimmed. `location_note`: 1–200 trimmed, and only without a bin.
+- `unit_code` names an existing unit; `category_id` an existing category; `bin_id` a live bin (`PRODUCT_BIN_UNAVAILABLE`).
+- `stock_step` and `sale_step` positive, `minimum_stock` at least 0, all `checkedQuantity`; `sale_step` and `minimum_stock` are multiples of `stock_step`; a discrete unit needs whole steps (`DISCRETE_UNIT_REQUIRES_WHOLE_QUANTITIES`).
+- `sale_unit_price_nok` null or `checkedUnitPrice`. `datasheet_url`, `purchase_url` null or `http(s)://` (`INVALID_URL`).
+- `metadata_revision` starts at 1 and increases with each edit.
+
+Field meanings:
 
 - `sale_unit_price_nok`: null makes the product **borrow-only** (a breadboard the workshop lends, never sells). It is public with its stock and drawer, but checkout rejects it (`PRODUCT_NOT_FOR_SALE`), so only staff counts, receipts, withdrawals and adjustments change its stock. `sale_step` is kept but unused.
 - `minimum_stock`: staff-only restock level. An active product with positive stock below it needs attention; `0` means only sold out does. Never public.
 - `location_note`: public finding hint for a product with no drawer, shown instead of coordinates. Without a note, the buyer asks staff.
-- `purchase_url`: staff-only standing reorder link, so opening stock needs no invented orders. Order lines keep their own URL, and `latest_purchase` still derives from history.
+- `purchase_url`: staff-only standing reorder link, so opening stock needs no invented orders. Order lines keep their own URL, and latest purchase still derives from history.
 
 ### `attribute_definitions`
 
-Meaning, type and canonical unit of one component property.
+`id uuid, code text, label text, value_type 'number' | 'text' | 'boolean', canonical_unit text?`
 
-```sql
-CREATE TABLE app.attribute_definitions (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  code text NOT NULL UNIQUE CHECK (code ~ '^[a-z][a-z0-9_]{0,63}$'),
-  label text NOT NULL CHECK (length(btrim(label)) BETWEEN 1 AND 100),
-  value_type text NOT NULL CHECK (value_type IN ('number','text','boolean')),
-  canonical_unit text,
-  CHECK (canonical_unit IS NULL OR value_type = 'number')
-);
-```
+Meaning, type and canonical unit of one component property. Checks in `convex/products.ts`: `code` matches `^[a-z][a-z0-9_]{0,63}$` and is unique; `label` 1–100 characters trimmed; `canonical_unit` only for numbers (`INVALID_DEFINITION`). Code, type and unit never change; only the label can be edited.
 
 ### `product_attributes`
 
-One typed value per product and attribute. A number may be a range (250–400 V):
-`number_value` is then the lower bound and `number_max` the upper one, strictly
-greater; `number_max` is null for a single value. Filters match a range they overlap,
-search reads both bounds and facets offer both. A dual rating such as 250 VAC and
-400 VDC is two attributes (`voltage_ac`, `voltage`), not a range.
+`product_id uuid, attribute_id uuid, number_value decimal?, text_value text?, boolean_value boolean?, number_max decimal?`
 
-```sql
-CREATE TABLE app.product_attributes (
-  product_id uuid NOT NULL REFERENCES app.products(id),
-  attribute_id uuid NOT NULL REFERENCES app.attribute_definitions(id),
-  number_value numeric,
-  text_value text,
-  boolean_value boolean,
-  number_max numeric,
-  PRIMARY KEY (product_id, attribute_id),
-  CHECK (num_nonnulls(number_value, text_value, boolean_value) = 1),
-  CHECK (number_value IS NULL OR
-    (number_value > '-Infinity'::numeric AND number_value < 'Infinity'::numeric)),
-  CHECK (text_value IS NULL OR length(text_value) <= 2000),
-  CHECK (number_max IS NULL OR (number_value IS NOT NULL AND number_max > number_value
-    AND number_max < 'Infinity'::numeric))
-);
-```
+One typed value per product and attribute. A number may be a range (250–400 V): `number_value` is then the lower bound and `number_max` the upper one, strictly greater; `number_max` is null for a single value. Filters match a range they overlap, search reads both bounds and facets offer both. A dual rating such as 250 VAC and 400 VDC is two attributes (`voltage_ac`, `voltage`), not a range.
+
+Checks in `convex/products.ts` (`INVALID_ATTRIBUTE`): exactly one of the three values, matching the definition's type (`ATTRIBUTE_VALUE_TYPE_MISMATCH`); numbers are plain decimal strings without exponent; `number_max` only with a number and greater than it; text at most 2000 characters; one row per product and attribute (`DUPLICATE_PRODUCT_SPECIFICATION` within one save). Values are the only rows that can be deleted, always through `deleteAudited`.
 
 ### `command_requests`
 
-Private retry record, completed in the operation's transaction. Raw inputs and secrets are not kept.
+`id uuid, command_name text, actor_id uuid?, request_digest text, result any?, created_at timestamp`
 
-```sql
-CREATE TABLE app.command_requests (
-  id uuid PRIMARY KEY,
-  command_name text NOT NULL,
-  actor_id uuid REFERENCES app.staff_members(id),
-  request_digest bytea NOT NULL CHECK (octet_length(request_digest) = 32),
-  result jsonb,
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp()
-);
-```
+Private retry record, completed in the command's transaction (`convex/lib/commands.ts`). `id` is the client's request ID; `request_digest` is the SHA-256 (hex) of the canonical JSON input. Raw inputs and secrets are not kept. `actor_id` is null for guest checkout.
 
 ### `purchase_orders`
 
-Header of an already-placed order.
+`id uuid, request_id uuid, supplier_name text, supplier_reference text?, placed_at timestamp, additional_cost_nok decimal, note text?, created_by uuid, recorded_at timestamp`
 
-```sql
-CREATE TABLE app.purchase_orders (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  request_id uuid NOT NULL UNIQUE REFERENCES app.command_requests(id),
-  supplier_name text NOT NULL CHECK (length(btrim(supplier_name)) BETWEEN 1 AND 200),
-  supplier_reference text,
-  placed_at timestamptz NOT NULL,
-  additional_cost_nok app.nok_amount NOT NULL DEFAULT 0,
-  note text,
-  created_by uuid NOT NULL REFERENCES app.staff_members(id),
-  recorded_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  -- Orders record what was already placed; a far-future placement time is a typo.
-  CONSTRAINT placed_at_not_in_future CHECK (placed_at <= recorded_at + interval '1 day')
-);
-```
+Header of an already-placed order; `request_id` is the recording command's request ID. Checks in `convex/orders.ts`: `supplier_name` 1–200 characters trimmed (`SUPPLIER_NAME_REQUIRED`); `supplier_reference` and `note` at most 2000 (`TEXT_TOO_LONG`); `additional_cost_nok` is `checkedNokAmount`; `placed_at` at most one day after recording (`ORDER_PLACED_IN_FUTURE`).
 
 ### `purchase_order_lines`
 
-One line of a placed order. The same product may appear on several lines.
+`id uuid, order_id uuid, line_number int, product_id uuid, ordered_quantity decimal, unit_cost_nok decimal, purchase_url text?, supplier_sku text?`
 
-```sql
-CREATE TABLE app.purchase_order_lines (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  order_id uuid NOT NULL REFERENCES app.purchase_orders(id),
-  line_number integer NOT NULL CHECK (line_number > 0),
-  product_id uuid NOT NULL REFERENCES app.products(id),
-  ordered_quantity app.quantity NOT NULL CHECK (ordered_quantity > 0),
-  unit_cost_nok app.unit_price NOT NULL,
-  purchase_url text CHECK (purchase_url IS NULL OR purchase_url ~ '^https?://'),
-  supplier_sku text,
-  UNIQUE (order_id, line_number)
-);
-```
+One line of a placed order, numbered from 1. The same product may appear on several lines. Checks in `convex/orders.ts`: `ordered_quantity` positive and a stock-step multiple; `unit_cost_nok` is `checkedUnitPrice`; `purchase_url` null or `http(s)://`; an empty URL or SKU is stored as null. Only cost, URL and SKU can be corrected.
 
 ### `purchase_order_cancellations`
 
-Append-only cancellations and their reversals.
+`id uuid, request_id uuid, order_line_id uuid, quantity decimal, reverses_id uuid?, reason text, created_by uuid, recorded_at timestamp`
 
-```sql
-CREATE TABLE app.purchase_order_cancellations (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  request_id uuid NOT NULL REFERENCES app.command_requests(id),
-  order_line_id uuid NOT NULL REFERENCES app.purchase_order_lines(id),
-  quantity app.quantity NOT NULL CHECK (quantity > 0),
-  -- A mistaken cancellation can be neutralised once, without deleting it.
-  reverses_id uuid UNIQUE REFERENCES app.purchase_order_cancellations(id),
-  reason text NOT NULL CHECK (length(btrim(reason)) BETWEEN 1 AND 2000),
-  created_by uuid NOT NULL REFERENCES app.staff_members(id),
-  recorded_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  UNIQUE (request_id, order_line_id)
-);
-```
+Append-only cancellations and their reversals, inserted by `convex/orders.ts`. A cancellation is positive, a stock-step multiple and at most the line's outstanding quantity (`INVALID_CANCELLATION_QUANTITY`); one per line per request. A reversal repeats the quantity with `reverses_id` set; a cancellation is reversed at most once and a reversal never (`CANCELLATION_ALREADY_REVERSED`, `CANNOT_REVERSE_A_REVERSAL`). `reason` is non-blank, at most 2000 characters.
 
 ### `checkouts`
 
-Immutable checkout identity. No expiry or paid field. The digest is never exposed.
+`id uuid, request_id uuid, token_digest text, created_at timestamp`
 
-```sql
-CREATE TABLE app.checkouts (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  request_id uuid NOT NULL UNIQUE REFERENCES app.command_requests(id),
-  token_digest bytea NOT NULL CHECK (octet_length(token_digest) = 32),
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp()
-);
-```
+Immutable checkout identity, inserted by `checkout.prepare`. No expiry or paid field. `token_digest` is the SHA-256 (hex) of the 64-hex token and is never returned.
 
 ### `checkout_lines`
 
-Frozen names, quantities and prices, one line per product.
+`checkout_id uuid, product_id uuid, product_name_nb_snapshot text, product_name_en_snapshot text, quantity decimal, unit_price_nok decimal`
 
-```sql
-CREATE TABLE app.checkout_lines (
-  checkout_id uuid NOT NULL REFERENCES app.checkouts(id),
-  product_id uuid NOT NULL REFERENCES app.products(id),
-  product_name_nb_snapshot text NOT NULL,
-  product_name_en_snapshot text NOT NULL,
-  quantity app.quantity NOT NULL CHECK (quantity > 0),
-  unit_price_nok app.unit_price NOT NULL,
-  PRIMARY KEY (checkout_id, product_id)
-);
-```
+Frozen names, quantities and prices, one line per product (`DUPLICATE_OR_MISSING_CART_PRODUCT`). Checks in `convex/checkout.ts`: the product is active with a price; `quantity` positive and a sale-step multiple (`POSITIVE_CART_QUANTITY_REQUIRED`).
 
 ### `checkout_contacts`
 
-Optional unverified contact, removable through `amp_clear_checkout_contact`.
+`checkout_id uuid, contact_text text`
 
-```sql
-CREATE TABLE app.checkout_contacts (
-  checkout_id uuid PRIMARY KEY REFERENCES app.checkouts(id),
-  contact_text text NOT NULL CHECK (length(btrim(contact_text)) BETWEEN 1 AND 300)
-);
-```
+Optional unverified contact, trimmed, 1–300 characters (`CONTACT_TOO_LONG`). Removed by `checkout.clearContact` or the retention job (`convex/retention.ts`), each audited as `CONTACT_CLEARED` without the text.
 
 ### `count_batches`
 
-Groups count observations under one owner. A product may be counted repeatedly; observations are never overwritten.
-A single-product count (`amp_record_single_count`) is its own batch, born finished, with `product_id` set and the
-product code as its title; the staff pages word it in the reader's language. Grouped stock counts leave `product_id` null.
+`id uuid, request_id uuid, owner_id uuid, title text, started_at timestamp, finished_at timestamp?, finished_by uuid?, finish_reason text?, product_id uuid?`
 
-```sql
-CREATE TABLE app.count_batches (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  request_id uuid NOT NULL UNIQUE REFERENCES app.command_requests(id),
-  owner_id uuid NOT NULL REFERENCES app.staff_members(id),
-  title text NOT NULL CHECK (length(btrim(title)) BETWEEN 1 AND 200),
-  started_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  finished_at timestamptz,
-  finished_by uuid REFERENCES app.staff_members(id),
-  finish_reason text CHECK (finish_reason IS NULL OR length(btrim(finish_reason)) BETWEEN 1 AND 2000),
-  CHECK (finished_at IS NULL OR finished_at >= started_at),
-  CHECK ((finished_at IS NULL) = (finished_by IS NULL)),
-  CHECK (finish_reason IS NULL OR finished_at IS NOT NULL),
-  product_id uuid REFERENCES app.products(id),
-  CONSTRAINT count_batches_single_count_finished CHECK (product_id IS NULL OR finished_at IS NOT NULL)
-);
-```
+Groups count observations under one owner. A product may be counted repeatedly; observations are never overwritten. A single-product count (`stock.recordSingleCount`) is its own batch, born finished, with `product_id` set and the product code as its title; the staff pages word it in the reader's language. Grouped stock counts leave `product_id` null.
+
+Checks in `convex/stock.ts`: `title` 1–200 characters trimmed (`COUNT_TITLE_REQUIRED`); `finished_at` and `finished_by` are set together; `finish_reason` (trimmed, 1–2000, `CLOSURE_REASON_REQUIRED`) only when another member closes an abandoned batch.
 
 ### `inventory_events`
 
-Header for one atomic stock operation. A matching count has no movement.
+`id uuid, request_id uuid?, kind 'receipt' | 'sale' | 'count' | 'adjustment' | 'withdrawal', actor_id uuid?, purchase_order_id uuid?, note text?, occurred_at timestamp, recorded_at timestamp`
 
-```sql
-CREATE TABLE app.inventory_events (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  request_id uuid UNIQUE REFERENCES app.command_requests(id),
-  kind text NOT NULL CHECK (kind IN ('receipt','sale','count','adjustment','withdrawal')),
-  actor_id uuid REFERENCES app.staff_members(id),
-  purchase_order_id uuid REFERENCES app.purchase_orders(id),
-  note text,
-  occurred_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  recorded_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  CHECK ((kind = 'sale' AND actor_id IS NULL) OR (kind <> 'sale' AND actor_id IS NOT NULL)),
-  CHECK (kind = 'receipt' OR purchase_order_id IS NULL),
-  CHECK (kind NOT IN ('adjustment','withdrawal') OR (note IS NOT NULL AND length(btrim(note)) > 0)),
-  CHECK (kind <> 'receipt' OR purchase_order_id IS NOT NULL OR (note IS NOT NULL AND length(btrim(note)) > 0)),
-  CHECK (note IS NULL OR length(note) <= 2000)
-);
-```
+Header for one atomic stock operation. A matching count has no movement. Checks in `convex/lib/inventory.ts`: a sale has no actor and every other kind has one (`INVALID_EVENT_ACTOR`); only receipts link an order (`INVALID_EVENT_ORDER`); adjustments and withdrawals need a note (`REASON_REQUIRED`); a receipt needs an order or a note (`UNPLANNED_RECEIPT_REQUIRES_SOURCE_NOTE`); notes are at most 2000 characters (`NOTE_TOO_LONG`). `request_id` is null for sales.
 
 ### `inventory_movements`
 
-Signed stock changes; the only source of balances.
+`id int, event_id uuid, product_id uuid, quantity_delta decimal`
 
-```sql
-CREATE TABLE app.inventory_movements (
-  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  event_id uuid NOT NULL REFERENCES app.inventory_events(id),
-  product_id uuid NOT NULL REFERENCES app.products(id),
-  quantity_delta app.stock_quantity NOT NULL CHECK (quantity_delta <> 0)
-);
-```
+Signed stock changes; the only source of balances. `id` comes from the `inventory_movements` counter and is the stock revision. Checks in `convex/lib/inventory.ts`: `quantity_delta` non-zero (`ZERO_MOVEMENT`), at most 6 decimals and a stock-step multiple; receipts are positive and sales and withdrawals negative (`INVALID_MOVEMENT_SIGN`).
 
 ### `movement_corrections`
 
-Links a later movement to the earlier one it corrects. Links cannot point forwards.
+`movement_id int, corrects_movement_id int`
 
-```sql
-CREATE TABLE app.movement_corrections (
-  movement_id bigint PRIMARY KEY REFERENCES app.inventory_movements(id),
-  corrects_movement_id bigint NOT NULL REFERENCES app.inventory_movements(id),
-  CHECK (movement_id > corrects_movement_id)
-);
-```
+Links a later adjustment movement to the earlier movement of the same product it corrects. Links cannot point forwards (`INVALID_CORRECTION_REFERENCE`, `convex/lib/inventory.ts`); a command corrects each movement at most once (`DUPLICATE_CORRECTION_REFERENCE`).
 
 ### `receipt_allocations`
 
-Links a movement to a purchase line.
+`movement_id int, order_line_id uuid`
 
-```sql
-CREATE TABLE app.receipt_allocations (
-  movement_id bigint PRIMARY KEY REFERENCES app.inventory_movements(id),
-  order_line_id uuid NOT NULL REFERENCES app.purchase_order_lines(id)
-);
-```
+Links a receipt movement, or an adjustment correcting one, to a purchase line of the same product (`INVALID_RECEIPT_ALLOCATION`, `convex/lib/inventory.ts`).
 
 ### `sales`
 
-One registration per checkout, by buyer or by staff recovery (with actor and reason). Not payment verification.
+`checkout_id uuid, event_id uuid, recovered_by uuid?, recovery_reason text?`
 
-```sql
-CREATE TABLE app.sales (
-  checkout_id uuid PRIMARY KEY REFERENCES app.checkouts(id),
-  event_id uuid NOT NULL UNIQUE REFERENCES app.inventory_events(id),
-  recovered_by uuid REFERENCES app.staff_members(id),
-  recovery_reason text,
-  CHECK ((recovered_by IS NULL AND recovery_reason IS NULL)
-      OR (recovered_by IS NOT NULL AND length(btrim(recovery_reason)) BETWEEN 1 AND 2000
-          AND recovery_reason IS NOT NULL))
-);
-```
+One registration per checkout, by buyer or by staff recovery (with actor and reason). Not payment verification. Inserted once by `convex/checkout.ts`; a recovery reason is trimmed, 1–2000 characters (`RECOVERY_REASON_REQUIRED`), and set together with `recovered_by`.
 
 ### `stock_counts`
 
-Immutable count observation. Expected may be negative; counted may not.
+`event_id uuid, batch_id uuid, product_id uuid, expected_quantity decimal, counted_quantity decimal, expected_revision int`
 
-```sql
-CREATE TABLE app.stock_counts (
-  event_id uuid PRIMARY KEY REFERENCES app.inventory_events(id),
-  batch_id uuid NOT NULL REFERENCES app.count_batches(id),
-  product_id uuid NOT NULL REFERENCES app.products(id),
-  expected_quantity app.stock_quantity NOT NULL,
-  counted_quantity app.stock_quantity NOT NULL CHECK (counted_quantity >= 0),
-  expected_revision bigint NOT NULL CHECK (expected_revision >= 0)
-);
-```
+Immutable count observation, inserted by `convex/stock.ts`. Expected may be negative; counted may not (`NEGATIVE_PHYSICAL_COUNT`) and is a stock-step multiple. `expected_quantity` and `expected_revision` are read from `stock_levels` in the same transaction.
 
 ### `audit_log`
 
-Immutable metadata history. Checkout contact values are never included.
+`id int, table_name text, row_key any, action 'INSERT' | 'UPDATE' | 'DELETE' | 'CONTACT_CLEARED', before_data any?, after_data any?, actor_id uuid?, database_role text, recorded_at timestamp, row_id text?`
 
-```sql
-CREATE TABLE app.audit_log (
-  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  table_name text NOT NULL,
-  row_key jsonb NOT NULL,
-  action text NOT NULL CHECK (action IN ('INSERT','UPDATE','DELETE','CONTACT_CLEARED')),
-  before_data jsonb,
-  after_data jsonb,
-  actor_id uuid REFERENCES app.staff_members(id),
-  database_role text NOT NULL,
-  recorded_at timestamptz NOT NULL DEFAULT clock_timestamp()
-);
-```
+Immutable metadata history, written by `convex/lib/audit.ts`. Checkout contact values are never included. `id` comes from the `audit_log` counter. `row_key` is `{id}`, or `{code}` for units and `{product_id, attribute_id}` for specification values; `row_id` copies `row_key.id` so one row's history is one index range. `database_role` is `authenticated` (staff), `convex` (system, such as retention and seeds) or `service_role` (imported history).
+
+### `stock_levels`
+
+`product_id uuid, quantity decimal, revision int, last_counted_at timestamp?`
+
+Rebuildable projection of the ledger (§2, §11), one row per product that has moved or been counted, written only by `convex/lib/inventory.ts` in the same transaction as each movement or count.
+
+### `counters`
+
+`name text, value int`
+
+Gap-free sequences `inventory_movements` and `audit_log` (`convex/lib/sequence.ts`). The import continues them after the imported IDs (`migration.setSequences`).
+
+### `password_tokens`
+
+`user_id Id<'users'>, token_digest text, purpose 'invite' | 'reset', expires_at int, used_at int?`
+
+Single-use invitation and reset links (`convex/passwords.ts`); only the SHA-256 of the token is stored. Times are milliseconds since the epoch. A new link sets `used_at` on the user's earlier unused links.
+
+### `rate_limits`
+
+`key text, window_start int, count int`
+
+Fixed one-minute windows for invitation and reset email (`convex/lib/rateLimit.ts`).
+
+### Convex Auth tables
+
+`authTables` from `@convex-dev/auth`: `users`, `authAccounts`, `authSessions`, `authRefreshTokens`, `authVerificationCodes`, `authVerifiers` and `authRateLimits` (failed sign-in attempts). `users` adds `auth_user_id`, the stable UUID that `staff_members.auth_user_id` refers to. `authAccounts` holds the bcrypt password hash under provider `password`, keyed by the lower-case email. Only Convex Auth, `members.grantAccess`, `passwords.complete`, the seeds and the import write them.

@@ -77,7 +77,7 @@ describe.skipIf(!enabled)('stock ledger', () => {
 		const { client } = await staff();
 		const p = await product(client);
 		for (const delta of ['5', '-2', '10']) await client.mutation(api.stock.adjust, { requestId: uuid(), items: [{ productId: p.id, quantityDelta: delta }], reason: 'test' });
-		expect(await internal('query', 'migration:verifyStockLevels')).toEqual([]);
+		expect(await internal<string[]>('query', 'migration:verifyStockLevels')).toEqual([]);
 		expect((await stockOf(client, p.id)).quantity).toBe('13');
 	});
 

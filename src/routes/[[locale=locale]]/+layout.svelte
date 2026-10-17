@@ -64,7 +64,7 @@
 	const auth = convexUrl ? new ConvexAuthClient(convexUrl) : null;
 	if (client && auth) setupAuth(() => auth.provider);
 	const serverAuth = client ? useAuth() : null;
-	const admin = setAdminContext(untrack(() => new AdminContext(data.convex, data.callbackOrigin, client, auth, serverAuth)));
+	const admin = setAdminContext(untrack(() => new AdminContext(data.convex, client, auth, serverAuth)));
 	onMount(() => { admin.start(); });
 
 	/** Current path with the locale prefix removed, so the picker can swap it. */

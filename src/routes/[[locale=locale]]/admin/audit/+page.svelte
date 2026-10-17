@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, untrack } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import { useQuery } from 'convex-svelte';
 	import { api } from '#lib/convex.js';
 	import { getI18n } from '#lib/i18n/index.js';
@@ -18,7 +18,8 @@
 
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.adminAudit);
 	// The newest page is live, so new entries appear as they are recorded; older pages load on request.
-	const head = useQuery(api.auditLog.page, () => admin.status === 'ready' ? {} : 'skip');
+	let resubscribing = $state(false);
+	const head = useQuery(api.auditLog.page, () => admin.status === 'ready' && !resubscribing ? {} : 'skip');
 	let entries = $state<AuditEntry[]>([]);
 	let references = $state<AuditReferences>({});
 	let loading = $state(false); let headFailed = $state(false); let olderFailed = $state(false); let complete = $state(false); let loaded = $state(false);
@@ -77,14 +78,14 @@
 		} catch (error) { olderFailed = true; await admin.permissionFailure(error); }
 		finally { loading = false; }
 	}
-	/** A failed live page is read once directly; the subscription keeps delivering after that. */
+	/**
+	 * A failed live page needs a fresh subscription: the client answers a direct read of
+	 * the same query from the failed one. Its first result clears the failure.
+	 */
 	async function retry() {
 		if (!headFailed) { await loadMore(); return; }
 		if (loading || admin.status !== 'ready') return;
-		loading = true;
-		try { absorb(await readAuditPage(admin.credentials())); await absorbing; }
-		catch (error) { await admin.permissionFailure(error); }
-		finally { loading = false; }
+		resubscribing = true; await tick(); resubscribing = false;
 	}
 </script>
 

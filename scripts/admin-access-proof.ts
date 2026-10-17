@@ -1,81 +1,61 @@
-/** Real Auth, Mailpit, built HTTPS Worker and responsive admin page. No hosted services. */
+/** Real Convex Auth, invitation email (Resend stand-in), built HTTPS Worker and responsive admin page. No hosted services. */
 import { strict as assert } from 'node:assert';
 import { mkdir } from 'node:fs/promises';
-import { firefox, expect, type BrowserContext } from '@playwright/test';
+import { firefox, expect as baseExpect, type BrowserContext } from '@playwright/test';
 import { resolve } from 'node:path';
+import { ConvexHttpClient } from 'convex/browser';
+import type { FunctionArgs } from 'convex/server';
 import { en } from '../src/lib/i18n/en';
 import { nb } from '../src/lib/i18n/nb';
-import { ApiError, identifier, object, requestApiJson } from '../src/lib/api';
-import { staffRequest, type StaffSession } from '../src/lib/admin-api';
-import { readAdminMembers } from '../src/lib/admin-members';
-import { proofEnvironment, signIn, fieldLabel, fits, captureFailure } from './web-proof/harness';
+import { identifier } from '../src/lib/api';
+import { api, errorCode, type ConvexCaller, type StaffSession } from '../src/lib/convex';
+import { readAdminMembers, runMemberCommand } from '../src/lib/admin-members';
+import { proofEnvironment, signIn, fieldLabel, fits, captureFailure, passwordLink } from './web-proof/harness';
+import { watchConvex } from './web-proof/convex-socket';
 
-const { directory, origin, api, publicKey, password, secrets, safe, ca, sql, createUser, startWorker } = await proofEnvironment();
-const mailpitPort = Number(process.argv[5]);
-assert.ok(Number.isInteger(mailpitPort) && mailpitPort > 0 && mailpitPort <= 65535, 'Use scripts/test-web.sh --admins');
-const config = { url: api.origin, publishableKey: publicKey };
+// A page load includes the Convex Auth handshake, which a loaded machine can stretch past the 5 s default.
+const expect = baseExpect.configure({ timeout: 15_000 });
+const { directory, origin, convexUrl, password, secrets, safe, fixtures, createStaff, createUser, startEmail, startWorker } = await proofEnvironment();
 const staffEmail = 'access-staff@example.test';
 const nonstaffEmail = 'access-nonstaff@example.test';
 const disabledEmail = 'access-disabled@example.test';
-const staffUserId = await createUser(staffEmail);
+const { staffId } = await createStaff(staffEmail, 'Access proof operator');
 await createUser(nonstaffEmail);
-const disabledUserId = await createUser(disabledEmail);
-await sql(`INSERT INTO app.staff_members(auth_user_id,display_name,is_active) VALUES
- ('${staffUserId}', 'Access proof operator', true), ('${disabledUserId}', 'Previous operator', false);`);
-const staffId = identifier(await sql(`SELECT id FROM app.staff_members WHERE auth_user_id='${staffUserId}'`));
-const disabledId = identifier(await sql(`SELECT id FROM app.staff_members WHERE auth_user_id='${disabledUserId}'`));
+const { staffId: disabledId, authUserId: disabledUserId } = await createStaff(disabledEmail, 'Previous operator', false);
+const outbox = startEmail();
 
-async function auth(path: string, body: unknown, token?: string, method = 'POST') {
-	return object(await requestApiJson(`${api.origin}/auth/v1/${path}`, {
-		method, headers: { apikey: publicKey, 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-		body: JSON.stringify(body)
-	}));
+const client = () => new ConvexHttpClient(convexUrl, { logger: false });
+/** Signs in as the login page does and carries the token like the shared client. */
+async function login(email: string): Promise<StaffSession> {
+	const signedIn = client();
+	const tokens = await signedIn.action(api.session.signIn, { email, password });
+	secrets.push(tokens.token, tokens.refreshToken);
+	signedIn.setAuth(tokens.token);
+	const me = await signedIn.query(api.members.me, {});
+	return { client: signedIn, userId: identifier(me?.authUserId) };
 }
-function session(value: Record<string, unknown>): StaffSession {
-	assert.equal(typeof value.access_token, 'string', 'Auth returns an access token');
-	const token = value.access_token as string;
-	secrets.push(token);
-	return { config, token, userId: identifier(object(value.user).id) };
+type Invitation = FunctionArgs<typeof api.members.invite>;
+const invite = (caller: ConvexCaller | StaffSession, command: Invitation) =>
+	('client' in caller ? caller.client : caller).action(api.members.invite, command);
+async function denied(operation: () => Promise<unknown>, code: string) {
+	await assert.rejects(operation, (error: unknown) => { assert.equal(errorCode(error), code); return true; });
 }
-async function login(email: string) { return session(await auth('token?grant_type=password', { email, password })); }
-type Invitation = { requestId: string; email: string; displayName: string; locale: 'nb' | 'en'; targetId: string | null; targetActive: boolean | null };
-function invite(token: string | undefined, body: Invitation) {
-	return requestApiJson(`${origin}/api/admin/invitations`, {
-		method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json',
-			...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body)
-	}, (input, init) => fetch(input, { ...init, tls: { ca } }), 60_000);
-}
-async function denied(operation: () => Promise<unknown>, code: string, status?: number) {
-	await assert.rejects(operation, (error: unknown) => {
-		assert.ok(error instanceof ApiError, 'Rejected through the HTTP API');
-		if (status !== undefined) assert.equal(error.status, status);
-		const body = object(error.body);
-		assert.equal(body.error ?? body.message, code);
-		return true;
-	});
-}
-async function invitationToken(email: string, locale: 'nb' | 'en') {
-	const mailbox = `http://127.0.0.1:${mailpitPort}/view/latest.html?query=${encodeURIComponent(`to:${email}`)}`;
-	for (let attempt = 0; attempt < 100; attempt++) {
-		const response = await fetch(mailbox);
-		if (response.ok) {
-			const html = await response.text();
-			const link = html.match(/<a href="([^"]+)"/)?.[1]?.replaceAll('&amp;', '&');
-			assert.ok(link, 'Rendered invitation contains a password link');
-			const url = new URL(link);
-			assert.equal(url.origin, origin);
-			assert.equal(url.pathname, `${locale === 'en' ? '/en' : ''}/admin/password`);
-			assert.equal(url.searchParams.get('next'), '/admin');
-			assert.equal(url.searchParams.get('type'), 'invite');
-			const token = url.searchParams.get('token_hash');
-			assert.match(token ?? '', /^(?:pkce_)?[a-f0-9]{32,256}$/);
-			secrets.push(token!);
-			return token!;
-		}
-		assert.equal(response.status, 404, 'Mailpit mailbox read');
-		await Bun.sleep(100);
-	}
-	throw new Error('Invitation did not reach local Mailpit');
+const users = async (email: string) => (await fixtures.rows('users', { email })).length;
+const staffAudit = (where: Record<string, unknown>) => fixtures.rows('audit_log', { table_name: 'staff_members', ...where });
+/** The single invitation sent to this address, checked down to its single-use link. */
+function invitationToken(email: string, locale: 'nb' | 'en') {
+	const messages = outbox.filter(message => message.to.includes(email));
+	assert.equal(messages.length, 1, 'One invitation per new account');
+	assert.match(messages[0].subject, /Invitation/);
+	const url = passwordLink(messages[0]);
+	assert.equal(url.origin, origin);
+	assert.equal(url.pathname, `${locale === 'en' ? '/en' : ''}/admin/password`);
+	assert.equal(url.searchParams.get('next'), '/admin');
+	assert.equal(url.searchParams.get('type'), 'invite');
+	const token = url.searchParams.get('token_hash');
+	assert.match(token ?? '', /^[a-f0-9]{64}$/);
+	secrets.push(token!);
+	return token!;
 }
 
 let browser: BrowserContext | undefined;
@@ -87,65 +67,66 @@ try {
 	const nonstaff = await login(nonstaffEmail);
 	const disabled = await login(disabledEmail);
 	const forbidden: Invitation = { requestId: crypto.randomUUID(), email: 'must-not-exist@example.test', displayName: 'Rejected invite', locale: 'en', targetId: null, targetActive: null };
-	await denied(() => invite(undefined, forbidden), 'STAFF_REQUIRED', 401);
-	await denied(() => invite(nonstaff.token, forbidden), 'STAFF_REQUIRED', 403);
-	await denied(() => invite(disabled.token, forbidden), 'STAFF_REQUIRED', 403);
-	assert.equal(await sql("SELECT count(*) FROM auth.users WHERE email='must-not-exist@example.test'"), '0');
+	await denied(() => invite(client(), forbidden), 'STAFF_REQUIRED');
+	await denied(() => invite(nonstaff, forbidden), 'STAFF_REQUIRED');
+	await denied(() => invite(disabled, forbidden), 'STAFF_REQUIRED');
+	assert.equal(await users('must-not-exist@example.test'), 0);
+	assert.equal(outbox.length, 0);
 	console.log('PASS: anonymous, nonstaff and disabled callers cannot create an Auth account');
 
 	const invited: { command: Invitation; staffId: string; session: StaffSession }[] = [];
 	for (const locale of ['en', 'nb'] as const) {
 		const command: Invitation = { requestId: crypto.randomUUID(), email: `access-invite-${locale}@example.test`, displayName: `Invited ${locale}`, locale, targetId: null, targetActive: null };
-		const result = object(await invite(staff.token, command));
+		const result = await invite(staff, command);
 		assert.equal(result.status, 'invited');
 		const invitedId = identifier(result.staffId);
 		const pending = (await readAdminMembers(staff)).find(member => member.id === invitedId);
 		assert.ok(pending?.isActive && !pending.emailConfirmed && pending.email === command.email);
-		assert.equal(await sql(`SELECT count(*) FROM app.audit_log WHERE table_name='staff_members'
- AND row_key->>'id'='${invitedId}' AND action='INSERT' AND actor_id='${staffId}' AND database_role='authenticated'`), '1');
-		const tokenHash = await invitationToken(command.email, locale);
-		const verified = session(await auth('verify', { type: 'invite', token_hash: tokenHash }));
-		assert.equal(verified.userId, pending.authUserId, 'Invitation retains the created Auth identity');
-		await auth('user', { password }, verified.token, 'PUT');
+		assert.equal((await staffAudit({ row_id: invitedId, action: 'INSERT', actor_id: staffId, database_role: 'authenticated' })).length, 1);
+		// The password page's calls: check the link, then set the password, which consumes it.
+		const token = invitationToken(command.email, locale), guest = client();
+		assert.deepEqual(await guest.query(api.passwords.checkLink, { token }), { valid: true });
+		assert.deepEqual(await guest.mutation(api.passwords.complete, { token, password }), { email: command.email });
+		assert.deepEqual(await guest.query(api.passwords.checkLink, { token }), { valid: false });
+		await denied(() => guest.mutation(api.passwords.complete, { token, password }), 'INVALID_PASSWORD_LINK');
 		const signedIn = await login(command.email);
-		assert.equal(signedIn.userId, verified.userId);
+		assert.equal(signedIn.userId, pending.authUserId, 'Invitation retains the created Auth identity');
 		const active = (await readAdminMembers(signedIn)).find(member => member.id === invitedId);
-		assert.ok(active?.isActive && active.emailConfirmed, 'New password login can call a staff-only RPC');
+		assert.ok(active?.isActive && active.emailConfirmed, 'New password login can call a staff-only query');
 		invited.push({ command, staffId: invitedId, session: signedIn });
 	}
-	assert.equal((await readAdminMembers(staff)).length, 4, 'Directory is complete despite a two-row API cap');
-	console.log('PASS: both locales deliver valid invitations; password setup/login grants access and audits the inviter');
+	assert.equal((await readAdminMembers(staff)).length, 4, 'Directory lists every membership');
+	console.log('PASS: both locales deliver valid single-use invitations; password setup/login grants access and audits the inviter');
 
-	const original = invited[0];
-	assert.deepEqual(await invite(staff.token, original.command), { status: 'existing_account', staffId: original.staffId });
-	assert.equal(await sql(`SELECT count(*) FROM app.command_requests WHERE id='${original.command.requestId}'`), '1');
-	assert.equal(await sql(`SELECT count(*) FROM app.audit_log WHERE table_name='staff_members' AND row_key->>'id'='${original.staffId}'`), '1');
+	const original = invited[0], sent = outbox.length;
+	assert.deepEqual(await invite(staff, original.command), { status: 'existing_account', staffId: original.staffId });
+	assert.equal((await fixtures.rows('command_requests', { id: original.command.requestId })).length, 1);
+	assert.equal((await staffAudit({ row_id: original.staffId })).length, 1);
 	const returning: Invitation = { requestId: crypto.randomUUID(), email: disabledEmail, displayName: 'Returning operator', locale: 'en', targetId: disabledId, targetActive: false };
-	assert.deepEqual(await invite(staff.token, returning), { status: 'existing_account', staffId: disabledId });
+	assert.deepEqual(await invite(staff, returning), { status: 'existing_account', staffId: disabledId });
+	assert.equal(outbox.length, sent, 'A confirmed account is not emailed again');
 	const returned = await login(disabledEmail);
 	assert.equal(returned.userId, disabledUserId, 'Reactivation retains the Auth identity and password');
 	assert.ok((await readAdminMembers(returned)).some(member => member.id === disabledId && member.isActive));
 	console.log('PASS: replay keeps its command and audit row; confirmed-account reactivation preserves identity and password');
 
-	await denied(() => staffRequest(staff, 'rpc/amp_deactivate_staff', {}, {
-		p_request_id: crypto.randomUUID(), p_staff_id: staffId
-	}), 'STAFF_SELF_DEACTIVATION');
-	const deactivation = { p_request_id: crypto.randomUUID(), p_staff_id: original.staffId };
-	assert.equal(await staffRequest(staff, 'rpc/amp_deactivate_staff', {}, deactivation), original.staffId);
-	assert.equal(await staffRequest(staff, 'rpc/amp_deactivate_staff', {}, deactivation), original.staffId);
+	await denied(() => runMemberCommand(staff, { kind: 'deactivate', userId: staff.userId, requestId: crypto.randomUUID(), staffId }), 'STAFF_SELF_DEACTIVATION');
+	const deactivation = { kind: 'deactivate', userId: staff.userId, requestId: crypto.randomUUID(), staffId: original.staffId } as const;
+	assert.equal(await runMemberCommand(staff, deactivation), 'deactivated');
+	assert.equal(await runMemberCommand(staff, deactivation), 'deactivated');
 	await denied(() => readAdminMembers(original.session), 'STAFF_REQUIRED');
-	await denied(() => invite(original.session.token, forbidden), 'STAFF_REQUIRED', 403);
-	await denied(() => invite(staff.token, original.command), 'INVITATION_SUPERSEDED', 409);
-	await denied(() => invite(staff.token, { ...original.command, requestId: crypto.randomUUID(), targetId: original.staffId, targetActive: true }), 'INVITATION_SUPERSEDED', 409);
+	await denied(() => invite(original.session, forbidden), 'STAFF_REQUIRED');
+	await denied(() => invite(staff, original.command), 'INVITATION_SUPERSEDED');
+	await denied(() => invite(staff, { ...original.command, requestId: crypto.randomUUID(), targetId: original.staffId, targetActive: true }), 'INVITATION_SUPERSEDED');
 	const inactive = (await readAdminMembers(staff)).find(member => member.id === original.staffId);
 	assert.equal(inactive?.isActive, false);
-	assert.equal(await sql(`SELECT count(*) FROM app.audit_log WHERE table_name='staff_members'
- AND row_key->>'id'='${original.staffId}' AND actor_id='${staffId}' AND database_role='authenticated'`), '2');
-	assert.equal(await sql("SELECT count(*) FROM auth.users WHERE email='must-not-exist@example.test'"), '0');
-	console.log('PASS: self-deactivation is rejected, revoked JWTs lose access, and replay cannot undo later deactivation');
-	await sql(`UPDATE app.staff_members SET display_name='Frivillig med et langt navn som skal vises uten at knapper flytter seg eller siden ruller sidelengs'
- WHERE id='${invited[1].staffId}';`);
+	assert.equal((await staffAudit({ row_id: original.staffId, actor_id: staffId, database_role: 'authenticated' })).length, 2);
+	assert.equal(await users('must-not-exist@example.test'), 0);
+	console.log('PASS: self-deactivation is rejected, revoked sessions lose access, and replay cannot undo later deactivation');
+	await fixtures.patch('staff_members', { id: invited[1].staffId },
+		{ display_name: 'Frivillig med et langt navn som skal vises uten at knapper flytter seg eller siden ruller sidelengs' });
 	browser = await firefox.launchPersistentContext(`${directory}/profile`, { headless: true, ignoreHTTPSErrors: false });
+	const socket = await watchConvex(browser);
 	const page = await browser.newPage();
 	const artifacts = resolve('test-results/admins');
 	await mkdir(artifacts, { recursive: true });
@@ -171,16 +152,17 @@ try {
 		}
 		const name = page.getByLabel(fieldLabel(en.adminMembers.name), { exact: true });
 		const email = page.getByLabel(fieldLabel(en.admin.email), { exact: true });
+		await expect(page.getByText(disabledEmail, { exact: true })).toBeVisible();
 		await name.fill('Preserved draft'); await email.fill('draft@example.test');
 		await name.focus();
 		const before = await name.boundingBox();
-		const directoryRead = `${api.origin}/rest/v1/rpc/amp_list_staff`;
-		await page.route(directoryRead, route => route.abort('failed'));
+		// The directory is a one-off read on focus, not a live subscription.
+		const restore = socket.rule(call => call.path === 'members:list' ? 'fail' : undefined);
 		await page.evaluate(() => window.dispatchEvent(new Event('focus')));
 		await expect(page.getByText(en.adminMembers.unavailable, { exact: true })).toBeVisible();
 		await expect(name).toHaveValue('Preserved draft'); await expect(name).toBeFocused();
 		expect(await name.boundingBox()).toEqual(before);
-		await page.unroute(directoryRead);
+		restore();
 		await page.getByRole('button', { name: en.admin.retry, exact: true }).click();
 		await expect(page.getByText(en.adminMembers.unavailable, { exact: true })).toHaveCount(0);
 		await expect(name).toHaveValue('Preserved draft');
@@ -198,6 +180,7 @@ try {
 		await expect(returnedRow.getByText(en.adminMembers.active, { exact: true })).toBeVisible();
 		await expect(returnedRow.getByText(en.adminMembers.feedback.existing_account, { exact: true })).toBeVisible();
 		await expect(name).toHaveValue('Preserved draft');
+		assert.equal(socket.of('members:deactivate').length, 1);
 		const ownRow = page.getByRole('listitem').filter({ hasText: staffEmail });
 		await expect(ownRow.getByRole('button', { name: /Deactivate/ })).toHaveCount(0);
 		expect(diagnostics).toEqual([]);

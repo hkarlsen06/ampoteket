@@ -11,7 +11,7 @@ import { v } from 'convex/values';
 import { getAuthUserId } from '@convex-dev/auth/server';
 import { action, internalMutation, mutation, query } from './_generated/server';
 import { internal } from './_generated/api';
-import { insertAudited, patchAudited } from './lib/audit';
+import { insertAudited, patchAudited, SYSTEM } from './lib/audit';
 import { beginCommand } from './lib/commands';
 import { passwordLink, sendPasswordEmail } from './lib/email';
 import { fail } from './lib/errors';
@@ -135,5 +135,45 @@ export const deactivate = mutation({
 		const staff = (await byUuid(ctx, 'staff_members', args.staffId)) ?? fail('STAFF_NOT_FOUND');
 		if (staff.is_active) await patchAudited(ctx, actor, 'staff_members', staff, { is_active: false });
 		return (await command.finish({ staff_id: staff.id })).staff_id;
+	}
+});
+
+/**
+ * Maintainer recovery (datamodell.md §9), for the first member or when no active
+ * member remains: `bunx convex run members:grantStaffAccess '{"email":…,"displayName":…}'`
+ * with the deployment's admin key. Creates the account if needed (the person then
+ * sets a password with "Forgot password"), grants or reactivates membership, and is
+ * audited as a system action. An already active member raises STAFF_ALREADY_ACTIVE.
+ */
+export const grantStaffAccess = internalMutation({
+	args: { email: v.string(), displayName: v.string() },
+	handler: async (ctx, args) => {
+		const email = args.email.trim().toLowerCase(), name = args.displayName.trim();
+		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fail('STAFF_EMAIL_REQUIRED');
+		if (!name || [...name].length > 120 || control.test(name)) fail('STAFF_DISPLAY_NAME_REQUIRED');
+		let user = await ctx.db.query('users').withIndex('email', (q) => q.eq('email', email)).unique();
+		if (!user) {
+			const userId = await ctx.db.insert('users', { email, auth_user_id: newUuid() });
+			await ctx.db.insert('authAccounts', { userId, provider: 'password', providerAccountId: email });
+			user = (await ctx.db.get(userId))!;
+		}
+		if (!user.auth_user_id) { await ctx.db.patch(user._id, { auth_user_id: newUuid() }); user = (await ctx.db.get(user._id))!; }
+		const authUserId = user.auth_user_id!;
+		const staff = await ctx.db.query('staff_members').withIndex('auth_user_id', (q) => q.eq('auth_user_id', authUserId)).unique();
+		if (staff?.is_active) fail('STAFF_ALREADY_ACTIVE', email);
+		if (staff) return (await patchAudited(ctx, SYSTEM, 'staff_members', staff, { display_name: name, is_active: true })).id;
+		return (await insertAudited(ctx, SYSTEM, 'staff_members', { id: newUuid(), auth_user_id: authUserId, display_name: name, is_active: true, created_at: isoNow() })).id;
+	}
+});
+
+/** Maintainer recovery: deactivate a member by email. It can remove the last one, so use it only with a recovery plan. */
+export const revokeStaffAccess = internalMutation({
+	args: { email: v.string() },
+	handler: async (ctx, args) => {
+		const email = args.email.trim().toLowerCase();
+		const user = await ctx.db.query('users').withIndex('email', (q) => q.eq('email', email)).unique();
+		const staff = user?.auth_user_id ? await ctx.db.query('staff_members').withIndex('auth_user_id', (q) => q.eq('auth_user_id', user.auth_user_id!)).unique() : null;
+		if (!staff?.is_active) fail('STAFF_NOT_ACTIVE', email);
+		return (await patchAudited(ctx, SYSTEM, 'staff_members', staff, { is_active: false })).id;
 	}
 });

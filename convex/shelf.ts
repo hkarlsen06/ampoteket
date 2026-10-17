@@ -207,7 +207,8 @@ export const updateBin = mutation({
 		if (current && sameRow(current, after)) return 'saved' as const;
 		if (!current || !sameRow(current, before)) return 'stale' as const;
 		if (after.id !== before.id || after.code !== before.code) fail('STORAGE_IDENTITY_IS_IMMUTABLE');
-		if (after.row_span !== current.row_span || after.col_span !== current.col_span) fail('LAYOUT_HAS_PRODUCTS');
+		// Spans change only through the layout editor (saveLayout), which guards occupied drawers.
+		if (after.row_span !== current.row_span || after.col_span !== current.col_span) fail('INVALID_SHELF_LAYOUT');
 		if (after.is_archived) { await archiveBin(ctx, actor, current); return 'saved' as const; }
 		if (!coordinate(after.inner_row) || !coordinate(after.inner_col) || !isUuid(after.cabinet_id)) fail('INVALID_SHELF_LAYOUT');
 		await checkBinPlacement(ctx, after as BinValue & Rect);

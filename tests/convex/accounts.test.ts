@@ -1,7 +1,7 @@
 // Invitations, password links, sign-in and membership changes (datamodell.md §9).
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { api } from '../../convex/_generated/api';
-import { emailPort, enabled, freshDeployment, guest, rejected, signedIn, staff, uuid } from './harness';
+import { emailPort, enabled, freshDeployment, guest, internal, rejected, signedIn, staff, uuid } from './harness';
 
 /** A stand-in for Resend that keeps every message, so tests can follow the link. */
 let outbox: { to: string[]; subject: string; html: string }[] = [];
@@ -9,15 +9,18 @@ let fail = false;
 let server: ReturnType<typeof Bun.serve> | null = null;
 const linkIn = (html: string) => new URL(/href="([^"]*token_hash[^"]*)"/.exec(html)![1].replaceAll('&amp;', '&').replaceAll('&#38;', '&'));
 
+// One stub for the whole file: every block below sends email through it.
+beforeAll(() => {
+	if (!enabled) return;
+	server = Bun.serve({ port: emailPort, hostname: '127.0.0.1', async fetch(request) {
+		if (fail) return new Response('down', { status: 503 });
+		outbox.push(await request.json());
+		return Response.json({ id: 'test' });
+	} });
+});
+afterAll(() => server?.stop());
+
 describe.skipIf(!enabled)('accounts', () => {
-	beforeAll(() => {
-		server = Bun.serve({ port: emailPort, hostname: '127.0.0.1', async fetch(request) {
-			if (fail) return new Response('down', { status: 503 });
-			outbox.push(await request.json());
-			return Response.json({ id: 'test' });
-		} });
-	});
-	afterAll(() => server?.stop());
 	beforeEach(async () => { await freshDeployment(); outbox = []; fail = false; });
 
 	test('an invitation creates the account, mails a single-use link, and the chosen password signs in', async () => {
@@ -83,5 +86,23 @@ describe.skipIf(!enabled)('accounts', () => {
 		expect((await a.client.action(api.members.invite, { requestId: uuid(), email: b.email, displayName: 'B again', locale: 'nb', targetId: b.staffId, targetActive: false })).status)
 			.toBe('existing_account');
 		expect((await b.client.query(api.members.me, {}))?.membership?.displayName).toBe('B again');
+	});
+});
+
+describe.skipIf(!enabled)('maintainer recovery', () => {
+	beforeEach(async () => { await freshDeployment(); outbox = []; fail = false; });
+
+	test('a maintainer grants the first member, who sets a password through a reset link; revocation and repeats are refused', async () => {
+		const email = `first-${Date.now()}@example.no`;
+		const staffId = await internal<string>('mutation', 'members:grantStaffAccess', { email, displayName: 'First admin' });
+		expect(String(await internal('mutation', 'members:grantStaffAccess', { email, displayName: 'First admin' }).catch((e) => e))).toContain('STAFF_ALREADY_ACTIVE');
+		await guest().action(api.passwords.requestReset, { email, locale: 'nb' });
+		const token = linkIn(outbox[0].html).searchParams.get('token_hash')!;
+		await guest().mutation(api.passwords.complete, { token, password: 'first admin password' });
+		const first = await signedIn(email, 'first admin password');
+		expect((await first.query(api.members.me, {}))?.membership?.id).toBe(staffId);
+		await internal('mutation', 'members:revokeStaffAccess', { email });
+		expect((await first.query(api.members.me, {}))?.membership).toBeNull();
+		expect(String(await internal('mutation', 'members:revokeStaffAccess', { email }).catch((e) => e))).toContain('STAFF_NOT_ACTIVE');
 	});
 });

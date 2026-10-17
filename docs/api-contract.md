@@ -1,106 +1,295 @@
-# API values and complete reads
+# API transport and exact values
 
-How clients read and write database values without losing precision or silently truncating lists. SQL stays authoritative for quantities, money, checkout totals and revisions; tables, RPCs and permissions are in [datamodell.md](datamodell.md).
+How the frontend reaches the Convex backend and the Worker's checkout API without
+losing precision, and what each shared read returns. The backend computes
+quantities, money, checkout totals and revisions; tables, functions and access
+rules are in [datamodell.md](datamodell.md), and `convex/schema.ts` with
+`convex/*.ts` is the final word.
+
+## Clients
+
+- Clients reach Convex only through the native clients and the generated, typed
+  `api` (`convex/_generated/api`, re-exported by `src/lib/convex.ts`). No raw HTTP
+  calls to the deployment, no other SDK.
+- Browser: one `ConvexClient` from convex-svelte, set up in
+  `src/routes/[[locale=locale]]/+layout.svelte`. It carries the staff session token
+  from `src/lib/convex-auth.svelte.ts` when someone is signed in. Staff code gets
+  `{ client, userId }` from `admin.credentials()` (`src/lib/admin-context.svelte.ts`),
+  which throws unless membership is confirmed.
+- Server: `serverConvex()` in `src/lib/server/convex.ts` returns an
+  unauthenticated `ConvexHttpClient` for SSR loads. The checkout gateway makes its
+  own client whose every request gives up after 15 seconds.
+- Modules take a `ConvexCaller` (`src/lib/convex.ts`), which both clients satisfy
+  and tests replace with a stub.
+- The deployment URL is `PUBLIC_CONVEX_URL`. In development `browserConvexConfig`
+  sends the browser to `/convex` on the page's own origin instead
+  (`CONVEX_DEV_PROXY`, [website-guide.md](website-guide.md) §1.1).
+- Live queries: screens that must follow changes subscribe with convex-svelte's
+  `useQuery` and pass `'skip'` until the admin context is ready. Today these are the
+  admin audit, products, counts list and count detail pages, `AdminProductEditor`,
+  `DrawerNeighbours` and the product page `/p/[code]` (seeded with the SSR result).
+  A new result replaces the old one; keep input, selection and focus. Other reads
+  are one-shot `client.query` calls on open, after a registered change, and on
+  focus, visibility and reconnect.
+- A Convex call cannot be cancelled. `abortable()` in `src/lib/catalog.ts` rejects
+  at once when its signal aborts and drops the late result.
 
 ## Exact JSON values
 
-- Decode every database and Worker JSON response with `requestApiJson` from `src/lib/api.ts`. It parses the raw text with `lossless-json`, so **every numeric token becomes a string** before JavaScript can round it, including nested audit images and attributes. Never use `Response.json()`, `JSON.parse` or an SDK's parsed result.
-- Quantities, money, bigint IDs and revisions stay strings in client state and in requests (including RPC item arrays). Values such as `999999999998.999999` and `9007199254740993` must survive an unedited round trip. No decimal library is needed; the database computes amounts.
-- Structural integers (coordinates, line numbers) also arrive as strings. Convert them only after checking format, `Number.isSafeInteger` and range; never convert quantities or money.
-- The helper returns `unknown`. Each screen validates the shape and shows an unavailable state on invalid data. It throws on HTTP errors rather than returning an empty result.
-- Deadline: 15 seconds for headers and body, 25 seconds for checkout, 60 seconds for admin invitations. A timeout means the write is uncertain, never that it rolled back.
-- Requests use `redirect: 'manual'` and redirect responses are rejected, so keys, JWTs and checkout bodies never reach a redirect target. (Workers do not support `redirect: 'error'`.)
-- The helper never logs URLs, tokens, contact text or bodies. Do not log `body` without removing personal data and credentials.
-- `amp_catalog` and guest RPCs return decimals as SQL text; staff views return native numbers, which the parser keeps exact. When updating `lossless-json`, run `bun test src/lib/api.test.ts` and `bun run check`.
+- Quantities, prices, money, specification numbers, `metadata_revision`,
+  `edit_revision`, stock revisions, movement IDs and audit entry IDs travel as exact
+  decimal strings in both directions. Values such as `999999999998.999999` and
+  `9007199254740993` must survive an unedited round trip. Never convert them to
+  numbers; compare them with `src/lib/decimal.ts` or `BigInt`, not as JavaScript
+  strings. No decimal library is needed; the backend computes amounts.
+- One exception: `stock.inventory` returns `revision` as a number (a safe integer
+  from the `counters` sequence). `inventoryStock()` in `src/lib/admin-products.ts`
+  turns it into a string before anything else sees it.
+- Structural integers are numbers: shelf coordinates, grid sizes and spans, order
+  line numbers and help `display_order`. Check them with `Number.isSafeInteger` and
+  their range before use.
+- The backend checks every decimal it receives (`convex/lib/decimal.ts`):
+  quantities ≤ 6 decimals and at most 999999999999 in magnitude, unit prices ≤ 6
+  decimals, NOK amounts ≤ 2 decimals. Excess precision is rejected
+  (`INVALID_QUANTITY`, `INVALID_PRICE`, `INVALID_AMOUNT` or the command's own code),
+  never rounded. Totals are rounded per line to øre, half away from zero, by the backend.
+- Timestamps are UTC ISO strings with six fractional digits, so string order is
+  time order. Display them in `Europe/Oslo`.
+- Optional fields are explicit `null`. A typed result is still validated: each
+  screen checks the shape (parsers in `src/lib/catalog.ts`, `shelf-map.ts`,
+  `help.ts` and `admin-*.ts`) and shows an unavailable state on invalid data, never
+  an empty list or a zero.
+- The Worker's own checkout JSON API is different: the browser decodes it with
+  `requestApiJson` from `src/lib/api.ts`, which parses the raw text with
+  `lossless-json` so **every numeric token becomes a string**. Never use
+  `Response.json()` or `JSON.parse` there. Its deadline is 15 seconds by default
+  and 25 seconds for checkout calls (`src/lib/checkout.ts`); a timeout means the
+  write is uncertain, never that it rolled back. Requests use `redirect: 'manual'`
+  and reject redirects, so checkout bodies never reach a redirect target. The
+  helper never logs URLs, tokens, contact text or bodies. When updating
+  `lossless-json`, run `bun test src/lib/api.test.ts` and `bun run check`.
+
+## Errors and uncertain outcomes
+
+- A rejected command throws `ConvexError({ code, message })` (`fail()` in
+  `convex/lib/errors.ts`); the message may add a detail after `:`. Read the code
+  with `errorCode(error)` and the message with `errorMessage(error)` from
+  `src/lib/convex.ts`. The codes and their UI treatment are in
+  [website-guide.md](website-guide.md) §8.1.
+- Only a code proves that the whole mutation rolled back. No code (network failure,
+  timeout, an argument the validator refused, a server bug) means the outcome of a
+  write is unknown: keep the request ID and exact payload and retry the same command.
+- `STAFF_REQUIRED` means access changed. Call `admin.permissionFailure(error)`; the
+  live membership already shows the new state.
+- `shelf.updateCabinet`, `shelf.updateBin`, `orders.updateOrder` and
+  `orders.updateOrderLine` answer `'stale'` instead of throwing when the row as
+  shown changed, and `'saved'` also for a retry that already applied.
+
+## Idempotent commands
+
+Commands that change stock, orders, storage, checkouts or membership take a
+`requestId`: `stock.adjust`, `stock.withdraw`, `stock.recordSingleCount`,
+`stock.correctAndCount`, `stock.startCountBatch`, `stock.recordCount`,
+`stock.closeAbandonedCountBatch`, `orders.recordOrder`, `orders.recordReceipt`,
+`orders.cancelQuantities`, `orders.reverseCancellation`, `shelf.saveLayout`,
+`shelf.archiveCabinet`, `shelf.swapBins`, `shelf.swapCabinets`,
+`checkout.prepare` (through the Worker), `checkout.recover`, `members.invite` and
+`members.deactivate`.
+
+- `convex/lib/commands.ts` stores the first completion in `command_requests`. A
+  repeat with the same request ID, command, actor and input (SHA-256 of the
+  key-sorted JSON) returns the stored result without acting again. Anything else
+  with that ID fails with `IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_INPUT`; an ID that
+  is not a UUID fails with `REQUEST_ID_REQUIRED`. Concurrent duplicates serialize:
+  one runs, the others find its result.
+- Create a fresh UUID per intention. Persist the exact command (actor, request ID,
+  payload, generated UUIDs and codes) before sending, and resend it unchanged after
+  an uncertain result. The admin screens keep pending commands per user in
+  `localStorage` (for example `ampoteket:admin-member-command:v1` and
+  `ampoteket:admin-recovery:v1`).
+- Other writes are repeat-safe by their guards: `products.save`,
+  `products.setAttribute`, `products.rename` and `help.save` return success when
+  the stored values already equal the new ones; `products.createDefinition` returns
+  the existing ID for the same definition; `help.reorder` accepts an order that is
+  already current; `stock.finishCountBatch`, `checkout.confirm` and
+  `checkout.clearContact` may be repeated.
 
 ## Catalog and topology
 
-`src/lib/catalog.ts` wraps `amp_catalog`: lookups, single pages and complete traversal. Transport, shape and cursor errors stay errors, distinct from an empty result.
+`src/lib/catalog.ts` wraps the public catalog: lookups, single pages and complete
+traversal. Transport, shape and cursor errors stay errors, distinct from an empty result.
 
-- Results are active products in catalog order. `p_sort` is a JSON array of up to 100 `[category name, attribute code or null, [attribute codes]?]` entries with distinct names (otherwise `INVALID_CATALOG_QUERY`): listed categories first, in array order, each sorted by that attribute's value with missing values last; then other categories by name; uncategorised products last; ties by `name_nb`, then code. The optional third element, up to 100 attribute codes, is the category's further specifications in the order worth showing. The default `[]` lists categories by name. `src/lib/catalog.ts` always sends `catalogSort` ([order](page-catalog.md#3-url-and-matching-rules)). `p_limit` is 1–200 (default 200). Code or QR lookup uses `p_code`.
-- Each row's `attributes` maps codes to `{ label, unit, value_type, value, max }`. `max` is the upper bound of a number range as decimal text (`value` is then the lower one) and null otherwise, including for text and boolean values. Conditions match a range they overlap.
-- Each row's `distinguishing` lists up to two attribute codes that tell it from active look-alikes: products in its category with the same primary value or, without one, the same normalized `name_nb`. Codes come in the category's order from `p_sort`, then the rest by code; one is kept only if it splits members that still look alike, until all differ. A missing or empty value counts as different. Every member gets the same list, computed over the whole active catalog, so it is the same for a lookup, a filter or any page. Empty when nothing looks alike; members with no differing specification stay alike until one is entered. A code may name a value the row lacks.
-- To page, send each page's last `code` as `p_after_code` with the same `p_sort`, and stop only at an **empty** page; a short page may be an API row cap. The next page starts after that product's current sort position (`app.catalog_sort_key`), so a cursor outside the current filter still works. If staff change a cursor product's primary value or name while someone pages, rows can repeat or be skipped: reject repeated codes and non-advancing cursors and offer the retry. The visible count describes only rendered rows.
-- `readCompleteCatalog` is for operations that need every matching row. A failed complete read never publishes a partial result.
-- `p_cabinet_ids` and `p_bin_ids` select any listed location, intersected with the other filters before paging; both empty means everywhere. Null arrays or members, duplicates, more than 100 cabinets or 4,096 drawers, and unknown or archived IDs raise `INVALID_CATALOG_FILTER`, even when nothing else matches. Drawer selection follows the stable drawer identity across moves.
-- SQL validates every condition (unknown categories or attributes, bad numeric bounds) before matching. `p_labels` comes from `catalogSearchLabels`, so bilingual and SI search matches what is displayed. Code search also matches codes without hyphens (`res00026` finds `RES-00026`).
-- `amp_catalog_facets` returns all category names and typed values for the selected categories as one JSON object, never truncated by a row cap.
-- The catalog is live; pages are not a point-in-time export. A lost saved cursor gives a return-to-start error.
+- `catalog.page({ q?, categories?, conditions?, cabinetIds?, binIds?, binId?, afterCode?, limit? })`
+  returns `{ products, complete, nextAfterCode }`: active products in catalog
+  order. The backend owns the order, from `catalogSort` in
+  `src/lib/product-specifications.ts`: listed categories first, in that order, each
+  sorted by its primary attribute's value with missing values last; then other
+  categories by name; uncategorised products last; ties by `name_nb`, then code
+  ([order](page-catalog.md#3-url-and-matching-rules)). `limit` is 1–200 (default
+  200; otherwise `INVALID_CATALOG_PAGE_SIZE`).
+- `conditions` maps an attribute code to `{ eq }` or `{ min?, max? }` (numbers
+  only). The backend validates the whole query before matching: more than 200
+  search characters, more than 100 categories or duplicates raise
+  `INVALID_CATALOG_QUERY`; unknown categories `UNKNOWN_CATALOG_CATEGORY`; an
+  attribute no product in scope has `UNKNOWN_CATALOG_ATTRIBUTE`; a malformed
+  condition or bound `INVALID_CATALOG_FILTER`. A number range matches a condition it overlaps.
+- `q` is matched by `catalogSearchText` and `matchesSearch` from
+  `src/lib/catalog-search.ts`, the same code the shop uses, so bilingual and SI
+  search matches what is displayed. Code search also matches codes without hyphens
+  (`res00026` finds `RES-00026`).
+- `cabinetIds` (up to 100) and `binIds` (up to 4,096) select any listed location,
+  intersected with the other filters; both empty means everywhere. Duplicates and
+  unknown or archived IDs raise `INVALID_CATALOG_FILTER`, even when nothing else
+  matches. `binId` selects one drawer. Drawer selection follows the stable drawer
+  identity across moves.
+- Each row's `attributes` maps codes to `{ label, unit, value_type, value, max }`.
+  `max` is the upper bound of a number range as a decimal string (`value` is then
+  the lower one) and null otherwise; text and boolean values carry no `max`.
+- Each row's `distinguishing` lists up to two attribute codes that tell it from active look-alikes: products in its category with the same primary value or, without one, the same normalized `name_nb`. Codes come in the category's order from `catalogSort`, then the rest by code; one is kept only if it splits members that still look alike, until all differ. A missing or empty value counts as different. Every member gets the same list, computed over the whole active catalog, so it is the same for a lookup, a filter or any page. Empty when nothing looks alike; members with no differing specification stay alike until one is entered. A code may name a value the row lacks.
+- To page, send `nextAfterCode` as `afterCode` with the same query and stop when
+  `complete` is true. The next page starts after that product's current position in
+  the whole catalog order, so a cursor outside the current filter still works; a
+  cursor code that is no longer active raises `CATALOG_CURSOR_MISSING`, shown as a
+  return-to-start error. If staff change a cursor product's primary value or name
+  while someone pages, rows can repeat or be skipped: `readCatalogPage` rejects a
+  page that repeats the cursor or is empty but incomplete, and `readCompleteCatalog`
+  rejects repeated codes and offers the retry. The visible count describes only
+  rendered rows.
+- `readCompleteCatalog` is for operations that need every matching row (such as one
+  drawer's contents). A failed complete read never publishes a partial result.
+- `catalog.product({ code })` returns one active product or null.
+  `lookupCatalogProduct` can also try the hyphenated form of a compact code.
+- `catalog.facets({ categories? })` returns `{ categories, attributes }`: every
+  category name with active products, and for the selected categories each
+  attribute's definition and values (number values and range bounds ascending,
+  distinct text values, none for booleans). One complete value, never truncated.
+- The catalog is live; pages are not a point-in-time export.
 
-`amp_shelf_map()` returns one JSON object with complete, ordered `cabinets` and `bins` arrays, including empty storage and excluding archived storage. Being one value, it cannot be truncated by the row cap. Each bin has `has_products`, true if any product (even inactive or zero stock) is assigned. Use that flag to show unassigned drawers; never infer emptiness from missing catalog rows or a failed read. `src/lib/shelf-map.ts` validates duplicates, parents, grid fit and overlaps. Only selecting an assigned drawer triggers a drawer-scoped catalog read. The map exposes placement only, never stock, costs, staff or contacts.
+`catalog.shelfMap()` returns `{ cabinets, bins }`, complete and ordered, including
+empty storage and excluding archived storage. Each bin has `has_products`, true if
+any product (even inactive or zero stock) is assigned. Use that flag to show
+unassigned drawers; never infer emptiness from missing catalog rows or a failed
+read. `parseShelfTopology` in `src/lib/shelf-map.ts` validates duplicates, parents,
+grid fit and overlaps. Only selecting an assigned drawer triggers a drawer-scoped
+catalog read. The map exposes placement only, never stock, costs, staff or contacts.
 
 ## Public volunteer directory
 
-`amp_help_directory(p_after_order, p_after_id, p_limit)` returns published contacts ordered by `(display_order, id)` with exactly `id`, `display_name`, `responsibility`, `email`, `phone`, `contact_url`, `discord` and `display_order`. `p_limit` is 1–1000 (default 100; otherwise `INVALID_HELP_PAGE_SIZE`). Send both cursor fields or neither (`INVALID_HELP_CURSOR`). Page until empty, reject duplicate IDs and non-advancing tuples, and keep "unavailable" distinct from "empty".
+`catalog.helpDirectory()` returns every published contact in display order, one
+complete list, with exactly `id`, `display_name`, `responsibility`, `email`,
+`phone`, `contact_url`, `discord` and `display_order`. `readHelpDirectory` in
+`src/lib/help.ts` rejects duplicates and unreachable entries; keep "unavailable"
+distinct from "empty".
 
-Staff edit through `amp_help_contacts` with their own JWT:
+Staff edit with their own session:
 
-- Insert with a fresh client UUID, so a lost response can be reconciled.
-- PATCH filters `id=eq.<id>` and `edit_revision=eq.<original>`, sends the same original `edit_revision` in the body, and uses `Prefer: return=representation`. Only one returned row means saved. Zero rows or `STALE_HELP_CONTACT` means someone else edited: keep the draft, refresh and review, never overwrite.
-- Send blank optional contact methods as `null`. Entries cannot be deleted; unpublish instead.
-- Never send `display_order`: a new contact goes last. `amp_reorder_help_contacts(p_ids, p_expected_ids)` takes every contact ID, drafts included, in both the desired order and the order displayed before the move, and renumbers from 0. A move does not advance `edit_revision`. The database compares the previous order after locking; `STALE_HELP_ORDER` means contacts or their order changed: re-read and let the user move again. A retry whose desired order is already current succeeds without another write. The old one-argument signature is unavailable.
+- `help.list()` returns every contact, drafts included, in display order, with
+  `edit_revision` as a decimal string.
+- `help.save({ id, revision, fields })` creates a contact with a fresh client UUID
+  and `revision: null`, so a lost response can be reconciled, or edits one with the
+  `edit_revision` shown. `fields` holds `display_name`, `responsibility`, `email`,
+  `phone`, `contact_url`, `discord` and `is_published`; send blank optional contact
+  methods as `null`. If the stored values already equal `fields`, it returns the
+  current row. Otherwise a different revision raises `STALE_HELP_CONTACT`: someone
+  else edited, so keep the draft, refresh and review, never overwrite.
+  `INVALID_HELP_CONTACT` names the bad field after `:`, and
+  `HELP_CONTACT_NOT_REACHABLE` refuses a published contact without any contact
+  method. Entries cannot be deleted; unpublish instead.
+- Never send `display_order`: a new contact goes last. `help.reorder({ ids, expectedIds })`
+  takes every contact ID, drafts included, in both the desired order and the order
+  displayed before the move, and renumbers from 0. A move does not advance
+  `edit_revision`. `STALE_HELP_ORDER` means contacts or their order changed: re-read
+  and let the user move again. A retry whose desired order is already current
+  succeeds without another write.
 
 ## Staff membership and invitations
 
-All membership RPCs require the active staff member's own JWT. Anon and service
-role have no execution grant; non-staff and inactive callers get `STAFF_REQUIRED`.
-The actor comes from the JWT, never a submitted staff ID.
+Every membership function except `members.me` requires an active staff member's own
+session; non-staff and inactive callers get `STAFF_REQUIRED`. The actor comes from
+the session, never a submitted staff ID.
 
-`amp_list_staff()` returns one JSON array, complete regardless of the API row cap:
+`members.me()` returns null when signed out, otherwise
+`{ authUserId, email, membership: { id, authUserId, displayName } | null }`.
+`AdminContext` subscribes to it, so revocation shows at once in every tab.
+
+`members.list()` returns every membership, active first, then by name:
 
 ```text
-[{ id, auth_user_id: uuid | null, display_name, email: string | null,
-   is_active: boolean, email_confirmed: boolean }]
+[{ id, authUserId: uuid | null, displayName, email: string | null,
+   isActive: boolean, emailConfirmed: boolean }]
 ```
 
-The UI shows a deleted account when `auth_user_id` is null, inactive when
-`is_active` is false, pending when the active account's email is unconfirmed, and
-active otherwise. Email comes from Auth and is visible only to active staff.
+The UI shows a deleted account when `authUserId` is null, inactive when
+`isActive` is false, pending when the active account's email is unconfirmed, and
+active otherwise. Email comes from the Auth account and is visible only to active staff.
 
-- `amp_grant_staff_access(p_request_id uuid, p_email text, p_display_name text, p_expected_staff_id uuid = null, p_expected_active boolean = null)`
-  returns the membership UUID, granting or reactivating access to an existing
-  Auth account. The Worker creates an absent account first.
-- `amp_deactivate_staff(p_request_id uuid, p_staff_id uuid)` returns the membership
-  UUID and sets it inactive. `STAFF_SELF_DEACTIVATION` forbids deactivating the
-  caller; `STAFF_NOT_FOUND` rejects an unknown target.
-- Both writes use `command_requests` idempotency and audit the signed-in actor.
-  Reuse the original actor, request ID and exact payload after an uncertain result.
-  Membership writes serialize and recheck caller access, so mutual deactivation
-  cannot disable both callers. A completed grant replay returns its result
-  without undoing a later deactivation.
-
-`POST /api/admin/invitations` requires `Authorization: Bearer <caller JWT>`, JSON,
-the exact configured `CHECKOUT_ALLOWED_ORIGIN` and the `ADMIN_INVITATION_LIMIT`
-binding. Request and success response:
+`members.invite` is an action. Request and success result:
 
 ```text
-{ requestId: uuid, email: string, displayName: string, targetId: uuid | null, targetActive: boolean | null, locale: "nb" | "en" }
+{ requestId: uuid, email: string, displayName: string, locale: "nb" | "en", targetId: uuid | null, targetActive: boolean | null }
 { status: "invited" | "existing_account", staffId: uuid }
 ```
 
-The Worker validates the request, limits its body and request rate, and verifies
-active staff before using the secret key for Auth account creation/invitation.
-The body is capped at 2,048 bytes. The native rate binding allows 10 requests per
-minute for each IP and each authenticated actor. Upstream work has a shared
-45-second deadline; the client allows 60 seconds for the complete request.
-It grants membership with the caller's JWT. For resend/reactivation, `targetId`
-binds the request to the listed membership and `targetActive` to its current
-access state. The database rejects a changed/deleted identity or access state
-before granting access, so stale resend actions cannot reactivate someone.
-New invitations use null for both fields. New accounts remain unconfirmed until
-the recipient follows the email link to set a password at the fixed localized
-`/admin/password?next=%2Fadmin` URL. Existing confirmed accounts retain their
-password and return `existing_account` without an invitation email.
+- It first runs the internal mutation `members.grantAccess`, one transaction that
+  rechecks the inviter, applies the rate limit (10 per minute per inviter,
+  `RATE_LIMITED`; retries count), trims and lower-cases the email
+  (`STAFF_EMAIL_REQUIRED`, at most 254 characters), checks the name
+  (`STAFF_DISPLAY_NAME_REQUIRED`, at most 120 characters) and is idempotent by
+  `requestId`. It creates the Convex Auth user without a password if none exists,
+  then grants or reactivates the membership, audited with the inviter as actor.
+- For a resend or reactivation, `targetId` binds the request to the listed
+  membership and `targetActive` to its current access state; send both or neither
+  (`INVALID_ADMIN_INVITATION`). A changed identity or access state raises
+  `INVITATION_SUPERSEDED` before any write, so a stale resend cannot reactivate
+  someone, and a targeted address without an account raises `STAFF_USER_NOT_FOUND`.
+  New invitations send null for both.
+- A replay of a completed grant returns its result, but raises
+  `INVITATION_SUPERSEDED` if the membership was deactivated afterwards, preserving
+  that deactivation.
+- An account whose email is already confirmed keeps its password: the result is
+  `existing_account` and no email is sent. Otherwise the action stores a new
+  single-use invite link (valid 7 days; it voids the user's earlier unused links)
+  and sends it through Resend from `Ampoteket <noreply@notify.ampoteket.no>`
+  (`convex/lib/email.ts`, templates in `convex/lib/emailTemplates.ts`).
+- Email delivery is separate from the transaction. `INVITATION_EMAIL_FAILED` means
+  membership is saved but delivery failed; retry the same command to send a new
+  link. An uncertain result never means access was rolled back.
 
-Email delivery is separate from the database transaction. `INVITATION_EMAIL_FAILED`
-means membership is saved but delivery failed; retry the same request to retry
-delivery. Resending a pending invitation uses the same endpoint. A replay after
-the membership was deactivated returns `INVITATION_SUPERSEDED` (409), preserving
-that deactivation. An uncertain response never means access was rolled back.
+`members.deactivate({ requestId, staffId })` returns the membership UUID and sets it
+inactive. `STAFF_SELF_DEACTIVATION` forbids deactivating the caller;
+`STAFF_NOT_FOUND` rejects an unknown target. Each access change rereads the caller's
+own membership in its transaction, so mutual deactivation cannot disable both callers.
+
+Password links and sign-in:
+
+- Links have the form
+  `<SITE_URL>[/en]/admin/password?next=/admin&token_hash=<64 hex>&type=invite|recovery`.
+  Only the SHA-256 of the token is stored.
+- `passwords.requestReset({ email, locale })` (action) always returns null, whether
+  or not the address has an account, and sends a reset link valid for one hour.
+  `INVALID_EMAIL` refuses an empty or over-long address; `RATE_LIMITED` applies
+  above 20 requests per minute overall or 1 per minute per address.
+- `passwords.checkLink({ token })` returns `{ valid }` and consumes nothing.
+  `passwords.complete({ token, password })` sets the password, consumes the link,
+  marks the email confirmed and returns `{ email }`, so the page signs in at once.
+  It raises `PASSWORD_TOO_SHORT` (under 8 characters), `PASSWORD_TOO_LONG` (over
+  72 bytes) or `INVALID_PASSWORD_LINK` (used, expired or unknown).
+- `session.signIn({ email, password })` (action) returns `{ token, refreshToken }`
+  or raises `INVALID_CREDENTIALS`, alike for a wrong password, an unknown address
+  and too many failed attempts.
+- `src/lib/convex-auth.ts` keeps the access JWT (one hour) and the refresh token in
+  `localStorage` under Convex Auth's keys, namespaced by deployment URL. It
+  refreshes through `auth:signIn` under a cross-tab `navigator.locks` lock, adopts a
+  token another tab stored meanwhile, and signs out locally when the backend
+  rejects the refresh token. Sign-out calls `auth:signOut` and always forgets the
+  local tokens.
 
 ## Staff statistics
 
-`amp_admin_statistics(p_product_id uuid = null)` needs an active staff JWT (`staffRequest`). Non-staff and disabled staff get `STAFF_REQUIRED`; anon and service role have no grant. Staff access is checked before an unknown product raises `PRODUCT_NOT_FOUND`. The response is one JSON object from one statement snapshot:
+`statistics.read({ productId: uuid | null })` needs an active staff session.
+Non-staff and disabled staff get `STAFF_REQUIRED`, checked before an unknown
+product raises `PRODUCT_NOT_FOUND`. The response is one object computed in one
+query, so it is one consistent snapshot:
 
 ```text
 {
@@ -119,24 +308,33 @@ that deactivation. An uncertain response never means access was rolled back.
 
 - All numbers are decimal strings. `days` is always 30 ascending rows: today (partial) in `Europe/Oslo` and the 29 days before, zero-filled.
 - Sales are dated by the sale event's `recorded_at`, valued from frozen checkout lines with per-line rounding. Staff recoveries, free sales and inactive products count; unregistered checkouts and later stock corrections do not. `sale_count` counts checkouts. These are registrations, never verified payment or net revenue.
-- Without a product: quantities are null (units cannot be mixed), `products` is the top ten by NOK value (code breaks ties), and `overview` lists up to eight products needing attention (sold out first, negative before zero, then below `minimum_stock` by ascending `quantity / minimum_stock`) and up to five open count batches, oldest first. The two counts cover the full set, not just the listed rows.
+- Without a product: quantities are null (units cannot be mixed), `products` is the top ten by NOK value (code breaks ties), and `overview` lists up to eight active products needing attention (sold out first, negative before zero, then below `minimum_stock` by ascending `quantity / minimum_stock`) and up to five open count batches, oldest first. The two counts cover the full set, not just the listed rows.
 - With a product: quantities are in its unit, `products` is empty and `overview` is null.
 - A failed or invalid response is shown as unavailable, never as zero.
 
-## Staff writes and complete reads
+## Staff reads
 
-- Staff screens use `staffRequest` and `allStaffRows` from `admin-api.ts`: own JWT, 15-second deadline, returned representations. An aborted write is uncertain.
-- Build scalar equality filters with `staffEquals` (`eq.<value>` or `is.null`). Do not quote the value; quotes change what is compared. Quoting inside `in` or logic expressions follows [different rules](https://github.com/PostgREST/postgrest/blob/v14.12/src/PostgREST/ApiRequest/QueryParams.hs#L639).
-- Shelf layout and cabinet retirement: persist the exact command, generated UUIDs and codes, actor and request ID before sending, and retry with the same payload. The rules are in [datamodell.md](datamodell.md) §10.
-- Label exports page `amp_product_attributes` by `(product_id, attribute_id)`. Any failed page blocks the file; never print a partial label set. See [page-labels.md](page-labels.md).
-
-Every list has a deterministic order on a unique key (`id`, or a tuple like `(recorded_at, id)`; composite keys need every column in both order and cursor) and pages with keyset filters, never offsets. Page until empty. An unavailable page is never shown as the end. Compare IDs and quantities in SQL, not as JavaScript strings.
-
-Operational scans (such as contact retention) record their cursor and counts, resume after failure and recheck eligibility before acting. An export that claims exact completeness needs one read-only `REPEATABLE READ` transaction or a backup; separate HTTP pages are not a snapshot. Write RPCs still require `READ COMMITTED`.
+- Staff reads return complete lists in one query, except
+  `auditLog.page({ before? })`: 200 entries, newest first, older than
+  the entry ID `before`, with `more` and the names the entries refer to. Page until
+  `more` is false; an unavailable page is never shown as the end.
+- Shelf layout and cabinet retirement: persist the exact command, generated UUIDs
+  and codes, actor and request ID before sending, and retry with the same payload.
+  The rules are in [datamodell.md](datamodell.md#shelf-layouts-and-storage).
+- Label exports read `products.attributes({})` (every product's values) in one
+  query. A failed read blocks the file; never print a partial label set. See
+  [page-labels.md](page-labels.md).
+- Backups are deployment snapshots, not client reads
+  ([runbook-backup-restore.md](runbook-backup-restore.md)); contact retention runs
+  in the backend ([runbook-contact-retention.md](runbook-contact-retention.md)).
 
 ## Tests
 
-- `src/lib/api.test.ts`: the parser and error boundary.
-- `supabase/tests/numeric-read-models.sql`: JSON types, exact values, precision rejection, rounding, catalog pagination and shelf topology.
-- `supabase/tests/admin-statistics.sql`: statistics dates, totals and ordering.
-- `./scripts/test-api.sh`: real HTTP through isolated PostgreSQL and PostgREST containers with signed synthetic JWTs, a small row cap and the production parser. It does not exercise Supabase Auth login, refresh or deletion, or the deployed JWT configuration; see [concurrency-tests.md](concurrency-tests.md) §7.
+- `src/lib/api.test.ts`: the Worker JSON parser and error boundary.
+- `src/lib/server/checkout-gateway.test.ts`: the checkout gateway with a stubbed client.
+- `tests/convex/*.test.ts`, run by `./scripts/test-convex.sh` against a disposable
+  local backend through the native client: exact decimal round trips, checkout,
+  stock, orders, shelf and help guards, accounts, the Supabase import and catalog
+  traversal of seeded data. `statistics.read` has no backend test yet.
+- `./scripts/test-web.sh`: the browser boundary proof; see
+  [concurrency-tests.md](concurrency-tests.md) §7.

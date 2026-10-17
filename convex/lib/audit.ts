@@ -3,7 +3,7 @@
  *
  * Every insert, update and delete on the tables in `AUDITED` must go through
  * these helpers, which write the row and its before/after image to `audit_log`
- * in the same transaction. convex/tests/audit-coverage.test.ts fails if code
+ * in the same transaction. tests/audit-coverage.test.ts fails if code
  * elsewhere writes these tables directly.
  */
 import type { MutationCtx } from '../_generated/server';

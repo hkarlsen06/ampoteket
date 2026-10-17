@@ -1,19 +1,21 @@
-/** Actual pages and gateway, disposable PostgreSQL/Auth, trusted HTTPS and real browser storage. */
-import { firefox, expect, type BrowserContext } from '@playwright/test';
+/** Actual pages and gateway, disposable Convex backend and Auth, trusted HTTPS and real browser storage. */
+import { firefox, expect as playwrightExpect, type BrowserContext } from '@playwright/test';
 import { strict as assert } from 'node:assert';
 import { resolve } from 'node:path';
 import { mkdir } from 'node:fs/promises';
 import { fieldLabel, signIn, fits, captureFailure, proofEnvironment } from './web-proof/harness';
-import { generateSeedSql, seedProductId, seedProductCode, seedBinId } from './seed-test-data';
+import { convexSocket } from './web-proof/convex-faults';
+import { seedDemoData, seedProductId, seedProductCode, seedBinId } from './seed-test-data';
 import { en } from '../src/lib/i18n/en';
 import { nb } from '../src/lib/i18n/nb';
 
-const { directory, origin, api, password, ca, sql, createUser, startWorker } = await proofEnvironment();
+// Several disposable backends and builds may share this machine; waits allow for that.
+const expect = playwrightExpect.configure({ timeout: 20_000 });
+const { directory, origin, convexUrl, password, ca, run, fixtures, createStaff, createUser, startWorker } = await proofEnvironment();
 const staffEmail = 'labels-staff@example.test';
 const nonstaffEmail = 'labels-nonstaff@example.test';
-const staffId = await createUser(staffEmail);
+await createStaff(staffEmail, 'Browser operator');
 await createUser(nonstaffEmail);
-await sql(`INSERT INTO app.staff_members(auth_user_id,display_name) VALUES ('${staffId}', 'Browser operator');`);
 let context: BrowserContext | undefined;
 const { ready, close } = await startWorker(() => context);
 const artifacts = resolve('test-results/labels');
@@ -34,9 +36,18 @@ async function verifyBootAssets() {
 }
 
 const diagnostics: string[] = [];
+// Every application table. Auth accounts, sessions and sign-in rate limits change
+// by signing in, which the old snapshot of the app schema never covered either.
+const applicationTables = ['units', 'staff_members', 'help_contacts', 'categories', 'cabinets', 'bins', 'products',
+  'attribute_definitions', 'product_attributes', 'command_requests', 'purchase_orders', 'purchase_order_lines',
+  'purchase_order_cancellations', 'checkouts', 'checkout_lines', 'checkout_contacts', 'count_batches', 'inventory_events',
+  'inventory_movements', 'movement_corrections', 'receipt_allocations', 'sales', 'stock_counts', 'audit_log', 'stock_levels', 'counters'];
+const stable = (value: unknown): unknown => Array.isArray(value) ? value.map(stable)
+  : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a < b ? -1 : 1).map(([key, item]) => [key, stable(item)]))
+    : value;
 async function snapshot() {
-  const tables = (await sql("SELECT tablename FROM pg_tables WHERE schemaname='app' ORDER BY tablename")).split('\n');
-  return await sql(tables.map(name => `SELECT '${name}:' || md5(coalesce(string_agg(value::text, E'\\n' ORDER BY value::text), '')) FROM (SELECT to_jsonb(t) AS value FROM app.${name} t) rows;`).join('\n'));
+  const tables = await Promise.all(applicationTables.map(async table => [table, (await fixtures.rows(table)).map(row => JSON.stringify(stable(row))).sort()]));
+  return JSON.stringify(tables);
 }
 async function inspectPdf(path: string, expectedCodes: string[], width: number, margin: number, gap: number) {
   const python = Bun.spawn(['python3', '-c', `
@@ -92,15 +103,25 @@ print(json.dumps(result))
 }
 
 // Everything is synthetic and belongs to this test's disposable project.
-await sql("SET ampoteket.test_seed = 'disposable-only';\n" + generateSeedSql());
-await sql(`
-UPDATE app.products SET bin_id='${seedBinId(0)}' WHERE id IN ('${seedProductId(0)}','${seedProductId(1)}','${seedProductId(2)}');
-UPDATE app.products SET is_active=false WHERE id='${seedProductId(2)}';
-UPDATE app.products SET is_active=false,bin_id=NULL WHERE id='${seedProductId(29)}';
-UPDATE app.products SET bin_id=(SELECT b.id FROM app.bins b JOIN app.cabinets c ON c.id=b.cabinet_id WHERE c.outer_row=1 AND c.outer_col=2 ORDER BY b.inner_row,b.inner_col LIMIT 1) WHERE id='${seedProductId(28)}';
-UPDATE app.product_attributes SET text_value=repeat('Very long specification ', 80) WHERE product_id='${seedProductId(0)}' AND attribute_id=(SELECT id FROM app.attribute_definitions WHERE code='package');
-UPDATE app.products SET name_nb='Langt norsk produktnavn med æ, ø og å for kontroll på en smal mobilskjerm',name_en='Deliberately long component name for the narrowest supported phone screen' WHERE id='${seedProductId(0)}';
-`);
+await seedDemoData(run);
+async function patchProduct(index: number, changes: Record<string, unknown>) {
+  assert.equal(await fixtures.patch('products', { id: seedProductId(index) }, changes), 1, `Fixture product ${index} exists`);
+}
+// Three components share the wall's first drawer; one of them and the unplaced one are unpublished.
+await patchProduct(0, { bin_id: seedBinId(0), name_nb: 'Langt norsk produktnavn med æ, ø og å for kontroll på en smal mobilskjerm',
+  name_en: 'Deliberately long component name for the narrowest supported phone screen' });
+await patchProduct(1, { bin_id: seedBinId(0) });
+await patchProduct(2, { bin_id: seedBinId(0), is_active: false });
+await patchProduct(29, { is_active: false, bin_id: null });
+const [secondCabinet] = await fixtures.rows<{ id: string }>('cabinets', { outer_row: 1, outer_col: 2 });
+const [secondCabinetBin] = (await fixtures.rows<{ id: string; inner_row: number; inner_col: number }>('bins', { cabinet_id: secondCabinet.id }))
+  .sort((a, b) => a.inner_row - b.inner_row || a.inner_col - b.inner_col);
+await patchProduct(28, { bin_id: secondCabinetBin.id });
+const [packageDefinition] = await fixtures.rows<{ id: string }>('attribute_definitions', { code: 'package' });
+assert.equal(await fixtures.patch('product_attributes', { product_id: seedProductId(0), attribute_id: packageDefinition.id },
+  { text_value: 'Very long specification '.repeat(80) }), 1);
+const productCodes = async (placedOnly: boolean) => (await fixtures.rows<{ code: string; bin_id: string | null }>('products'))
+  .filter(product => !placedOnly || product.bin_id !== null).map(product => product.code).sort();
 // Resolve the actual production chunks containing writer/font delivery so the
 // lazy-load check verifies JavaScript too, not merely absence of asset requests.
 const exportChunks = new Set<string>();
@@ -109,26 +130,27 @@ for await (const filename of new Bun.Glob('**/*.js').scan(`${directory}/site/clo
   if (source.includes('zxing_writer') || source.includes('Lato-Regular')) exportChunks.add(`/_app/immutable/${filename}`);
 }
 assert.ok(exportChunks.size, 'The production build contains identifiable lazy label-export chunks');
+// Every public mutation the browser could call (`products:save`), from the functions' sources.
+const mutationPaths: string[] = [];
+for await (const filename of new Bun.Glob('*.ts').scan('convex')) {
+  for (const [, name] of (await Bun.file(`convex/${filename}`).text()).matchAll(/^export const (\w+) = mutation\(/gm)) mutationPaths.push(`${filename.replace(/\.ts$/, '')}:${name}`);
+}
+assert.ok(mutationPaths.includes('products:save') && mutationPaths.includes('stock:adjust'), 'Public mutations are discoverable');
 const fixtureState = await snapshot();
-const writes: string[] = [];
 const requests: string[] = [];
 try {
   await ready();
   await verifyBootAssets();
   context = await firefox.launchPersistentContext(`${directory}/profile`, { headless: true, ignoreHTTPSErrors: false, acceptDownloads: true });
+  // Routes only apply to sockets opened afterwards, so install before the first page.
+  const socket = await convexSocket(context, convexUrl);
   context.on('page', tab => {
     tab.on('pageerror', error => diagnostics.push(error.message));
     tab.on('response', response => {
       const url = new URL(response.url());
       if (url.origin === origin && url.pathname.startsWith('/_app/immutable/') && /\.(css|js)$/.test(url.pathname) && !response.ok()) diagnostics.push(`Static asset ${response.status}: ${url.pathname}`);
     });
-    tab.on('request', request => {
-      requests.push(request.url());
-      const path = new URL(request.url()).pathname;
-      // Read-only RPCs use POST transport.
-      const rpcRead = request.method() === 'POST' && ['/rest/v1/rpc/amp_shelf_map', '/rest/v1/rpc/amp_admin_statistics'].includes(path);
-      if (request.url().startsWith(`${api.origin}/rest/v1/`) && !['GET', 'HEAD', 'OPTIONS'].includes(request.method()) && !rpcRead) writes.push(`${request.method()} ${path}`);
-    });
+    tab.on('request', request => { requests.push(request.url()); });
   });
   const page = await context.newPage();
   page.setDefaultTimeout(30000);
@@ -141,34 +163,42 @@ try {
   await expect(page.getByRole('heading', { name: en.admin.overview, exact: true })).toBeVisible();
 
   const m = en.adminLabels;
-  const productsPattern = `${api.origin}/rest/v1/amp_products*`;
-  let refused = 0;
-  await page.route(productsPattern, async route => { refused++; await route.abort('failed'); });
-  await page.goto(`${origin}/en/admin/products/labels`);
-  await expect(page.getByRole('button', { name: m.retry, exact: true })).toBeVisible();
-  expect(refused).toBeGreaterThan(0);
-  await expect(page.getByRole('button', { name: m.generate, exact: true, disabled: false })).toHaveCount(0);
-  await page.unroute(productsPattern);
-  await page.getByRole('button', { name: m.retry, exact: true }).click();
+  const retry = page.getByRole('button', { name: m.retry, exact: true });
   const wall = page.getByRole('group', { name: m.wall, exact: true });
+  // The page reads products, references, the wall and specifications as four
+  // Convex queries. A failed product read leaves nothing to select or generate.
+  const productRead = socket.failReads('products:list');
+  await page.goto(`${origin}/en/admin/products/labels`);
+  await expect(retry).toBeVisible();
+  await expect(wall).toHaveCount(0);
+  await expect(page.getByRole('button', { name: m.generate, exact: true, disabled: false })).toHaveCount(0);
+  productRead.stop();
+  await retry.click();
   await expect(wall).toBeVisible();
   expect(requests.filter(url => /\.wasm(?:\?|$)|Lato-Regular/.test(url) || exportChunks.has(new URL(url).pathname))).toEqual([]);
 
-  // A failure after one successful page must never look like a complete result.
-  let partialRead = 0;
-  await page.route(productsPattern, async route => {
-    partialRead++;
-    if (new URL(route.request().url()).searchParams.has('and')) await route.abort('failed');
-    else await route.continue();
-  });
+  // Products arriving while another read fails must never look like a complete result.
+  const specificationRead = socket.failReads('products:attributes');
   await page.reload();
-  await expect(page.getByRole('button', { name: m.retry, exact: true })).toBeVisible();
-  expect(partialRead).toBeGreaterThan(1);
+  await expect(retry).toBeVisible();
+  await expect(wall).toHaveCount(0);
   await expect(page.getByRole('button', { name: m.generate, exact: true, disabled: false })).toHaveCount(0);
-  await page.unroute(productsPattern);
-  await page.getByRole('button', { name: m.retry, exact: true }).click();
+  specificationRead.stop();
+  await retry.click();
   await expect(wall).toBeVisible();
-  console.log('PASS: real non-staff denial, initial/partial read failures and complete traversal under a two-row cap');
+  // Nor may a failed background re-read leave the earlier data usable for a file.
+  await page.getByRole('button', { name: m.selectAll, exact: true }).click();
+  await expect(page.getByRole('button', { name: m.generate, exact: true })).toBeEnabled();
+  const backgroundRead = socket.failReads('products:attributes');
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(retry).toBeVisible();
+  await expect(page.getByRole('button', { name: m.generate, exact: true })).toBeDisabled();
+  backgroundRead.stop();
+  await retry.click();
+  await expect(retry).toHaveCount(0);
+  await expect(page.getByRole('button', { name: m.generate, exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: m.clearSelection, exact: true }).click();
+  console.log('PASS: real non-staff denial; failed product, specification and background reads never enable Generate, and Retry recovers');
 
   const clear = page.getByRole('button', { name: m.clearSelection, exact: true });
   const selectAll = page.getByRole('button', { name: m.selectAll, exact: true });
@@ -222,9 +252,16 @@ try {
   await page.keyboard.press('Tab'); await page.keyboard.press('Shift+Tab');
   const focused = await widthControl.evaluate(element => element === document.activeElement && element.matches(':focus-visible') && parseFloat(getComputedStyle(element.closest('[data-slot="input-group"]') ?? element).outlineWidth) >= 2);
   expect(focused).toBe(true);
-  const resumed = page.waitForResponse(response => response.url().startsWith(`${api.origin}/rest/v1/amp_products?`) && response.ok());
+  // Window focus re-reads in the background. A change made meanwhile (without
+  // audit, restored below) shows that the read happened; selection, input and focus stay.
+  await patchProduct(3, { is_active: false });
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await resumed;
+  await expect(page.getByText(m.summary(30, 3), { exact: true }).and(page.locator('p'))).toBeVisible();
+  await expect(widthControl).toBeFocused();
+  await expect(widthControl).toHaveValue('45');
+  await expect(page.getByText(m.selectedDrawers(492), { exact: true })).toBeVisible();
+  await patchProduct(3, { is_active: true });
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(page.getByText(m.summary(30, 2), { exact: true }).and(page.locator('p'))).toBeVisible();
   await expect(widthControl).toBeFocused();
   await page.getByLabel(fieldLabel(m.includeUnplaced)).uncheck();
@@ -240,8 +277,7 @@ try {
   const file = await downloaded;
   const pdfPath = `${artifacts}/labels-assigned.pdf`;
   await file.saveAs(pdfPath);
-  const assignedCodes = (await sql('SELECT code FROM app.products WHERE bin_id IS NOT NULL ORDER BY code')).split('\n');
-  await inspectPdf(pdfPath, assignedCodes, 45, 10, 2);
+  await inspectPdf(pdfPath, await productCodes(true), 45, 10, 2);
   expect(requests.filter(url => url.endsWith('.wasm')).every(url => new URL(url).origin === origin)).toBe(true);
   expect(requests.some(url => url.endsWith('.wasm'))).toBe(true);
   console.log('PASS: no font/WASM fetch before generation, warm read preserves selection/input/focus, inactive parts included and stock never becomes copies');
@@ -253,7 +289,7 @@ try {
   const allDownload = page.waitForEvent('download');
   await download.click();
   await (await allDownload).saveAs(`${artifacts}/labels-all.pdf`);
-  await inspectPdf(`${artifacts}/labels-all.pdf`, (await sql('SELECT code FROM app.products ORDER BY code')).split('\n'), 45, 10, 2);
+  await inspectPdf(`${artifacts}/labels-all.pdf`, await productCodes(false), 45, 10, 2);
   console.log('PASS: Select all also includes the unplaced component, producing all 30 labels');
 
   // Changing selection or dimensions invalidates the earlier downloadable file.
@@ -366,7 +402,8 @@ try {
     await geometry.screenshot({ path: `${artifacts}/labels-${suffix}.png`, fullPage: true });
   }
   await geometry.close();
-  expect(writes).toEqual([]);
+  // The browser sent no mutation over the Convex socket at any point.
+  expect(mutationPaths.flatMap(path => socket.sent(path).map(args => `${path} ${args}`))).toEqual([]);
   expect(await snapshot()).toBe(fixtureState);
   expect(diagnostics).toEqual([]);
   console.log('PASS: both locales/themes at 360/1280, stable drawer disclosure, visible keyboard focus, no horizontal overflow and no application writes');

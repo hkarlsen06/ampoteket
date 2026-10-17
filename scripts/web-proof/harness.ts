@@ -76,6 +76,8 @@ export async function proofEnvironment() {
 	async function run<T = unknown>(kind: 'query' | 'mutation', name: string, args: Row = {}): Promise<T> {
 		const call = admin[kind] as (fn: never, args: Row) => Promise<T>;
 		try { return await call.call(admin, makeFunctionReference(name) as never, args); }
+		// Only the redacted text survives: the raw error could carry credentials into a dump.
+		// eslint-disable-next-line preserve-caught-error
 		catch (error) { throw new Error(`Disposable fixture ${name} failed: ${safe(String(error))}`); }
 	}
 	/** Test-only table access (convex/fixtures.ts); never available in production. */

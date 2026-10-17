@@ -4,9 +4,9 @@ Staff screens for products, placement, counts, withdrawals and corrections, unde
 `src/routes/[[locale=locale]]/admin/`. The product form is
 `src/lib/AdminProductEditor.svelte`; counts share `src/lib/CountForm.svelte`.
 [Labels](page-labels.md) and [orders](page-admin-orders.md) have their own pages. All
-routes need an active personal admin identity and call the audited staff views and
-RPCs ([datamodell.md](datamodell.md)) with the operator's own JWT. The database is
-authoritative.
+routes need an active personal admin identity and call the audited staff queries and
+mutations ([datamodell.md](datamodell.md)) under the operator's own Convex Auth
+session. The backend is authoritative.
 
 ## Overview and statistics
 
@@ -29,7 +29,8 @@ not) that other staff created since the signed-in staff member last reviewed, so
 checks new entries sees value, drawer, names, price and recorded stock at a glance; the
 heading carries the count. Each card adds when it was created and by whom, the actor as
 [audit browsing](website-guide.md#58-audit-browsing) names it, from the product's `INSERT`
-in `amp_audit_log`; products from before the log was truncated show only the time. The
+in the audit log (`auditLog.productCreations`; the list itself is `products.createdSince`);
+products without a recorded creation show only the time. The
 viewer's own products are left out. If the audit cannot be read, the list still shows,
 without creators and with the viewer's own products, and says so with a retry; it never
 looks empty. **Mark all as reviewed** moves the review point to the newest listed product's
@@ -44,7 +45,7 @@ audit.
 `/admin/statistics` graphs 30 days of purchases and ranks up to ten products by sales
 value; a saved product's **Statistics** tab shows its own figures (tab changes keep the
 editor's unsaved input). Rules, with aggregation in
-[`amp_admin_statistics`](api-contract.md#staff-statistics):
+[`statistics.read`](api-contract.md#staff-statistics):
 
 - Period, counting and valuation follow the linked contract; the figures are
   registered purchases. Public pages show no sales history.
@@ -55,8 +56,12 @@ editor's unsaved input). Rules, with aggregation in
 
 ## Products
 
-`/admin/products` lists published and unpublished products, searching after complete keyset
-pagination and showing 50 cards at a time with **Show more**, as in the public catalog.
+`/admin/products` lists published and unpublished products from live Convex
+subscriptions (`products.list`, `products.references`, `catalog.shelfMap`,
+`products.attributes`, `stock.inventory`), so edits, stock and placement by others appear
+without a re-read. Search runs over the complete list, showing 50 cards at a time with
+**Show more**, as in the public catalog. A failed stock subscription marks stock
+unavailable per card instead of hiding the list.
 An empty catalog offers **New product**; an unmatched search offers clearing search and filters.
 The **Low stock** toggle narrows to the overview's needs-attention set and combines with
 the published filter and search. **Shelf map** beside search opens the shelf map; tapping a drawer narrows
@@ -130,7 +135,8 @@ remain outside the scrolling region.
   the history-derived `purchase_order_lines.purchase_url`.
 - The editor counts through CountForm in a dialog and prints through **Print**
   ([P-touch tape labels](page-labels.md#p-touch-tape-labels)). Beside the balance it
-  shows any quantity still on open supplier orders and links to the product's
+  shows any quantity still on open supplier orders, both kept current by live
+  subscriptions (`stock.inventory`, `orders.outstandingByProduct`), and links to the product's
   [stock changes](#stock-changes), which links back.
 - A new product takes its opening stock and a **Print label** choice in the same
   form. The quantity travels in the creation command and is posted once that command is
@@ -159,9 +165,9 @@ remain outside the scrolling region.
   this drawer, right, below), so a value in the wrong drawer or cabinet stands out
   against its series (`DrawerNeighbours`, `drawerNeighbours` in `shelf-map.ts`). It
   sits beside the map, or below it on a phone, so the map never moves between picks.
-  Shared drawers are normal, so nothing warns. Products load once per editor (a just
-  created product included) and revalidate on return to the tab; a failed load shows
-  the unavailable pattern, never an empty drawer. Choosing a drawer announces only
+  Shared drawers are normal, so nothing warns. Products come from a live subscription
+  (`products.list`), so a just created product or another editor's change appears on its
+  own; a failed subscription shows the unavailable pattern, never an empty drawer. Choosing a drawer announces only
   its own contents.
 
 **Categories.** Choosing a standard category for a new product picks the code prefix;
@@ -173,17 +179,18 @@ Miscellaneous.
 
 A category change never changes a saved code, QR target or history. Custom, legacy
 ("Transistors") and uncategorized products keep their category until an operator
-picks a standard one; never infer it from the code prefix. On save, reuse the row with
-the standard name or create it through `amp_categories` with its predefined stable ID.
+picks a standard one; never infer it from the code prefix. On save, `products.save`
+reuses the row with the standard name or creates it with its predefined stable ID.
 To extend the list, update `productTypes` in `src/lib/admin-products.ts` and both
 dictionaries. Canonical names and IDs are data identities, not copy.
 
 **Save and retry.** Persist the product command (actor, UUID, code, exact payload,
 category requirement) before writing. A lost response is retried with the same
 identities, never a replacement product or category. Only a definite code-uniqueness
-rejection permits a new code candidate. Category and product are separate writes, so a
-category may survive a failed product save. Edits check the displayed metadata
-revision; a stale draft needs review, never a blind overwrite. After creation the
+rejection (`PRODUCT_CODE_TAKEN`) permits a new code candidate. `products.save` writes
+the category on first use, the product and a new product's specifications in one
+transaction, so a failed save leaves nothing behind. Edits check the displayed metadata
+revision (`STALE_PRODUCT`); a stale draft needs review, never a blind overwrite. After creation the
 editor replaces the `/new` history entry with the product's route.
 
 ### Predefined specifications
@@ -197,8 +204,9 @@ scrolls in short viewports.
 - Fields are edited in place and written by Save product. All are optional; clearing
   removes the value, and unknown values stay missing, never zero or false. An invalid
   number blocks the whole save.
-- Each changed specification is its own persisted, acknowledged command after the
-  metadata. Partial failure keeps the command for retry or review. A value changed by
+- A new product's specifications travel in its creation command. On a saved product,
+  each changed specification is its own persisted, acknowledged command
+  (`products.setAttribute`, guarded by the value the editor showed) after the metadata. Partial failure keeps the command for retry or review. A value changed by
   someone else stops the save and shows the current value; saving again replaces it
   deliberately. An uncertain response locks the field until the next Save.
 - Every number field has «Min–maks» / "Min–max" under its input. It turns the field into
@@ -210,9 +218,9 @@ scrolls in short viewports.
   ([datamodell.md](datamodell.md#product_attributes)); the unlikely-value warning checks
   both bounds. A dual rating (250 VAC and 400 VDC) is two fields, «Vekselspenning» /
   "AC voltage" (`voltage_ac`) and Voltage, not a range.
-- Missing definitions are created through `amp_attribute_definitions` with their stable
-  UUID, then values go through `amp_product_attributes`. A conflicting definition is
-  reported, never reinterpreted.
+- Missing definitions are created through `products.createDefinition` with their stable
+  UUID before values are written. A conflicting definition (`DEFINITION_ID_TAKEN`,
+  `DEFINITION_CODE_TAKEN`) is reported, never reinterpreted.
 
 `src/lib/product-specifications.ts` defines the standard fields (code, type, canonical
 unit) and the category mapping. SI fields accept prefixes and units (`27p`, `4k7`,
@@ -230,8 +238,8 @@ database's optional cabinet and drawer `label` text; saves keep whatever is stor
 column A on the left, spans anchor bottom-left. Cells are at least 24px; dense layouts
 pan in a named keyboard-accessible viewport without horizontal page overflow.
 
-The migration seeds 12 Raaco 150-system cabinets (306 × 552 mm), six columns by two
-rows:
+`seed:base` creates the workshop wall on a fresh deployment: 12 Raaco 150-system
+cabinets (306 × 552 mm), six columns by two rows:
 
 | Wall positions | Drawer rows × columns | Drawers |
 |---|---|---|
@@ -257,8 +265,8 @@ The border grips add or remove rows and columns, by pointer or arrow keys, up to
 cells. Each sits mid-edge and slides along it when the selected drawer's move or width
 grip would land on it. Selecting a drawer shows its heading, its actions (*Wider*, *Narrower*, *Split
 into single drawers*, *Move drawer*, *Archive empty drawer*) and its products. A width
-grip on the drawer also resizes it. Save commits atomically. Rules, rechecked by the
-database:
+grip on the drawer also resizes it. Save commits atomically (`shelf.saveLayout`). Rules,
+rechecked by the backend:
 
 - Widening keeps the drawer's ID and products and may consume only whole neighbours
   with no assigned products (unpublished assignments count).
@@ -290,7 +298,7 @@ operator checks the physical shelf and redoes it.
 **Archive.** Only drawers with no assigned products (including unpublished) can be
 archived. The cabinet action archives its unassigned drawers and the cabinet in one
 confirmed transaction, or nothing. Archive keeps audit history (the change log, and
-`amp_archived_bin_locations` for a drawer's last position). The page has no archived
+`shelf.archivedBinLocations` for a drawer's last position). The page has no archived
 list and no reactivation: a drawer needed again is made by growing or splitting the
 layout, a cabinet by adding one.
 
@@ -300,6 +308,8 @@ layout, a cabinet by adding one.
 observation immediately; finishing posts no stock again and is confirmed. Another admin
 may close an abandoned batch only if its owner is inactive or has no Auth identity,
 with a required reason.
+The list (`stock.countBatches`) and a batch's detail (`stock.countDetail`) are live
+subscriptions, so another admin's counts appear without a re-read.
 The list holds only these batches; single-product counts (opening stock and counts
 from the product page) appear in that product's stock history instead.
 
@@ -325,7 +335,7 @@ minimum as the list and editor. A failed read keeps previous content unavailable
 never an empty ledger. Background reads keep controls stable; submission waits for
 an ongoing read before validating the draft against fresh history.
 
-- A withdrawal records a positive quantity and reason; the database posts it negative.
+- A withdrawal records a positive quantity and reason; the backend posts it negative.
   An adjustment records a signed non-zero quantity and reason.
 - Invalid quantities identify the field and its permitted step, retain the draft,
   and focus the first invalid field. Recounts accept zero; changes do not.
@@ -333,22 +343,24 @@ an ongoing read before validating the draft against fresh history.
   affected order line, and carries the history revision. A changed revision needs a
   fresh review.
 - If a count followed the movement, the correction needs a fresh physical count and a
-  pause acknowledgement, and `amp_correct_movement_and_count` links both in one
-  transaction.
+  pause acknowledgement, and `stock.correctAndCount` links both in one transaction.
 
 ## Shared request rules
 
-- **Freshness** follows design-system §4.2: re-read on page open, tab return and after
-  acknowledged writes, and once more if a return happened mid-request. Failed reads
+- **Freshness** follows design-system §4.2. Screens on live subscriptions (product
+  list, editor stock, drawer contents, counts, audit) update on their own. The others
+  (overview, statistics, stock changes, cabinets and drawers) re-read on page open, tab
+  return and after acknowledged writes, and once more if a return happened mid-request. Failed reads
   keep the previous content mounted, mark it unavailable and offer contextual retry.
   Actions requiring fresh values wait for a successful read.
 - **Conflicts.** After a stale or occupied rejection the map re-reads itself and the
   admin confirms again. Specification conflicts show the current value and need an
   explicit choice; neither replaces the draft.
 - **Uncertain writes.** Keep the Auth identity, request ID and frozen payload in browser
-  storage across reload. Reauthentication never changes a command's actor. A timeout
-  permits only retry of the same command; a confirmed rejection permits editing. Staff
-  requests time out after 15 seconds; an abort is not proof of rollback.
+  storage across reload. Reauthentication never changes a command's actor. An unknown
+  outcome permits only retry of the same command; a confirmed rejection permits editing. Only
+  an error code (`errorCode` in `src/lib/convex.ts`) proves a command rolled back; a
+  network failure or lost connection leaves the outcome unknown.
 - **Access.** A failed membership read makes the editor inert but keeps its state until
   access is rechecked; revocation, sign-out or another identity clears it. Portaled
   editors enforce the same boundary and offer access retry within the active dialog,

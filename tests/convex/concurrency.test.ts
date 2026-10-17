@@ -18,7 +18,7 @@ describe.skipIf(!enabled)('concurrency', () => {
 			client.mutation(api.stock.recordSingleCount, { requestId: uuid(), productId: p.id, expectedRevision: '0', counted: String(10 + i), note: null })));
 		expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
 		expect(JSON.stringify(results.find((r) => r.status === 'rejected'))).toContain('STALE_STOCK_COUNT');
-		expect(await internal('query', 'migration:verifyStockLevels')).toEqual([]);
+		expect(await internal<string[]>('query', 'migration:verifyStockLevels')).toEqual([]);
 	});
 
 	test('duplicate confirmations register one sale', async () => {

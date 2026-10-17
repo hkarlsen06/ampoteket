@@ -41,31 +41,37 @@ for payment again ([checkout-recovery.md](checkout-recovery.md)).
 
 ### Staff (one role)
 
-Each volunteer has their own Supabase Auth login plus an explicit staff
-membership. Staff maintain products, drawers and cabinets, record orders and
+Each volunteer has their own Convex Auth login (email and password) plus an
+explicit staff membership. Staff maintain products, drawers and cabinets, record orders and
 receipts, post corrections and withdrawals with a reason, run counts and erase
 buyer contact details on request.
 Active admins also invite and deactivate other admins from `/admin/admins`.
-Only the first admin needs maintainer setup; new admins set their password from
-the invitation email.
+New admins set their password from the invitation email. The existing admins and
+their passwords move to Convex in the cutover import
+([runbook-cutover.md](runbook-cutover.md)).
 
 ## 3. Architecture
 
 ```
-Buyer browser ──► SvelteKit pages ──► Worker endpoints ──► Supabase Postgres (RPCs)
-Staff browser ──► SvelteKit pages ──► Supabase PostgREST (own staff JWT) ──► Postgres
+Buyer browser ──► SvelteKit pages ──► Worker checkout endpoints ──► Convex (checkout functions, server key)
+Staff browser ──► SvelteKit pages ──► Convex (own Auth session, staff functions)
+Any page      ──► server load or browser client ──► Convex (public queries)
 ```
 
 | Part | Responsibility |
 | --- | --- |
-| SvelteKit on Cloudflare Workers | All pages, checkout endpoints under `/api/checkouts`, and authenticated admin invitations. No separate backend. |
-| Supabase Postgres 17 (Stockholm) | Data, integrity rules, history. One function call is one atomic stock operation. |
-| Supabase Auth | Staff only. Buyers have no accounts. |
-| PostgREST | Exposes only the `public` schema. The internal `app` schema is never exposed. |
+| SvelteKit on Cloudflare Workers | All pages, server loads, the checkout endpoints under `/api/checkouts` and buyer receipt email. The Worker holds `CHECKOUT_SERVER_KEY`, the only credential for the guest checkout functions. |
+| Convex (`convex/`) | Data, integrity rules, history and Auth. Each command is one mutation, a serializable transaction that Convex retries on conflict, so one call is one atomic stock operation. `convex/schema.ts` defines the tables. |
+| Convex Auth | Staff only, email and password; sign-up is refused. Buyers have no accounts. Invitation and reset emails go through Resend. |
 
-Not in v1, on purpose: Edge Functions, an ORM, realtime updates, job queues,
-offline registration, long-lived caching of stock. Pages load data when opened and
-after a change.
+Clients use the native Convex clients with the generated typed `api`: the browser
+`ConvexClient` (convex-svelte), with live subscriptions on the product page and on
+the admin products, counts, audit and product editor views; the server
+`ConvexHttpClient` (`src/lib/server/convex.ts`). The only scheduled job is the
+nightly contact retention (`convex/crons.ts`).
+
+Not in v1, on purpose: an ORM, a separate job queue, offline registration,
+long-lived caching of stock.
 
 ## 4. Domain model in brief
 
@@ -86,11 +92,12 @@ Details are in [datamodell.md](datamodell.md).
   while counting it ([operating-procedures.md](operating-procedures.md)).
 - **Corrections are new movements, never edits.** Withdrawals and adjustments need
   a reason. Stock may go negative; that is a visible discrepancy, not an error.
-- **Money and quantities are exact.** The database computes NOK amounts
+- **Money and quantities are exact.** The backend computes NOK amounts with exact
+  decimal arithmetic
   ([datamodell.md](datamodell.md#4-units-quantities-and-rounding)); clients carry
   them as strings ([api-contract.md](api-contract.md#exact-json-values)).
-- **History is immutable.** Ledger rows cannot be updated or deleted, and metadata
-  edits are audited. A buyer's optional contact string is stored separately so it
+- **History is immutable.** Ledger rows are never updated or deleted, and metadata
+  edits are audited in the same transaction. A buyer's optional contact string is stored separately so it
   can be erased.
 - **Times show in `Europe/Oslo`**, whatever the browser's time zone
   ([rules](website-guide.md#6-numbers-the-frontend-must-respect)).
@@ -113,9 +120,9 @@ labels always use the Norwegian, unprefixed address.
 | `/admin/orders` | Orders and receipts ([page-admin-orders.md](page-admin-orders.md)) |
 | `/admin/purchases` | Find a purchase by its support reference, register an unregistered one and erase the buyer's contact detail ([website-guide.md](website-guide.md#57-checkout-recovery-and-contact-erasure)) |
 | `/admin/contacts` | Edit, publish and reorder the `/contact` volunteer list (same documents as `/contact`) |
-| `/admin/admins` | Invite, list, reactivate and deactivate admins ([website-guide.md](website-guide.md#59-admin-access)) |
-| `POST /api/checkouts/…` | Worker-only checkout endpoints. Browsers never call the checkout RPCs directly. |
-| `POST /api/admin/invitations` | Authenticated staff invitations ([api-contract.md](api-contract.md#staff-membership-and-invitations)) |
+| `/admin/admins` | Invite, list, reactivate and deactivate admins ([website-guide.md](website-guide.md#59-admin-access), [api-contract.md](api-contract.md#staff-membership-and-invitations)) |
+| `/admin/login`, `/admin/password` | Staff sign-in; setting a password from an invitation or reset link |
+| `POST /api/checkouts/…` | Worker checkout endpoints. Browsers never call the checkout functions directly. |
 | `GET /api/discord`, `/api/discord/avatar/…` | Online members of the Ampoteket Discord server and their avatars, proxied and edge-cached so browsers never contact Discord |
 
 Until `SALES_OPEN=true` is deployed, the buyer routes and the checkout API are closed
@@ -134,32 +141,33 @@ One scanner dialog is shared by all shopping pages ([scanner.md](scanner.md)).
 
 | Caller | Credential | Allowed |
 |---|---|---|
-| Visitor or logged-in non-staff | publishable key / own JWT | Public catalog, facets, shelf map and help directory |
-| Staff | own staff JWT (never the secret key) | Staff views and RPCs, including audited admin management; no direct ledger or membership writes |
-| Worker | secret key, server-side only | Public reads, three guest checkout RPCs, and Auth account creation/invitation for a verified active staff caller. Membership changes use the caller's JWT |
-| Maintainer | direct database access | Migrations, first-admin bootstrap, emergency access recovery, backups |
+| Visitor or signed-in non-staff | none needed | Public queries: catalog, facets, shelf map and help directory, without costs, contacts, tokens or staff identities |
+| Staff | own Convex Auth session | Staff functions, each starting with `requireStaff`, including audited admin management. Stock changes only through the ledger commands |
+| Worker | `CHECKOUT_SERVER_KEY`, server-side only | The three guest checkout functions (prepare, get, confirm); public queries for server loads |
+| Maintainer | Convex deploy key (`bunx convex run`, dashboard) | Deploys, internal functions (import, stock projection checks), backups and restore |
 
-The database identifies staff with `auth.uid()`; the browser never sends an actor
-id. Removing a staff membership takes effect on the next request. A failed read
-shows "Unavailable", never "0 in stock". Secrets never go in the repo, URLs or logs.
+The backend identifies staff from the signed-in identity; the browser never sends
+an actor id. Deactivating a staff membership takes effect on the next call. A
+failed read shows "Unavailable", never "0 in stock". Secrets never go in the repo,
+URLs or logs. Details: [datamodell.md](datamodell.md).
 
 ## 7. Shelf numbering and QR codes
 
-QR codes contain only `ampoteket.no/p/CODE`, never prices, placement or Supabase
+QR codes contain only `ampoteket.no/p/CODE`, never prices, placement or backend
 URLs. Drawers have no identity labels; they are found by cabinet and drawer
 coordinates.
 
 Both the wall and each cabinet number rows from 1 at the **bottom** and columns
 from A at the **left**. A1 is bottom-left, and adding a row on top never renumbers
 existing cells. A drawer spanning several cells is named from its bottom-left cell
-(C3–D4 covers columns C–D, rows 3–4). The migration creates the workshop's 12
-cabinets and 492 drawers.
+(C3–D4 covers columns C–D, rows 3–4). The workshop has 12 cabinets and 492
+drawers; `seed:base` creates the same wall in a fresh development or test backend.
 
 ## 8. Decisions made with the owner
 
 | Topic | Decision |
 |---|---|
-| Staff sign-in | Email and password; active admins invite and manage other admins in the site, with maintainer setup for the first admin |
+| Staff sign-in | Email and password; active admins invite and manage other admins in the site |
 | Staff devices | Personal phones and laptops only; normal sign-in and sign-out |
 | Vipps | Number 47322, QR `https://qr.vipps.no/vp/swDrxGWcp`; the buyer types the amount shown by the site |
 | Product codes | Three-letter category prefix + five random hex digits, e.g. `RES-A3F09` |
@@ -168,13 +176,13 @@ cabinets and 492 drawers.
 | Labels | A4: select cabinets or drawers on the map and print sheets. Brother: pick one drawer and print its products one by one on the P-touch printer |
 | Cart after checkout | One active cart and checkout at a time, locked across tabs |
 | Help when nobody is there | Buyer notes the amount and reference, then uses `/contact` |
-| Retention | Unconfirmed checkouts' contact strings are cleared after 90 days; checkouts, sales and history are never purged ([runbook](runbook-contact-retention.md)) |
+| Retention | Unconfirmed checkouts' contact strings are cleared automatically after 90 days; checkouts, sales and history are never purged ([runbook](runbook-contact-retention.md)) |
 
 ## 9. Out of scope for v1
 
 Payment verification, refunds and returns, reservations, customer accounts, other
 currencies, lot or serial tracking, stock for one product in several places,
-purchase approvals, multi-person counts, realtime sync and offline registration.
+purchase approvals, multi-person counts and offline registration.
 
 ## 10. Repository layout
 
@@ -182,8 +190,9 @@ purchase approvals, multi-person counts, realtime sync and offline registration.
 src/routes/[[locale=locale]]/   pages (Norwegian at /, English at /en)
 src/lib/                        components, API clients, domain logic, unit tests
 src/lib/i18n/{nb,en}.ts         all UI text
-supabase/migrations/            the schema, functions, grants and RLS
-supabase/tests/                 SQL and Python database tests
+convex/                         backend: schema.ts, functions per area, crons, Auth
+convex/lib/                     shared rules: decimals, audit, ledger, access, commands
+tests/convex/                   backend tests (scripts/test-convex.sh)
 scripts/                        dev launcher, seeds, test runners, browser proofs
 static/                         served files (fonts, photos, models, brand)
 assets/                         sources for static/ (photos and models in Git LFS)
@@ -196,12 +205,13 @@ Read the document for the area you are changing, not the whole set.
 
 | Area | Document |
 | --- | --- |
-| Tables, RPCs, permissions, concurrency rules, money and quantity precision | [datamodell.md](datamodell.md) |
+| Tables, Convex functions, access checks, concurrency rules, money and quantity precision | [datamodell.md](datamodell.md) |
 | Website architecture, checkout, staff screens, error catalog | [website-guide.md](website-guide.md), then the relevant `page-*.md` |
-| JSON numbers, pagination, checkout retries, scanner | [api-contract.md](api-contract.md), [checkout-recovery.md](checkout-recovery.md), [scanner.md](scanner.md) |
+| Exact values, checkout retries, scanner | [api-contract.md](api-contract.md), [checkout-recovery.md](checkout-recovery.md), [scanner.md](scanner.md) |
 | Palette, tokens, typography, logo, component conventions | [design-system.md](design-system.md), [assets/brand/README.md](../assets/brand/README.md), [ui/README.md](../src/lib/components/ui/README.md) |
 | UI copy, languages, locale routing, links between pages | [i18n.md](i18n.md) |
 | Races that must stay correct, real-API checks, test status | [concurrency-tests.md](concurrency-tests.md), [VALIDATION.md](../VALIDATION.md) |
 | Running the workshop day to day | [operating-procedures.md](operating-procedures.md), [runbook-contact-retention.md](runbook-contact-retention.md) |
-| Migrations, seeds, disposable validation | [README.md](../README.md), `scripts/test-database.sh` |
+| Schema or function changes, seeds, disposable validation | [README.md](../README.md), `scripts/test-convex.sh` |
+| The Supabase-to-Convex cutover | [runbook-cutover.md](runbook-cutover.md) |
 | Deploy, backup and restore, opening stock | [runbook-deploy.md](runbook-deploy.md), [runbook-backup-restore.md](runbook-backup-restore.md) |

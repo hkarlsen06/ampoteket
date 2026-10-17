@@ -1,29 +1,48 @@
-/** Real admin order/receipt pages against disposable Auth, PostgREST and PostgreSQL. */
-import { firefox, expect, type BrowserContext, type Page } from '@playwright/test';
+/** Real admin order/receipt pages against a disposable Convex backend. */
+import { firefox, expect as baseExpect, type BrowserContext, type Page } from '@playwright/test';
 import { strict as assert } from 'node:assert';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { prepareZXingModule, writeBarcode } from 'zxing-wasm/writer';
-import { fieldLabel, signIn, fits, proofEnvironment } from './web-proof/harness';
-import { generateSeedSql, seedProductCode, seedProductId } from './seed-test-data';
+import { ConvexHttpClient } from 'convex/browser';
+import { api } from '../convex/_generated/api';
+import { captureFailure, fieldLabel, signIn, fits, proofEnvironment } from './web-proof/harness';
+import { interceptConvex } from './web-proof/convex-socket';
+import { seedDemoData, seedProductCode, seedProductId } from './seed-test-data';
 import { en } from '../src/lib/i18n/en';
 import { nb } from '../src/lib/i18n/nb';
 import { formatMeasurementText, unitLabel } from '../src/lib/format';
+import { addDecimals, compareDecimals } from '../src/lib/decimal';
 
-const { directory, origin, api, password, sql, createUser, startWorker } = await proofEnvironment();
+// Live backend round trips, not animations, set the pace; allow for a busy machine.
+const expect = baseExpect.configure({ timeout: 15_000 });
+const { directory, origin, convexUrl, password, secrets, run, fixtures, createStaff, createUser, startWorker } = await proofEnvironment();
 const staffEmail = 'orders-staff@example.test';
 const nonstaffEmail = 'orders-nonstaff@example.test';
-const staffId = await createUser(staffEmail);
+const { authUserId: staffId } = await createStaff(staffEmail, 'Orders browser operator');
 await createUser(nonstaffEmail);
-await sql(`INSERT INTO app.staff_members(auth_user_id,display_name) VALUES ('${staffId}', 'Orders browser operator');`);
-await sql("SET ampoteket.test_seed = 'disposable-only';\n" + generateSeedSql());
+await seedDemoData(run);
+// Order progress is read the way the app reads it, with the staff member's own session.
+const staffApi = new ConvexHttpClient(convexUrl, { logger: false });
+const { token: staffToken } = await staffApi.action(api.session.signIn, { email: staffEmail, password });
+secrets.push(staffToken);
+staffApi.setAuth(staffToken);
 let context: BrowserContext | undefined;
 const { ready, close } = await startWorker(() => context);
 const artifacts = resolve('test-results/orders');
 await mkdir(artifacts, { recursive: true });
 const m = en.adminOrders;
-const literal = (value: string) => `'${value.replaceAll("'", "''")}'`;
 const diagnostics: string[] = [];
+type Row = Record<string, string | number | null>;
+/** Stored decimals without insignificant zeros, as the old SQL text compared them. */
+const plain = (value: string) => value.includes('.') ? value.replace(/0+$/, '').replace(/\.$/, '') : value;
+const stock = async (productId: string) => (await fixtures.rows<{ quantity: string }>('stock_levels', { product_id: productId }))[0]?.quantity ?? '0';
+async function lines(orderId: string) { return (await staffApi.query(api.orders.detail, { orderId }))!.lines; }
+async function progress(orderId: string, productId: string, fields: ('receivedQuantity' | 'outstandingQuantity' | 'cancelledQuantity')[]) {
+	const line = (await lines(orderId)).find((item) => item.productId === productId)!;
+	return fields.map((field) => plain(line[field])).join('|');
+}
+const receipts = async (where: Row) => (await fixtures.rows('inventory_events', { kind: 'receipt', ...where })).length;
 
 async function headingClear(page: Page, heading: string) {
 	await page.evaluate(() => { (document.activeElement as HTMLElement | null)?.blur(); window.scrollTo(0, 0); });
@@ -32,7 +51,6 @@ async function headingClear(page: Page, heading: string) {
 	const title = await page.getByRole('heading', { name: heading, exact: true }).first().boundingBox();
 	assert.ok(banner && title && title.y >= banner.y + banner.height - 1, 'The sticky header does not cover the page heading');
 }
-async function value(statement: string) { return (await sql(statement)).trim(); }
 async function chooseProduct(page: Page, index: number, line = 0) {
 	const picker = page.getByRole('combobox', { name: m.product, exact: true }).nth(line);
 	await picker.click();
@@ -50,6 +68,7 @@ try {
 	await ready();
 	context = await firefox.launchPersistentContext(`${directory}/profile`, { headless: true, ignoreHTTPSErrors: false });
 	context.on('page', (tab) => tab.on('pageerror', (error) => diagnostics.push(error.message)));
+	const socket = await interceptConvex(context);
 	const page = await context.newPage();
 	page.setDefaultTimeout(30000);
 	await signIn(page, origin, nonstaffEmail, password);
@@ -57,6 +76,8 @@ try {
 	await page.goto(`${origin}/en/admin/orders`);
 	await expect(page.getByRole('button', { name: m.newOrder, exact: true })).toHaveCount(0);
 	await page.getByRole('button', { name: en.admin.signOut, exact: true }).click();
+	// Signing out returns to the login page; typing before it arrives would be reset.
+	await expect(page).toHaveURL(/\/en\/admin\/login/);
 	await signIn(page, origin, staffEmail, password);
 	await expect(page.getByRole('heading', { name: en.admin.overview, exact: true })).toBeVisible();
 	await page.goto(`${origin}/en/admin/orders`);
@@ -129,14 +150,17 @@ try {
 	await expect(firstOrderQuantity).toBeFocused();
 	await expect(orderSheet.getByText(m.invalidQuantity('1'), { exact: true })).toBeVisible();
 	await firstOrderQuantity.fill('10');
-	const beforeOrderStock = await value(`SELECT quantity FROM app.inventory WHERE product_id=${literal(seedProductId(0))}`);
+	const beforeOrderStock = await stock(seedProductId(0));
 	await page.getByRole('button', { name: m.recordOrder, exact: true }).click();
 	await expect(page).toHaveURL(/\/en\/admin\/orders\/[0-9a-f-]{36}$/);
 	const orderId = page.url().split('/').at(-1)!;
 	assert.match(orderId, /^[0-9a-f-]{36}$/);
-	expect(await value(`SELECT supplier_name||'|'||supplier_reference||'|'||additional_cost_nok FROM app.purchase_orders WHERE id=${literal(orderId)}`)).toBe('Disposable parts supplier|WEB-ORDER-1|3.5');
-	expect(await value(`SELECT string_agg(ordered_quantity::text||' '||unit_cost_nok::text,', ' ORDER BY line_number) FROM app.purchase_order_lines WHERE order_id=${literal(orderId)}`)).toBe('10 1.25, 1.25 2.5');
-	expect(await value(`SELECT quantity FROM app.inventory WHERE product_id=${literal(seedProductId(0))}`)).toBe(beforeOrderStock);
+	const [order] = await fixtures.rows<Record<string, string>>('purchase_orders', { id: orderId });
+	expect(`${order.supplier_name}|${order.supplier_reference}|${plain(order.additional_cost_nok)}`).toBe('Disposable parts supplier|WEB-ORDER-1|3.5');
+	const orderLines = (await fixtures.rows<{ line_number: number; ordered_quantity: string; unit_cost_nok: string }>('purchase_order_lines', { order_id: orderId }))
+		.sort((a, b) => a.line_number - b.line_number);
+	expect(orderLines.map((line) => `${plain(line.ordered_quantity)} ${plain(line.unit_cost_nok)}`).join(', ')).toBe('10 1.25, 1.25 2.5');
+	expect(await stock(seedProductId(0))).toBe(beforeOrderStock);
 	console.log('PASS: English admin records an already-placed two-line order without adding stock');
 
 	prepareZXingModule({ overrides: { wasmBinary: new Uint8Array(await Bun.file('node_modules/zxing-wasm/dist/writer/zxing_writer.wasm').arrayBuffer()) } });
@@ -173,8 +197,8 @@ try {
 	await receive.getByRole('button', { name: m.scanProduct, exact: true }).click();
 	await expect(receive.getByText(m.cameraDenied, { exact: true })).toBeVisible();
 	await expect(receive.getByRole('textbox')).toHaveCount(0);
-	expect(await value(`SELECT quantity FROM app.inventory WHERE product_id=${literal(seedProductId(0))}`)).toBe(beforeOrderStock);
-	expect(await value(`SELECT count(*) FROM app.inventory_events WHERE kind='receipt' AND purchase_order_id=${literal(orderId)}`)).toBe('0');
+	expect(await stock(seedProductId(0))).toBe(beforeOrderStock);
+	expect(await receipts({ purchase_order_id: orderId })).toBe(0);
 	await receive.getByRole('button', { name: m.differentQuantity, exact: true }).first().click();
 	const receivedQuantity = receive.getByLabel(fieldLabel(`${m.receivedQuantity} (pcs)`));
 	await receivedQuantity.fill('0');
@@ -188,45 +212,31 @@ try {
 	await expect(receivedQuantity).toBeFocused();
 	await expect(receive.getByText(m.exceedsOutstanding('10', unitLabel('pcs', 'en', '10')), { exact: true })).toBeVisible();
 	await receivedQuantity.fill('4');
-	await sql(`UPDATE app.purchase_orders SET supplier_name='Supplier updated in another tab' WHERE id=${literal(orderId)}`);
+	await fixtures.patch('purchase_orders', { id: orderId }, { supplier_name: 'Supplier updated in another tab' });
 	await page.evaluate(() => window.dispatchEvent(new Event('online')));
 	await expect(receive.getByText('Supplier updated in another tab', { exact: true })).toBeVisible();
 	await expect(receivedQuantity).toHaveValue('4');
 	await expect(receivedQuantity).toBeFocused();
-	await sql(`UPDATE app.purchase_orders SET supplier_name='Disposable parts supplier' WHERE id=${literal(orderId)}`);
+	await fixtures.patch('purchase_orders', { id: orderId }, { supplier_name: 'Disposable parts supplier' });
 	await page.evaluate(() => window.dispatchEvent(new Event('online')));
 	await expect(receive.getByText('Disposable parts supplier', { exact: true })).toBeVisible();
 	await expect(receivedQuantity).toHaveValue('4');
 	console.log('PASS: planned receipt refreshes on reconnect while retaining selected quantity and focus');
-	const receiptRpc = `${api.origin}/rest/v1/rpc/amp_record_receipt`;
-	let releaseReceipt!: () => void;
-	let requestSeen!: () => void;
-	const held = new Promise<void>((resolve) => { releaseReceipt = resolve; });
-	const started = new Promise<void>((resolve) => { requestSeen = resolve; });
-	await page.route(receiptRpc, async (route) => {
-		if (route.request().method() !== 'POST') { await route.continue(); return; }
-		requestSeen(); await held; await route.continue();
-	});
+	const receiptCommand = 'orders:recordReceipt';
+	// The receipt commits while its response is held: the sheet stays in progress, never unknown.
+	const held = socket.hold(receiptCommand);
 	const confirming = receive.getByRole('button', { name: m.recordReceipt, exact: true }).click();
-	try { await started; await expect(receive.getByText(m.unknown, { exact: true })).toHaveCount(0); }
-	finally { releaseReceipt(); }
+	try { await held.committed; await expect(receive.getByText(m.unknown, { exact: true })).toHaveCount(0); }
+	finally { held.release(); }
 	await confirming;
 	await expect(page.getByText(m.receiptRecorded, { exact: true })).toBeVisible();
-	await page.unroute(receiptRpc);
-	expect(await value(`SELECT received_quantity||'|'||outstanding_quantity FROM app.purchase_line_progress WHERE order_id=${literal(orderId)} AND product_id=${literal(seedProductId(0))}`)).toBe('4|6');
-	expect(await value(`SELECT quantity-${beforeOrderStock} FROM app.inventory WHERE product_id=${literal(seedProductId(0))}`)).toBe('4');
+	expect(await progress(orderId, seedProductId(0), ['receivedQuantity', 'outstandingQuantity'])).toBe('4|6');
+	expect(compareDecimals(await stock(seedProductId(0)), addDecimals(beforeOrderStock, '4'))).toBe(0);
 	console.log('PASS: receipt camera highlights only the matched line, never selects quantity; denied camera leaves the visible checklist usable, and confirmation posts exact stock');
 
-	const commands: unknown[] = [];
-	await page.route(receiptRpc, async (route) => {
-		if (route.request().method() !== 'POST') { await route.continue(); return; }
-		commands.push(route.request().postDataJSON());
-		if (commands.length === 1) {
-			const response = await route.fetch();
-			expect(response.ok(), 'Receipt committed before its response was lost').toBe(true);
-			await route.abort('failed');
-		} else await route.continue();
-	});
+	// The receipt commits and its response is lost: the outcome is unknown until retried.
+	const sentBefore = socket.mutations.length;
+	socket.withhold(receiptCommand);
 	await orderRow.getByRole('button', { name: m.openReceipt, exact: true }).click();
 	await receive.getByRole('button', { name: m.differentQuantity, exact: true }).first().click();
 	await receive.getByLabel(fieldLabel(`${m.receivedQuantity} (pcs)`)).fill('1');
@@ -239,11 +249,11 @@ try {
 	await expect(receive).toBeVisible();
 	await receive.getByRole('button', { name: m.retryReceipt, exact: true }).click();
 	await expect(page.getByText(m.receiptRecorded, { exact: true })).toBeVisible();
-	await page.unroute(receiptRpc);
+	const commands = socket.sent(receiptCommand, sentBefore);
 	expect(commands).toHaveLength(2);
-	expect(commands[1]).toEqual(commands[0]);
-	expect(await value(`SELECT received_quantity||'|'||outstanding_quantity FROM app.purchase_line_progress WHERE order_id=${literal(orderId)} AND product_id=${literal(seedProductId(0))}`)).toBe('5|5');
-	expect(await value(`SELECT count(*) FROM app.inventory_events WHERE kind='receipt' AND purchase_order_id=${literal(orderId)}`)).toBe('2');
+	expect(commands[1].args).toEqual(commands[0].args);
+	expect(await progress(orderId, seedProductId(0), ['receivedQuantity', 'outstandingQuantity'])).toBe('5|5');
+	expect(await receipts({ purchase_order_id: orderId })).toBe(2);
 	console.log('PASS: committed lost response retries the identical receipt once');
 
 	await page.goto(`${origin}/en/admin/orders/${orderId}`);
@@ -286,18 +296,19 @@ try {
 	await cancellationDialog.getByRole('button', { name: m.cancelSelected, exact: true }).click();
 	// The state is a badge; the same word also labels a line's cancelled quantity.
 	await expect(page.locator('[data-slot="badge"]').getByText(m.cancellationRecorded, { exact: true })).toBeVisible();
-	expect(await value(`SELECT cancelled_quantity||'|'||outstanding_quantity FROM app.purchase_line_progress WHERE order_id=${literal(orderId)} AND product_id=${literal(seedProductId(0))}`)).toBe('2|3');
+	expect(await progress(orderId, seedProductId(0), ['cancelledQuantity', 'outstandingQuantity'])).toBe('2|3');
 	const history = page.locator('section[aria-labelledby="cancellation-history-title"]');
 	await history.getByRole('button', { name: m.reverseCancellation, exact: true }).click();
 	await history.getByLabel(fieldLabel(m.reason)).fill('Supplier delivered the missing quantity');
 	await history.getByRole('button', { name: m.reverseCancellation, exact: true }).last().click();
 	const reversalDialog = page.getByRole('alertdialog', { name: m.reverseCancellation, exact: true });
 	await expect(reversalDialog).toHaveAccessibleDescription(m.reverseConfirm);
-	expect(await value(`SELECT cancelled_quantity FROM app.purchase_line_progress WHERE order_id=${literal(orderId)} AND product_id=${literal(seedProductId(0))}`)).toBe('2');
+	expect(await progress(orderId, seedProductId(0), ['cancelledQuantity'])).toBe('2');
 	await reversalDialog.getByRole('button', { name: m.reverseCancellation, exact: true }).click();
 	await expect(page.locator('[data-slot="badge"]').getByText(m.reversalRecorded, { exact: true })).toBeVisible();
-	expect(await value(`SELECT cancelled_quantity||'|'||outstanding_quantity FROM app.purchase_line_progress WHERE order_id=${literal(orderId)} AND product_id=${literal(seedProductId(0))}`)).toBe('0|5');
-	expect(await value(`SELECT count(*) FROM app.purchase_order_cancellations c JOIN app.purchase_order_lines l ON l.id=c.order_line_id WHERE l.order_id=${literal(orderId)}`)).toBe('2');
+	expect(await progress(orderId, seedProductId(0), ['cancelledQuantity', 'outstandingQuantity'])).toBe('0|5');
+	const orderLineIds = new Set((await lines(orderId)).map((line) => line.id));
+	expect((await fixtures.rows<{ order_line_id: string }>('purchase_order_cancellations')).filter((row) => orderLineIds.has(row.order_line_id))).toHaveLength(2);
 	await page.getByRole('button', { name: m.openReceipt, exact: true }).click();
 	await expect(receive.getByRole('checkbox')).toHaveCount(2);
 	await receive.getByRole('button', { name: m.closeReceipt, exact: true }).click();
@@ -305,16 +316,8 @@ try {
 	await orderRow.getByRole('button', { name: m.openReceipt, exact: true }).click();
 	await receive.getByRole('checkbox').first().click();
 	await receive.getByRole('checkbox').nth(1).click();
-	const finalCommands: unknown[] = [];
-	await page.route(receiptRpc, async (route) => {
-		if (route.request().method() !== 'POST') { await route.continue(); return; }
-		finalCommands.push(route.request().postDataJSON());
-		if (finalCommands.length === 1) {
-			const response = await route.fetch();
-			expect(response.ok(), 'Final receipt committed before its response was lost').toBe(true);
-			await route.abort('failed');
-		} else await route.continue();
-	});
+	const finalFrom = socket.mutations.length;
+	socket.withhold(receiptCommand);
 	await receive.getByRole('button', { name: m.recordReceipt, exact: true }).click();
 	await expect(receive.getByText(m.unknown, { exact: true })).toBeVisible();
 	await page.reload();
@@ -324,11 +327,11 @@ try {
 	await expect(orderRow).toContainText(m.completed);
 	await expect(orderRow).not.toContainText(m.openLines(0));
 	await expect(orderRow.getByRole('button', { name: m.openReceipt, exact: true })).toHaveCount(0);
-	await page.unroute(receiptRpc);
+	const finalCommands = socket.sent(receiptCommand, finalFrom);
 	expect(finalCommands).toHaveLength(2);
-	expect(finalCommands[1]).toEqual(finalCommands[0]);
-	expect(await value(`SELECT count(*) FROM app.purchase_line_progress WHERE order_id=${literal(orderId)} AND outstanding_quantity>0`)).toBe('0');
-	expect(await value(`SELECT count(*) FROM app.inventory_events WHERE kind='receipt' AND purchase_order_id=${literal(orderId)}`)).toBe('3');
+	expect(finalCommands[1].args).toEqual(finalCommands[0].args);
+	expect((await lines(orderId)).filter((line) => compareDecimals(line.outstandingQuantity, '0') > 0)).toHaveLength(0);
+	expect(await receipts({ purchase_order_id: orderId })).toBe(3);
 	console.log('PASS: partial receipts, cancellation/reversal and receive remaining quantities agree with SQL progress');
 
 	await page.goto(`${origin}/en/admin/orders/${orderId}`);
@@ -341,7 +344,8 @@ try {
 	await page.getByLabel(fieldLabel(m.note)).fill(longNote);
 	await page.getByRole('button', { name: m.saveOrderMetadata, exact: true }).click();
 	await expect(page.getByText(m.metadataSaved, { exact: true })).toBeVisible();
-	expect(await value(`SELECT supplier_name||'|'||supplier_reference||'|'||note FROM app.purchase_orders WHERE id=${literal(orderId)}`)).toBe(`${longSupplier}|${longReference}|${longNote}`);
+	const [edited] = await fixtures.rows<Record<string, string>>('purchase_orders', { id: orderId });
+	expect(`${edited.supplier_name}|${edited.supplier_reference}|${edited.note}`).toBe(`${longSupplier}|${longReference}|${longNote}`);
 	console.log('PASS: guarded metadata PATCH updates the allowed supplier reference');
 	await fits(page);
 	await headingClear(page, longSupplier);
@@ -352,26 +356,21 @@ try {
 	await page.getByLabel(fieldLabel(m.sourceNote)).fill('Donation from the workshop');
 	await chooseProduct(page, 29);
 	await page.getByLabel(fieldLabel(`${m.quantity} (m)`)).fill('0.5');
-	const beforeUnplanned = await value(`SELECT quantity FROM app.inventory WHERE product_id=${literal(seedProductId(29))}`);
-	const unplannedCommands: unknown[] = [];
-	await page.route(receiptRpc, async route => {
-		if (route.request().method() !== 'POST') { await route.continue(); return; }
-		unplannedCommands.push(route.request().postDataJSON());
-		if (unplannedCommands.length === 1) { const response = await route.fetch(); expect(response.ok()).toBe(true); await route.abort('failed'); }
-		else await route.continue();
-	});
+	const beforeUnplanned = await stock(seedProductId(29));
+	const unplannedFrom = socket.mutations.length;
+	socket.withhold(receiptCommand);
 	await page.getByRole('button', { name: m.recordReceipt, exact: true }).click();
 	const unplannedSheet = page.getByRole('dialog', { name: m.unplannedReceipt, exact: true });
 	await expect(unplannedSheet.getByText(m.unknown, { exact: true })).toBeVisible();
 	const pendingBeforeAccessFailure = await page.evaluate(() => localStorage.getItem('ampoteket:admin-order-command:v1'));
-	const membershipRead = `${api.origin}/rest/v1/amp_staff_members*`;
-	await page.route(membershipRead, route => route.abort('failed'));
-	await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+	// Membership is a live subscription: its next result (here, after a rename elsewhere) fails.
+	socket.fail('members:me');
+	await fixtures.patch('staff_members', { auth_user_id: staffId }, { display_name: 'Orders browser operator, renamed' });
 	await expect(unplannedSheet.getByText(en.admin.accessUnavailable, { exact: true })).toBeVisible();
 	// The access gate's retry and the command's retry share the words "Try again", so tell them apart by type.
 	await expect(unplannedSheet.locator('button[type="submit"]').filter({ hasText: m.retryReceipt })).toBeDisabled();
 	await expect(unplannedSheet.getByRole('button', { name: m.closeEntry, exact: true })).toBeEnabled();
-	await page.unroute(membershipRead);
+	socket.restore('members:me');
 	await unplannedSheet.locator('button[type="button"]').filter({ hasText: en.admin.retry }).click();
 	await expect(unplannedSheet.getByText(en.admin.accessUnavailable, { exact: true })).toHaveCount(0);
 	expect(await page.evaluate(() => localStorage.getItem('ampoteket:admin-order-command:v1'))).toBe(pendingBeforeAccessFailure);
@@ -380,11 +379,11 @@ try {
 	await page.getByRole('button', { name: m.resumePending, exact: true }).click();
 	await unplannedSheet.getByRole('button', { name: m.retryReceipt, exact: true }).click();
 	await expect(page.getByText(m.receiptRecorded, { exact: true })).toBeVisible();
-	await page.unroute(receiptRpc);
+	const unplannedCommands = socket.sent(receiptCommand, unplannedFrom);
 	expect(unplannedCommands).toHaveLength(2);
-	expect(unplannedCommands[1]).toEqual(unplannedCommands[0]);
-	expect(await value(`SELECT quantity-${beforeUnplanned}=0.5 FROM app.inventory WHERE product_id=${literal(seedProductId(29))}`)).toBe('t');
-	expect(await value("SELECT count(*) FROM app.inventory_events WHERE kind='receipt' AND purchase_order_id IS NULL AND note='Donation from the workshop'")).toBe('1');
+	expect(unplannedCommands[1].args).toEqual(unplannedCommands[0].args);
+	expect(compareDecimals(await stock(seedProductId(29)), addDecimals(beforeUnplanned, '0.5'))).toBe(0);
+	expect(await receipts({ purchase_order_id: null, note: 'Donation from the workshop' })).toBe(1);
 	await expect(page.getByRole('heading', { name: m.unplannedHistory, exact: true })).toBeVisible();
 	await fits(page);
 	await headingClear(page, m.heading);
@@ -443,11 +442,12 @@ try {
 	await fits(page);
 	await page.screenshot({ path: `${artifacts}/new-product-sheet-en-1280.png` });
 	await productSheet.getByLabel(fieldLabel(en.adminProducts.purchaseUrl)).fill('https://example.test/new-item');
+	// A new product needs a price or an explicit Free choice (the editor's rule since 3056eee).
+	await productSheet.getByLabel(fieldLabel(`${en.adminProducts.price} (NOK)`)).fill('2.50');
 	await productSheet.getByRole('button', { name: en.adminProducts.save, exact: true }).click();
 	// Saving closes the sheet, selects the product on the line and keeps the order draft.
 	await expect(productSheet).toBeHidden();
-	const newProductId = await value("SELECT id FROM app.products WHERE name_en='New item from order'");
-	const newProductCode = await value(`SELECT code FROM app.products WHERE id=${literal(newProductId)}`);
+	const [{ id: newProductId, code: newProductCode }] = await fixtures.rows<{ id: string; code: string }>('products', { name_en: 'New item from order' });
 	await expect(page).toHaveURL(`${origin}/en/admin/orders`);
 	const linePicker = page.getByRole('combobox', { name: m.product, exact: true }).first();
 	await expect(linePicker).toContainText(newProductCode);
@@ -464,7 +464,7 @@ try {
 	await page.getByLabel(fieldLabel(`${m.unitCost} (NOK)`)).first().fill('0.5');
 	await page.getByRole('button', { name: m.recordOrder, exact: true }).click();
 	await expect(page).toHaveURL(/\/en\/admin\/orders\/[0-9a-f-]{36}$/);
-	expect(await value(`SELECT count(*) FROM app.purchase_order_lines WHERE order_id=${literal(page.url().split('/').at(-1)!)} AND product_id=${literal(newProductId)}`)).toBe('1');
+	expect(await fixtures.rows('purchase_order_lines', { order_id: page.url().split('/').at(-1)!, product_id: newProductId })).toHaveLength(1);
 	await page.getByRole('button', { name: m.openReceipt, exact: true }).click();
 	const activeReceipt = page.getByRole('dialog', { name: m.openReceipt, exact: true });
 	const activeBody = activeReceipt.getByRole('region', { name: m.openReceipt, exact: true });
@@ -496,14 +496,13 @@ try {
 	await page.emulateMedia({ colorScheme: 'light' });
 	await page.goto(`${origin}/en/admin/orders`);
 	await expect(page.getByRole('link', { name: longSupplier, exact: true })).toBeVisible();
-	const ordersRead = `${api.origin}/rest/v1/amp_purchase_orders*`;
-	await page.route(ordersRead, (route) => route.abort('failed'));
+	socket.fail('orders:list');
 	await page.evaluate(() => window.dispatchEvent(new Event('focus')));
 	await expect(page.getByText(m.unavailable, { exact: true })).toBeVisible();
 	await expect(page.getByRole('link', { name: longSupplier, exact: true })).toBeVisible();
 	await page.getByRole('button', { name: m.newOrder, exact: true }).click();
 	await expect(page.getByRole('button', { name: m.recordOrder, exact: true })).toBeDisabled();
-	await page.unroute(ordersRead);
+	socket.restore('orders:list');
 	await page.getByRole('dialog', { name: m.newOrder, exact: true }).getByRole('button', { name: m.retry, exact: true }).click();
 	await expect(page.getByRole('dialog', { name: m.newOrder, exact: true }).getByText(m.unavailable, { exact: true })).toHaveCount(0);
 	await page.getByRole('button', { name: m.closeEntry, exact: true }).click();
@@ -513,9 +512,13 @@ try {
 
 	// New order shows the most urgent parts as chips and all of them in a dialog: choosing adds lines with purchase links, and quantity already on order shows.
 	const s = en.adminStatistics, wanted = [3, 4].map(seedProductId), extra = Array.from({ length: 12 }, (_, index) => seedProductId(index + 5)), purchaseLink = 'https://supplier.example.test/item/3';
-	await sql(`UPDATE app.products SET is_active=true, minimum_stock=stock_step*ceil(999999/stock_step) WHERE id IN (${[...wanted, ...extra].map(literal).join(',')});
-		UPDATE app.products SET purchase_url=${literal(purchaseLink)} WHERE id=${literal(wanted[0])};`);
-	const rows = (await value(`SELECT string_agg(p.name_en||'~'||u.symbol, '|' ORDER BY p.code) FROM app.products p JOIN app.units u ON u.code=p.unit_code WHERE p.id IN (${wanted.map(literal).join(',')})`)).split('|').map((row) => row.split('~')).map(([name, unit]) => [formatMeasurementText(name, 'en'), unit]);
+	// These parts are counted in whole pieces, so the minimum is a multiple of their stock step.
+	for (const id of [...wanted, ...extra]) await fixtures.patch('products', { id }, { is_active: true, minimum_stock: '999999' });
+	await fixtures.patch('products', { id: wanted[0] }, { purchase_url: purchaseLink });
+	const symbols = new Map((await fixtures.rows<{ code: string; symbol: string }>('units')).map((unit) => [unit.code, unit.symbol]));
+	const rows = (await fixtures.rows<{ id: string; code: string; name_en: string; unit_code: string }>('products'))
+		.filter((product) => wanted.includes(product.id)).sort((a, b) => a.code.localeCompare(b.code))
+		.map((product) => [formatMeasurementText(product.name_en, 'en'), symbols.get(product.unit_code)!]);
 	await page.setViewportSize({ width: 360, height: 900 });
 	await page.goto(`${origin}/en/admin`);
 	await page.getByRole('link', { name: s.openOrder, exact: true }).click();
@@ -558,7 +561,8 @@ try {
 	await prefilled.getByRole('button', { name: m.recordOrder, exact: true }).click();
 	await expect(page).toHaveURL(/\/en\/admin\/orders\/[0-9a-f-]{36}$/);
 	// An untouched placement time is taken when saving, not when the form opened.
-	expect(await value(`SELECT placed_at > now() - interval '2 minutes' FROM app.purchase_orders WHERE supplier_name='Attention supplier'`)).toBe('t');
+	const [attentionOrder] = await fixtures.rows<{ placed_at: string }>('purchase_orders', { supplier_name: 'Attention supplier' });
+	expect(Date.parse(attentionOrder.placed_at)).toBeGreaterThan(Date.now() - 120_000);
 	await page.goto(`${origin}/en/admin/orders`);
 	await page.getByRole('button', { name: m.newOrder, exact: true }).click();
 	await showAll.click();
@@ -574,6 +578,10 @@ try {
 	await expect(prefilled).toBeVisible();
 	console.log('PASS: New order shows the most urgent parts as chips and all of them in a dialog; choosing adds and removes lines with purchase links, and quantity already on order shows');
 	assert.deepEqual(diagnostics, []);
+} catch (error) {
+	for (const [index, tab] of (context?.pages() ?? []).entries()) await captureFailure(tab, artifacts, String(index));
+	if (diagnostics.length) console.error(diagnostics.join('\n'));
+	throw error;
 } finally {
 	await close();
 }

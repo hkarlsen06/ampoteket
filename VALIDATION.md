@@ -1,40 +1,31 @@
 # Current validation
 
 What has been executed, and what must still happen before launch. All runs used
-local, disposable services, except the provider checks and approved hosted
-release recorded below.
-Past runs live in git history, not here. Replace a row when you rerun it; do not
-append a diary. CI runs the database chain and the `boundary`, `shop`, `checkout`,
-`admin`, `admins`, `scanner`, `labels` and `statistics` browser modes; the results
-below are local runs, not CI claims.
+local, disposable services, except the provider checks and hosted release recorded
+below. Past runs live in git history, not here. Replace a row when you rerun it; do
+not append a diary.
+
+The backend moved from Supabase (PostgreSQL) to Convex. Production runs the
+Supabase version until the cutover ([runbook-cutover.md](docs/runbook-cutover.md)).
+Evidence that only described the PostgreSQL implementation (migration hashes, SQL
+suites, PostgREST regressions, restore rehearsals, browser modes against a local
+Supabase stack) is in git history up to commit `b83c41e`.
+
+CI (`.github/workflows/database.yml`) runs check, lint, unit tests and
+`./scripts/test-convex.sh`, then the `boundary`, `shop`, `checkout`, `admin`,
+`admins`, `scanner`, `labels` and `statistics` browser modes. The results below
+are local runs, not CI claims.
 
 ## Executed checks
 
 | Check | Last run | Result | Covers |
 | --- | --- | --- | --- |
-| `bun run check`, `bun run check:scripts`, `bun run lint` | 2026-10-15 | PASS, 0 errors/warnings | Types, scripts, lint (oxlint run under Bun: the host's Node lacks TypeScript support for its config) |
-| `bun run build` | 2026-10-05 | PASS | Production SvelteKit/Cloudflare bundle with the admin professionalism fixes |
-| `bun test` | 2026-10-15 | 276 pass, 1 fail (2,276 assertions) | Unit tests, including CI/deploy failures, HTTPS headers, account-bound password changes, receipt retries, Discord deadlines/cooldowns, look-alike lines and specification ranges. The failure is the seed cleanup-ownership test, which needs `psql`, absent on that host; last passed 2026-10-06 |
-| `bun audit` | 2026-10-02 | PASS, no reported vulnerabilities | Resolved dependency tree |
+| `./scripts/test-convex.sh` | 2026-10-17 | PASS, 33 tests in 9 files | Disposable local Convex backend with `convex/` deployed and type-checked; `tests/convex/` through the native client: accounts (invitation link and sign-in, failed email retry, alike refusals, no self-deactivation, maintainer grant and revoke), statistics (registered sales, per-line rounding, attention order), checkout (Worker key only, frozen prices, exactly-once confirmation, recovery, contact erasure and 90-day retention), concurrency (stale counts, duplicate confirmations, duplicate request IDs, many sales of one product, mutual deactivation), the Supabase import, orders, seed, shelf and help contacts, stock (counts, steps, idempotent retries, corrections, projection equals ledger, count batches, non-staff refusal) |
+| `./scripts/test-web.sh` and all 12 modes (`--shop`, `--checkout`, `--scanner`, `--admin`, `--admins`, `--statistics`, `--labels`, `--shelf`, `--orders`, `--drafts`, `--admin-help`, `--sidebar`) | 2026-10-17 | PASS, every mode in one sequential sweep; `--admins` then 4 more consecutive passes after the refresh-abort fix | The built Worker over trusted HTTPS against a disposable Convex backend in Firefox (WebKit too for the scanner): sign-in, refresh and revocation, the whole shop and checkout (exactly-once registration, staff recovery racing the buyer, lost responses), invitations and resets through the emailed single-use link, every admin screen including labels PDFs with decoded QR codes, counts, orders and statistics, at phone and desktop widths in both locales and themes |
+| Repository checks | 2026-10-17 | PASS | `bun run check` (0 errors), `bun run check:scripts`, `bunx eslint .`, `bun test` (266 tests), `bun run check:dashes`, build under Bun (`bun --bun run build`). `bun audit`: `@auth/core` raised to 0.41.3 for its advisories; remaining findings are in `wrangler`'s `sharp` and `source-map-js`, unchanged from the Supabase version. Oxlint could not load `oxlint.config.ts` under this machine's Node 22, so it was not run locally; CI runs it |
+| Catalog read time | 2026-10-17 | 115 ms at 150 products, 720 ms at 1,000 | Uncached `catalog.page` on a quiet local backend against Convex's 1 s query limit; time grows with the number of active products, so revisit (a catalog projection) before the catalog nears 1,000 |
 | `python3 scripts/test-check-clipped-ink.py`, `bun run check:ink` | 2026-10-02 | PASS | Checker regressions, static SVG checks |
-| `./scripts/test-database.sh` | 2026-10-06 | PASS | Eleven migrations, catalog order by category and primary specification across 37-row pages, rollback/retry, ACLs/RLS, acceptance, 12 stored-data corruption cases including drawer bounds/overlap, 42 concurrency scenarios including competing help-order writes, restore, schema/docs comparison, signed-JWT HTTP |
-| GitHub Actions Validation | 2026-10-02 | PASS, all nine jobs on the deployed application revision `d2a5485` | Database and all eight browser modes; [release CI](https://github.com/hkarlsen06/ampoteket/actions/runs/36975296467) (scanner passed on rerun after a CI hang) |
-| GitHub Actions Deploy | 2026-10-02 | PASS, version `d1ffbf47-c54d-4f85-b555-b3c786f5883c` | First deploy from `.github/workflows/deploy.yml`: CI gate, reviewed vars/rate limits/secret names, HSTS, `/contact` and HTTP redirect checks by `deploy:production`; [run](https://github.com/hkarlsen06/ampoteket/actions/runs/36976781424) |
-| Hosted release verification | 2026-10-02 | PASS | Reviewed vars/rate limits/secret names; 25 HTTP checks across both locales, HTTP/www redirects, HSTS, private admin/checkout headers, closed sales; persisted error logs with query redaction and invocation logs off |
-| Actual-snapshot migration rehearsal | 2026-10-15 | PASS | Private hosted checkpoint (13:31 UTC) restored locally with owners/ACLs; the CLI applied `20261015000100` and `20261015000200`; only `app.product_attributes` changed, by its new empty `number_max` column (50 tables, three sequences unchanged); prior twelve history rows unchanged, two new rows; permissions, protections and invariants passed. Owned container removed; checkpoint deleted after the release. This is not the full hosted recovery drill |
-| Hosted release of `20261015000100`, `20261015000200` | 2026-10-15 | PASS | Applied 13:33 UTC with `supabase migration up --linked` (CLI 2.116.0); history matches the repo's fourteen versions. Before/after on production: 192 attribute values with an identical fingerprint of the earlier columns, `number_max` empty, 149 catalog rows, audit log unchanged at id 646; permissions, protections and invariants passed |
-| Audit fix browser acceptance | 2026-10-02 | PASS | Real disposable Auth/PostgREST: active unplaced product in shelf/count picker; invitation password save and independent sign-in; cross-tab account switch removes password form and preserves both passwords; help reorder/focus, stale rejection and retry. No overflow at 360 px (password/help) or 1280 px (shelf/count). Owned seed and dev server removed after verification |
-| `./scripts/test-web.sh` | 2026-10-01 | PASS | Real local Auth, public/staff/Worker boundaries, exact decimal transport |
-| `./scripts/test-web.sh --shop` | 2026-10-06 | PASS | Catalog order by category and primary specification matching the complete API traversal across 37-row pages, no-JavaScript category shortcuts, 100-character category without sideways scroll, lifecycle freshness, retained drafts, invalid saved quantities, removal focus, mobile drawer addresses |
-| `./scripts/test-web.sh --checkout` | 2026-10-01 | PASS | Remote staff recovery, pre-payment recheck and navigation during it, framing protection, Auth invitation/recovery emails in Mailpit |
-| `./scripts/test-web.sh --admin` | 2026-10-03 | PASS | Access recovery, retained cached content, partial-inventory retry, stock field validation, audit freshness with older pages retained, drawer resizing, specification error focus |
-| `./scripts/test-web.sh --admins` | 2026-10-01 | PASS | Real Auth/Worker/Mailpit invitations in both locales, password setup/login, permissions and audit, replay/stale-resend safeguards, 360/1280 px in both locales/themes, retained drafts/focus on read failure, deactivation/reactivation |
-| `./scripts/test-web.sh --statistics` | 2026-10-01 | PASS | Localized responsive charts, retained data and focus after a failed background read |
-| `./scripts/test-web.sh --scanner` | 2026-10-01 | PASS | Firefox and WebKit with synthetic camera; named long-content scrolling keeps Add/Scan visible |
-| `./scripts/test-web.sh --labels` | 2026-10-06 | PASS | Decoded PDF QR payloads, geometry |
-| `./scripts/test-web.sh --shelf` | 2026-10-03 | PASS | Shelf UI: grid grips, drawer actions beside the selected drawer, drag/grip moves and swaps, archive guards, cabinet move to a vacant wall position |
-| `./scripts/test-web.sh --drafts` | 2026-10-03 | FAIL | Stops at its first step, the new-order draft: the order form now opens two lines, so the `Product` combobox locator is ambiguous. The shelf layout and catalog search steps passed when run on their own. Unsaved admin drafts survive reload, Back and sign-in round trips |
-| `./scripts/test-web.sh --orders` | 2026-10-02 | PASS | Field errors and first-invalid focus, receipt freshness with selection retained, access recovery inside a pending sheet, identical uncertain-write retry, exact stock changes, New order checklist of parts needing ordering adds and removes lines |
+| Hosted release verification | 2026-10-02 | PASS | On the Supabase-era Worker: reviewed vars/rate limits/secret names; 25 HTTP checks across both locales, HTTP/www redirects, HSTS, private admin/checkout headers, closed sales; persisted error logs with query redaction and invocation logs off |
 | Browser geometry, automated | not recorded | PASS | 320×256, 667×375 and 844×390 viewports, both locales, reduced motion, 100-character category, 120-character supplier token, full accessible warning description on confirmations |
 | Browser geometry, manual | not recorded | PASS | Homepage in both locales/themes at 320/360/768/1280 px; specification and admin scanner dialogs at 360×320; short dialogs, product pickers, long text, dense shelf targets, enlarged hero text; `ShelfCabinetFace` viewBox reviewed (fill-only drawers, no clipped strokes) |
 | iOS 27 Simulator (Safari) | not recorded | PASS | 440×956 and 956×440: rotation, keyboard, native shelf panning |
@@ -44,49 +35,19 @@ short-viewport checks do not prove physical phone keyboard behaviour, and the
 simulator is not physical-device coverage. Android emulation was unavailable
 (missing SDK).
 
-## Migrations and schema surface
-
-Update this section whenever a migration changes (`sha256sum supabase/migrations/*`).
-
-- `20260917000100_ampoteket_initial.sql`: SHA-256
-  `0eda5217b038887d44b1960983f7df650f6ba44458bb1f05f5f5808b5e99c69b`
-- `20260924000100_archive_empty_cabinet.sql`: SHA-256
-  `503d75885d3774a967f4cad7a3b891b94b4f62020a393d5620220a997be6b7d6`
-- `20260927000100_staff_management.sql`: SHA-256
-  `a894879c2707f3d11542aed1131f4245e8445e433122ed1ef0416a4157edfde8`
-- `20261001000100_help_contact_discord.sql`: SHA-256
-  `f7bcedb3b2e2f7a03455c06664e4e97833b00fe7b07f004ba29255bdd73b673a`
-- `20261001000200_volunteer_contacts.sql`: SHA-256
-  `7b0888d92f33d4c5927abc81249230d7763012e625268de26d34c59fcc3239ba`
-- `20261001000300_help_contact_order.sql`: SHA-256
-  `99c58f4e01fda5334d07698c889f40e9207fb302afd7687839215e22545af76c`
-- `20261002000100_guard_help_contact_order.sql`: SHA-256
-  `884bc671e2ceec8c346a00121bf0168d346e716bdb0f7c4111b5bafde520d6dc`
-- `20261004000100_single_count_product.sql`: SHA-256
-  `25904328be34292b3a959f27b62018c3ac06a6ee12b4413c45c3ed09621148a2`
-- `20261006000100_gram_unit.sql`: SHA-256
-  `2d48d9687355724cda060e9982f2953c249abef0537d19f98fe6b7f54b779013`
-- `20261006000200_catalog_compact_measurements.sql`: SHA-256
-  `6ecb9d6548ba035c25196cc766decdaf6db5a0ab5f74184f33d4db245f06f2de`
-- `20261006000300_catalog_spec_order.sql`: SHA-256
-  `92f114fed52a0ea3cf45c62adade1444c8b268666e5dc8366ce773ea67058b5b`
-- `20261006000400_borrow_only_products.sql`: SHA-256
-  `7c374a27c2b0662eff5a52abdcd28d9b2435ce02015db6705cb604412dd2a65b`
-- `20261015000100_catalog_distinguishing_specs.sql`: SHA-256
-  `be2b8b0e934e155e8cdc6cc2545224465de2dc53bd2fa0072670a1e297e4dea8`
-- `20261015000200_specification_ranges.sql`: SHA-256
-  `f9d0ac918afe4cd07aa4c6296a9b054f790d26a887bd71a77bd8ee9a920e6fdc`
-
-24 app tables, four exact numeric domains, 30 public RPCs, 29 staff views and five
-internal derived views. All views are security invoker; only `public` is exposed.
-Initial data: 12 cabinets, 492 drawers, reference units and 12 published volunteer
-contacts; no products or stock.
-
-A 5,002-product / 250,000-movement workload checks that catalog reads touch only
-the selected products. It is a regression check, not a hosted latency guarantee.
-
 ## Open checks before launch
 
+- **Convex cutover:**
+  - The real-data import rehearsal on a separate Convex deployment
+    ([runbook-cutover.md §2](docs/runbook-cutover.md#2-rehearsal-owner-or-a-session-the-owner-trusts-days-before)).
+  - The cutover itself ([§3](docs/runbook-cutover.md#3-the-window-owner)).
+  - Live sign-in in production with a password imported from Supabase.
+  - Invitation and password-reset delivery from Convex through Resend to a real
+    mailbox.
+  - The backup and restore drill on Convex
+    ([backup runbook](docs/runbook-backup-restore.md)).
+- **CI on the Convex code:** the Validation workflow has not run on this branch;
+  it runs on the pull request or the cutover merge.
 - **Stock withdrawals/corrections:** real staff/non-staff browser write acceptance
   at 360 and 1280 px, including uncertain writes and a recount after an intervening
   count. Direct non-staff audit-page coverage.
@@ -101,38 +62,16 @@ the selected products. It is a regression check, not a hosted latency guarantee.
   margins, attach it to real drawers and scan it in the workshop's light. For the
   P-touch printer, a WebUSB print from the admin editor and scanning the printed
   tape QR with a phone.
-- **Hosted setup:** the approved audit fixes from commit `959ea2e` passed all nine
-  CI jobs and were deployed with `bun run deploy:production` as Worker version
-  `c577fda5-a502-4a56-80b4-e2e21e67721b` at 04:00 UTC on 2026-10-02.
-  One attempt automatically rolled back after its HTTP check failed; the
-  unchanged retry and an independent HTTP client passed. The original failed
-  response was not recorded, so its cause is unproven. The expected four vars,
-  four rate limits and both secret names match. Both locales passed the 25
-  public/private/closed-route HTTP checks; sales remain closed. See
-  [current state](AGENTS.md#current-state). Hosted Auth configuration matches
-  SMTP, signup, Site URL, localized return URL and template requirements.
-  A real invitation and password reset reached an OsloMet (Microsoft 365) mailbox
-  on 2026-10-01; the reset set a password. Buyer receipt delivery,
-  receipt-archive access, aligned message headers and DMARC enforcement remain
-  unverified. The global Data API
-  cutover barrier and full hosted recovery drill remain open
-  ([deploy](docs/runbook-deploy.md), [backup](docs/runbook-backup-restore.md)).
-- **Hosted migration and release:** with the owner's approval, CLI 2.116.0 applied
-  `20261006000300_catalog_spec_order.sql` at 19:07 UTC on 2026-10-06, after the
-  isolated rehearsal above on a checkpoint taken a minute before. Linked history
-  matches all eleven local versions. `permissions.sql`, `protections.sql` and
-  `v1-invariants.sql` passed against the hosted project afterwards. The public
-  catalog returned the same 106 products with an identical code and quantity
-  digest before and after. The deployed frontend, which sends no `p_sort`, kept
-  answering 200 on `/p`, `/en/p`, a category filter and a product page, and its
-  request shape paged all 106 products once each at 37 rows. With `p_sort`,
-  capacitors list in capacitance order. The global cutover barrier was not
-  needed; the hosted recovery drill remains open.
+- **Email:** in the Supabase era, a real invitation and password reset sent
+  through Supabase Auth SMTP reached an OsloMet (Microsoft 365) mailbox on
+  2026-10-01, and the reset set a password. That proves the Resend domain, not the
+  Convex sender. Buyer receipt delivery, receipt-archive access, aligned message
+  headers (DKIM/SPF) and DMARC enforcement remain unverified.
 - **Repository and monitoring controls:** CI gating, deployment rollback, HTTPS
   and error-log changes are live. Provider settings confirm persisted logs with
   invocation logs off and query strings redacted. The reviewed native main-protection
   policy is `.github/main-protection.json`. On 2026-10-02 the owner approved and
-  the provider APIs confirmed all nine required GitHub Actions checks, admin
+  the provider APIs confirmed the required GitHub Actions checks, admin
   enforcement, linear history, blocked force pushes/deletion, vulnerability
   alerts, automated security fixes, secret scanning and push protection. On
   2026-10-04 the owner removed the required checks from main protection. See
@@ -140,7 +79,7 @@ the selected products. It is a regression check, not a hosted latency guarantee.
   Verify an actual error/uptime notification path before launch.
 - **Owners and targets:** Hjalmar Karlsen (`hkarlsen06`) is the primary operator
   for service access, backups and contact retention, assigned on 2026-10-02.
-  An independent backup operator, RPO/RTO, backup storage, retention reminder,
+  An independent backup operator, RPO/RTO, backup storage,
   alert recipient and drill schedule remain open. The backup runbook proposes
   24 hours each, daily off-platform backups and a drill each semester; these
   targets and arrangements have not been accepted.

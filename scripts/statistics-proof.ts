@@ -1,61 +1,67 @@
-/** Staff statistics over real disposable Auth/PostgREST, production pages and trusted HTTPS. */
-import { firefox, expect, type BrowserContext } from '@playwright/test';
+/** Staff statistics over a disposable Convex backend, production pages and trusted HTTPS. */
+import { firefox, expect as baseExpect, type BrowserContext } from '@playwright/test';
 import { strict as assert } from 'node:assert';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { ConvexHttpClient } from 'convex/browser';
+import { api } from '../convex/_generated/api';
 import { fieldLabel, signIn, captureFailure, proofEnvironment } from './web-proof/harness';
-import { generateSeedSql, seedProductId, seedProductCode } from './seed-test-data';
+import { interceptConvex } from './web-proof/convex-socket';
+import { seedDemoData, seedProductId, seedProductCode } from './seed-test-data';
 import { en } from '../src/lib/i18n/en';
 import { nb } from '../src/lib/i18n/nb';
 import { formatDecimal, formatMoney } from '../src/lib/format';
+import { errorCode } from '../src/lib/convex';
 import type { AdminStatistics } from '../src/lib/admin-statistics';
 
-const { directory, origin, api, publicKey, anonKey, serviceKey, password, secrets, sql, createUser, startWorker } = await proofEnvironment();
+// Live backend round trips, not animations, set the pace; allow for a busy machine.
+const expect = baseExpect.configure({ timeout: 15_000 });
+const { directory, origin, convexUrl, serverKey, password, secrets, run, fixtures, createStaff, createUser, startWorker } = await proofEnvironment();
 const staffEmail = 'statistics-staff@example.test';
 const nonstaffEmail = 'statistics-nonstaff@example.test';
-const staffId = await createUser(staffEmail);
+const { authUserId: staffId } = await createStaff(staffEmail, 'Statistics operator');
 await createUser(nonstaffEmail);
-await sql(`INSERT INTO app.staff_members(auth_user_id,display_name) VALUES ('${staffId}', 'Statistics operator');`);
-await sql("SET ampoteket.test_seed = 'disposable-only';\n" + generateSeedSql());
+await seedDemoData(run);
 const productId = seedProductId(0);
 const wireId = seedProductId(29);
 const outOfStockId = seedProductId(10);
 const longName = 'Browser statistics resistor with a deliberately long descriptive name that must fit a narrow phone screen';
 const longNameNb = 'Motstand for statistikk i nettlesertest med et svært langt beskrivende navn som skal få plass på en smal mobilskjerm';
-await sql(`UPDATE app.products SET name_en='${longName}', name_nb='${longNameNb}', sale_unit_price_nok=999999999998.999999 WHERE id='${productId}';
-  UPDATE app.products SET name_en='${longName} out of stock', name_nb='${longNameNb} uten beholdning' WHERE id='${outOfStockId}';`);
-async function authToken(email: string) {
-  const response = await fetch(`${api.origin}/auth/v1/token?grant_type=password`, {
-    method: 'POST', headers: { apikey: publicKey, 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password })
-  });
-  assert.ok(response.ok, 'Disposable Supabase Auth issues a real session');
-  const { access_token } = await response.json() as { access_token: string };
-  secrets.push(access_token);
-  return access_token;
+await fixtures.patch('products', { id: productId }, { name_en: longName, name_nb: longNameNb, sale_unit_price_nok: '999999999998.999999' });
+await fixtures.patch('products', { id: outOfStockId }, { name_en: `${longName} out of stock`, name_nb: `${longNameNb} uten beholdning` });
+/** A real Convex Auth session, signed in the way the admin login page does it. */
+async function signedIn(email: string) {
+  const client = new ConvexHttpClient(convexUrl, { logger: false });
+  const { token } = await client.action(api.session.signIn, { email, password });
+  secrets.push(token);
+  client.setAuth(token);
+  return client;
 }
-async function rpc(name: string, body: unknown, token = serviceKey) {
-  return fetch(`${api.origin}/rest/v1/rpc/${name}`, {
-    method: 'POST', headers: { apikey: publicKey, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body)
-  });
+const statistics = (client: ConvexHttpClient, productId: string | null) => client.query(api.statistics.read, { productId }) as Promise<AdminStatistics>;
+async function denied(read: Promise<unknown>) {
+  await assert.rejects(read, (error: unknown) => { assert.equal(errorCode(error), 'STAFF_REQUIRED'); return true; });
 }
-const staffToken = await authToken(staffEmail);
-const nonstaffToken = await authToken(nonstaffEmail);
+const osloDate = (at: number) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Oslo' }).format(at);
+const daysBefore = (date: string, days: number) => new Date(Date.parse(`${date}T00:00:00Z`) - days * 86_400_000).toISOString().slice(0, 10);
+// Independent of the backend's decimal code: exact cents by BigInt, half up.
+const scaled = (value: string) => { const [whole, fraction = ''] = value.split('.'); assert.ok(fraction.length <= 6); return BigInt(whole + fraction.padEnd(6, '0')); };
+const cents = (quantity: string, price: string) => (scaled(quantity) * scaled(price) + 5_000_000_000n) / 10_000_000_000n;
+const money = (value: bigint) => `${value / 100n}.${(value % 100n).toString().padStart(2, '0')}`;
+const staff = await signedIn(staffEmail);
+const nonstaff = await signedIn(nonstaffEmail);
+const guest = new ConvexHttpClient(convexUrl, { logger: false });
 let context: BrowserContext | undefined;
 const { ready, close } = await startWorker(() => context);
 const artifacts = resolve('test-results/statistics');
 await mkdir(artifacts, { recursive: true });
-const endpoint = `${api.origin}/rest/v1/rpc/amp_admin_statistics*`;
 const errors: string[] = [];
 
 try {
   await ready();
-  for (const token of [anonKey, nonstaffToken, serviceKey]) {
-    const response = await rpc('amp_admin_statistics', { p_product_id: null }, token);
-    expect(response.ok, 'Statistics require active personal staff access').toBe(false);
-    expect([401, 403]).toContain(response.status);
-    await response.body?.cancel();
-  }
+  // Statistics require active personal staff access; the guest gateway's key is no identity here.
+  for (const client of [guest, nonstaff]) await denied(statistics(client, null));
   context = await firefox.launchPersistentContext(`${directory}/profile`, { headless: true, ignoreHTTPSErrors: false });
+  const socket = await interceptConvex(context);
   context.on('page', tab => tab.on('pageerror', error => errors.push(error.message)));
   const page = await context.newPage();
   await signIn(page, origin, nonstaffEmail, password);
@@ -64,6 +70,8 @@ try {
   await expect(page.getByText(en.admin.noAccess, { exact: true })).toBeVisible();
   await expect(page.getByRole('img', { name: en.adminStatistics.chartTitle })).toHaveCount(0);
   await page.getByRole('button', { name: en.admin.signOut, exact: true }).click();
+  // Signing out returns to the login page; typing before it arrives would be reset.
+  await expect(page).toHaveURL(/\/en\/admin\/login/);
   await signIn(page, origin, staffEmail, password);
   await expect(page.getByRole('heading', { name: en.admin.overview, exact: true })).toBeVisible();
   await page.goto(`${origin}/en/admin/statistics`);
@@ -74,42 +82,34 @@ try {
   // dates are shifted by the disposable fixture owner to exercise the window.
   for (const daysAgo of [0, 1, 7, 29, 30]) {
     const token = crypto.randomUUID().replaceAll('-', '') + crypto.randomUUID().replaceAll('-', '');
-    const prepared = await rpc('amp_prepare_checkout', {
-      p_request_id: crypto.randomUUID(), p_token: token,
-      p_items: [{ product_id: productId, quantity: '1' }, { product_id: wireId, quantity: '0.1' }],
-      p_contact_text: 'private-statistics-contact@example.test'
+    const { checkout_id } = await guest.mutation(api.checkout.prepare, {
+      serverKey, requestId: crypto.randomUUID(), token, contact: 'private-statistics-contact@example.test',
+      items: [{ productId, quantity: '1' }, { productId: wireId, quantity: '0.1' }]
     });
-    assert.ok(prepared.ok, 'Prepare registered-sales fixture');
-    const { checkout_id } = await prepared.json() as { checkout_id: string };
-    const confirmed = await rpc('amp_confirm_checkout', { p_checkout_id: checkout_id, p_token: token });
-    assert.ok(confirmed.ok, 'Register sales through the normal audited RPC');
-    await confirmed.body?.cancel();
-    if (daysAgo) await sql(`BEGIN; SET LOCAL session_replication_role=replica;
-      UPDATE app.inventory_events SET recorded_at=(((now() AT TIME ZONE 'Europe/Oslo')::date-${daysAgo})+time '12:00') AT TIME ZONE 'Europe/Oslo'
-      WHERE id=(SELECT event_id FROM app.sales WHERE checkout_id='${checkout_id}'); COMMIT;`);
+    const confirmed = await guest.mutation(api.checkout.confirm, { serverKey, checkoutId: checkout_id, token });
+    assert.equal(confirmed.status, 'confirmed', 'Register sales through the normal guest checkout');
+    if (daysAgo) {
+      const [sale] = await fixtures.rows<{ event_id: string }>('sales', { checkout_id });
+      // Ten o'clock UTC is late morning in Oslo, summer or winter.
+      assert.equal(await fixtures.patch('inventory_events', { id: sale.event_id }, { recorded_at: `${daysBefore(osloDate(Date.now()), daysAgo)}T10:00:00.000000Z` }), 1);
+    }
   }
-  const preparedOnly = await rpc('amp_prepare_checkout', {
-    p_request_id: crypto.randomUUID(), p_token: 'b'.repeat(64), p_items: [{ product_id: productId, quantity: '1' }]
-  });
-  assert.ok(preparedOnly.ok); await preparedOnly.body?.cancel();
+  await guest.mutation(api.checkout.prepare, { serverKey, requestId: crypto.randomUUID(), token: 'b'.repeat(64), contact: null, items: [{ productId, quantity: '1' }] });
   // Current catalog changes must not rewrite frozen sale value.
-  await sql(`UPDATE app.products SET sale_unit_price_nok=0 WHERE id='${productId}'`);
+  await fixtures.patch('products', { id: productId }, { sale_unit_price_nok: '0' });
 
-  const globalResponse = await rpc('amp_admin_statistics', { p_product_id: null }, staffToken);
-  assert.ok(globalResponse.ok);
-  const global = await globalResponse.json() as AdminStatistics;
-  const productResponse = await rpc('amp_admin_statistics', { p_product_id: productId }, staffToken);
-  assert.ok(productResponse.ok);
-  const product = await productResponse.json() as AdminStatistics;
-  const expected = JSON.parse(await sql(`SELECT jsonb_build_object('sale_count',count(DISTINCT s.checkout_id)::text,
-    'total_nok',sum(round(l.quantity*l.unit_price_nok,2))::text)
-    FROM app.sales s JOIN app.inventory_events e ON e.id=s.event_id JOIN app.checkout_lines l ON l.checkout_id=s.checkout_id
-    WHERE (e.recorded_at AT TIME ZONE 'Europe/Oslo')::date BETWEEN (now() AT TIME ZONE 'Europe/Oslo')::date-29 AND (now() AT TIME ZONE 'Europe/Oslo')::date`));
-  const expectedDays = JSON.parse(await sql(`SELECT jsonb_agg(jsonb_build_object(
-    'date',d::date,'sale_count',(SELECT count(DISTINCT s.checkout_id)::text FROM app.sales s JOIN app.inventory_events e ON e.id=s.event_id WHERE (e.recorded_at AT TIME ZONE 'Europe/Oslo')::date=d::date),
-    'total_nok',(SELECT coalesce(sum(round(l.quantity*l.unit_price_nok,2)),0.00)::text FROM app.sales s JOIN app.inventory_events e ON e.id=s.event_id JOIN app.checkout_lines l ON l.checkout_id=s.checkout_id WHERE (e.recorded_at AT TIME ZONE 'Europe/Oslo')::date=d::date),
-    'quantity',NULL) ORDER BY d)
-    FROM generate_series((now() AT TIME ZONE 'Europe/Oslo')::date-29,(now() AT TIME ZONE 'Europe/Oslo')::date,interval '1 day') d`));
+  const global = await statistics(staff, null);
+  const product = await statistics(staff, productId);
+  // The expected window, computed from the stored rows rather than the statistics code.
+  const today = osloDate(Date.now());
+  const period = Array.from({ length: 30 }, (_, index) => daysBefore(today, 29 - index));
+  const events = new Map((await fixtures.rows<{ id: string; recorded_at: string }>('inventory_events', { kind: 'sale' })).map(event => [event.id, osloDate(Date.parse(event.recorded_at))]));
+  const lines = await fixtures.rows<{ checkout_id: string; quantity: string; unit_price_nok: string }>('checkout_lines');
+  const sales = (await fixtures.rows<{ checkout_id: string; event_id: string }>('sales')).map(sale => ({ ...sale, day: events.get(sale.event_id)!,
+    cents: lines.filter(line => line.checkout_id === sale.checkout_id).reduce((sum, line) => sum + cents(line.quantity, line.unit_price_nok), 0n) }));
+  const summarize = (rows: typeof sales) => ({ sale_count: String(rows.length), total_nok: money(rows.reduce((sum, sale) => sum + sale.cents, 0n)) });
+  const expectedDays = period.map(date => ({ date, ...summarize(sales.filter(sale => sale.day === date)), quantity: null }));
+  const expected = summarize(sales.filter(sale => period.includes(sale.day)));
   expect(global.days).toEqual(expectedDays);
   expect(global.start_date).toBe(global.days[0].date);
   expect(global.end_date).toBe(global.days.at(-1)!.date);
@@ -138,15 +138,21 @@ try {
   }
   const daily = page.getByRole('button', { name: en.adminStatistics.dailyData, exact: true });
   await daily.focus();
-  const refreshed = page.waitForResponse(response => response.url().includes('/rpc/amp_admin_statistics') && response.ok());
+  const readsBefore = socket.queries.length;
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await refreshed;
+  await expect.poll(() => socket.reads('statistics:read', readsBefore)).toBeGreaterThan(0);
   await expect(daily).toHaveAttribute('aria-expanded', 'true');
   await expect(daily).toBeFocused();
   console.log('PASS: registered snapshots, exact rounded values, distinct purchases, mixed units, 30-day window and focus-preserving revalidation');
 
-  await page.route(endpoint, route => route.abort('failed'));
-  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  socket.fail('statistics:read');
+  const failedFrom = socket.queries.length;
+  // A read right after another may be answered from the client's cache of the
+  // previous result; revalidate until one reaches the backend.
+  await expect.poll(async () => {
+    await page.evaluate(() => window.dispatchEvent(new Event('online')));
+    return socket.reads('statistics:read', failedFrom);
+  }).toBeGreaterThan(0);
   await expect(page.getByText(en.adminStatistics.unavailable, { exact: true })).toBeVisible();
   await expect(chart).toBeVisible();
   await expect(daily).toHaveAttribute('aria-expanded', 'true');
@@ -155,7 +161,7 @@ try {
   await page.goto(`${origin}/en/admin/statistics`);
   await expect(page.getByText(en.adminStatistics.unavailable, { exact: true })).toBeVisible();
   await expect(page.getByText(en.adminStatistics.emptySales, { exact: true })).toHaveCount(0);
-  await page.unroute(endpoint);
+  socket.restore('statistics:read');
   await page.getByRole('button', { name: en.adminStatistics.retry, exact: true }).click();
   await expect(page.getByRole('img', { name: en.adminStatistics.chartTitle })).toBeVisible();
   console.log('PASS: failed statistics are unavailable and contextual retry recovers');
@@ -185,7 +191,8 @@ try {
         await expect(page.getByRole('img', { name: m.chartTitle })).toHaveCount(0);
         await expect(page.getByRole('link', { name: m.allStatistics, exact: true })).toHaveAttribute('href', `${prefix}/admin/statistics`);
         await expect(page.getByRole('link', { name: m.openOrder, exact: true })).toHaveAttribute('href', `${prefix}/admin/orders?new`);
-        await expect(page.getByRole('link', { name: `${locale === 'nb' ? longNameNb : longName} ${locale === 'nb' ? 'uten beholdning' : 'out of stock'}`, exact: false })).toHaveAttribute('href', `${prefix}/admin/products/${outOfStockId}`);
+        // Freshly seeded parts are also listed as new products; this link belongs to the attention list.
+        await expect(page.getByRole('list', { name: m.attention, exact: true }).getByRole('link', { name: `${locale === 'nb' ? longNameNb : longName} ${locale === 'nb' ? 'uten beholdning' : 'out of stock'}`, exact: false })).toHaveAttribute('href', `${prefix}/admin/products/${outOfStockId}`);
       } else if (path.endsWith(productId)) {
         const name = page.getByLabel(fieldLabel(messages.adminProducts.nameEn));
         await expect(name).toHaveValue(drafted ? `${longName} unsaved` : longName);
@@ -218,15 +225,13 @@ try {
     }
   }
   console.log('PASS: both locales/themes at 360/768/1280, long names, exact large money, stable disclosures and preserved product drafts');
-  let publicStatisticsReads = 0;
-  page.on('request', request => { if (request.url().includes('/rpc/amp_admin_statistics')) publicStatisticsReads++; });
+  const publicReadsFrom = socket.queries.length;
   await page.goto(`${origin}/en/p/${seedProductCode(0)}`);
   await expect(page.getByRole('heading', { name: longName, exact: true })).toBeVisible();
   await expect(page.getByRole('img', { name: en.adminStatistics.chartTitle })).toHaveCount(0);
-  expect(publicStatisticsReads).toBe(0);
-  await sql(`UPDATE app.staff_members SET is_active=false WHERE auth_user_id='${staffId}'`);
-  const revoked = await rpc('amp_admin_statistics', { p_product_id: null }, staffToken);
-  expect(revoked.status).toBe(403); await revoked.body?.cancel();
+  expect(socket.reads('statistics:read', publicReadsFrom)).toBe(0);
+  await fixtures.patch('staff_members', { auth_user_id: staffId }, { is_active: false });
+  await denied(statistics(staff, null));
   expect(errors).toEqual([]);
   console.log('PASS: public product privacy and immediate revoked-staff API denial');
 } catch (error) {

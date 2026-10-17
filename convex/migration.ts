@@ -1,5 +1,5 @@
 /**
- * One-time import from Supabase (scripts/convex-import.ts) and the checks that
+ * One-time import from Supabase (scripts/convex-cutover/import.ts) and the checks that
  * prove nothing was lost. Internal functions: callable only with the
  * deployment's admin key (`convex run`, or the import script). Never part of
  * ordinary operation; see docs/runbook-cutover.md.
@@ -131,7 +131,7 @@ export const resetForRehearsal = internalMutation({
 	args: { table: v.string() },
 	handler: async (ctx, { table }) => {
 		if (process.env.ALLOW_TEST_FIXTURES !== 'true') throw new Error('MIGRATION_RESET_FORBIDDEN');
-		const rows = await ctx.db.query(table as AppTable).take(4000);
+		const rows = await ctx.db.query(table as AppTable).take(500);
 		for (const row of rows) await ctx.db.delete(row._id);
 		return rows.length;
 	}

@@ -20,7 +20,7 @@ describe.skipIf(!enabled)('demo seed', () => {
 			afterCode = page.nextAfterCode!;
 		}
 		expect(all).toHaveLength(60);
-		expect(await internal('query', 'migration:verifyStockLevels')).toEqual([]);
+		expect(await internal<string[]>('query', 'migration:verifyStockLevels')).toEqual([]);
 		const cable = (await guest().query(api.catalog.product, { code: seedProductCode(DEMO_PARTS.length - 1) }))!;
 		expect(cable).toMatchObject({ unit_code: 'm', quantity: '12.345', sale_unit_price_nok: '12.345678' });
 	});

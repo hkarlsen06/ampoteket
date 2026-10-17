@@ -43,24 +43,27 @@ asset and mapping when a new family needs one.
 
 The server validates the URL and fetches the first page with `readCatalogPage` (50
 rows), alongside `readCatalogFacets` for the category shortcuts, so they render with the
-page and never push the results down later. SQL filters before paging and stock aggregation, so search and exact lookup work
-without JavaScript or a full-catalog read.
+page and never push the results down later. Both are the public Convex queries
+`catalog.page` and `catalog.facets`, called through `ConvexHttpClient` on the server.
+`catalog.page` searches, filters and orders the whole active catalog before it
+pages, so search and exact lookup work without JavaScript or a full-catalog read in
+the browser.
 
-The browser reads `amp_catalog_facets` for category choices and the selected category's
+The browser reads `catalog.facets` for category choices and the selected category's
 recorded values. Only filter controls wait for facets; failures get a retry in the
 dialog, and late responses never replace a draft. Main search changes only `q` and keeps
 the submitted filters. Search text typed but not submitted survives reload and Back
 (a SvelteKit `snapshot`).
 
-Opening the shelf map reads `amp_shelf_map`. The map is `LabelShelfSelection` in its
+Opening the shelf map reads `catalog.shelfMap`. The map is `LabelShelfSelection` in its
 single-drawer pick mode, shared with [label printing](page-labels.md). Shared links may
 still carry several `cabinet`/`bin` IDs: locations combine with OR, a cabinet filter
 follows its current drawers and a drawer filter follows a moved drawer. A location that
 no longer exists stays an error until cleared, never silently broadening results.
 
 **Paging.** Within 300 px of the end, or on "Show more", fetch the page after the last
-code; keep cards, focus and scroll. Only an empty page proves the end (a short page may
-be the Data API row cap). Duplicate rows or a failed page stop loading and retry that
+code; keep cards, focus and scroll. The page's `complete` flag, not its length, says
+nothing follows. Duplicate rows or a failed page stop loading and retry that
 page; never restart and mix traversals. Appends are announced politely. A new query
 resets the rows. Back restores rows before scroll, and the submitted query, not an
 unsaved draft. The count covers visible products only. A vanished cursor offers a
@@ -87,7 +90,7 @@ works in both locales. Saved data is plain text; never interpret markup.
   way to remove them. Never drop a filter and broaden results.
 - Ignore unrecognized keys and allowlist the names above when serializing; never echo
   arbitrary parameters into canonical, alternate or social URLs.
-- SQL validates `after` against published products.
+- `catalog.page` validates `after` against active products (`CATALOG_CURSOR_MISSING`).
 
 **Search** splits `q` on whitespace, normalizes and case-folds, and requires every term
 in the code (with or without hyphens), either name, description, category (both
@@ -100,16 +103,16 @@ categories by name, then products without a category. Within a category, product
 by its primary specification, the first entry of `categorySpecifications` (resistors by
 resistance, capacitors by capacitance, LEDs by colour; Miscellaneous has none), with
 products lacking that value after the rest; then by Norwegian name and code.
-`catalogSort` sends this list as `p_sort`; facet categories use the same order.
+`catalog.page` applies this order from `catalogSort`; facet categories use the same order.
 Staff product search uses the same matcher (`catalogSearchText`).
 
 **Look-alikes.** Products in one category with the same primary value (two 680 pF
 capacitors), or without one the same name, show what tells them apart under the name:
-`distinguishing` from `amp_catalog` ([rule](api-contract.md#catalog-and-topology)),
+`distinguishing` from `catalog.page` and `catalog.product` ([rule](api-contract.md#catalog-and-topology)),
 formatted by `productVariants` as a value that names itself ("350 V") or with its field
 name ("Kapsling: TO-220"), each in an outline `Badge` under the name (`VariantBadges`).
 The badges are part of the heading and link text, with hidden commas between them, so
-look-alike links have different names. SQL computes it over the whole catalog, so it is
+look-alike links have different names. The backend computes it over the whole catalog, so it is
 present on the first render and never appears as more rows load. Products with no
 differing specification look identical until staff enter one. The same line follows
 `ProductIdentity` to the [product page](page-product.md), scanner and [cart](page-cart.md).
@@ -157,5 +160,5 @@ zero. Buyers see no low-stock state; the minimum is staff-only.
 ## 5. Acceptance
 
 `./scripts/test-web.sh --shop` covers catalog, product and cart in a browser
-(1,000 products under a 37-row cap, filters, paging failures, no JavaScript). Results
-and open checks are in [VALIDATION.md](../VALIDATION.md).
+(1,000 products, filters, paging failures, no JavaScript). Results and open checks are in
+[VALIDATION.md](../VALIDATION.md).
