@@ -5,9 +5,9 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 
 export const PORT = 5174;
-// Set by `bun run development`: the disposable API is served from the site's own
-// origin, so any device that can open the dev server also reaches the database.
-const apiProxy = process.env.SUPABASE_API_PROXY;
+// Set by `bun run development`: the local Convex backend is served at /convex on the
+// site's own origin, so any device that can open the dev server also reaches it.
+const convexProxy = process.env.CONVEX_DEV_PROXY;
 
 export default defineConfig({
 	plugins: [
@@ -33,7 +33,7 @@ export default defineConfig({
 		strictPort: true,
 		host: true,
 		allowedHosts: ['dev.ampoteket.no'],
-		proxy: apiProxy ? { '/auth/v1/': apiProxy, '/rest/v1/': apiProxy } : undefined
+		proxy: convexProxy ? { '/convex': { target: convexProxy, ws: true, rewrite: (path) => path.replace(/^\/convex/, '') } } : undefined
 	},
 	preview: {
 		port: PORT,

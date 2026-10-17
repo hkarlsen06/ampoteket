@@ -1,9 +1,9 @@
 # Ampoteket: filer som ikke skal spores i git
-# Basert på docs/prosjektoversikt.md §3 (SvelteKit + Cloudflare Workers + Supabase),
-# §6 (ingen hemmeligheter i repoet) og §8 (migrasjoner spores, lokal kjøring holdes utenfor).
+# Basert på docs/prosjektoversikt.md §3 (SvelteKit + Cloudflare Workers + Convex),
+# §6 (ingen hemmeligheter i repoet) og §8 (backend-kode spores, lokal kjøring holdes utenfor).
 #
-# Hovedregel: versjoner kildekode, docs/, supabase/migrations/ og .env.example.
-# Ignorer: avhengigheter, byggartefakter, lokale hemmeligheter, lokal Supabase-state,
+# Hovedregel: versjoner kildekode, docs/, convex/ (med convex/_generated/) og .env.example.
+# Ignorer: avhengigheter, byggartefakter, lokale hemmeligheter, lokal Convex-state,
 # backup/data og OS/editor-filer.
 
 # --- Avhengigheter (Node.js) ---
@@ -48,17 +48,6 @@ wrangler.local.toml
 *.pfx
 secrets/
 service-account*.json
-supabase/.env
-
-# --- Supabase lokalt (§8) ---
-# config.toml, migrations/ og seed.sql SKAL spores. Lokal CLI-state skal ikke.
-supabase/.branches/
-supabase/.temp/
-supabase/.timers/
-supabase/.pooler/
-supabase/storage/
-supabase/postgres-data/
-supabase/pgdata/
 
 # --- Tester / coverage ---
 .venv-proof/

@@ -7,6 +7,6 @@
 		"types": ["bun-types"],
 		"lib": ["ESNext", "DOM", "DOM.Iterable"]
 	},
-	"include": ["scripts/**/*.ts", "supabase/tests/**/*.ts", "src/app.d.ts"],
+	"include": ["scripts/**/*.ts", "tests/**/*.ts", "src/app.d.ts"],
 	"exclude": ["node_modules", ".svelte-kit", ".wrangler"]
 }

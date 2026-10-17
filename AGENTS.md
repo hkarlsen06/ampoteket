@@ -5,7 +5,7 @@ that has been running for about a year; its audience is the workshop's members, 
 a public market. Besides presenting the workshop, it runs a self-service parts shelf
 with stock control. Buyers need no account: browse stock, fill a cart, pay with trust-based Vipps
 (self-reported, never verified), then register the purchase, which withdraws stock.
-Staff (one operational role, individual Supabase Auth identities) maintain products,
+Staff (one operational role, individual Convex Auth identities) maintain products,
 prices, placement, purchasing, counts and corrections, all with a full audit trail.
 
 Documentation ownership is listed below. `docs/prosjektoversikt.md` is the
@@ -41,7 +41,7 @@ hosted migration history and an isolated restore of the actual database checkpoi
 ## Read relevant guidance first
 
 Read the relevant documents below before changing their area. They describe current
-contracts; they are not a checklist for unrelated work. The migration wins over any
+contracts; they are not a checklist for unrelated work. `convex/schema.ts` and the Convex functions win over any
 doc that disagrees ([datamodell.md](docs/datamodell.md)). Historical implementations are context, not permanent requirements.
 When behavior changes, update its owning contract and remove conflicting guidance
 elsewhere. Keep current requirements separate from historical execution records;
@@ -53,63 +53,69 @@ instructions take precedence over project defaults.
 
 | Working on | Read first |
 |---|---|
-| Tables, RPCs, RLS/grants, concurrency rules, money/quantity precision | `docs/datamodell.md` |
+| Tables, Convex functions, access checks, concurrency rules, money/quantity precision | `docs/datamodell.md` |
 | SvelteKit pages and Worker endpoints | `docs/website-guide.md`, then the relevant `docs/page-*.md` |
 | Exact API transport, checkout retries, scanner | `docs/api-contract.md`, `docs/checkout-recovery.md`, `docs/scanner.md`, as applicable |
 | Routes, roles, scope, what is out of v1 | `docs/prosjektoversikt.md` |
 | Palette, light/dark tokens, typography, logo roles, component motifs | `docs/design-system.md`, `assets/brand/README.md` |
 | UI copy, languages, locale routing, links between pages | `docs/i18n.md` |
 | Two-connection cases, real-API checks, acceptance matrix | `docs/concurrency-tests.md`, `VALIDATION.md` |
-| Migrations, seeds, disposable validation | `README.md`, `scripts/test-database.sh` |
+| Schema or function changes, seeds, disposable validation | `README.md`, `scripts/test-convex.sh` |
+| The Supabase-to-Convex cutover | `docs/runbook-cutover.md` |
 | Connecting to the hosted database, deploying, diagnosing production, backups, restore, opening-stock import | `docs/runbook-deploy.md`, `docs/runbook-backup-restore.md` |
 
 ## Tooling
 
-Database validation (also run by GitHub Actions, `.github/workflows/database.yml`):
+Backend validation (also run by GitHub Actions, `.github/workflows/database.yml`):
 
 ```bash
-./scripts/test-database.sh
+./scripts/test-convex.sh
 ```
 
-Requires Linux, Docker, PostgreSQL client tools (`psql`), Python 3, curl,
-Bun 1.3.14 with installed dependencies, and
-**Supabase CLI 2.116.0**. The script creates its own PostgreSQL 17.6 container,
-applies migrations through the CLI, runs acceptance/permission/concurrency checks,
-rollback/retry, corruption and workflow sequences, full restore and isolated
-PostgREST HTTP regressions, then removes its containers and temp files. No database URL or
-hosted credential is needed. Development and tests stay local and disposable; never
-point a script at the hosted project, which is production ([Current state](#current-state)).
+It starts its own local Convex backend with a fresh secret, deploys `convex/` to it
+with type checking, runs `tests/convex/` through the native client (acceptance,
+access, concurrency, import), then deletes it. It needs Bun with installed
+dependencies, python3, curl, jq and the Convex backend binary in the CLI cache
+(`CONVEX_AGENT_MODE=anonymous bunx convex dev --once` fetches it). No hosted
+credential is involved. Development and tests stay local and disposable; point
+scripts only at backends they started, never at production
+([Current state](#current-state)).
 
-Rules for schema work:
+Rules for backend work:
 
-- Migration files must not contain top-level `BEGIN`/`COMMIT`; apply via the CLI
-  so schema changes and migration history share a transaction.
-- New privileged functions must explicitly revoke `PUBLIC`, `anon`,
-  `authenticated` and `service_role` execution and grant only reviewed callers in
-  the same migration. Update `supabase/tests/permissions.sql` when intentionally
-  adding a public RPC.
-- Keep `app` out of the Data API exposed-schema list. Public reads go through
-  `public.amp_catalog`, `public.amp_catalog_facets`, `public.amp_shelf_map`
-  and `public.amp_help_directory`; staff use their own JWT; the Worker uses the secret key
-  server-side only for the three guest checkout RPCs (prepare/get/confirm) and
-  Auth account creation/invitation after verifying an active staff caller.
-  Membership changes use that caller's own JWT.
-- No ORM, Edge Functions, realtime subscriptions, job queue, or JS-float money
-  handling. Quantities/prices/totals travel as strings; the database computes totals.
-- After amending the migration, re-run `./scripts/test-database.sh` and update the
-  SHA-256 and counts in `VALIDATION.md`.
+- Clients reach Convex only through the native clients and the generated typed
+  `api`: `ConvexClient` via convex-svelte in the browser (`useQuery` for live
+  data), `ConvexHttpClient` on the server (`src/lib/server/convex.ts`).
+- Staff functions start with `requireStaff`; the three guest checkout functions
+  check the Worker's `CHECKOUT_SERVER_KEY`; maintenance, import, seed and fixture
+  functions are internal. A new public function is a deliberate API: add it to
+  `docs/datamodell.md` §10.
+- Master-data writes go through `convex/lib/audit.ts`, which records the audit
+  image; ledger rows (events, movements, counts, allocations, stock levels) are
+  written only by `convex/lib/inventory.ts` and the command that owns them.
+- Quantities, prices and totals are exact decimal strings computed with
+  `convex/lib/decimal.ts`; the backend computes totals.
+- A schema change must accept every existing document, and a function change must
+  keep working with the previously deployed Worker: deploys push Convex first,
+  and Convex has no rollback.
+- Test-only functions (`convex/fixtures.ts`, `seed:demo`, the migration reset)
+  run only where `ALLOW_TEST_FIXTURES=true`, which production never sets.
+- After changing `convex/`, re-run `./scripts/test-convex.sh` and update
+  `VALIDATION.md`.
 
 Pushing to `main` deploys production ([Current state](#current-state)), so push only
 what the owner wants live. A manual deploy uses `bun run deploy:production`, which
-requires successful CI for the exact commit, verifies the live vars, HTTPS and
-`/contact`, and rolls back on failure; never a bare
+requires successful CI for the exact commit, deploys the Convex functions with the
+production deploy key, then publishes and verifies the Worker (vars, HTTPS and
+`/contact`) and rolls the Worker back on failure; never a bare
 `wrangler deploy` or `wrangler versions upload` to the `ampoteket` Worker
 ([runbook](docs/runbook-deploy.md#publish)). Validation takes about six minutes and
 Deploy follows it; wait with `gh run watch` instead of polling.
 
-A migration reaches the hosted database before the frontend that needs it. Pushing
-code that reads a new column or RPC before the owner has applied the migration breaks
-production ([runbook](docs/runbook-deploy.md#1-prepare-the-exact-release)).
+The backend and the Worker deploy together, backend first, so a frontend change may use
+a new function in the same push. The reverse needs care: a backend change runs under
+the old Worker for a minute and stays if the Worker rolls back
+([runbook](docs/runbook-deploy.md)).
 
 Web frontend: SvelteKit 3 / Svelte 5 (runes) / TypeScript, Bun,
 `adapter-cloudflare`, shadcn-svelte (Nova) and Tailwind CSS 4. Import primitives
@@ -126,7 +132,7 @@ and setup/check commands in `README.md`. Dev and preview use port **5174**.
 No em dashes (U+2014) anywhere in the repo, and no spaced hyphen, en dash or em
 dash splitting a sentence in UI copy, components or docs; `bun run lint` fails on
 them. Use a comma, colon or full stop. Unspaced en dashes stay for ranges and pairs
-(`1–200`, `male–male`). Only `supabase/migrations/` is exempt.
+(`1–200`, `male–male`).
 
 The UI is bilingual: Norwegian at `/`, English at `/en`, all copy in
 `src/lib/i18n/{nb,en}.ts`, every page under `src/routes/[[locale=locale]]/`. Buyer routes
@@ -171,7 +177,7 @@ Several sessions often share this worktree at once:
 - Stage only the paths you changed (`git add <path>`), never `git add -A` or
   `git commit -a`. Another session's half-finished work must not ride along into a
   commit, since a push deploys it.
-- The dev server (5174) and seed API (54329) ports are pinned. Before starting one,
+- The dev server (5174) and local Convex backend (54329) ports are pinned. Before starting one,
   check whether it is already serving (`ss -ltnp | grep -E ':(5174|54329) '`); a
   running server may be the owner's or another session's, so do not kill it or
   assume it runs your code.
@@ -224,14 +230,14 @@ Run the checks appropriate to the change. Do not write new tests for reversible,
 changes that mirror the implementation. Once the relevant suite passes, broaden or repeat
 testing only when new changes, failures, or unresolved concerns justify it.
 
-- Schema/RPC changes: `supabase/tests/acceptance.sql` and `permissions.sql` via
-  `psql -X -v ON_ERROR_STOP=1 -f ...` against the disposable DB, plus the full
-  `./scripts/test-database.sh` chain before calling it done.
-- Stock-changing behavior must hold under overlap. Check the relevant
-  two-connection case in `docs/concurrency-tests.md` (duplicate confirms,
-  sale/count races, bin/cabinet-swap races, abandoned-batch closure, …).
-- Production acceptance (§9 of `website-guide.md`) needs real HTTP with real
-  staff/non-staff JWTs. SQL alone cannot do it; say so when it remains unverified.
+- Backend changes: add or update the case in `tests/convex/` and run
+  `./scripts/test-convex.sh` before calling it done.
+- Stock-changing behavior must hold under overlap. Cover it in
+  `tests/convex/concurrency.test.ts`, which runs commands in parallel against a
+  real backend; `docs/concurrency-tests.md` lists the cases.
+- UI flows: the browser proofs (`./scripts/test-web.sh --<proof>`) run the built
+  shop against a disposable backend. Production acceptance (§9 of
+  `website-guide.md`) still needs real sign-ins; say so when it remains unverified.
 
 ## Final responses
 

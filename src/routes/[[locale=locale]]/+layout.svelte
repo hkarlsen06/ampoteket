@@ -59,7 +59,8 @@
 	// One Convex client and one Auth session for the header and every page. Admin
 	// membership is a live subscription, so revocation shows without polling.
 	const convexUrl = untrack(() => data.convex?.url ?? null);
-	const client = convexUrl ? setupConvex(convexUrl) : null;
+	// Production is *.convex.cloud; development reaches its local backend through the dev server.
+	const client = convexUrl ? setupConvex(convexUrl, { skipConvexDeploymentUrlCheck: !new URL(convexUrl).hostname.endsWith('.convex.cloud') }) : null;
 	const auth = convexUrl ? new ConvexAuthClient(convexUrl) : null;
 	if (client && auth) setupAuth(() => auth.provider);
 	const serverAuth = client ? useAuth() : null;

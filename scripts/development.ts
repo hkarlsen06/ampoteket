@@ -1,150 +1,108 @@
 /**
- * One-command local development: disposable workshop sample Supabase (API + Studio)
- * plus the Vite dev server, with a single Ctrl-C teardown.
+ * One-command local development: a disposable local Convex backend (functions
+ * redeploy on save), seeded data, and the Vite dev server, with one Ctrl-C teardown.
  *
- *   bun run development                 # empty database + test admin, API :54329, Studio :54327
+ *   bun run development                 # the wall and a test admin, no products
  *   bun run development -- --workshop   # photo-inspired inventory + test admin
- *   bun run development -- --count 30   # synthetic browser-test catalog
- *   bun run development -- --studio-port off  # no Studio, API only
- *   bun run development -- --sigkill      # kill whatever holds :54329/:54327, then start
+ *   bun run development -- --count 30   # synthetic browser-test catalog (30–10000)
  *
- * Extra arguments pass straight to scripts/seed-test.sh. The API and Studio
- * ports default to the pinned values the `dev.ampoteket.no` and
- * `api.dev.ampoteket.no` Caddy blocks target; pass explicit --api-port or
- * --studio-port to override them (the Caddy names then stop matching).
- *
- * It spawns seed-test.sh, reads the public settings and the private status
- * file of that owned seed, then starts `bun run dev` with its credentials.
- * Only the public settings reach the browser; the checkout secret stays in
- * the server environment. Real environment variables win over .env, so no
- * files are changed. Stopping removes only that seed and its synthetic data.
+ * Ports are pinned: the dev site on 5174 (dev.ampoteket.no) and the backend on
+ * 54329. A port already in use is reported, never taken over: it may be the
+ * owner's or another session's server. The browser reaches the backend through
+ * the dev server at /convex (vite.config.ts), so dev.ampoteket.no and phones work.
+ * Everything lives in a fresh /tmp directory that is deleted on exit; no hosted
+ * deployment, .env or .env.local is read.
  *
  * Runs on Bun; checked by `bun run check:scripts`.
  */
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:net';
+import { exportJWK, exportPKCS8, generateKeyPair } from 'jose';
+import { ConvexHttpClient } from 'convex/browser';
+import { makeFunctionReference } from 'convex/server';
+import { DEFAULT_SEED_COUNT, seedDemoData } from './seed-test-data';
+import { WORKSHOP_PARTS } from './seed-workshop-data';
 
-const seedArgs = process.argv.slice(2);
-if (!seedArgs.some(arg => ['--count', '--empty', '--workshop'].includes(arg))) seedArgs.push('--empty');
-if (!seedArgs.includes('--api-port')) seedArgs.push('--api-port', '54329');
-if (!seedArgs.includes('--studio-port')) seedArgs.push('--studio-port', '54327');
+const SITE_PORT = 5174, BACKEND_PORT = 54329, BACKEND_SITE_PORT = 54330;
+const args = process.argv.slice(2);
+let profile: 'empty' | 'workshop' | 'synthetic' = 'empty', count = DEFAULT_SEED_COUNT;
+for (let i = 0; i < args.length; i++) {
+	if (args[i] === '--workshop' || args[i] === '--empty') profile = args[i].slice(2) as 'workshop' | 'empty';
+	else if (args[i] === '--count' && /^\d+$/.test(args[i + 1] ?? '')) { profile = 'synthetic'; count = Number(args[++i]); }
+	else throw new Error('Usage: bun run development [-- --empty | --workshop | --count 30..10000]');
+}
 
-const seed = Bun.spawn(['bash', 'scripts/seed-test.sh', ...seedArgs], {
-	stdout: 'pipe',
-	stderr: 'inherit',
-	env: process.env
+const free = (port: number) => new Promise<boolean>((resolve) => {
+	const server = createServer().once('error', () => resolve(false)).once('listening', () => server.close(() => resolve(true)));
+	server.listen(port, '127.0.0.1');
 });
+for (const port of [SITE_PORT, BACKEND_PORT, BACKEND_SITE_PORT]) {
+	if (!await free(port)) throw new Error(`Port ${port} is in use (another session's or the owner's server?). Stop it yourself first; this script never kills it.`);
+}
+const binary = (await Array.fromAsync(new Bun.Glob(`${process.env.HOME}/.cache/convex/binaries/*/convex-local-backend`).scan({ absolute: true }))).sort().at(-1);
+if (!binary) throw new Error('No Convex backend binary cached; run: CONVEX_AGENT_MODE=anonymous bunx convex dev --once');
 
-const decoder = new TextDecoder();
-let buffer = '';
-let supabaseUrl = '';
-let publishableKey = '';
-let studioUrl = '';
-let seedSettingsPath = '';
-let dev: ReturnType<typeof Bun.spawn> | undefined;
-let shuttingDown = false;
-
-async function shutdown(code: number): Promise<never> {
-	// The first caller decides the exit code; later callers wait it out.
-	if (shuttingDown) await new Promise<never>(() => {});
-	shuttingDown = true;
-	dev?.kill();
-	// Killing the seed script runs its EXIT trap, which removes only the
-	// seed project and its synthetic data.
-	seed.kill();
-	await Promise.allSettled([dev?.exited, seed.exited]);
+const directory = await mkdtemp('/tmp/ampoteket-dev.');
+const children: ReturnType<typeof Bun.spawn>[] = [];
+let stopping: Promise<void> | undefined;
+/** Every exit path waits for the same teardown, so the temporary backend is always deleted. */
+async function stop(code: number): Promise<never> {
+	stopping ??= (async () => {
+		for (const child of [...children].reverse()) child.kill();
+		await Promise.allSettled(children.map((child) => child.exited));
+		await rm(directory, { recursive: true, force: true });
+	})();
+	await stopping;
 	process.exit(code);
 }
-for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-	process.once(signal, () => {
-		void shutdown(130);
-	});
-}
-
-async function handleLine(line: string): Promise<void> {
-	const ready = line.match(/^Seed settings: (\/tmp\/ampoteket-seed\.[A-Za-z0-9]{8}\/status\.json)$/);
-	if (ready) {
-		seedSettingsPath = ready[1];
-		return;
-	}
-	const settings = line.match(
-		/^PUBLIC_SUPABASE_URL='([^']+)' PUBLIC_SUPABASE_PUBLISHABLE_KEY='([A-Za-z0-9_.-]+)' bun run dev$/
-	);
-	if (settings && !dev) {
-		supabaseUrl = settings[1];
-		publishableKey = settings[2];
-		if (!seedSettingsPath) throw new Error('The seed did not report its private settings file.');
-		const status = await Bun.file(seedSettingsPath).json();
-		const secretKey = status.SECRET_KEY ?? status.SERVICE_ROLE_KEY;
-		if (status.API_URL !== supabaseUrl ||
-			(status.PUBLISHABLE_KEY ?? status.ANON_KEY) !== publishableKey ||
-			typeof secretKey !== 'string' || !secretKey) {
-			throw new Error('Private settings do not match the owned seed.');
-		}
-		if (shuttingDown) return;
-		dev = Bun.spawn(['bun', 'run', 'dev'], {
-			stdout: 'inherit',
-			stderr: 'inherit',
-			env: {
-				...process.env,
-				// An explicit local HTTPS proxy is shared by browser and server reads.
-				PUBLIC_SUPABASE_URL: process.env.PUBLIC_SUPABASE_URL ?? supabaseUrl,
-				// Without an explicit proxy, Vite serves the API from the page's origin,
-				// so phones and other machines on the network reach it too.
-				...(process.env.PUBLIC_SUPABASE_URL ? {} : { SUPABASE_API_PROXY: supabaseUrl }),
-				PUBLIC_SUPABASE_PUBLISHABLE_KEY: publishableKey,
-				SUPABASE_SECRET_KEY: secretKey,
-				CHECKOUT_ALLOWED_ORIGIN: process.env.CHECKOUT_ALLOWED_ORIGIN ?? 'https://dev.ampoteket.no',
-				SALES_OPEN: process.env.SALES_OPEN ?? 'true'
-			}
-		});
-		clearTimeout(timeout);
-		void dev.exited.then((code) => {
-			console.error(`Dev server exited (${code}); stopping the seed project.`);
-			void shutdown(typeof code === 'number' ? code : 1);
-		});
-		console.log(`Dev site: http://localhost:5174; checkout origin: ${process.env.CHECKOUT_ALLOWED_ORIGIN ?? 'https://dev.ampoteket.no'}`);
-		if (studioUrl) console.log(studioLine());
-		return;
-	}
-	const studio = line.match(/^Studio: (\S+)$/);
-	if (studio) {
-		studioUrl = studio[1];
-		if (dev) console.log(studioLine());
-	}
-}
-
-/** The tailnet name only matches the pinned Studio port the Caddy block targets. */
-function studioLine(): string {
-	return studioUrl.endsWith(':54327')
-		? `Studio: ${studioUrl} and https://api.dev.ampoteket.no`
-		: `Studio: ${studioUrl}`;
-}
-
-const timeout = setTimeout(() => {
-	console.error('Seed project did not report its settings in time; stopping.');
-	void shutdown(1);
-}, 10 * 60 * 1000);
+for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => void stop(130));
 
 try {
-	for await (const chunk of seed.stdout) {
-		buffer += decoder.decode(chunk, { stream: true });
-		let end: number;
-		while ((end = buffer.indexOf('\n')) >= 0) {
-			const line = buffer.slice(0, end);
-			buffer = buffer.slice(end + 1);
-			process.stdout.write(line + '\n');
-			await handleLine(line);
-		}
+	const hex = () => Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, '0')).join('');
+	const name = 'ampoteket-dev', secret = hex();
+	const adminKey = (await new Response(Bun.spawn([binary, 'keygen', 'admin-key', '--instance-name', name, '--instance-secret', secret]).stdout).text()).trim();
+	const backend = `http://127.0.0.1:${BACKEND_PORT}`;
+	children.push(Bun.spawn([binary, '--port', String(BACKEND_PORT), '--site-proxy-port', String(BACKEND_SITE_PORT), '--instance-name', name,
+		'--instance-secret', secret, '--local-storage', `${directory}/storage`, `${directory}/convex.sqlite3`], { stdout: Bun.file(`${directory}/backend.log`), stderr: 'inherit' }));
+	for (let attempt = 0; ; attempt++) {
+		try { if ((await fetch(`${backend}/version`)).ok) break; } catch { /* starting */ }
+		if (attempt > 100) throw new Error('The local Convex backend did not start.');
+		await Bun.sleep(200);
 	}
-} catch {
-	// Do not expose credential-bearing status contents in an exception.
-	console.error('Could not load the owned seed settings or start development; stopping.');
-	await shutdown(1);
+	const envFile = `${directory}/backend.env`;
+	await writeFile(envFile, `CONVEX_SELF_HOSTED_URL=${backend}\nCONVEX_SELF_HOSTED_ADMIN_KEY=${adminKey}\n`, { mode: 0o600 });
+	const convex = async (...command: string[]) => {
+		const run = Bun.spawn(['bunx', 'convex', ...command.slice(0, 2), '--env-file', envFile, ...command.slice(2)], { stdout: 'ignore', stderr: 'inherit' });
+		if (await run.exited !== 0) throw new Error(`convex ${command.slice(0, 2).join(' ')} failed`);
+	};
+	const keys = await generateKeyPair('RS256', { extractable: true });
+	const serverKey = hex(), origin = process.env.CHECKOUT_ALLOWED_ORIGIN ?? 'https://dev.ampoteket.no';
+	await convex('env', 'set', 'JWT_PRIVATE_KEY', '--', (await exportPKCS8(keys.privateKey)).trimEnd().replace(/\n/g, ' '));
+	await convex('env', 'set', 'JWKS', JSON.stringify({ keys: [{ use: 'sig', ...(await exportJWK(keys.publicKey)) }] }));
+	for (const [key, value] of [['SITE_URL', origin], ['CHECKOUT_SERVER_KEY', serverKey], ['ALLOW_TEST_FIXTURES', 'true']]) await convex('env', 'set', key, value);
+	console.log('Deploying functions to the local backend…');
+	await convex('deploy', '--yes');
+	// Watch convex/ and redeploy on save.
+	children.push(Bun.spawn(['bunx', 'convex', 'dev', '--env-file', envFile], { stdout: 'inherit', stderr: 'inherit' }));
+
+	const admin = new ConvexHttpClient(backend, { logger: false });
+	(admin as unknown as { setAdminAuth(key: string): void }).setAdminAuth(adminKey);
+	const run = (kind: 'mutation', fn: string, fnArgs: Record<string, unknown>) => admin[kind](makeFunctionReference<'mutation'>(fn) as never, fnArgs as never);
+	await run('mutation', 'seed:base', {});
+	const password = `${hex().slice(0, 16)}-Aa7`;
+	await run('mutation', 'seed:staff', { email: 'admin@example.test', password, displayName: 'Test admin' });
+	if (profile === 'synthetic') await seedDemoData(run, count);
+	if (profile === 'workshop') await seedDemoData(run, WORKSHOP_PARTS.length, { parts: WORKSHOP_PARTS,
+		description: 'Unofficial development sample inspired by workshop photos. Stock and placement are illustrative.' });
+
+	const dev = Bun.spawn(['bun', '--bun', 'run', 'dev'], { stdout: 'inherit', stderr: 'inherit', env: { ...process.env,
+		CONVEX_DEV_PROXY: backend, PUBLIC_CONVEX_URL: backend, CHECKOUT_SERVER_KEY: serverKey,
+		CHECKOUT_ALLOWED_ORIGIN: origin, SALES_OPEN: process.env.SALES_OPEN ?? 'true' } });
+	children.push(dev);
+	console.log(`Dev site: http://localhost:${SITE_PORT} and ${origin}`);
+	console.log(`Admin: admin@example.test / ${password} (this run only)`);
+	void dev.exited.then((code) => { console.error(`Dev server exited (${code}); stopping.`); void stop(typeof code === 'number' ? code : 1); });
+} catch (error) {
+	console.error(error instanceof Error ? error.message : error);
+	await stop(1);
 }
-clearTimeout(timeout);
-const seedCode = await seed.exited;
-if (!dev) {
-	// Handles --help/--check and startup failures: the seed already printed
-	// what happened, so just mirror its exit status.
-	process.exit(typeof seedCode === 'number' ? seedCode : 1);
-}
-if (!shuttingDown) void shutdown(0);

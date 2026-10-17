@@ -1,7 +1,7 @@
 // Guest checkout, registration, recovery and contact erasure (datamodell.md §7).
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { api } from '../../convex/_generated/api';
-import { enabled, freshDeployment, guest, product, rejected, serverKey, staff, uuid } from './harness';
+import { enabled, freshDeployment, guest, internal, product, rejected, serverKey, staff, uuid } from './harness';
 
 const token = () => Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, '0')).join('');
 
@@ -68,5 +68,28 @@ describe.skipIf(!enabled)('checkout', () => {
 		const cleared = page.entries.filter((e) => e.table_name === 'checkout_contacts');
 		expect(cleared).toHaveLength(1);
 		expect(JSON.stringify(cleared)).not.toContain('buyer@example.no');
+	});
+});
+
+describe.skipIf(!enabled)('contact retention', () => {
+	beforeEach(freshDeployment);
+
+	test('contacts on unconfirmed checkouts older than 90 days are cleared; confirmed and recent ones stay', async () => {
+		const { client } = await staff();
+		const p = await product(client);
+		const make = async (contact: string) => {
+			const secret = token();
+			const { checkout_id } = await guest().mutation(api.checkout.prepare, { serverKey, requestId: uuid(), token: secret, contact, items: [{ productId: p.id, quantity: '1' }] });
+			return { checkout_id, secret };
+		};
+		const old = await make('old@example.no'), oldConfirmed = await make('kept@example.no'), recent = await make('recent@example.no');
+		await guest().mutation(api.checkout.confirm, { serverKey, checkoutId: oldConfirmed.checkout_id, token: oldConfirmed.secret });
+		const longAgo = new Date(Date.now() - 91 * 86_400_000).toISOString().replace('Z', '000Z');
+		for (const c of [old, oldConfirmed]) await internal('mutation', 'fixtures:patch', { table: 'checkouts', where: { id: c.checkout_id }, changes: { created_at: longAgo } });
+		expect(await internal('mutation', 'retention:clearExpiredContacts')).toBe(1);
+		expect(await client.query(api.checkout.staffContact, { checkoutId: old.checkout_id })).toBeNull();
+		expect(await client.query(api.checkout.staffContact, { checkoutId: oldConfirmed.checkout_id })).toBe('kept@example.no');
+		expect(await client.query(api.checkout.staffContact, { checkoutId: recent.checkout_id })).toBe('recent@example.no');
+		expect(await internal('mutation', 'retention:clearExpiredContacts')).toBe(0);
 	});
 });

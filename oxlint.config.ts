@@ -1,7 +1,7 @@
 import { defineConfig } from 'oxlint';
 
 export default defineConfig({
-	ignorePatterns: ['**/node_modules/**', '.svelte-kit/**', 'build/**', 'dist/**', 'test-results/**', 'scripts/**', 'supabase/**'],
+	ignorePatterns: ['**/node_modules/**', '.svelte-kit/**', 'build/**', 'dist/**', 'test-results/**', 'scripts/**'],
 	plugins: [],
 	categories: { correctness: 'off' },
 	jsPlugins: [{ name: 'shadcn', specifier: '@shadcn/lint' }],

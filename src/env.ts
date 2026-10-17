@@ -9,6 +9,9 @@ export const variables = defineEnvVars({
 	PUBLIC_CONVEX_URL: { public: true, schema: optional },
 	// Shared with the Convex deployment's CHECKOUT_SERVER_KEY; proves checkout calls come from this Worker.
 	CHECKOUT_SERVER_KEY: { schema: optional },
+	// Development only (`bun run development`): the local backend URL. Vite proxies it at
+	// /convex on the page's own origin, so phones and dev.ampoteket.no reach it too.
+	CONVEX_DEV_PROXY: { schema: optional },
 	CHECKOUT_ALLOWED_ORIGIN: { schema: optional },
 	RESEND_API_KEY: { schema: optional },
 	SALES_OPEN: { schema: optional }

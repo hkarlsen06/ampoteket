@@ -1,6 +1,6 @@
 /** Synthetic, deterministic fixtures. Never a real workshop stock import.
- * The caller must own a disposable database and SET ampoteket.test_seed to
- * 'disposable-only' before applying the rendered transaction.
+ * Written through the internal `seed:demo` mutation, which refuses to run
+ * unless the deployment sets ALLOW_TEST_FIXTURES=true (disposable backends only).
  */
 type AttributeValue = string | boolean;
 export type DemoPart = {
@@ -91,74 +91,41 @@ export function seedProductCode(index: number, parts: readonly DemoPart[] = DEMO
 function id(namespace: number, index: number): string {
 	return `de${namespace.toString().padStart(6, '0')}-0000-4000-8000-${index.toString(16).padStart(12, '0')}`;
 }
-function literal(value: string | boolean | null): string {
-	return value === null ? 'NULL' : typeof value === 'boolean' ? String(value) : `'${value.replaceAll("'", "''")}'`;
-}
-function insert(table: string, columns: string, values: (string | boolean | null)[], conflict = 'id'): string {
-	return `INSERT INTO app.${table} (${columns}) VALUES (${values.map(literal).join(',')}) ON CONFLICT (${conflict}) DO NOTHING;`;
-}
+type Run = (kind: 'mutation', name: string, args: Record<string, unknown>) => Promise<unknown>;
 
 /** count includes the 30 representative products; extra products repeat their
  * technical families with separate stable codes/names for pagination testing.
  * Existing fixture metadata and later stock movements are never overwritten.
+ * `run` calls an internal function with the admin key (web-proof harness `run`).
  */
-export function generateSeedSql(count = DEFAULT_SEED_COUNT, dataset?: SeedDataset): string {
+export async function seedDemoData(run: Run, count = DEFAULT_SEED_COUNT, dataset?: SeedDataset): Promise<void> {
 	if (!Number.isSafeInteger(count) || count < DEFAULT_SEED_COUNT || count > 10000) {
 		throw new Error('Seed count must be an integer from 30 to 10000.');
 	}
 	const parts = dataset?.parts ?? DEMO_PARTS;
 	const description = dataset?.description ?? 'Synthetic development fixture; specifications and stock are examples, not workshop records.';
-	const sql = [
-		'-- Synthetic test data only; apply through scripts/seed-test.sh or an owned disposable harness.',
-		'BEGIN;',
-		`DO $$ BEGIN IF current_setting('ampoteket.test_seed', true) IS DISTINCT FROM 'disposable-only' THEN RAISE EXCEPTION 'TEST_SEED_REQUIRES_DISPOSABLE_DATABASE'; END IF; END $$;`,
-		`INSERT INTO auth.users (id) VALUES ('${SEED_AUTH_ID}') ON CONFLICT (id) DO NOTHING;`,
-		insert('staff_members', 'id,auth_user_id,display_name', [SEED_STAFF_ID, SEED_AUTH_ID, 'Synthetic seed fixture (no login)']),
-		// Gram sales are a local fixture reference unit, not a production schema change.
-		...(parts.some(part => part.unit === 'g') ? [insert('units', 'code,name,symbol,is_discrete', ['g', 'Gram', 'g', false], 'code')] : []),
-		`SET LOCAL request.jwt.claims = '{"sub":"${SEED_AUTH_ID}","role":"authenticated"}';`,
-		'SET LOCAL ROLE authenticated;',
-		'CREATE TEMP TABLE seed_added_products (id uuid PRIMARY KEY) ON COMMIT DROP;'
-	];
 	const categories = [...new Set(parts.map((part) => part.category))];
-	for (const [index, name] of categories.entries()) sql.push(insert('categories', 'id,name', [id(4, index + 1), name]));
-	for (const [index, [code, label, valueType, unit]] of definitions.entries()) {
-		sql.push(insert('attribute_definitions', 'id,code,label,value_type,canonical_unit', [id(5, index + 1), code, label, valueType, unit]));
-	}
-	for (let index = 0; index < count; index++) {
+	const products = Array.from({ length: count }, (_, index) => {
 		const part = parts[index % parts.length];
-		const productId = seedProductId(index);
-		const synthetic = index >= parts.length ? ` (syntetisk ${index + 1})` : '';
-		const syntheticEn = index >= parts.length ? ` (synthetic ${index + 1})` : '';
-		const productInsert = insert('products', 'id,code,name_nb,name_en,description,category_id,bin_id,unit_code,stock_step,sale_step,sale_unit_price_nok,is_active',
-			[productId, seedProductCode(index, parts), part.nameNb + synthetic, part.nameEn + syntheticEn, part.description ?? description,
-				id(4, categories.indexOf(part.category) + 1), seedBinId(part.bin === undefined ? index % 30 : part.bin - 1), part.unit ?? 'pcs',
-				part.stockStep ?? (part.unit === 'm' ? '0.001' : '1'), part.saleStep ?? (part.unit === 'm' ? '0.1' : '1'), part.price, true]);
-		sql.push(`WITH added AS (${productInsert.slice(0, -1)} RETURNING id) INSERT INTO pg_temp.seed_added_products SELECT id FROM added;`);
-		for (const [code, value] of Object.entries(part.attributes)) {
-			const attributeIndex = definitions.findIndex((definition) => definition[0] === code);
-			if (attributeIndex < 0) throw new Error(`Unknown fixture attribute ${code}`);
-			const valueType = definitions[attributeIndex][2];
-			// Only initialise new products: a deliberate later attribute removal stays removed.
-			sql.push(`INSERT INTO app.product_attributes (product_id,attribute_id,${valueType}_value)
-SELECT ${[productId, id(5, attributeIndex + 1), value].map(literal).join(',')}
-WHERE EXISTS (SELECT FROM pg_temp.seed_added_products WHERE id='${productId}') ON CONFLICT (product_id,attribute_id) DO NOTHING;`);
-		}
-		if (part.stock === '0') {
-			sql.push(`SELECT public.amp_record_single_count('${id(8, index + 1)}','${productId}',0,0,'Synthetic opening count: empty drawer');`);
-		} else if (part.stock !== null) {
-			const items = JSON.stringify([{ product_id: productId, quantity_delta: part.stock }]);
-			sql.push(`SELECT public.amp_adjust_stock('${id(8, index + 1)}',${literal(items)}::jsonb,'Synthetic opening balance for disposable tests');`);
-		}
+		const synthetic = index >= parts.length;
+		return {
+			id: seedProductId(index), code: seedProductCode(index, parts),
+			name_nb: part.nameNb + (synthetic ? ` (syntetisk ${index + 1})` : ''), name_en: part.nameEn + (synthetic ? ` (synthetic ${index + 1})` : ''),
+			description: part.description ?? description, categoryId: id(4, categories.indexOf(part.category) + 1), categoryName: part.category,
+			binId: seedBinId(part.bin === undefined ? index % 30 : part.bin - 1), unit: part.unit ?? 'pcs',
+			stockStep: part.stockStep ?? (part.unit === 'm' ? '0.001' : '1'), saleStep: part.saleStep ?? (part.unit === 'm' ? '0.1' : '1'),
+			price: part.price, stock: part.stock, openingRequestId: id(8, index + 1),
+			attributes: Object.entries(part.attributes).map(([code, value]) => {
+				const index = definitions.findIndex((definition) => definition[0] === code);
+				if (index < 0) throw new Error(`Unknown fixture attribute ${code}`);
+				const [, label, valueType, unit] = definitions[index];
+				return { definitionId: id(5, index + 1), code, label, valueType, unit, value };
+			})
+		};
+	});
+	const staff = { id: SEED_STAFF_ID, authUserId: SEED_AUTH_ID };
+	// Batches keep each mutation well inside Convex's per-transaction write limits.
+	for (let start = 0; start < products.length; start += 100) {
+		await run('mutation', 'seed:demo', { staff, products: products.slice(start, start + 100) });
 	}
-	sql.push('COMMIT;', '');
-	return sql.join('\n');
-}
-
-if (import.meta.main) {
-	const args = process.argv.slice(2);
-	if (args.length !== 0 && (args.length !== 2 || args[0] !== '--count' || !/^\d+$/.test(args[1]))) {
-		throw new Error('Usage: bun scripts/seed-test-data.ts [--count 30..10000] > seed.sql');
-	}
-	process.stdout.write(generateSeedSql(args.length ? Number(args[1]) : DEFAULT_SEED_COUNT));
 }

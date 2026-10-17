@@ -23,7 +23,6 @@
 		".svelte-kit/cloudflare/**",
 		"build/**",
 		".wrangler/**",
-		"supabase/**",
 		"scripts/**"
 	]
 }

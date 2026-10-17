@@ -45,5 +45,7 @@ jobs:
         name: Deploy, verify and roll back on failure
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          # Production deploy key of the Convex deployment named in wrangler.jsonc.
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
           CLOUDFLARE_ACCOUNT_ID: ffdf1ff5874475b8eaf9f691e42f27ce
         run: bun run deploy:production
