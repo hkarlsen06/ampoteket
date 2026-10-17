@@ -15,9 +15,12 @@ after the workshop.
 
 Hard constraints:
 
-- **No API reads before the first byte.** The server renders without reading the
-  backend, and the response is cacheable (no `no-store`, so the back/forward cache
-  works). The shelf picker and its code load in the browser on first open. The
+- **No API reads before the first byte**, with one exception: whether any article is
+  published, so the hero links to `/news` only when there is something to read. That
+  answer is one `news.feed` read of one row, kept in the Worker's memory for a minute
+  and given up after 300 ms, which hides the link until an answer arrives
+  (`src/lib/server/news-presence.ts`). Nothing else is read, and the response is
+  cacheable (no `no-store`, so the back/forward cache works). The shelf picker and its code load in the browser on first open. The
   homepage shows no quantities or prices.
 - **Readable and navigable without JavaScript**, including the language picker.
 - **First paint on one round trip on bad wifi:** HTML + CSS < 30 KB and one 5 KB
@@ -66,8 +69,8 @@ JSON-LD (name, logo, address, Instagram) for search results.
 A scheme-stable `--night` stage telling one walk: up to the lit storefront window, then
 inside. The copy names the workshop, what is in the room and where, and leads to `/p`.
 Beside the catalog, a `night-outline` secondary («Hva skjer») leads to `/news`
-([page-news.md](page-news.md)); the catalog stays the hero's one primary action, and the
-secondary shows nothing live, so the page still reads no data.
+([page-news.md](page-news.md)) while an article is published (§1); the catalog stays the
+hero's one primary action, and the secondary shows nothing live.
 The headline scales with its column (container query) so a wide fallback font cannot
 push it into the status strip. The catalog button stays in the first viewport down to
 320 × 568. Below 64rem the photograph starts under the status strip and its height

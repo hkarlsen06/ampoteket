@@ -377,7 +377,7 @@
 					<Button variant="night" class="min-w-42 px-6 whitespace-nowrap phone:min-w-0 phone:flex-[1_1_auto] phone:px-4 [-webkit-touch-callout:none]" href={i18n.href('/p')} onpointerdown={startHold} onpointerup={cancelHold} onpointerleave={cancelHold} onpointercancel={cancelHold} oncontextmenu={(event) => event.preventDefault()} onclick={(event) => { if (held) { event.preventDefault(); held = false; } }}><Icon icon={CpuIcon} />{m.hero.parts}</Button>
 					<Button variant="night" class="hidden grow px-4 no-js:hidden phone:inline-flex" aria-label={i18n.m.scanner.open} aria-haspopup="dialog" data-scanner-dock={scanDocked || undefined} bind:ref={scanDock} onclick={openScanner}><Icon icon={QrCodeIcon} />{i18n.m.scanner.action}</Button>
 					{/if}
-					<Button variant="night-outline" class="px-6 whitespace-nowrap phone:basis-full phone:px-4" href={i18n.href('/news')}><Icon icon={NewspaperIcon} />{m.hero.news}</Button>
+					{#if data.hasNews}<Button variant="night-outline" class="px-6 whitespace-nowrap phone:basis-full phone:px-4" href={i18n.href('/news')}><Icon icon={NewspaperIcon} />{m.hero.news}</Button>{/if}
 				</div>
 			</div>
 		</div>
