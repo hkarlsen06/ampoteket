@@ -18,9 +18,8 @@ Hard constraints:
 - **Only published rows are public**, and an image is served only while a published
   article or event shows it. A failed read says unavailable with a retry, never
   "no news".
-- **The homepage reads nothing.** It links here from the hero with one quiet text
-  link under the actions («Nyheter og arrangementer»), not a third button and not a
-  live "next event", because the homepage renders without a database read
+- **The homepage reads nothing.** It links here from the hero with a secondary
+  button beside the catalog («Hva skjer»), not a live "next event", because the homepage renders without a database read
   ([page-home.md](page-home.md#1-job-of-the-page)).
 - **Times are Oslo wall time** at every width and in every browser time zone.
 - **Images reserve their box** from the stored width and height, so nothing shifts.

@@ -281,7 +281,7 @@ inline navigation in link blue (never brand red). `href` renders an anchor.
 Sizes are in [`ui/README.md`](../src/lib/components/ui/README.md); labels wrap. The primary is a
 square **wireframe**: opaque 10% primary tint, primary hairline, `--primary-ink`
 sentence-case label and corner marks (also on `AlertDialog.Action`). `outline` is
-square without marks. Labels are never mono or capitalized. `variant="night"` is the primary on the `--night` hero.
+square without marks. Labels are never mono or capitalized. `variant="night"` is the primary on the `--night` hero and `night-outline` (square, hairline, no marks) its secondary.
 One primary per region: submits and page-level create are `default`, row actions
 `size="sm"` `outline`, cancel and disclosure `ghost`. Buyer back links are `link`
 buttons with a leading arrow icon; admin detail pages rely on the breadcrumb.

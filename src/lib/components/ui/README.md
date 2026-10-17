@@ -43,7 +43,7 @@ Keep these when comparing with or updating from upstream:
   none, embedded buttons keep their own. `Input` forwards a supplied `data-slot` so
   InputGroup selectors work. Field descriptions have no implicit margins.
 - **`Button`:** framed variants (`default`, `outline`, `night`) are square with
-  sans sentence-case labels, no mono or uppercase; `link` is link blue with no padding; `night` is the hero primary;
+  sans sentence-case labels, no mono or uppercase; `link` is link blue with no padding; `night` is the hero primary and `night-outline` its secondary;
   only `default`/`sm`/`icon`/`icon-sm` sizes remain.
 - **`ButtonLabel`** reserves idle and pending label sizes in overlapping grid cells;
   only the active label is exposed. `reserveLabels` covers save/retry alternatives.

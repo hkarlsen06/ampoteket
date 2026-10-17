@@ -697,7 +697,7 @@ export const en: Messages = {
 			lede: 'Soldering stations, oscilloscopes, two 3D printers and a shelf of parts, right in Pilestredet 35.',
 			parts: 'Browse parts catalog',
 			maintenance: 'The shop is closed for maintenance',
-			news: 'News and events',
+			news: "What's on",
 			place: 'PS126 · Pilestredet 35',
 			map: 'Show the room in MazeMap',
 			clock: 'Time in Oslo',

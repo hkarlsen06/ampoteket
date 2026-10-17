@@ -65,9 +65,9 @@ JSON-LD (name, logo, address, Instagram) for search results.
 
 A scheme-stable `--night` stage telling one walk: up to the lit storefront window, then
 inside. The copy names the workshop, what is in the room and where, and leads to `/p`.
-Under the actions, one quiet text link («Nyheter og arrangementer») leads to `/news`
-([page-news.md](page-news.md)); it is not a button, so the catalog stays the hero's
-one primary action, and it shows nothing live, so the page still reads no data.
+Beside the catalog, a `night-outline` secondary («Hva skjer») leads to `/news`
+([page-news.md](page-news.md)); the catalog stays the hero's one primary action, and the
+secondary shows nothing live, so the page still reads no data.
 The headline scales with its column (container query) so a wide fallback font cannot
 push it into the status strip. The catalog button stays in the first viewport down to
 320 × 568. Below 64rem the photograph starts under the status strip and its height

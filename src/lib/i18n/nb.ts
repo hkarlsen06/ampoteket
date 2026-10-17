@@ -705,7 +705,7 @@ export const nb = {
 			lede: 'Loddeplasser, oscilloskop, to 3D‑printere og en hylle med deler, midt i Pilestredet 35.',
 			parts: 'Se delekatalogen',
 			maintenance: 'Nettbutikken er stengt for vedlikehold',
-			news: 'Nyheter og arrangementer',
+			news: 'Hva skjer',
 			place: 'PS126 · Pilestredet 35',
 			map: 'Vis rommet i MazeMap',
 			clock: 'Klokka i Oslo',

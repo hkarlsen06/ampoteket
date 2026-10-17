@@ -18,6 +18,8 @@
 				link: "text-link px-0 underline underline-offset-[0.15em] hover:decoration-2",
 				// The primary on the always-dark hero (`--night`), with the sign's red.
 				night: "border-[color-mix(in_oklab,var(--night-accent)_40%,transparent)] bg-[color-mix(in_oklab,var(--night-accent)_10%,var(--night))] text-night-accent hover:bg-[color-mix(in_oklab,var(--night-accent)_18%,var(--night))]",
+				// The secondary beside it: the night text colour, a hairline frame and no marks.
+				"night-outline": "border-[color-mix(in_oklab,var(--night-foreground)_35%,transparent)] bg-night text-night-foreground hover:bg-[color-mix(in_oklab,var(--night-foreground)_10%,var(--night))]",
 			},
 			size: {
 				default: "min-h-12 h-auto gap-2 px-5 py-2 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
@@ -28,7 +30,7 @@
 		},
 		// Square corners for the framed variants; links keep the text edge. After the size classes.
 		compoundVariants: [
-			{ variant: ["default", "outline", "night"], class: "rounded-none" },
+			{ variant: ["default", "outline", "night", "night-outline"], class: "rounded-none" },
 			{ variant: "link", class: "px-0 font-normal" },
 		],
 		defaultVariants: {
