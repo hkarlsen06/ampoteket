@@ -19,14 +19,14 @@ export function getConvexConfig(): ConvexConfig | null {
 
 /**
  * The deployment URL the browser uses. In development the local backend sits
- * behind the dev server at /convex on the page's own origin (vite.config.ts).
+ * behind the dev server at /_convex on the page's own origin (vite.config.ts).
  */
 export function browserConvexConfig(request: Request): ConvexConfig | null {
 	if (!parse(CONVEX_DEV_PROXY)) return parse(PUBLIC_CONVEX_URL);
 	const url = new URL(request.url);
 	// A local HTTPS proxy (Caddy) forwards plain HTTP to Vite.
 	if (request.headers.get('x-forwarded-proto') === 'https') url.protocol = 'https:';
-	return { url: `${url.origin}/convex` };
+	return { url: `${url.origin}/_convex` };
 }
 
 /** An unauthenticated client for one server request (SSR reads, the checkout gateway). */

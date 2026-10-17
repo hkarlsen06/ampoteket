@@ -165,7 +165,7 @@ Setup:
   behind a reverse proxy to the dev server. The original developer used a tailnet
   name behind Caddy as one example.
 - `bun run development` serves its disposable local Convex backend through the dev
-  server's own origin (`/convex`, `CONVEX_DEV_PROXY`), so the phone needs only that
+  server's own origin (`/_convex`, `CONVEX_DEV_PROXY`), so the phone needs only that
   one HTTPS origin. Set `CHECKOUT_ALLOWED_ORIGIN` to it for payment rehearsals
   ([README](../README.md#https-checkout-and-camera)). The launcher and
   `vite.config.ts` default to the original developer's host name

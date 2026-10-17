@@ -22,7 +22,7 @@ rules are in [datamodell.md](datamodell.md), and `convex/schema.ts` with
 - Modules take a `ConvexCaller` (`src/lib/convex.ts`), which both clients satisfy
   and tests replace with a stub.
 - The deployment URL is `PUBLIC_CONVEX_URL`. In development `browserConvexConfig`
-  sends the browser to `/convex` on the page's own origin instead
+  sends the browser to `/_convex` on the page's own origin instead
   (`CONVEX_DEV_PROXY`, [website-guide.md](website-guide.md) §1.1).
 - Live queries: screens that must follow changes subscribe with convex-svelte's
   `useQuery` and pass `'skip'` until the admin context is ready. Today these are the

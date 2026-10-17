@@ -45,7 +45,7 @@ Worker secrets.
 | `RESEND_API_KEY` | Worker secret | Sends buyer receipts and the staff copy (§4.2); never in logs or the browser bundle. Missing: receipts are unavailable. |
 | `CHECKOUT_ALLOWED_ORIGIN` | Checkout Worker | Exact HTTPS origin for checkout POSTs. Never derive trust from the request Host header. |
 | `SALES_OPEN` | Worker/server only | Exactly `true` opens buying. Anything else, including unset, closes it: `/p`, `/cart` and `/checkout` (the `(sales)` route group) render a 503 "closed for maintenance" page, `/api/checkouts/…` answers `503 CHECKOUT_UNAVAILABLE`, and the header, footer, scanner and homepage hide their buying entry points. Admin is unaffected. `bun run development` sets it to `true`. |
-| `CONVEX_DEV_PROXY` | Development only | Set by `bun run development` to the local backend. The server calls it directly; the browser reaches it at `/convex` on the page's own origin, so `dev.ampoteket.no` and phones work. |
+| `CONVEX_DEV_PROXY` | Development only | Set by `bun run development` to the local backend. The server calls it directly; the browser reaches it at `/_convex` on the page's own origin, so `dev.ampoteket.no` and phones work. |
 
 | Convex environment variable | Used by | Notes |
 |---|---|---|

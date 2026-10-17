@@ -9,7 +9,7 @@
  * Ports are pinned: the dev site on 5174 (dev.ampoteket.no) and the backend on
  * 54329. A port already in use is reported, never taken over: it may be the
  * owner's or another session's server. The browser reaches the backend through
- * the dev server at /convex (vite.config.ts), so dev.ampoteket.no and phones work.
+ * the dev server at /_convex (vite.config.ts), so dev.ampoteket.no and phones work.
  * Everything lives in a fresh /tmp directory that is deleted on exit; no hosted
  * deployment, .env or .env.local is read.
  *

@@ -5,7 +5,7 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 
 export const PORT = 5174;
-// Set by `bun run development`: the local Convex backend is served at /convex on the
+// Set by `bun run development`: the local Convex backend is served at /_convex on the
 // site's own origin, so any device that can open the dev server also reaches it.
 const convexProxy = process.env.CONVEX_DEV_PROXY;
 
@@ -33,7 +33,8 @@ export default defineConfig({
 		strictPort: true,
 		host: true,
 		allowedHosts: ['dev.ampoteket.no'],
-		proxy: convexProxy ? { '/convex': { target: convexProxy, ws: true, rewrite: (path) => path.replace(/^\/convex/, '') } } : undefined
+		// Not /convex: Vite serves the repository's convex/ sources (the generated api) under that path.
+		proxy: convexProxy ? { '^/_convex(/|$)': { target: convexProxy, ws: true, rewrite: (path) => path.replace(/^\/_convex/, '') } } : undefined
 	},
 	preview: {
 		port: PORT,

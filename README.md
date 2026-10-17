@@ -70,7 +70,7 @@ no hosted deployment, `.env` or `.env.local`. Options (after `--`):
 - `--count 30`: the synthetic catalog used by the browser tests (30–10000
   products).
 
-The browser reaches the backend through the dev server at `/convex`, so the same
+The browser reaches the backend through the dev server at `/_convex`, so the same
 run works from `https://dev.ampoteket.no` and from a phone that can open the dev
 server. A port already in use is reported and left alone: it may be the owner's
 or another session's server. Stop it yourself only if it is yours.
