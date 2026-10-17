@@ -47,7 +47,7 @@
 	onMount(() => {
 		supported = labelPrinterSupported();
 		const job = queued; queued = null;
-		if (supported && job?.productId === product.id && job.userId === admin.session?.user.id) void print();
+		if (supported && job?.productId === product.id && job.userId === admin.userId) void print();
 	});
 </script>
 <Button variant="outline" size="sm" aria-label={m.printLabelName} aria-describedby={!supported ? describedby ?? `${uid}-unsupported` : undefined} disabled={busy || !supported} onclick={print}>

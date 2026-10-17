@@ -630,7 +630,7 @@
 									<!-- svelte-ignore a11y_no_noninteractive_tabindex (Named scroll region supports native keyboard scrolling.) -->
 									<div bind:this={shelfBody} class={["shelf-picker-body", sheetBody]} role="region" aria-labelledby="home-shelf-title" tabindex="0">
 										<!-- Loaded on first open: the picker is most of this page's own script. -->
-										{#await import('#lib/ShelfMap.svelte') then { default: ShelfMap }}<ShelfMap config={data.adminConfig} labelledby="home-shelf-title" onreveal={shelfOpen ? revealShelfSection : undefined} />{/await}
+										{#await import('#lib/ShelfMap.svelte') then { default: ShelfMap }}<ShelfMap config={data.convex} labelledby="home-shelf-title" onreveal={shelfOpen ? revealShelfSection : undefined} />{/await}
 									</div>
 								</Dialog.Content>
 							{/if}

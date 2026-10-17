@@ -20,7 +20,7 @@
 	let batches = $state<CountBatch[]>([]); let owners = $state<CountOwner[]>([]); let title = $state('');
 	let loaded = $state(false); let loading = $state(true); let failed = $state(false); let busy = $state(false); let storageReady = $state(false);
 	let command = $state<CountCommand | null>(null); let outcome = $state<'idle' | 'failed' | 'unknown'>('idle'); let mounted = false; let generation = 0;
-	const wrongIdentity = $derived(Boolean(command && command.userId !== admin.session?.user.id));
+	const wrongIdentity = $derived(Boolean(command && command.userId !== admin.userId));
 	const ownerById = $derived(new Map(owners.map((owner) => [owner.id, owner])));
 	const batchTone = { owner: 'success', other: 'neutral', abandoned: 'warning', finished: 'neutral' } as const;
 	onMount(() => {
@@ -35,7 +35,7 @@
 		if (admin.status !== 'ready') return;
 		loading = true; failed = false; const version = ++generation;
 		try {
-			const session = admin.credentials(); const result = await readCountBatches(session); if (mounted && version === generation && admin.session?.user.id === session.userId) { batches = result.batches; owners = result.owners; loaded = true; } }
+			const session = admin.credentials(); const result = await readCountBatches(session); if (mounted && version === generation && admin.userId === session.userId) { batches = result.batches; owners = result.owners; loaded = true; } }
 		catch (error) { if (mounted && version === generation) failed = true; await admin.permissionFailure(error); }
 		finally { if (mounted && version === generation) loading = false; }
 	}
@@ -59,7 +59,7 @@
 			frozen = await updateCountStorage((storage) => saveCountCommand(storage, candidate)); command = frozen;
 			const result = await runCountCommand(session, frozen);
 			await updateCountStorage((storage) => clearCountCommand(storage, frozen!));
-			if (mounted && admin.session?.user.id === session.userId) { command = null; await goto(i18n.href(`/admin/counts/${result.batchId}`)); }
+			if (mounted && admin.userId === session.userId) { command = null; await goto(i18n.href(`/admin/counts/${result.batchId}`)); }
 		} catch (error) { if (mounted) outcome = frozen ? 'unknown' : 'failed'; await admin.permissionFailure(error); }
 		finally { if (mounted) busy = false; }
 	}

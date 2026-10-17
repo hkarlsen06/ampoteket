@@ -18,7 +18,7 @@
 	let busy = $state(false); let failed = $state(false); let alive = true;
 	let storageFailed = $state(false);
 	let editor: { prepare(): boolean } | undefined;
-	const wrongIdentity = $derived(command.userId !== admin.session?.user.id);
+	const wrongIdentity = $derived(command.userId !== admin.userId);
 	const labels = $derived.by(() => { try { return standardSpecificationDefinitions(definitions); } catch { return definitions; } });
 	onMount(() => { staged = (command.attributes ?? []).map(value => ({ ...value })); return () => { alive = false; }; });
 	function label(value: AttributeValue) {
@@ -33,7 +33,7 @@
 		const session = admin.credentials(); busy = true; failed = false;
 		try {
 			const current = await readProductSpecificationReview(session, command);
-			if (alive && session.userId === admin.session?.user.id) { review = current; failed = false; }
+			if (alive && session.userId === admin.userId) { review = current; failed = false; }
 		} catch (error) { if (alive) failed = true; await admin.permissionFailure(error); }
 		finally { if (alive) busy = false; }
 	}

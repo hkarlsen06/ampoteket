@@ -48,7 +48,7 @@
 	let selectionLoaded = $state(false);
 	$effect(() => {
 		if (!selectionLoaded) return;
-		writeDraft(admin.session?.user.id, 'labels', selected.length || includeUnplaced || widthText !== '45' || mode !== 'a4' || drawer
+		writeDraft(admin.userId, 'labels', selected.length || includeUnplaced || widthText !== '45' || mode !== 'a4' || drawer
 			? { selected: $state.snapshot(selected), includeUnplaced, widthText, mode, drawer } : null, 'session');
 	});
 	const dimensions = $derived(proportionalLabelSettings(width ?? NaN));
@@ -75,7 +75,7 @@
 		downloadUrl = ''; prepared = null; previewLines = {};
 	}
 	onMount(() => {
-		const saved = readDraft(admin.session?.user.id, 'labels', 'session') as Record<string, unknown> | null;
+		const saved = readDraft(admin.userId, 'labels', 'session') as Record<string, unknown> | null;
 		if (Array.isArray(saved?.selected) && saved.selected.every(id => typeof id === 'string') && typeof saved.includeUnplaced === 'boolean' && typeof saved.widthText === 'string') {
 			selected = saved.selected; includeUnplaced = saved.includeUnplaced; widthText = saved.widthText;
 			if (saved.mode === 'brother') mode = 'brother';
@@ -111,7 +111,7 @@
 		try {
 			const next = await readLabelData(session, fetcher);
 			signal.throwIfAborted();
-			if (!alive || session.userId !== admin.session?.user.id || admin.status !== 'ready') throw new Error('Label read identity changed');
+			if (!alive || session.userId !== admin.userId || admin.status !== 'ready') throw new Error('Label read identity changed');
 			return next;
 		} catch (cause) {
 			// One failed branch must also stop its parallel reads before removing

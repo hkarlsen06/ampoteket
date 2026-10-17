@@ -1,4 +1,4 @@
-import type { AttributeDefinition } from './admin-products';
+import type { AttributeDefinition } from './catalog-types';
 
 // Stable identities for categories first created through the standard picker.
 // Never change an ID when reordering or translating the choices.

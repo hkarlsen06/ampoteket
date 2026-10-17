@@ -49,7 +49,7 @@
 		try {
 			const raw = sessionStorage.getItem(key); if (raw) pending = restore(raw);
 			const probe = key + ':probe'; sessionStorage.setItem(probe, '1'); if (sessionStorage.getItem(probe) !== '1') throw new Error(); sessionStorage.removeItem(probe); storageReady = true;
-			if (pending) { wrongIdentity = pending.userId !== admin.session?.user.id; if (!wrongIdentity) { editing = true; editTarget = pending.revision ? pending.payload.id : 'new'; fields(pending.payload); } }
+			if (pending) { wrongIdentity = pending.userId !== admin.userId; if (!wrongIdentity) { editing = true; editTarget = pending.revision ? pending.payload.id : 'new'; fields(pending.payload); } }
 		} catch { storageReady = false; }
 		void load();
 	});
@@ -57,7 +57,7 @@
 		if (admin.status !== 'ready') return;
 		if (busy || moving || admin.status !== 'ready') return; busy = true; outcome = 'idle';
 		try {
-			const session = admin.credentials(); const rows = await readAdminHelp(session); if (session.userId === admin.session?.user.id) { contacts = rows; failed = false; } }
+			const session = admin.credentials(); const rows = await readAdminHelp(session); if (session.userId === admin.userId) { contacts = rows; failed = false; } }
 		catch (error) { failed = true; await admin.permissionFailure(error); } finally { busy = false; }
 	}
 	// The app owns freshness (design-system.md §4.2): re-read the list on
@@ -132,7 +132,7 @@
 				acknowledged = parseEditableHelpContact(result[0]);
 				if (!sameFields(acknowledged, saved.payload)) throw new Error();
 			}
-			if (admin.session?.user.id !== session.userId) return;
+			if (admin.userId !== session.userId) return;
 			sessionStorage.removeItem(key); pending = null; selected = acknowledged; fields(acknowledged); outcome = 'saved';
 			try { contacts = await readAdminHelp(session); failed = false; }
 			catch (error) { failed = true; await admin.permissionFailure(error); }

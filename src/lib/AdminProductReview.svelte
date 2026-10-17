@@ -38,7 +38,7 @@
 				readProductCreations(session, point).then(async entries => ({ entries, actors: await readActorReferences(session, entries) }))
 					.catch(error => { void admin.permissionFailure(error); return null; })
 			]) : [null, [] as ProductStock[], { entries: [], actors: {} }];
-			if (mounted && version === generation && admin.session?.user.id === session.userId) {
+			if (mounted && version === generation && admin.userId === session.userId) {
 				// A review marked while this read ran stays marked; the point only moves forward.
 				products = items; since = since && timestampMicros(since) > timestampMicros(point) ? since : point; references = refs;
 				stock = inventory && new Map(inventory.map(row => [row.product_id, row])); stockFailed = inventory === null;
@@ -60,7 +60,7 @@
 	function markReviewed() {
 		const through = list && reviewedThrough(list);
 		if (!through) return;
-		writeReviewPoint(admin.session?.user.id, through);
+		writeReviewPoint(admin.userId, through);
 		since = through; reviewed = true; visibleCount = 12;
 		// The button leaves with the list; keep focus in the section without scrolling.
 		heading?.focus({ preventScroll: true });

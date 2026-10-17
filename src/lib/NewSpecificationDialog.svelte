@@ -19,7 +19,7 @@
 	const storageKey = `${detailCommandKey}:new-definition`;
 	let open = $state(false); let label = $state(''); let type = $state<AttributeDefinition['value_type']>('number'); let unit = $state('');
 	let pending = $state<DetailCommand | null>(null); let busy = $state(false); let storageReady = $state(false); let outcome = $state('idle'); let alive = true;
-	const wrongIdentity = $derived(Boolean(pending && pending.userId !== admin.session?.user.id));
+	const wrongIdentity = $derived(Boolean(pending && pending.userId !== admin.userId));
 	onMount(() => {
 		try {
 			const raw = sessionStorage.getItem(storageKey);
@@ -69,7 +69,7 @@
 			const definition = pending.after as AttributeDefinition;
 			await executeDetailCommand(session, pending);
 			clearPending();
-			if (!alive || session.userId !== admin.session?.user.id) return;
+			if (!alive || session.userId !== admin.userId) return;
 			oncreated(definition); open = false; label = ''; type = 'number'; unit = ''; outcome = 'idle';
 		} catch (error) {
 			if (pending && (error instanceof StaleProductError || definitiveProductFailure(error))) {

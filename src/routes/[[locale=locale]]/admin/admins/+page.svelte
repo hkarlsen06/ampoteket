@@ -21,7 +21,7 @@
 	let outcome = $state<'idle' | 'invited' | 'existing_account' | 'deactivated' | 'deactivationSuperseded' | 'unknown' | 'failed' | MemberFailure>('idle');
 	let outcomeTarget = $state<string | null>(null), revalidateQueued = $state(false);
 	let mutationGeneration = 0;
-	const wrongIdentity = $derived(Boolean(pending && pending.userId !== admin.session?.user.id));
+	const wrongIdentity = $derived(Boolean(pending && pending.userId !== admin.userId));
 	const locked = $derived(busy || Boolean(pending) || !storageReady || admin.status !== 'ready');
 	const pendingTarget = $derived(pending?.kind === 'deactivate' ? pending.staffId : pending?.targetId ?? null);
 	const orphaned = $derived(outcomeTarget !== null && (members !== null || failed) && !members?.some(member => member.id === outcomeTarget));
@@ -33,7 +33,7 @@
 			const probe = `${memberStorageKey}:probe`; sessionStorage.setItem(probe, '1');
 			if (sessionStorage.getItem(probe) !== '1') throw new Error();
 			sessionStorage.removeItem(probe); storageReady = true;
-			if (pending && pending.userId === admin.session?.user.id) {
+			if (pending && pending.userId === admin.userId) {
 				outcomeTarget = pending.kind === 'deactivate' ? pending.staffId : pending.targetId; outcome = 'unknown';
 				if (pending.kind === 'invite' && pending.targetId === null) { name = pending.displayName; email = pending.email; }
 			}
@@ -47,7 +47,7 @@
 		try {
 			const session = admin.credentials(), result = await readAdminMembers(session);
 			if (generation !== mutationGeneration) { revalidateQueued = true; return; }
-			if (session.userId === admin.session?.user.id) {
+			if (session.userId === admin.userId) {
 				// Access changes must not move existing rows or the controls being used.
 				const positions = new Map(members?.map((member, index) => [member.id, index]));
 				members = result.sort((a, b) => (positions.get(a.id) ?? positions.size) - (positions.get(b.id) ?? positions.size));
@@ -90,7 +90,7 @@
 			if (!pending) return;
 			outcomeTarget = pending.kind === 'deactivate' ? pending.staffId : pending.targetId;
 			const session = admin.credentials(), result = await runMemberCommand(session, pending);
-			if (session.userId !== admin.session?.user.id) return;
+			if (session.userId !== admin.userId) return;
 			const finished = pending; forgetPending(); outcome = result;
 			// A finished invitation must not be repeatable from the same filled-in form.
 			if (finished?.kind === 'invite' && finished.targetId === null) { name = ''; email = ''; }
@@ -156,11 +156,11 @@
 				{#if index > 0}<Item.Separator />{/if}
 				<Item.Root variant="row" role="listitem">
 					<Item.Content class="min-w-0 basis-64">
-						<Item.Title id={`${fieldId}-member-${member.id}`} tabindex={-1} class={[itemTitle, 'flex-wrap']}>{member.displayName}{#if member.authUserId === admin.session?.user.id}<span class="font-normal text-muted-foreground">{m.you}</span>{/if}</Item.Title>
+						<Item.Title id={`${fieldId}-member-${member.id}`} tabindex={-1} class={[itemTitle, 'flex-wrap']}>{member.displayName}{#if member.authUserId === admin.userId}<span class="font-normal text-muted-foreground">{m.you}</span>{/if}</Item.Title>
 						{#if member.email}<Item.Description class="wrap-anywhere">{member.email}</Item.Description>{/if}
 						<div class="flex flex-wrap gap-2"><StateBadge tone={!member.authUserId || !member.isActive ? 'neutral' : member.emailConfirmed ? 'success' : 'warning'}>{!member.authUserId ? m.accountRemoved : !member.isActive ? m.inactive : member.emailConfirmed ? m.active : m.awaitingSetup}</StateBadge></div>
 					</Item.Content>
-					{#if member.authUserId && member.authUserId !== admin.session?.user.id}
+					{#if member.authUserId && member.authUserId !== admin.userId}
 						<Item.Actions class="flex-wrap">
 							{#if member.email && (!member.isActive || !member.emailConfirmed)}
 								<Button type="button" variant="outline" size="sm" disabled={locked || failed} onclick={() => inviteMember(member)}><ButtonLabel pending={busy && outcomeTarget === member.id && pending?.kind === 'invite'} label={member.isActive ? m.resend : m.reactivate} pendingLabel={member.isActive ? i18n.m.admin.sending : m.activating} /></Button>

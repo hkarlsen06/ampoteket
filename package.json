@@ -15,11 +15,12 @@
 		"check:scripts": "svelte-kit sync && tsc --project tsconfig.scripts.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"lint": "bun run check:dashes && oxlint && eslint .",
-		"check:dashes": "! git grep -nI '\u2014' -- ':!supabase/migrations' && ! git grep -nI ' - ' -- 'src/lib/i18n' && ! git grep -nIE ' [\u2013\u2014] ' -- src scripts docs '*.md' || (echo 'dash used as a sentence break; use a comma, colon or full stop' && exit 1)",
+		"check:dashes": "! git grep -nI '—' -- ':!supabase/migrations' && ! git grep -nI ' - ' -- 'src/lib/i18n' && ! git grep -nIE ' [–—] ' -- src scripts docs '*.md' || (echo 'dash used as a sentence break; use a comma, colon or full stop' && exit 1)",
 		"check:ink": "python3 scripts/check-clipped-ink.py",
 		"test": "bun test"
 	},
 	"devDependencies": {
+		"@edge-runtime/vm": "^5.0.0",
 		"@eslint/js": "^10.0.1",
 		"@internationalized/date": "^3.12.4",
 		"@playwright/test": "1.63.0",
@@ -32,6 +33,7 @@
 		"bits-ui": "^2.19.3",
 		"bun-types": "^1.4.2",
 		"cn": "^0.4.0",
+		"convex-test": "^0.0.62",
 		"eslint": "^10.11.0",
 		"eslint-plugin-svelte": "^3.23.0",
 		"globals": "^17.12.0",
@@ -47,13 +49,19 @@
 		"typescript": "^6.0.3",
 		"typescript-eslint": "^8.71.0",
 		"vite": "^8.3.1",
+		"vitest": "^5.0.5",
 		"wrangler": "^4.144.0"
 	},
 	"dependencies": {
+		"@auth/core": "0.41.1",
+		"@convex-dev/auth": "0.0.96",
 		"@google/model-viewer": "4.3.1",
 		"@pdf-lib/fontkit": "1.1.1",
 		"@supabase/supabase-js": "2.117.2",
 		"barcode-detector": "3.2.2",
+		"bcryptjs": "3.0.3",
+		"convex": "1.47.0",
+		"convex-svelte": "0.15.1",
 		"lossless-json": "4.3.1",
 		"pdf-lib": "1.17.1",
 		"phosphor-svelte": "3.1.0",
@@ -61,6 +69,7 @@
 		"zxing-wasm": "3.1.3"
 	},
 	"imports": {
-		"#lib/*": "./src/lib/*"
+		"#lib/*": "./src/lib/*",
+		"#convex/*": "./convex/*"
 	}
 }

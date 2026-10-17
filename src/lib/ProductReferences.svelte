@@ -22,7 +22,7 @@
 	let busy = $state(false);
 	let outcome = $state('idle');
 	let alive = true;
-	const wrongIdentity = $derived(Boolean(pending && pending.userId !== admin.session?.user.id));
+	const wrongIdentity = $derived(Boolean(pending && pending.userId !== admin.userId));
 	const category = $derived(pending?.kind === 'category' ? pending.after as Category : null);
 	const definition = $derived(pending?.kind === 'definition' ? pending.after as AttributeDefinition : null);
 
@@ -65,11 +65,11 @@
 			if (sessionStorage.getItem(key) !== storedCommand) throw new Error('Reference command changed');
 			await executeDetailCommand(session, pending);
 			clearPending();
-			if (!alive || session.userId !== admin.session?.user.id) return;
+			if (!alive || session.userId !== admin.userId) return;
 			outcome = 'saved';
 			try {
 				const references = await readProductReferences(session);
-				if (alive && session.userId === admin.session?.user.id) onrefresh(references);
+				if (alive && session.userId === admin.userId) onrefresh(references);
 			} catch (error) {
 				outcome = 'savedRefreshFailed';
 				await admin.permissionFailure(error);

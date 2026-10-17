@@ -47,7 +47,7 @@
 	});
 	const pendingId = $derived(pending ? subject(pending).attribute_id : null);
 	const layout = $derived(productSpecificationFields(family, definitionState.definitions, [...(values ?? []).map(value => value.attribute_id), ...added, ...(pendingId ? [pendingId] : [])]));
-	const wrongIdentity = $derived(Boolean(pending && pending.userId !== admin.session?.user.id));
+	const wrongIdentity = $derived(Boolean(pending && pending.userId !== admin.userId));
 	function subject(command: DetailCommand) { return (command.after ?? command.before) as AttributeValue; }
 	onMount(() => {
 		try {
@@ -73,7 +73,7 @@
 		const session = admin.credentials();
 		try {
 			const rows = await readProductAttributes(session, productId);
-			if (alive && session.userId === admin.session?.user.id) { savedValues = rows; if (!draftRestored) restoreDraft(); }
+			if (alive && session.userId === admin.userId) { savedValues = rows; if (!draftRestored) restoreDraft(); }
 		} catch (error) {
 			if (alive) loadFailed = true;
 			await admin.permissionFailure(error);
@@ -89,7 +89,7 @@
 	function restoreDraft() {
 		draftRestored = true;
 		if (!drafts) return;
-		const saved = readDraft(admin.session?.user.id, draftName) as { values?: unknown; edits?: unknown; maxEdits?: unknown; ranges?: unknown; added?: unknown; stale?: unknown } | null;
+		const saved = readDraft(admin.userId, draftName) as { values?: unknown; edits?: unknown; maxEdits?: unknown; ranges?: unknown; added?: unknown; stale?: unknown } | null;
 		const texts = (value: unknown) => Array.isArray(value) && value.every(item => typeof item === 'string');
 		const record = (value: unknown, type: 'string' | 'boolean') => value === undefined
 			|| (Boolean(value) && typeof value === 'object' && Object.values(value as object).every(item => typeof item === type));
@@ -110,7 +110,7 @@
 			const definition = definitions.find(item => item.id === id);
 			return !definition || isRange(definition) !== Boolean(saved(id)?.number_max) || (isRange(definition) && currentMax(definition) !== asMaxText(saved(id), unitOf(definition)));
 		});
-		writeDraft(admin.session?.user.id, draftName, dirty ? { values: valuesKey, edits: $state.snapshot(edits), maxEdits: $state.snapshot(maxEdits), ranges: $state.snapshot(ranges), added: $state.snapshot(added), stale: Object.keys(errors).filter(id => errors[id] === 'stale') } : null);
+		writeDraft(admin.userId, draftName, dirty ? { values: valuesKey, edits: $state.snapshot(edits), maxEdits: $state.snapshot(maxEdits), ranges: $state.snapshot(ranges), added: $state.snapshot(added), stale: Object.keys(errors).filter(id => errors[id] === 'stale') } : null);
 	});
 	function asText(value: Omit<AttributeValue, 'product_id'> | null | undefined, unit: string | null): string {
 		return !value ? '' : value.number_value !== null ? measurementInput(value.number_value, unit, i18n.locale) : value.text_value ?? (value.boolean_value === null ? '' : String(value.boolean_value));
@@ -261,7 +261,7 @@
 				if (JSON.stringify(parseDetailCommand(JSON.parse(sessionStorage.getItem(storageKey) ?? ''))) !== JSON.stringify(command)) throw new Error('Attribute command changed');
 				await executeDetailCommand(session, command);
 				sessionStorage.removeItem(storageKey);
-				if (!alive || session.userId !== admin.session?.user.id) return false;
+				if (!alive || session.userId !== admin.userId) return false;
 				const id = subject(command).attribute_id;
 				pending = null;
 				savedValues = [...(savedValues ?? []).filter(value => value.attribute_id !== id), ...(command.after ? [command.after as AttributeValue] : [])];

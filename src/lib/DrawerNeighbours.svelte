@@ -33,7 +33,7 @@
 		loading = true;
 		try {
 			const session = admin.credentials(); const next = await readAdminProducts(session);
-			if (alive && session.userId === admin.session?.user.id) { products = next; failed = false; }
+			if (alive && session.userId === admin.userId) { products = next; failed = false; }
 		} catch (error) {
 			// A failed background read keeps the list it already shows.
 			if (alive && !products) failed = true;

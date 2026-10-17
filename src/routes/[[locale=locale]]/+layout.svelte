@@ -12,6 +12,8 @@
 	import DiscordLogo from '#lib/DiscordLogo.svelte';
 	import { onMount, setContext, untrack } from 'svelte';
 	import { AdminContext, setAdminContext } from '#lib/admin-context.svelte.js';
+	import { ConvexAuthClient } from '#lib/convex-auth.svelte.js';
+	import { setupAuth, setupConvex, useAuth } from 'convex-svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Separator } from '#lib/components/ui/separator/index.js';
@@ -54,10 +56,15 @@
 		href: (path: string) => localizeHref(path, data.locale)
 	});
 	const m = $derived(i18n.m);
-	// One browser Auth client is shared by the header and all admin pages.
-	const admin = setAdminContext(untrack(() => new AdminContext(data.adminConfig, data.callbackOrigin)));
-	onMount(() => { void admin.start(); });
-	function checkAccess() { if (document.visibilityState === 'visible') void admin.refresh(); }
+	// One Convex client and one Auth session for the header and every page. Admin
+	// membership is a live subscription, so revocation shows without polling.
+	const convexUrl = untrack(() => data.convex?.url ?? null);
+	const client = convexUrl ? setupConvex(convexUrl) : null;
+	const auth = convexUrl ? new ConvexAuthClient(convexUrl) : null;
+	if (client && auth) setupAuth(() => auth.provider);
+	const serverAuth = client ? useAuth() : null;
+	const admin = setAdminContext(untrack(() => new AdminContext(data.convex, data.callbackOrigin, client, auth, serverAuth)));
+	onMount(() => { admin.start(); });
 
 	/** Current path with the locale prefix removed, so the picker can swap it. */
 	const bare = $derived(stripLocale(page.url.pathname));
@@ -156,8 +163,7 @@
 	}
 </script>
 
-<svelte:window onkeydown={onKeydown} onpointerdown={onPointerdown} onfocus={checkAccess} />
-<svelte:document onvisibilitychange={checkAccess} />
+<svelte:window onkeydown={onKeydown} onpointerdown={onPointerdown} />
 
 <svelte:head>
 	{#if privatePage}
@@ -242,7 +248,7 @@
 			{#if data.salesOpen}<div class="flex">{@render iconLink(links.catalog, 'phone:hidden')}{@render iconLink(links.cart, 'header-cart')}</div>{/if}
 		</Tooltip.Provider>
 		{/if}
-		{#if buyerScanPage}<Scanner bind:this={scanner} config={data.adminConfig} />{/if}
+		{#if buyerScanPage}<Scanner bind:this={scanner} config={data.convex} />{/if}
 		<!-- Desktop: a floating panel hanging from the header under the button. Phone: a full-width panel under the header bar. -->
 		<Collapsible.Root bind:open={menuOpen} class="relative flex phone:static no-js:contents">
 			<Collapsible.Trigger>

@@ -65,7 +65,7 @@
 	const openLines = $derived(detail?.lines.filter((line) => compareDecimals(line.outstandingQuantity, '0') > 0) ?? []);
 	const reviewLines = $derived(detail?.lines.filter((line) => compareDecimals(line.outstandingQuantity, '0') > 0 || Boolean(quantities[line.id]?.trim())) ?? []);
 	const matchingLines = $derived(openLines.filter((line) => products.get(line.productId)?.code === scanCode));
-	const wrongIdentity = $derived(Boolean(command && command.userId !== admin.session?.user.id));
+	const wrongIdentity = $derived(Boolean(command && command.userId !== admin.userId));
 	const selectedCount = $derived(reviewLines.filter((line) => quantities[line.id]?.trim()).length);
 
 	function full(line: OrderLine) { return !manual.has(line.id) && quantities[line.id] === line.outstandingQuantity; }
@@ -92,7 +92,7 @@
 		syncPending();
 		// Ticks and amounts outlive closing the sheet, a reload or a sign-in round
 		// trip (drafts.ts); lines received in full meanwhile are dropped on load.
-		const saved = pendingHere ? null : readDraft(admin.session?.user.id, `receipt:${orderId}`) as { quantities?: unknown; manual?: unknown } | null;
+		const saved = pendingHere ? null : readDraft(admin.userId, `receipt:${orderId}`) as { quantities?: unknown; manual?: unknown } | null;
 		const texts = (value: unknown) => Array.isArray(value) && value.every(item => typeof item === 'string');
 		if (saved?.quantities && typeof saved.quantities === 'object' && texts(Object.values(saved.quantities)) && texts(saved.manual)) {
 			quantities = saved.quantities as Record<string, string>; manual = new Set(saved.manual as string[]); restoredDraft = true;
@@ -124,7 +124,7 @@
 		try {
 			const session = admin.credentials();
 			const result = await readOrderDetail(session, orderId);
-			if (mounted && version === generation && admin.session?.user.id === session.userId) {
+			if (mounted && version === generation && admin.userId === session.userId) {
 				detail = result;
 				const ids = result.products.map((product) => product.id);
 				if (ids.length) void Promise.all([readAdminProducts(session, fetch, ids), readShelfTopology(session.config)]).then(([rows, shelf]) => {
@@ -146,7 +146,7 @@
 		// Another pending command leaves this draft alone; this sheet is inert meanwhile.
 		if (!draftLoaded || command) return;
 		const dirty = Object.values(quantities).some(value => value.trim());
-		writeDraft(admin.session?.user.id, `receipt:${orderId}`, dirty ? { quantities: $state.snapshot(quantities), manual: [...manual] } : null);
+		writeDraft(admin.userId, `receipt:${orderId}`, dirty ? { quantities: $state.snapshot(quantities), manual: [...manual] } : null);
 	});
 	let revalidateQueued = $state(false);
 	function revalidate() { revalidateQueued = document.visibilityState === 'visible'; }
@@ -205,7 +205,7 @@
 			} else if (mounted) outcome = saved ? 'unknown' : 'invalid';
 			await admin.permissionFailure(error);
 		} finally { if (mounted) { busy = false; syncPending(); } }
-		if (recorded && mounted && admin.session?.user.id === candidate.userId) {
+		if (recorded && mounted && admin.userId === candidate.userId) {
 			// onclose() destroys this sheet before an effect could drop the draft.
 			command = null; quantities = {}; writeDraft(candidate.userId, `receipt:${orderId}`, null);
 			onclose();

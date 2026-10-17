@@ -1,5 +1,5 @@
 import { compareDecimals, normalizeDecimal, shiftDecimal } from './decimal';
-import type { Locale } from './i18n';
+import type { Locale } from './i18n/core';
 
 /** Exact display, including all significant fraction digits; never a money total. */
 export function formatDecimal(value: string, locale: Locale): string {

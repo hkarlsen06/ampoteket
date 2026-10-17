@@ -12,7 +12,8 @@ export const productSelect = 'id,code,name_nb,name_en,description,category_id,bi
 export type ProductWrite = { id: string; code: string; name_nb: string; name_en: string; description: string | null; category_id: string | null; bin_id: string | null; location_note: string | null; unit_code: string; stock_step: string; sale_step: string; sale_unit_price_nok: string | null; minimum_stock: string; datasheet_url: string | null; purchase_url: string | null; is_active: boolean };
 export type AdminProduct = ProductWrite & { metadata_revision: string };
 export type Category = { id: string; name: string };
-export type AttributeDefinition = { id: string; code: string; label: string; value_type: 'number' | 'text' | 'boolean'; canonical_unit: string | null };
+import type { AttributeDefinition } from './catalog-types';
+export type { AttributeDefinition } from './catalog-types';
 /** A number may be a range: number_value is then its lower bound and number_max the upper one. */
 export type AttributeValue = { product_id: string; attribute_id: string; number_value: string | null; number_max: string | null; text_value: string | null; boolean_value: boolean | null };
 export type ProductReferences = { categories: Category[]; definitions: AttributeDefinition[]; units: { code: string; name: string; symbol: string; is_discrete: boolean }[]; shelf: ShelfTopology };

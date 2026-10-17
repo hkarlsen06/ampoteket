@@ -34,7 +34,7 @@
 	let trigger = $state<HTMLButtonElement | null>(null);
 	let rejectedObservation = $state<string | null>(null);
 	const ownCommand = $derived(command?.kind === 'count' && command.productId === product.id && command.batchId === (batchId ?? null));
-	const wrongIdentity = $derived(Boolean(command && command.userId !== admin.session?.user.id));
+	const wrongIdentity = $derived(Boolean(command && command.userId !== admin.userId));
 	const pendingElsewhere = $derived(Boolean(command && !ownCommand));
 	const difference = $derived.by(() => {
 		try { return snapshot ? countDifference(validCountQuantity(quantity, product.stock_step, i18n.locale), snapshot.quantity) : null; }
@@ -66,7 +66,7 @@
 		try {
 			const session = admin.credentials();
 			const loaded = await readCountInventory(session, product.id);
-			if (mounted && version === generation && admin.session?.user.id === session.userId) { snapshot = loaded; status = 'idle'; }
+			if (mounted && version === generation && admin.userId === session.userId) { snapshot = loaded; status = 'idle'; }
 		} catch (error) { if (mounted && version === generation) status = 'failed'; await admin.permissionFailure(error); }
 		finally { if (mounted && version === generation) busy = false; }
 	}
@@ -85,7 +85,7 @@
 			command = frozen;
 			const saved = await runCountCommand(session, frozen);
 			await updateCountStorage((storage) => clearCountCommand(storage, frozen!));
-			if (mounted && admin.session?.user.id === session.userId) { command = null; result = saved; snapshot = null; paused = false; status = 'idle'; onsaved?.(); }
+			if (mounted && admin.userId === session.userId) { command = null; result = saved; snapshot = null; paused = false; status = 'idle'; onsaved?.(); }
 		} catch (error) {
 			const rejected = countRejection(error);
 			if (frozen && rejected) {

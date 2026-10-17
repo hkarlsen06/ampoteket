@@ -119,7 +119,7 @@
 						<Icon icon={UserCircleIcon} class="size-8 shrink-0" />
 						<div class="min-w-0 text-sm group-data-[collapsible=icon]:sr-only">
 							<p class="font-medium wrap-anywhere">{admin.membership?.displayName}</p>
-							<p class="text-muted-foreground wrap-anywhere">{admin.session?.user.email}</p>
+							<p class="text-muted-foreground wrap-anywhere">{admin.email}</p>
 						</div>
 					{:else}
 						<Skeleton class="size-8 shrink-0 rounded-full" />
@@ -159,7 +159,7 @@
 				<!-- A transport failure blocks interaction without destroying this
 				     identity's drafts. Credentials remain fail-closed in AdminContext. -->
 				<div inert={!authPage && admin.status !== 'ready'}>
-					{#key authPage ? 'auth' : admin.session?.user.id}{@render children()}{/key}
+					{#key authPage ? 'auth' : admin.userId}{@render children()}{/key}
 				</div>
 			{/if}
 			<!-- Signed out: the effect above is already redirecting, so draw nothing rather than flash a prompt. -->

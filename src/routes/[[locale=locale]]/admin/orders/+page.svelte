@@ -62,7 +62,7 @@
 	let stock = $state(new Map<string, string>()); let outstanding = $state(new Map<string, string>());
 	// An untouched placement time follows the clock until saving, since the admin shops before recording.
 	let placedEdited = $state(false);
-	const wrongIdentity = $derived(Boolean(command && command.userId !== admin.session?.user.id));
+	const wrongIdentity = $derived(Boolean(command && command.userId !== admin.userId));
 	const otherCommand = $derived(Boolean(command && (command.kind !== 'create' && (command.kind !== 'receipt' || command.orderId !== null))));
 	const frozen = $derived(Boolean(command));
 	const offsets = $derived(possibleOsloOffsets(placedLocal));
@@ -179,7 +179,7 @@
 	const lineText = ['productId', 'quantity', 'unitCost', 'purchaseUrl', 'supplierSku'] as const;
 	const lineFilled = (line: DraftLine) => lineText.some((name) => line[name].trim());
 	function restoreDraft() {
-		const saved = readDraft(admin.session?.user.id, 'order') as Record<string, unknown> | null;
+		const saved = readDraft(admin.userId, 'order') as Record<string, unknown> | null;
 		const text = (value: unknown, names: readonly string[]) => Boolean(value && typeof value === 'object' && names.every(name => typeof (value as Record<string, unknown>)[name] === 'string'));
 		if (!saved || !text(saved, draftText) || !Array.isArray(saved.lines) || !saved.lines.length || !saved.lines.every(line => text(line, lineText))) return;
 		({ supplier, reference, offset, additionalCost, note, sourceNote } = saved as Record<typeof draftText[number], string>);
@@ -191,7 +191,7 @@
 		const fields = { supplier, reference, placedLocal: placedEdited ? placedLocal : '', offset, additionalCost, note, sourceNote, lines: lines.map(({ key, ...line }) => line) };
 		const dirty = !created && Boolean(supplier || reference || note || sourceNote || additionalCost !== '0' || fields.placedLocal
 			|| fields.lines.some(line => lineText.some(name => line[name])));
-		writeDraft(admin.session?.user.id, 'order', dirty ? fields : null);
+		writeDraft(admin.userId, 'order', dirty ? fields : null);
 	});
 	async function load() {
 		if (admin.status !== 'ready') return;
@@ -199,7 +199,7 @@
 		try {
 			const session = admin.credentials();
 			const [orderRows, productRows, receiptRows, inventory, onOrder] = await Promise.all([readOrders(session), readOrderProducts(session), readUnplannedReceipts(session), readInventory(session), readOutstandingByProduct(session)]);
-			if (mounted && version === generation && session.userId === admin.session?.user.id) {
+			if (mounted && version === generation && session.userId === admin.userId) {
 				orders = orderRows; products = productRows; unplanned = receiptRows; loaded = true;
 				stock = new Map(inventory.map((item) => [item.product_id, item.quantity])); outstanding = onOrder;
 			}
@@ -244,7 +244,7 @@
 			saved = await updateOrderStorage((storage) => saveOrderCommand(storage, candidate)); command = saved;
 			const result = await runOrderCommand(session, saved);
 			await updateOrderStorage((storage) => clearOrderCommand(storage, saved!));
-			if (!mounted || session.userId !== admin.session?.user.id) return;
+			if (!mounted || session.userId !== admin.userId) return;
 			command = null; outcome = 'recorded';
 			if (result.kind === 'create') { created = true; await goto(i18n.href(`/admin/orders/${result.orderId}`)); }
 			else { sourceNote = ''; lines = [blankLine()]; mode = 'closed'; await load(); }

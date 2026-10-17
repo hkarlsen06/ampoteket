@@ -63,7 +63,7 @@
 	let alive = true;
 	let editorTrigger: HTMLElement | null = null;
 	let newCabinetButton = $state<HTMLButtonElement | null>(null);
-	const wrongIdentity = $derived(Boolean(pending && pending.userId !== admin.session?.user.id));
+	const wrongIdentity = $derived(Boolean(pending && pending.userId !== admin.userId));
 	const locked = $derived(admin.status !== 'ready' || busy || Boolean(pending) || Boolean(reviewCommand) || !storageReady || needsRefresh || loadFailed || !shelf);
 	const currentReview = $derived.by(() => {
 		const command = reviewCommand;
@@ -104,7 +104,7 @@
 			const key = 'ampoteket:admin-shelf:probe'; sessionStorage.setItem(key, '1');
 			if (sessionStorage.getItem(key) !== '1') throw new Error();
 			sessionStorage.removeItem(key); storageReady = true;
-			if (pending) { outcome = 'unknown'; if (pending.userId === admin.session?.user.id) restoreDraft(pending); }
+			if (pending) { outcome = 'unknown'; if (pending.userId === admin.userId) restoreDraft(pending); }
 		} catch { storageReady = false; }
 		void load();
 	});
@@ -131,7 +131,7 @@
 		busy = true;
 		try {
 			const session = admin.credentials(), result = await readAdminShelf(session);
-			if (!alive || session.userId !== admin.session?.user.id) return;
+			if (!alive || session.userId !== admin.userId) return;
 			shelf = result; loadFailed = false; needsRefresh = false;
 			if (!pending && !reconciling) outcome = 'idle';
 		} catch (error) { if (alive) loadFailed = true; await admin.permissionFailure(error); }
@@ -198,7 +198,7 @@
 		layoutBins = value ? beforeBins.map((bin) => ({ ...bin })) : resizeLayout([], layoutId, null, layoutSize, assignedIds);
 		layoutVersion++;
 		draftStart = JSON.stringify(draftFields()); draftStored = false;
-		const saved = readDraft(admin.session?.user.id, 'shelf') as { editor?: unknown; before?: unknown; beforeBins?: unknown; fields?: Record<string, unknown> } | null;
+		const saved = readDraft(admin.userId, 'shelf') as { editor?: unknown; before?: unknown; beforeBins?: unknown; fields?: Record<string, unknown> } | null;
 		const fields = saved?.fields, size = fields?.layoutSize as Record<string, unknown> | undefined;
 		if (saved?.editor === 'cabinet' && JSON.stringify(saved.before) === JSON.stringify(before) && JSON.stringify(saved.beforeBins) === JSON.stringify(beforeBins)
 			&& ['row', 'column', 'layoutId'].every(name => typeof fields?.[name] === 'string')
@@ -214,14 +214,14 @@
 	// began; Discard and an acknowledged save drop it.
 	let draftStart = '', draftStored = false;
 	function draftFields() { return { row, column, layoutId, layoutSize: $state.snapshot(layoutSize), layoutBins: $state.snapshot(layoutBins) }; }
-	function discardDraft() { writeDraft(admin.session?.user.id, 'shelf', null); draftStored = false; }
+	function discardDraft() { writeDraft(admin.userId, 'shelf', null); draftStored = false; }
 	$effect(() => {
 		if (!editor || editorMode !== 'edit' || busy || pending) return;
 		const fields = draftFields();
 		untrack(() => {
 			// Only this unit's own draft is removed when its edits are undone by hand.
 			if (JSON.stringify(fields) === draftStart) { if (draftStored) discardDraft(); return; }
-			writeDraft(admin.session?.user.id, 'shelf', { editor: 'cabinet', before: $state.snapshot(before), beforeBins: $state.snapshot(beforeBins), fields });
+			writeDraft(admin.userId, 'shelf', { editor: 'cabinet', before: $state.snapshot(before), beforeBins: $state.snapshot(beforeBins), fields });
 			draftStored = true;
 		});
 	});
@@ -265,7 +265,7 @@
 			const saved = readShelfCommand(sessionStorage);
 			if (!saved || saved.userId !== session.userId || JSON.stringify(saved) !== JSON.stringify(pending)) throw new Error();
 			const result = await executeShelfCommand(session, saved);
-			if (!alive || session.userId !== admin.session?.user.id) return;
+			if (!alive || session.userId !== admin.userId) return;
 			clearShelfCommand(sessionStorage, saved); pending = null;
 			outcome = result; swapSource = null;
 			// The acknowledged fields are the new baseline, even if the display refresh fails.
@@ -280,7 +280,7 @@
 			if (inlineEditor) savedInline = true;
 			else { closeEditor(false); closed = true; }
 			// This is display refresh after acknowledgement, never a new write.
-			try { const refreshed = await readAdminShelf(session); if (alive && session.userId === admin.session?.user.id) { shelf = refreshed; loadFailed = false; } }
+			try { const refreshed = await readAdminShelf(session); if (alive && session.userId === admin.userId) { shelf = refreshed; loadFailed = false; } }
 			catch (error) { loadFailed = true; needsRefresh = true; await admin.permissionFailure(error); }
 		} catch (error) {
 			if (!alive) return;

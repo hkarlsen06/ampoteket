@@ -125,3 +125,6 @@ __pycache__/
 slopo.db
 slopo-report/
 slopo.agent.log
+
+# --- Convex: local backend state (convex dev --local / anonymous) ---
+.convex/

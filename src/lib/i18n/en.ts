@@ -375,7 +375,6 @@ export const en: Messages = {
 		signInTitle: 'Sign in | Admin | Ampoteket', email: 'Email address', password: 'Password', forgotPassword: 'Forgot password?',
 		signInErrors: {
 			invalid: "Couldn't sign in. Check your email address and password and try again.",
-			rateLimited: 'Too many attempts. Wait a little and try again.',
 			unavailable: "Sign-in isn't responding right now. Check your connection and try again."
 		},
 		passwordTitle: 'Password | Admin | Ampoteket', passwordHeading: 'Set up or reset password',

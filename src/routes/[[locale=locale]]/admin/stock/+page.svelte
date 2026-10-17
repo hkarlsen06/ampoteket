@@ -52,7 +52,7 @@
 			...detail.counts.map(entry => ({ at: entry.at, id: entry.eventId, movement: deviation.get(entry.eventId) ?? null, count: entry }))
 		].sort((a, b) => b.at.localeCompare(a.at) || b.id.localeCompare(a.id));
 	});
-	const wrongIdentity = $derived(Boolean(command && command.userId !== admin.session?.user.id));
+	const wrongIdentity = $derived(Boolean(command && command.userId !== admin.userId));
 	const otherProduct = $derived(Boolean(command && command.productId !== selected));
 	function movementLabel(id: string) {
 		const movement = detail?.movements.find(item => item.id === id);
@@ -82,11 +82,11 @@
 		const version = ++generation, session = admin.credentials(); loading = true; background = inBackground;
 		try {
 			const result = await readStockProducts(session);
-			if (!mounted || version !== generation || admin.session?.user.id !== session.userId) return;
+			if (!mounted || version !== generation || admin.userId !== session.userId) return;
 			products = result; loaded = true;
 			if (selected && result.some(item => item.id === selected)) {
 				const next = await readStockDetail(session, selected);
-				if (!mounted || version !== generation || admin.session?.user.id !== session.userId) return;
+				if (!mounted || version !== generation || admin.userId !== session.userId) return;
 				const base = detail?.stock.revision ?? draftRevision; draftRevision = null;
 				if (!command && base && kind === 'correct' && movementId && (quantity || reason) && base !== next.stock.revision) { reviewNeeded = true; outcome = 'stale'; }
 				detail = next;
@@ -101,7 +101,7 @@
 	// review still owed.
 	let draftLoaded = $state(false), draftRevision: string | null = null;
 	function restoreDraft() {
-		const saved = readDraft(admin.session?.user.id, 'stock') as Record<string, unknown> | null;
+		const saved = readDraft(admin.userId, 'stock') as Record<string, unknown> | null;
 		if (!saved || (selected && saved.selected !== selected) || !['withdraw', 'adjust', 'correct'].includes(saved.kind as string)
 			|| !['selected', 'movementId', 'quantity', 'counted', 'reason'].every(name => typeof saved[name] === 'string') || typeof saved.paused !== 'boolean') return;
 		({ selected, movementId, quantity, counted, reason, paused } = saved as { selected: string; movementId: string; quantity: string; counted: string; reason: string; paused: boolean });
@@ -113,7 +113,7 @@
 		// A pending command owns the form; a draft is left alone meanwhile.
 		if (!draftLoaded || command) return;
 		const dirty = Boolean(quantity || counted || reason);
-		writeDraft(admin.session?.user.id, 'stock', dirty ? { selected, kind, movementId, quantity, counted, reason, paused, reviewNeeded, revision: detail?.stock.revision ?? draftRevision } : null);
+		writeDraft(admin.userId, 'stock', dirty ? { selected, kind, movementId, quantity, counted, reason, paused, reviewNeeded, revision: detail?.stock.revision ?? draftRevision } : null);
 	});
 	async function choose(productId: string) {
 		if (command || busy || admin.status !== 'ready') return;
@@ -121,7 +121,7 @@
 		invalidField = ''; invalidMessage = '';
 		if (!productId) return;
 		const version = ++generation, session = admin.credentials(); loading = true; background = false; failed = false;
-		try { const result = await readStockDetail(session, productId); if (mounted && version === generation && session.userId === admin.session?.user.id) detail = result; }
+		try { const result = await readStockDetail(session, productId); if (mounted && version === generation && session.userId === admin.userId) detail = result; }
 		catch (error) { if (mounted && version === generation) failed = true; await admin.permissionFailure(error); }
 		finally { if (mounted && version === generation) loading = false; }
 	}

@@ -32,7 +32,7 @@
 			const key = 'ampoteket:admin-storage-test'; sessionStorage.setItem(key, '1');
 			if (sessionStorage.getItem(key) !== '1') throw new Error(); sessionStorage.removeItem(key); storageReady = true;
 			if (pending) {
-				command = pending; wrongIdentity = pending.userId !== admin.session?.user.id;
+				command = pending; wrongIdentity = pending.userId !== admin.userId;
 				if (!wrongIdentity) { reference = pending.checkoutId; reason = pending.reason; identified = true; void lookup(); }
 			}
 		} catch { storageReady = false; }
@@ -46,7 +46,7 @@
 		try {
 			const session = admin.credentials();
 			const result = await readStaffCheckout(session, ref);
-			if (admin.session?.user.id !== session.userId) return;
+			if (admin.userId !== session.userId) return;
 			snapshot = result; if (!snapshot) outcome = 'missing';
 			if (snapshot?.registered && command && command.checkoutId === snapshot.id) {
 				clearRecoveryCommand(sessionStorage, command); command = null; outcome = 'registered';
@@ -63,9 +63,9 @@
 			const saved = readRecoveryCommand(sessionStorage);
 			if (!saved || saved.checkoutId !== snapshot.id || saved.requestId !== command.requestId || saved.userId !== session.userId) throw new Error();
 			await recoverStaffCheckout(session, saved);
-			if (admin.session?.user.id !== session.userId) return;
+			if (admin.userId !== session.userId) return;
 			const result = await readStaffCheckout(session, snapshot.id);
-			if (!result?.registered || admin.session?.user.id !== session.userId) throw new Error();
+			if (!result?.registered || admin.userId !== session.userId) throw new Error();
 			snapshot = result; clearRecoveryCommand(sessionStorage, saved); command = null; outcome = 'registered';
 		} catch (error) { outcome = command ? 'unknown' : 'failed'; await admin.permissionFailure(error); } finally { busy = false; }
 	}
@@ -77,7 +77,7 @@
 			if (!Array.isArray(rows) || rows.length > 1) throw new Error();
 			let value: string | null = null;
 			if (rows.length) { const row = object(rows[0]); if (row.checkout_id !== snapshot.id || typeof row.contact_text !== 'string' || [...row.contact_text].length > 300) throw new Error(); value = row.contact_text; }
-			if (admin.session?.user.id === session.userId) { contact = value; contactShown = true; }
+			if (admin.userId === session.userId) { contact = value; contactShown = true; }
 		} catch (error) { outcome = 'failed'; await admin.permissionFailure(error); } finally { busy = false; }
 	}
 	async function clearContact() {
@@ -86,7 +86,7 @@
 			const session = admin.credentials();
 			const result = object(await staffRequest(session, 'rpc/amp_clear_checkout_contact', {}, { p_checkout_id: snapshot.id }));
 			if (result.checkout_id !== snapshot.id || typeof result.contact_removed !== 'boolean') throw new Error();
-			if (admin.session?.user.id === session.userId) { contact = null; contactErased = true; }
+			if (admin.userId === session.userId) { contact = null; contactErased = true; }
 		} catch (error) { outcome = 'failed'; await admin.permissionFailure(error); } finally { busy = false; }
 	}
 </script>

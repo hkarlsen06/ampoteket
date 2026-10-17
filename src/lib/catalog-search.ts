@@ -1,6 +1,6 @@
-import type { CatalogAttribute, CatalogProduct } from './catalog';
+import type { CatalogAttribute, CatalogProduct } from './catalog-types';
 import { compareDecimals, normalizeDecimal, shiftDecimal } from './decimal';
-import { categoryLabel, specificationLabel, locales, messagesFor } from './i18n';
+import { categoryLabel, specificationLabel, locales, messagesFor } from './i18n/core';
 import { engineeringUnits, formatMeasurement, formatMeasurementText } from './format';
 import { catalogSort, standardSpecifications } from './product-specifications';
 

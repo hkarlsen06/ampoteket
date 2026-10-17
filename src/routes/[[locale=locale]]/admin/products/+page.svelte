@@ -46,7 +46,7 @@
 	let visibleCount = $state(50);
 	$effect(() => {
 		if (!viewLoaded) return;
-		writeDraft(admin.session?.user.id, 'products-view', query || activity !== 'all' || lowStock || bins.length || sort !== 'attention' || visibleCount > 50 ? { query, activity, lowStock, bins, sort, visibleCount } : null, 'session');
+		writeDraft(admin.userId, 'products-view', query || activity !== 'all' || lowStock || bins.length || sort !== 'attention' || visibleCount > 50 ? { query, activity, lowStock, bins, sort, visibleCount } : null, 'session');
 	});
 	// Low stock matches the overview's attention list: active and sold out or below minimum.
 	const terms = $derived(searchTerms(query));
@@ -57,7 +57,7 @@
 	let currentRead: Promise<void> | null = null;
 	onMount(() => {
 		try { pending = readProductCommand(sessionStorage); } catch { /* The editor reports blocked persistence before any write. */ }
-		const view = readDraft(admin.session?.user.id, 'products-view', 'session') as Record<string, unknown> | null;
+		const view = readDraft(admin.userId, 'products-view', 'session') as Record<string, unknown> | null;
 		if (typeof view?.query === 'string' && ['all', 'active', 'inactive'].includes(view.activity as string) && typeof view.sort === 'string' && Object.hasOwn(sorters, view.sort)) {
 			query = view.query; activity = view.activity as string; sort = view.sort as keyof typeof sorters; lowStock = view.lowStock === true;
 			if (Array.isArray(view.bins) && view.bins.every(id => typeof id === 'string')) bins = view.bins;
@@ -78,7 +78,7 @@
 	}
 	async function loadProducts() {
 		// A failed stock read shows as unavailable per card instead of hiding the product list.
-		try { const session = admin.credentials(); const [items, refs, attributes, inventory] = await Promise.all([readAdminProducts(session), readProductReferences(session), readAllProductAttributes(session), readInventory(session).catch(error => { void admin.permissionFailure(error); return null; })]); if (alive && session.userId === admin.session?.user.id) { searchTexts = adminSearchTexts(items, refs, attributes); products = items.sort((a, b) => a.code.localeCompare(b.code)); references = refs; if (inventory) stock = new Map(inventory.map(s => [s.product_id, s])); stockFailed = inventory === null; failed = false; } }
+		try { const session = admin.credentials(); const [items, refs, attributes, inventory] = await Promise.all([readAdminProducts(session), readProductReferences(session), readAllProductAttributes(session), readInventory(session).catch(error => { void admin.permissionFailure(error); return null; })]); if (alive && session.userId === admin.userId) { searchTexts = adminSearchTexts(items, refs, attributes); products = items.sort((a, b) => a.code.localeCompare(b.code)); references = refs; if (inventory) stock = new Map(inventory.map(s => [s.product_id, s])); stockFailed = inventory === null; failed = false; } }
 		catch (error) { if (alive) failed = true; await admin.permissionFailure(error); } finally { if (alive) { busy = false; reading = false; } }
 	}
 	function retryInventory() {
@@ -90,7 +90,7 @@
 	async function loadInventory() {
 		try {
 			const session = admin.credentials(); const inventory = await readInventory(session);
-			if (alive && session.userId === admin.session?.user.id) { stock = new Map(inventory.map(item => [item.product_id, item])); stockFailed = false; }
+			if (alive && session.userId === admin.userId) { stock = new Map(inventory.map(item => [item.product_id, item])); stockFailed = false; }
 		} catch (error) { stockFailed = true; await admin.permissionFailure(error); }
 		finally { if (alive) { busy = false; reading = false; } }
 	}

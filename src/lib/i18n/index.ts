@@ -2,101 +2,9 @@
 // Full explanation and the recipe for adding a string or a language: docs/i18n.md.
 
 import { getContext, setContext } from 'svelte';
-import { en } from './en';
-import { nb, type Messages } from './nb';
-import { standardSpecifications } from '../product-specifications';
-import { defaultLocale, isLocale, isPrefixedLocale, locales, type Locale } from './locales';
+import type { Locale, Messages } from './core';
 
-export { defaultLocale, isLocale, isPrefixedLocale, locales, type Locale };
-
-/**
- * The production origin, used for `canonical` and `hreflang` links so preview
- * deployments (`*.workers.dev`) never emit their own origin and create
- * duplicate-content URLs.
- */
-export const PROD_ORIGIN = 'https://ampoteket.no';
-
-const dictionaries: Record<Locale, Messages> = { nb, en };
-
-/** `<html lang>` and `hreflang` value for a locale. */
-export const htmlLang: Record<Locale, string> = { nb: 'nb', en: 'en' };
-
-/** `og:locale` value for a locale. Open Graph wants language_TERRITORY. */
-export const ogLocale: Record<Locale, string> = { nb: 'nb_NO', en: 'en_US' };
-
-/** The social card served as `og:image`, 1200 x 630 (docs/design-system.md §6). */
-export const SOCIAL_CARD = '/photos/social-card.jpg';
-
-/** Permanent invite to the Ampoteket Discord server (never expires, no use limit). */
-export const DISCORD_INVITE = 'https://discord.gg/X7xp3vgfyH';
-
-/** The workshop room, P35-PS126 (MazeMap still names it "Leseplass"). */
-export const MAZEMAP = 'https://use.mazemap.com/#v=1&campusid=53&sharepoitype=identifier&sharepoi=P35-PS126';
-
-export const INSTAGRAM = 'https://www.instagram.com/ampoteket';
-
-export const THE_RESISTANCE = 'https://foreninger.sio.no/foreninger/the-resistance';
-
-export function messagesFor(locale: Locale): Messages {
-	return dictionaries[locale];
-}
-
-/** Translate known categories for display without changing their stored/filter values. */
-export function categoryLabel(name: string, locale: Locale): string {
-	const labels = messagesFor(locale).categories;
-	const key = name.trim().toLowerCase();
-	return Object.hasOwn(labels, key) ? labels[key as keyof typeof labels] : name;
-}
-
-/** The category label shown beside a product name; null when the name already starts with it. */
-export function categoryBesideName(category: string | null | undefined, name: string, locale: Locale): string | null {
-	if (!category) return null;
-	const label = categoryLabel(category, locale);
-	return name.toLocaleLowerCase(locale).startsWith(label.toLocaleLowerCase(locale)) ? null : label;
-}
-
-/** Translate the fixed fields only when their saved type and unit agree. */
-export function specificationLabel(code: string, definition: { label: string; value_type: string; unit?: string | null; canonical_unit?: string | null }, locale: Locale): string {
-	const standard = standardSpecifications.find(field => field.code === code);
-	const unit = definition.canonical_unit !== undefined ? definition.canonical_unit : definition.unit ?? null;
-	return standard && standard.value_type === definition.value_type && standard.canonical_unit === unit
-		? messagesFor(locale).specificationLabels[standard.code] : definition.label;
-}
-
-/**
- * The default locale is served without a prefix (`/p/AMP-00123`), every other
- * locale behind its code (`/en/p/AMP-00123`). Printed QR labels point at the
- * unprefixed URLs, so those must keep working forever.
- */
-export function localizeHref(path: string, locale: Locale): string {
-	const clean = path.startsWith('/') ? path : `/${path}`;
-	if (locale === defaultLocale) return clean;
-	return clean === '/' ? `/${locale}` : `/${locale}${clean}`;
-}
-
-/** The path without its locale prefix: `/en/p` → `/p`, `/en` → `/`. */
-export function stripLocale(pathname: string): string {
-	const [, first, ...rest] = pathname.split('/');
-	if (!isPrefixedLocale(first)) return pathname;
-	return `/${rest.join('/')}`.replace(/\/$/, '') || '/';
-}
-
-/**
- * Localizes a path for a given locale, preserving the query string. Used for
- * the language picker, so a no-JS lookup
- * like `/p?code=AMP-00123` survives a language switch. `search` is
- * `URL#search` (including its leading `?`, or `''`); the hash is deliberately
- * not handled here since it is not available server-side.
- */
-export function localizeCurrentUrl(path: string, search: string, locale: Locale): string {
-	return localizeHref(path, locale) + search;
-}
-
-/** Which locale a request path is in. Used by hooks.server.ts before routing. */
-export function localeFromPathname(pathname: string): Locale {
-	const first = pathname.split('/')[1];
-	return isPrefixedLocale(first) ? first : defaultLocale;
-}
+export * from './core';
 
 export type I18n = {
 	/** Current locale. Reactive: reading it inside a component tracks navigation. */
@@ -121,4 +29,3 @@ export function getI18n(): I18n {
 	return i18n;
 }
 
-export type { Messages };

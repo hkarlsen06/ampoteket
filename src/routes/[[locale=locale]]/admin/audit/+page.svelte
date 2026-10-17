@@ -38,7 +38,7 @@
 			do {
 				const page = newest ? { entries: await readAuditUpdates(session, newest), more: !complete } : await readAuditPage(session, refresh ? null : cursor);
 				const names = await readAuditReferences(session, page.entries);
-				if (!alive || admin.session?.user.id !== session.userId) return;
+				if (!alive || admin.userId !== session.userId) return;
 				for (const [table, rows] of Object.entries(names)) references[table] = { ...references[table], ...rows };
 				entries = newest ? [...page.entries, ...entries] : [...entries, ...page.entries];
 				if (!newest) {

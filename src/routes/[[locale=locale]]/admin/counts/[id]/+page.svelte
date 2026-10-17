@@ -38,7 +38,7 @@
 	const access = $derived(batch && admin.membership ? countBatchAccess(batch, owner, admin.membership.id) : null);
 	const ownerName = (id: string | null) => (id && ownerById.get(id)?.name) || m.unknownAdmin;
 	const batchName = $derived(batch && batch.id === page.params.id ? (batch.productId ? m.singleCount(batch.title) : batch.title) : m.detailHeading);
-	const wrongIdentity = $derived(Boolean(command && command.userId !== admin.session?.user.id));
+	const wrongIdentity = $derived(Boolean(command && command.userId !== admin.userId));
 	const pendingHere = $derived(Boolean(command && command.kind !== 'start' && command.batchId === page.params.id));
 	const pendingCount = $derived(pendingHere && command?.kind === 'count');
 	const selectedProduct = $derived(productById.get(selected));
@@ -93,7 +93,7 @@
 			const [detail, shelf] = await Promise.all([readCountDetail(session, id, admin.membership!.id, {
 				productId: pendingCount && command?.kind === 'count' ? command.productId : undefined
 			}), readShelfTopology(session.config)]);
-			if (!mounted || version !== generation || admin.session?.user.id !== session.userId) return;
+			if (!mounted || version !== generation || admin.userId !== session.userId) return;
 			batch = detail.batch; owners = detail.owners; products = detail.products; observations = detail.observations; topology = shelf;
 			if (drawerFilter && !shelf.bins.some((bin) => bin.id === drawerFilter)) drawerFilter = null;
 		} catch (error) { if (mounted && version === generation) failed = true; await admin.permissionFailure(error); }
@@ -128,7 +128,7 @@
 			: { kind: 'close', userId: session.userId, requestId: crypto.randomUUID(), batchId: batch.id, reason: reason.trim() });
 			frozen = await updateCountStorage((storage) => saveCountCommand(storage, candidate)); command = frozen;
 			await runCountCommand(session, frozen); await updateCountStorage((storage) => clearCountCommand(storage, frozen!));
-			if (mounted && admin.session?.user.id === session.userId) { command = null; outcome = 'saved'; await load(); }
+			if (mounted && admin.userId === session.userId) { command = null; outcome = 'saved'; await load(); }
 		} catch (error) {
 			if (frozen && countRejection(error)) {
 				try { await updateCountStorage((storage) => clearCountCommand(storage, frozen!)); if (mounted) { command = null; outcome = 'owner'; await load(); } }

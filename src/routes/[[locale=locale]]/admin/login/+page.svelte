@@ -10,6 +10,7 @@
 	import { getI18n } from '#lib/i18n/index.js';
 	import { getAdminContext, adminReturnPath } from '#lib/admin-context.svelte.js';
 	import { signInFailure, type SignInFailure } from '#lib/admin-auth.js';
+	import { waitFor } from '#lib/wait.svelte.js';
 	const fieldId = $props.id();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.admin);
 	let email = $state(''); let password = $state(''); let busy = $state(false); let failure = $state<SignInFailure | null>(null);
@@ -19,11 +20,12 @@
 		event.preventDefault(); if (!admin.auth || busy) return;
 		busy = true; failure = null;
 		try {
-			const { error } = await admin.auth.signInWithPassword({ email: email.trim(), password });
-			password = ''; if (error) throw error;
-			await admin.refresh();
+			await admin.signIn(email, password);
+			password = '';
+			// Membership arrives through the live subscription once the backend accepts the new token.
+			await waitFor(() => admin.status !== 'loading');
 			if (admin.status === 'ready') await goto(i18n.href(next));
-		} catch (error) { failure = signInFailure(error); } finally { busy = false; }
+		} catch (error) { password = ''; failure = signInFailure(error); } finally { busy = false; }
 	}
 </script>
 <svelte:head><title>{m.signInTitle}</title></svelte:head>

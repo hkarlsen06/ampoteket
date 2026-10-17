@@ -9,61 +9,48 @@
 	import { onMount } from 'svelte';
 	import { getI18n } from '#lib/i18n/index.js';
 	import { getAdminContext, adminReturnPath } from '#lib/admin-context.svelte.js';
-	import { updateAdminPassword } from '#lib/admin-auth.js';
+	import { passwordLinkToken } from '#lib/admin-auth.js';
+	import { api, errorCode } from '#lib/convex.js';
 	const fieldId = $props.id();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.admin);
 	let email = $state(''); let password = $state(''); let repeat = $state(''); let busy = $state(false);
 	let status = $state<'idle' | 'sent' | 'failed' | 'invalid' | 'saved' | 'mismatch'>('idle');
-	let callback = $state<{ code?: string; token_hash?: string; type?: 'invite' | 'recovery' } | null>(null);
-	let verifiedUserId = $state<string | null>(null); let next = $state('/admin');
-	$effect(() => {
-		const userId = verifiedUserId;
-		if (!userId || !admin.auth) return;
-		const { data } = admin.auth.onAuthStateChange((_event, session) => {
-			if (session?.user.id !== userId) { verifiedUserId = null; password = ''; repeat = ''; status = 'invalid'; }
-		});
-		return () => data.subscription.unsubscribe();
-	});
+	/** A link not yet opened, and one checked as usable. */
+	let callback = $state<string | null>(null);
+	let verifiedToken = $state<string | null>(null); let next = $state('/admin');
 	onMount(() => {
 		const url = new URL(window.location.href); next = adminReturnPath(url.searchParams.get('next'));
-		const code = url.searchParams.get('code'); const token = url.searchParams.get('token_hash'); const type = url.searchParams.get('type');
-		const invalid = Boolean(url.hash || url.searchParams.has('error') || (code && token)
-			|| url.searchParams.getAll('code').length > 1 || url.searchParams.getAll('token_hash').length > 1 || url.searchParams.getAll('type').length > 1);
-		// Discard callback credentials before any in-page link can copy them.
+		const link = passwordLinkToken(url);
+		// Discard the link's token before any in-page link can copy it.
 		history.replaceState(history.state, '', i18n.href('/admin/password'));
-		if (invalid) status = 'invalid';
-		else if (code && /^[A-Za-z0-9_-]{10,2048}$/.test(code)) callback = { code };
-		else if (token && /^(?:pkce_)?[a-f0-9]{32,256}$/.test(token) && (type === 'invite' || type === 'recovery')) callback = { token_hash: token, type };
-		else if (code || token || type) status = 'invalid';
+		if (link === 'invalid') status = 'invalid';
+		else if (link) callback = link.token;
 	});
-	// Links are single-use; wait for a click so mail scanners that open them do not consume them.
+	// Wait for a click, as with the old links; opening a link consumes nothing, setting the password does.
 	async function exchange() {
-		if (!callback || !admin.auth || busy) return; busy = true;
+		if (!callback || !admin.client || busy) return; busy = true;
 		try {
-			if (!admin.callbackOrigin || window.location.origin !== admin.callbackOrigin) throw new Error();
-			const result = callback.code ? await admin.auth.exchangeCodeForSession(callback.code)
-				: await admin.auth.verifyOtp({ token_hash: callback.token_hash!, type: callback.type! });
-			callback = null; if (result.error || !result.data.session) throw new Error();
-			verifiedUserId = result.data.session.user.id; await admin.refresh();
-		} catch { callback = null; status = 'invalid'; } finally { busy = false; }
+			const { valid } = await admin.client.query(api.passwords.checkLink, { token: callback });
+			if (!valid) throw new Error();
+			verifiedToken = callback;
+		} catch { status = 'invalid'; } finally { callback = null; busy = false; }
 	}
 	async function send(event: SubmitEvent) {
-		event.preventDefault(); if (!admin.auth || !admin.callbackOrigin || busy) return; busy = true; status = 'idle';
-		try {
-			const redirectTo = new URL(i18n.href('/admin/password'), admin.callbackOrigin); redirectTo.searchParams.set('next', next);
-			const result = await admin.auth.resetPasswordForEmail(email.trim(), { redirectTo: redirectTo.href });
-			if (result.error) throw result.error; status = 'sent';
-		} catch { status = 'failed'; } finally { busy = false; }
+		event.preventDefault(); if (!admin.client || busy) return; busy = true; status = 'idle';
+		try { await admin.client.action(api.passwords.requestReset, { email: email.trim(), locale: i18n.locale }); status = 'sent'; }
+		catch { status = 'failed'; } finally { busy = false; }
 	}
 	async function save(event: SubmitEvent) {
-		event.preventDefault(); if (!admin.auth || !admin.config || busy || !verifiedUserId) return;
+		event.preventDefault(); if (!admin.client || busy || !verifiedToken) return;
 		if (password !== repeat) { status = 'mismatch'; return; } busy = true; status = 'idle';
-		const verified = verifiedUserId;
 		try {
-			await updateAdminPassword(admin.config, admin.auth, verified, password);
-			if (verifiedUserId === verified) { password = ''; repeat = ''; status = 'saved'; }
-		}
-		catch { if (verifiedUserId === verified) status = 'failed'; } finally { busy = false; }
+			const account = await admin.client.mutation(api.passwords.complete, { token: verifiedToken, password });
+			verifiedToken = null;
+			await admin.signIn(account.email, password);
+			password = ''; repeat = ''; status = 'saved';
+		} catch (error) {
+			if (errorCode(error) === 'INVALID_PASSWORD_LINK') { verifiedToken = null; status = 'invalid'; } else status = 'failed';
+		} finally { busy = false; }
 	}
 </script>
 <svelte:head><title>{m.passwordTitle}</title></svelte:head>
@@ -71,8 +58,8 @@
 	{#if status === 'saved'}
 		<Button variant="default" class="w-full" href={i18n.href(next)}>{m.continueToAdmin}</Button>
 	{:else if callback}
-		<Button variant="default" class="w-full" onclick={exchange} disabled={busy || !admin.auth}><ButtonLabel pending={busy} pendingLabel={m.continuing} label={m.continue} /></Button>
-	{:else if verifiedUserId}
+		<Button variant="default" class="w-full" onclick={exchange} disabled={busy || !admin.client}><ButtonLabel pending={busy} pendingLabel={m.continuing} label={m.continue} /></Button>
+	{:else if verifiedToken}
 		<form class="grid gap-5" onsubmit={save}>
 			<Field.Field><Field.Label for={`${fieldId}-1`}>{m.newPassword}</Field.Label><Input id={`${fieldId}-1`} type="password" autocomplete="new-password" minlength={8} required aria-describedby={`${fieldId}-hint`} bind:value={password} disabled={busy} /><Field.Description id={`${fieldId}-hint`}>{m.passwordHint}</Field.Description></Field.Field>
 			<Field.Field><Field.Label for={`${fieldId}-2`}>{m.repeatPassword}</Field.Label><Input id={`${fieldId}-2`} type="password" autocomplete="new-password" enterkeyhint="go" minlength={8} required bind:value={repeat} disabled={busy} /></Field.Field>
@@ -81,12 +68,11 @@
 	{:else}
 		<form class="grid gap-5" onsubmit={send}>
 			<Field.Field><Field.Label for={`${fieldId}-3`}>{m.email}</Field.Label><Input id={`${fieldId}-3`} type="email" autocomplete="username" enterkeyhint="send" required bind:value={email} disabled={busy} /></Field.Field>
-			<Button type="submit" variant="default" class="w-full" disabled={busy || !admin.auth || !admin.callbackOrigin}><ButtonLabel pending={busy} pendingLabel={m.sending} label={m.sendReset} /></Button>
+			<Button type="submit" variant="default" class="w-full" disabled={busy || !admin.client}><ButtonLabel pending={busy} pendingLabel={m.sending} label={m.sendReset} /></Button>
 		</form>
 	{/if}
 	<div class={formStatus} aria-live="polite">
-		{#if status === 'saved'}<StateBadge tone="success">{m.saved}</StateBadge>{:else if status === 'sent'}<Alert.Message appearance="inline">{m.resetSent}</Alert.Message>{:else if status === 'invalid'}<Alert.Message appearance="inline" variant="destructive">{m.invalidCallback}</Alert.Message>{:else if status === 'failed'}<Alert.Message appearance="inline" variant="destructive">{m.authFailed}</Alert.Message>{:else if status === 'mismatch'}<Alert.Message appearance="inline" variant="destructive">{m.passwordMismatch}</Alert.Message>{:else if !admin.callbackOrigin || admin.status === 'unavailable'}<Alert.Message appearance="inline" variant="destructive">{m.accessUnavailable}</Alert.Message>{/if}
+		{#if status === 'saved'}<StateBadge tone="success">{m.saved}</StateBadge>{:else if status === 'sent'}<Alert.Message appearance="inline">{m.resetSent}</Alert.Message>{:else if status === 'invalid'}<Alert.Message appearance="inline" variant="destructive">{m.invalidCallback}</Alert.Message>{:else if status === 'failed'}<Alert.Message appearance="inline" variant="destructive">{m.authFailed}</Alert.Message>{:else if status === 'mismatch'}<Alert.Message appearance="inline" variant="destructive">{m.passwordMismatch}</Alert.Message>{:else if !admin.client}<Alert.Message appearance="inline" variant="destructive">{m.accessUnavailable}</Alert.Message>{/if}
 	</div>
-	{#if admin.status === 'unavailable' && admin.callbackOrigin}<Button type="button" variant="outline" class="justify-self-start" onclick={() => admin.refresh()}>{m.retry}</Button>{/if}
-	{#if !verifiedUserId && status !== 'saved'}<Button variant="link" class="justify-self-start" href={i18n.href('/admin/login')}>{m.backToSignIn}</Button>{/if}
+	{#if !verifiedToken && status !== 'saved'}<Button variant="link" class="justify-self-start" href={i18n.href('/admin/login')}>{m.backToSignIn}</Button>{/if}
 </AdminAuthCard>

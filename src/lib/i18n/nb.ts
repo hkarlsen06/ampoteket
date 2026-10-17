@@ -376,7 +376,6 @@ export const nb = {
 		signInTitle: 'Logg inn | Admin | Ampoteket', email: 'E-postadresse', password: 'Passord', forgotPassword: 'Glemt passord?',
 		signInErrors: {
 			invalid: 'Kunne ikke logge inn. Sjekk e-postadressen og passordet og prøv igjen.',
-			rateLimited: 'For mange forsøk. Vent litt og prøv igjen.',
 			unavailable: 'Innloggingen svarer ikke akkurat nå. Sjekk nettforbindelsen og prøv igjen.'
 		},
 		passwordTitle: 'Passord | Admin | Ampoteket', passwordHeading: 'Sett opp eller tilbakestill passord',

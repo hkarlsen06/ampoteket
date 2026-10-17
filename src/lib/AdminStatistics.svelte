@@ -30,7 +30,7 @@
 			// The statistics RPC names the parts needing attention; the catalog-style cards need their full product rows.
 			const ids = overview ? result.overview?.attention.map(part => part.product_id) ?? [] : [];
 			const [products, references] = ids.length ? await Promise.all([readAdminProducts(session, fetch, ids), readProductReferences(session)]) : [[], null];
-			if (mounted && version === generation && admin.session?.user.id === session.userId) {
+			if (mounted && version === generation && admin.userId === session.userId) {
 				data = result; failed = false;
 				attention = references && { products: ids.map(id => products.find(p => p.id === id)).filter(p => p !== undefined), references };
 			}

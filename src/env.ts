@@ -5,10 +5,10 @@ import { defineEnvVars } from '@sveltejs/kit/env';
 const optional = (value: string | undefined) => value;
 
 export const variables = defineEnvVars({
-	PUBLIC_SUPABASE_URL: { public: true, schema: optional },
-	PUBLIC_SUPABASE_PUBLISHABLE_KEY: { public: true, schema: optional },
-	SUPABASE_SECRET_KEY: { schema: optional },
-	SUPABASE_API_PROXY: { schema: optional },
+	// The Convex deployment URL (https://<name>.convex.cloud), used by browser and server.
+	PUBLIC_CONVEX_URL: { public: true, schema: optional },
+	// Shared with the Convex deployment's CHECKOUT_SERVER_KEY; proves checkout calls come from this Worker.
+	CHECKOUT_SERVER_KEY: { schema: optional },
 	CHECKOUT_ALLOWED_ORIGIN: { schema: optional },
 	RESEND_API_KEY: { schema: optional },
 	SALES_OPEN: { schema: optional }

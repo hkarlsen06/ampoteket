@@ -115,7 +115,7 @@
 	let stockLoading = $state(false); let stockFailed = $state(false); let stockGeneration = 0;
 	let alive = true; let restoringCreation = $state(false);
 	const ownPending = $derived(Boolean(pending && (pending.payload.id === id || (id === 'new' && pending.revision === null))));
-	const wrongIdentity = $derived(Boolean(pending && pending.userId !== admin.session?.user.id));
+	const wrongIdentity = $derived(Boolean(pending && pending.userId !== admin.userId));
 	const blocked = $derived(busy || Boolean(pending));
 	const ready = $derived(Boolean(references && (product || id === 'new' || ownPending || restoringCreation)));
 	const bins = $derived(references?.shelf.bins ?? []);
@@ -180,7 +180,7 @@
 			const session = admin.credentials();
 			// Read together so the on-order badge never pops in after the balance.
 			const [next, outstanding] = await Promise.all([readProductStock(session, product.id), readOutstandingByProduct(session).catch(() => null)]);
-			if (alive && generation === stockGeneration && admin.session?.user.id === session.userId) { stock = next; stockFailed = false; onOrder = outstanding?.get(product.id) ?? null; } }
+			if (alive && generation === stockGeneration && admin.userId === session.userId) { stock = next; stockFailed = false; onOrder = outstanding?.get(product.id) ?? null; } }
 		catch (error) { if (alive && generation === stockGeneration) stockFailed = true; await admin.permissionFailure(error); }
 		finally { if (alive && generation === stockGeneration) stockLoading = false; }
 	}
@@ -202,7 +202,7 @@
 			if (id !== 'new' && !uuidPattern.test(id)) { product = null; return; }
 			const sourceId = id === 'new' && from && uuidPattern.test(from) ? from : null;
 			const [refs, item, source] = await Promise.all([readProductReferences(session), id === 'new' ? Promise.resolve(null) : readProduct(session, id), sourceId ? readProduct(session, sourceId) : Promise.resolve(null)]);
-			if (!alive || session.userId !== admin.session?.user.id) return;
+			if (!alive || session.userId !== admin.userId) return;
 			references = refs; product = item; previous = created ? source : null;
 			// Unsaved input returns only onto the revision it was typed against.
 			if (pending && ownPending && !wrongIdentity) { adopt(pending.payload); staged = pending.attributes ?? []; openingStock = pending.opening ?? ''; }
@@ -243,7 +243,7 @@
 	$effect(() => {
 		if (!draftLoaded || pending) return;
 		const dirty = (writeFields(draft) !== writeFields(product ?? start) || (!product && (staged.length > 0 || openingStock !== '')));
-		writeDraft(admin.session?.user.id, `product:${product?.id ?? id}`, dirty
+		writeDraft(admin.userId, `product:${product?.id ?? id}`, dirty
 			? { revision: product?.metadata_revision ?? null, fields: $state.snapshot(draft), ...(product ? {} : { staged: $state.snapshot(staged), opening: openingStock }) } : null);
 	});
 	async function review() {
@@ -311,11 +311,11 @@
 			const opening = pending?.revision === null ? pending.opening ?? null : null;
 			if (pending) await saveMetadata(session);
 			if (existing && attributesEditor && !(await attributesEditor.commit())) { outcome = 'specificationsNotSaved'; return; }
-			if (!alive || session.userId !== admin.session?.user.id) return;
+			if (!alive || session.userId !== admin.userId) return;
 			outcome = 'saved';
 			if (product && opening !== null) {
 				const stored = await countOpeningStock(session, product.id, opening);
-				if (!alive || session.userId !== admin.session?.user.id) return;
+				if (!alive || session.userId !== admin.userId) return;
 				// Unstored, the count is lost: stay, so the count button is at hand.
 				if (!stored) { outcome = 'openingNotCounted'; void refreshStock(); return; }
 			}
@@ -362,7 +362,7 @@
 		if (!result || !pending) throw new Error('Missing product acknowledgement');
 		clearProductCommand(sessionStorage, pending);
 		if (pending.revision === null) for (const name of ['product:new', 'product:new:specifications']) writeDraft(session.userId, name, null);
-		if (!alive || session.userId !== admin.session?.user.id) return;
+		if (!alive || session.userId !== admin.userId) return;
 		pending = null; product = result; adopt(result); staged = [];
 	}
 	// The value that names a resistor or capacitor; shorthand like "4p7" in a name uses its unit.
@@ -453,7 +453,7 @@
 		existingRequested = true;
 		const session = admin.credentials(); const definitions = references.definitions;
 		Promise.all([readAdminProducts(session), readAllProductAttributes(session)]).then(([items, values]) => {
-			if (!alive || session.userId !== admin.session?.user.id) return;
+			if (!alive || session.userId !== admin.userId) return;
 			existing = existingProducts(items, values, definitions); checkDuplicates();
 		}, () => { /* No list, no duplicate warning. */ });
 	}

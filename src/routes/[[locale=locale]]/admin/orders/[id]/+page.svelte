@@ -72,7 +72,7 @@
 		|| (command.kind === 'cancel' && command.orderId === page.params.id)
 		|| (command.kind === 'reverse' && command.orderId === page.params.id)
 	)));
-	const wrongIdentity = $derived(Boolean(command && command.userId !== admin.session?.user.id));
+	const wrongIdentity = $derived(Boolean(command && command.userId !== admin.userId));
 
 	function productName(productId: string): string {
 		const product = products.get(productId);
@@ -150,7 +150,7 @@
 		try {
 			const session = admin.credentials();
 			const result = await readOrderDetail(session, id);
-			if (mounted && version === generation && admin.session?.user.id === session.userId) detail = result;
+			if (mounted && version === generation && admin.userId === session.userId) detail = result;
 		} catch (error) {
 			if (mounted && version === generation) failed = true;
 			await admin.permissionFailure(error);
@@ -290,7 +290,7 @@
 			command = frozen;
 			await runOrderCommand(session, frozen);
 			await updateOrderStorage((storage) => clearOrderCommand(storage, frozen!));
-			if (mounted && admin.session?.user.id === session.userId) {
+			if (mounted && admin.userId === session.userId) {
 				command = null;
 				outcome = 'saved';
 				savedAction = kind;
