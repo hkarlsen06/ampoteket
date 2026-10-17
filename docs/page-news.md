@@ -73,13 +73,17 @@ first. «Ny artikkel» and «Nytt arrangement» open the editor.
   never deleted, and «Angre» restores it until saving.
 - **Forfatter** is the byline, filled with the signed-in admin's name for a new
   article; it can be changed or cleared.
-- **Images in the text.** «Sett inn bilde» under the text uploads an image and places
-  it where the cursor was; «Sett inn i teksten» on an image in the list places that
-  one. The text shows it as `[bilde 2]` (`[image 2]` in English), the image's number
-  in the list, on a line of its own; a marker in the middle of a line is never
-  created, since the image goes before the line the cursor starts or after the line it
-  is in. Reordering or removing images renumbers or removes the markers. On save the
-  numbers become `[image:<id>]`; a number with no image is refused before sending.
+- **Images in the text** (`ArticleBodyEditor`, logic in `article-body.ts`). The text
+  is one bordered field of text parts with a thumbnail row for each placed image.
+  «Sett inn bilde» under it uploads an image and places it where the cursor was;
+  «Sett inn i teksten» on an image in the list places that one. An image goes before
+  the line the cursor starts or after the line it is in, never inside a line. Drag a
+  thumbnail to move it: a line shows where it will land, between any two written lines
+  or images, and Escape cancels. The page is never scrolled for you; scroll with the
+  wheel while dragging. The arrow buttons move it one place at a time (the keyboard and
+  touch alternative) and ✕ takes it out of the text, keeping it in the list. An image
+  stands between paragraphs, so the line it split stays two paragraphs when it leaves.
+  Stored, each placed image is a paragraph `[image:<id>]`.
 - **Bilder, Lenker, Personer** apply to both sides. The browser re-encodes each
   image (at most 1600 px and 1 MB, no EXIF) and uploads it once with a fixed id; a
   failed upload retries the same id. Every image needs a description for screen

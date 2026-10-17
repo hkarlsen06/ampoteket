@@ -66,7 +66,7 @@ try {
 	await article.getByLabel(fieldLabel(m.titleLabel)).fill(articleTitle);
 	await article.getByLabel(fieldLabel(m.summary)).fill('Bring nothing; we have irons, solder and coffee.');
 	await expect(article.getByLabel(fieldLabel(m.author))).toHaveValue('News proof volunteer');
-	const body = article.getByLabel(fieldLabel(m.body));
+	const body = article.getByRole('textbox', { name: fieldLabel(m.body) });
 	await body.fill('First paragraph.\n\nSecond paragraph.');
 	await event.getByRole('button', { name: m.addEvent, exact: true }).click();
 	await expect(event.getByLabel(fieldLabel(m.titleLabel))).toHaveValue(articleTitle);
@@ -86,10 +86,24 @@ try {
 	const alt = page.getByLabel(fieldLabel(m.imageAlt));
 	await expect(alt).toBeFocused();
 	await alt.fill('Two people soldering at a bench');
-	// Placed after the first paragraph, where the cursor was.
+	// Placed after the line the cursor was in; the text continues below the thumbnail.
 	await body.focus(); await body.evaluate((field: HTMLTextAreaElement) => field.setSelectionRange(5, 5));
 	await page.getByRole('button', { name: m.insertImageN(1), exact: true }).click();
-	await expect(body).toHaveValue('First paragraph.\n\n[image 1]\n\nSecond paragraph.');
+	await expect(body).toHaveValue('First paragraph.');
+	const rest = article.getByLabel(m.bodyPart(2), { exact: true });
+	await expect(rest).toHaveValue('Second paragraph.');
+	// Dragged by its thumbnail below the last line, then one place back up with its button.
+	await rest.scrollIntoViewIfNeeded();
+	const handle = (await article.locator('[data-drag-handle]').boundingBox())!, end = (await rest.boundingBox())!;
+	await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+	await page.mouse.down();
+	for (let step = 1; step <= 6; step++) await page.mouse.move(handle.x + 40, handle.y + (end.y + end.height + 4 - handle.y) * step / 6);
+	await page.mouse.up();
+	await expect(body).toHaveValue('First paragraph.\n\nSecond paragraph.');
+	await expect(rest).toHaveValue('');
+	await page.getByRole('button', { name: m.moveInTextUp(1), exact: true }).click();
+	await expect(body).toHaveValue('First paragraph.');
+	await expect(rest).toHaveValue('Second paragraph.');
 	const [image] = await fixtures.rows<{ id: string; content_type: string; width: number; height: number }>('news_images');
 	expect(image).toMatchObject({ width: 1200, height: 800 });
 	expect(['image/webp', 'image/jpeg']).toContain(image.content_type);
@@ -120,7 +134,7 @@ try {
 	expect(articleRow).toMatchObject({ slug: 'soldering-night-for-beginners', edit_revision: 1 });
 	expect(eventRow).toMatchObject({ slug: 'soldering-night', article_id: articleRow.id });
 	await expect(page).toHaveURL(`${origin}/en/admin/news/${articleRow.id}`);
-	console.log('PASS: editor: article and event created and linked in one save, image re-encoded, uploaded once and placed in the text, byline from the account, lost response resent unchanged');
+	console.log('PASS: editor: article and event created and linked in one save, image re-encoded, uploaded once, placed in the text from the cursor, dragged and moved back by button, byline from the account, lost response resent unchanged');
 
 	// ---------- Public pages ----------
 	const visitor = await context.newPage();

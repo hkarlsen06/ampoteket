@@ -29,9 +29,10 @@
 	import type { StaffSession } from '#lib/convex.js';
 	import { isSafeHttpsUrl, type EditableHelpContact } from '#lib/help.js';
 	import { osloInstant, osloLocal } from '#lib/oslo-time.js';
-	import { formatEventWhen, slugify, uniqueSlug, type NewsLink } from '#lib/news.js';
+	import { formatEventWhen, placedImages, slugify, uniqueSlug, type NewsLink } from '#lib/news.js';
+	import ArticleBodyEditor from '#lib/ArticleBodyEditor.svelte';
 	import {
-		clearNewsCommand, insertParagraph, newsError, numberMarkers, placedNumbers, prepareImage, storeMarkers, readAdminNews, readNewsCommand, readNewsImage, saveNews, saveNewsCommand, uploadNewsImage,
+		clearNewsCommand, newsError, prepareImage, readAdminNews, readNewsCommand, readNewsImage, saveNews, saveNewsCommand, uploadNewsImage,
 		type AdminArticle, type AdminEvent, type ArticleWrite, type EventWrite, type ImageRef, type NewsCommand, type PreparedImage
 	} from '#lib/admin-news.js';
 
@@ -53,7 +54,7 @@
 	let images = $state<ImageRef[]>([]); let links = $state<NewsLink[]>([]); let people = $state<string[]>([]);
 	let previews = $state<Record<string, string | null | undefined>>({});
 	let busy = $state(false);
-	type Outcome = 'idle' | 'saved' | 'invalid' | 'missingImage' | 'stale' | 'slugTaken' | 'linkTaken' | 'unknown' | 'ambiguousTime' | 'invalidTime' | 'endsBeforeStart';
+	type Outcome = 'idle' | 'saved' | 'invalid' | 'stale' | 'slugTaken' | 'linkTaken' | 'unknown' | 'ambiguousTime' | 'invalidTime' | 'endsBeforeStart';
 	let outcome = $state<Outcome>('idle');
 	let pending = $state<NewsCommand | null>(null); let restored = $state(false);
 	let storageReady = $state(false); let wrongIdentity = $state(false);
@@ -61,11 +62,9 @@
 	let failedUpload = $state.raw<{ id: string; image: PreparedImage } | null>(null);
 	let fileInput = $state<HTMLInputElement | null>(null);
 	// Images go into the text where the cursor last was; an upload started from the text goes there too.
-	let bodyField = $state<HTMLTextAreaElement | null>(null);
-	let bodyCursor: number | null = null;
-	let insertUpload: number | null = null;
+	let bodyEditor = $state<ReturnType<typeof ArticleBodyEditor> | null>(null);
+	let insertUpload = false;
 
-	// The body keeps stored markers until `numberBody` shows them as image numbers.
 	const fromArticle = (a: AdminArticle): ArticleDraft => ({ id: a.id, slug: a.slug, title: a.title, author: a.author ?? '', summary: a.summary ?? '', body: a.body, is_published: a.is_published, revision: a.edit_revision });
 	const fromEvent = (e: AdminEvent): EventDraft => ({ id: e.id, slug: e.slug, title: e.title, description: e.description, location: e.location ?? '',
 		starts: osloLocal(new Date(e.starts_at)), ends: e.ends_at ? osloLocal(new Date(e.ends_at)) : '', is_published: e.is_published, revision: e.edit_revision });
@@ -79,9 +78,8 @@
 	}
 	function fill(a: AdminArticle | null, e: AdminEvent | null) {
 		article = a ? fromArticle(a) : null; event = e ? fromEvent(e) : null; removed = null;
-		images = []; links = []; people = []; merge(a, e); numberBody();
+		images = []; links = []; people = []; merge(a, e);
 	}
-	function numberBody() { if (article) article.body = numberMarkers(article.body, images, m.markerWord); }
 	async function load() {
 		if (admin.status !== 'ready') return;
 		loading = true; loadFailed = false; notFound = false;
@@ -132,7 +130,7 @@
 	function addEvent() { event = blankEvent(article?.title ?? ''); outcome = 'idle'; }
 	function linkExisting(side: 'article' | 'event', rowId: string) {
 		if (side === 'event') { const row = news?.events.find(e => e.id === rowId); if (row) { event = fromEvent(row); merge(row); } }
-		else { const row = news?.articles.find(a => a.id === rowId); if (row) { article = fromArticle(row); merge(row); numberBody(); } }
+		else { const row = news?.articles.find(a => a.id === rowId); if (row) { article = fromArticle(row); merge(row); } }
 		outcome = 'idle';
 	}
 	// Removing a side that is linked in the database keeps it, unlinked; a side added in this editor just goes.
@@ -168,30 +166,17 @@
 		catch (error) { imageState = 'failed'; failedUpload = attempt; await admin.permissionFailure(error); return; }
 		previews[attempt.id] = URL.createObjectURL(attempt.image.blob);
 		images.push({ id: attempt.id, alt: '' }); imageState = 'idle';
-		if (insertUpload !== null && article) { article.body = insertParagraph(article.body, insertUpload, marker(images.length)).body; insertUpload = null; }
+		if (insertUpload) { bodyEditor?.insert(attempt.id); insertUpload = false; }
 		await tick(); document.getElementById(`${fieldId}-alt-${attempt.id}`)?.focus();
 	}
 	function chooseImage(intoText: boolean) {
-		insertUpload = intoText && article ? bodyCursor ?? article.body.length : null;
+		insertUpload = intoText && Boolean(article);
 		fileInput?.click();
 	}
-	const marker = (n: number) => `[${m.markerWord} ${n}]`;
-	async function insertImage(n: number) {
-		if (!article) return;
-		const inserted = insertParagraph(article.body, bodyCursor ?? article.body.length, marker(n));
-		article.body = inserted.body; bodyCursor = inserted.cursor;
-		await tick(); bodyField?.focus(); bodyField?.setSelectionRange(inserted.cursor, inserted.cursor);
-	}
-	// The text names images by their number in the list, so reordering or removing renumbers it.
-	function setImages(next: ImageRef[]) {
-		const stored = article ? storeMarkers(article.body, images) : null;
-		images = next;
-		if (article && stored !== null) article.body = numberMarkers(stored, next, m.markerWord);
-	}
 	function moveImage(index: number, step: -1 | 1) {
-		const next = [...images]; const [row] = next.splice(index, 1); next.splice(index + step, 0, row); setImages(next);
+		const next = [...images]; const [row] = next.splice(index, 1); next.splice(index + step, 0, row); images = next;
 	}
-	const placed = $derived(article ? placedNumbers(article.body) : new Set<number>());
+	const placed = $derived(placedImages(article?.body ?? ''));
 	function togglePerson(contactId: string, checked: boolean) {
 		const chosen = checked ? [...people, contactId] : people.filter(person => person !== contactId);
 		// Tags follow the contact page's order, like everywhere else the volunteers are listed.
@@ -208,11 +193,9 @@
 		const imageRefs = images.map(image => ({ id: image.id, alt: image.alt.trim() }));
 		const linkList = links.map(link => ({ label: link.label.trim(), url: link.url.trim() })).filter(link => link.label || link.url);
 		if (imageRefs.some(image => !image.alt) || linkList.some(link => !link.label || !isSafeHttpsUrl(link.url))) return 'invalid';
-		const body = article && storeMarkers(article.body, imageRefs);
-		if (article && body === null) return 'missingImage';
 		const articleWrite: ArticleWrite | null = article && {
 			id: article.id, slug: article.slug ?? uniqueSlug(slugify(article.title), new Set(news?.articles.map(row => row.slug))), title: article.title.trim(),
-			author: article.author.trim() || null, summary: article.summary.trim() || null, body: body!, images: imageRefs, links: linkList, people, is_published: article.is_published, expected_revision: article.revision
+			author: article.author.trim() || null, summary: article.summary.trim() || null, body: article.body, images: imageRefs, links: linkList, people, is_published: article.is_published, expected_revision: article.revision
 		};
 		let eventWrite: EventWrite | null = null;
 		if (event) {
@@ -267,7 +250,7 @@
 	// The saved title, so the heading does not change while typing.
 	const heading = $derived(news?.articles.find(row => row.id === article?.id)?.title ?? news?.events.find(row => row.id === event?.id)?.title
 		?? (event && !article ? m.newEvent : m.newArticle));
-	const messages = $derived<Record<Outcome, string>>({ idle: '', saved: '', invalid: m.invalid, missingImage: m.missingImage, stale: m.stale, slugTaken: m.slugTaken, linkTaken: m.linkTaken, unknown: m.unknown,
+	const messages = $derived<Record<Outcome, string>>({ idle: '', saved: '', invalid: m.invalid, stale: m.stale, slugTaken: m.slugTaken, linkTaken: m.linkTaken, unknown: m.unknown,
 		ambiguousTime: m.ambiguousTime, invalidTime: m.invalidTime, endsBeforeStart: m.endsBeforeStart });
 </script>
 <svelte:head><title>{m.editTitle}</title></svelte:head>
@@ -322,8 +305,10 @@
 					<Field.Field class="col-span-full"><Field.Label for={`${fieldId}-article-name`} required>{m.titleLabel}</Field.Label><Input id={`${fieldId}-article-name`} autocapitalize="sentences" required maxlength={160} bind:value={article.title} disabled={locked} /></Field.Field>
 					<Field.Field class="col-span-full md:col-span-2"><Field.Label for={`${fieldId}-author`}>{m.author}</Field.Label><Input id={`${fieldId}-author`} autocomplete="name" autocapitalize="words" maxlength={80} bind:value={article.author} disabled={locked} /></Field.Field>
 					<Field.Field class="col-span-full"><Field.Label for={`${fieldId}-summary`}>{m.summary}</Field.Label><Textarea id={`${fieldId}-summary`} rows={2} maxlength={300} bind:value={article.summary} disabled={locked} /></Field.Field>
-					<Field.Field class="col-span-full"><Field.Label for={`${fieldId}-body`}>{m.body}</Field.Label><Textarea id={`${fieldId}-body`} rows={12} maxlength={20000} bind:ref={bodyField} bind:value={article.body} disabled={locked} aria-describedby={`${fieldId}-body-hint`} aria-invalid={outcome === 'missingImage'} onblur={(blur: FocusEvent) => { bodyCursor = (blur.currentTarget as HTMLTextAreaElement).selectionStart; }} /><Field.Description id={`${fieldId}-body-hint`}>{m.bodyHint}</Field.Description>
-							{#if images.length < 8}<Button type="button" variant="outline" class="self-start" disabled={locked || imageState === 'preparing'} onclick={() => chooseImage(true)}><Icon icon={ImageSquareIcon} />{m.insertImage}</Button>{/if}
+					<Field.Field class="col-span-full"><Field.Label id={`${fieldId}-body-label`} for={`${fieldId}-body`}>{m.body}</Field.Label>
+							{#key article.id}<ArticleBodyEditor bind:this={bodyEditor} bind:value={article.body} {images} {previews} id={`${fieldId}-body`} describedBy={`${fieldId}-body-hint`} disabled={locked} />{/key}
+							<Field.Description id={`${fieldId}-body-hint`}>{m.bodyHint}</Field.Description>
+							{#if images.length < 8}<div><Button type="button" variant="outline" disabled={locked || imageState === 'preparing'} onclick={() => chooseImage(true)}><Icon icon={ImageSquareIcon} />{m.insertImage}</Button></div>{/if}
 						</Field.Field>
 				</div>
 				<Field.Field orientation="horizontal" class="min-h-12"><Switch id={`${fieldId}-article-published`} bind:checked={article.is_published} disabled={locked} /><Field.Label for={`${fieldId}-article-published`} class="cursor-pointer">{m.publishArticle}</Field.Label></Field.Field>
@@ -373,12 +358,12 @@
 								<div class="grid aspect-video w-full place-items-center overflow-hidden rounded-xl bg-muted text-center text-sm text-muted-foreground md:w-32">
 									{#if previews[image.id]}<img src={previews[image.id]} alt="" class="size-full object-cover" />{:else if previews[image.id] === null}<span class="p-2">{m.imagePreviewUnavailable}</span>{:else}<Skeleton class="size-full" />{/if}
 								</div>
-								<p class="text-sm text-muted-foreground">{m.imageNumber(index + 1)}{#if placed.has(index + 1)}, {m.inText}{/if}</p>
+								<p class="text-sm text-muted-foreground">{m.imageNumber(index + 1)}{#if placed.has(image.id)}, {m.inText}{/if}</p>
 							</div>
 							<Field.Field class="col-start-2 md:col-start-auto"><Field.Label for={`${fieldId}-alt-${image.id}`} required>{m.imageAlt}</Field.Label><Input id={`${fieldId}-alt-${image.id}`} autocapitalize="sentences" required maxlength={300} bind:value={image.alt} disabled={locked} /></Field.Field>
 							<div class="col-start-2 flex flex-wrap items-center gap-1 md:col-start-auto md:self-end">
-								{#if article}<Button type="button" variant="ghost" disabled={locked} onclick={() => insertImage(index + 1)}><Icon icon={ArrowLineUpIcon} /><span aria-hidden="true">{m.insertInText}</span><span class="sr-only">{m.insertImageN(index + 1)}</span></Button>{/if}
-								<Button type="button" variant="ghost" disabled={locked} onclick={() => setImages(images.filter((_, other) => other !== index))}><Icon icon={TrashIcon} /><span class="sr-only">{m.removeImage(index + 1)}</span></Button>
+								{#if article}<Button type="button" variant="ghost" disabled={locked} onclick={() => bodyEditor?.insert(image.id)}><Icon icon={ArrowLineUpIcon} /><span aria-hidden="true">{m.insertInText}</span><span class="sr-only">{m.insertImageN(index + 1)}</span></Button>{/if}
+								<Button type="button" variant="ghost" disabled={locked} onclick={() => { images.splice(index, 1); }}><Icon icon={TrashIcon} /><span class="sr-only">{m.removeImage(index + 1)}</span></Button>
 							</div>
 						</li>
 					{/each}
