@@ -1,95 +1,101 @@
 import { describe, expect, test } from 'bun:test';
-import { ApiError } from './api';
-import { createClient, type Session } from '@supabase/supabase-js';
-import { memory } from './test-storage';
-import { createBrowserAdminAuth, readAdminMembership, signInFailure, updateAdminPassword } from './admin-auth';
+import { getFunctionName } from 'convex/server';
+import { passwordLinkToken, signInFailure } from './admin-auth';
+import { rejection } from './convex';
+import { authStorageKeys, ConvexAuthSession, mayHaveSession, type AuthStorage } from './convex-auth';
 
-const config = { url: 'https://example.invalid', publishableKey: 'sb_publishable_fixture' };
-const userId = 'df5aa780-0f36-44d4-a05f-d61206cc8bc9';
-const member = { id: '11111111-1111-4111-8111-111111111111', auth_user_id: userId, display_name: 'Volunteer', is_active: true };
-
-describe('admin Auth boundary', () => {
-	test('requires browser ownership, never a shared SSR Auth client', async () => {
-		await expect(createBrowserAdminAuth(config)).rejects.toThrow('requires a browser');
-	});
-
-	test('uses the current user JWT and an explicit own-membership projection', async () => {
-		const membership = await readAdminMembership(config, 'fixture-token', userId, {
-			fetcher: async (input, init) => {
-				const url = new URL(String(input));
-				expect(url.pathname).toBe('/rest/v1/amp_staff_members');
-				expect(url.searchParams.get('auth_user_id')).toBe(`eq.${userId}`);
-				expect(url.searchParams.get('select')).toBe('id,auth_user_id,display_name,is_active');
-				expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer fixture-token');
-				expect(init?.cache).toBe('no-store');
-				expect(init?.redirect).toBe('manual');
-				return Response.json([member]);
-			}
-		});
-		expect(membership).toEqual({ id: member.id, authUserId: userId, displayName: 'Volunteer' });
-	});
-
-	test('distinguishes absent/revoked membership from unavailable or unauthorized reads', async () => {
-		for (const rows of [[], [{ ...member, is_active: false }]]) {
-			expect(await readAdminMembership(config, 'token', userId, { fetcher: async () => Response.json(rows) })).toBeNull();
-		}
-		for (const status of [401, 403, 503]) {
-			await expect(readAdminMembership(config, 'token', userId, {
-				fetcher: async () => Response.json({ code: 'unavailable' }, { status })
-			})).rejects.toBeInstanceOf(ApiError);
-		}
-	});
-
-	test('rejects wrong identities, duplicate and malformed responses', async () => {
-		for (const rows of [null, {}, [member, member], [{ ...member, auth_user_id: member.id }],
-			[{ ...member, is_active: 'true' }], [{ ...member, id: null }], [{ ...member, display_name: '' }]]) {
-			await expect(readAdminMembership(config, 'token', userId, {
-				fetcher: async () => Response.json(rows)
-			})).rejects.toThrow('Invalid membership response');
-		}
-	});
-
-	test('password updates reject a changed identity and retain the checked token across a later account switch', async () => {
-		const otherId = member.id, storageKey = 'password-identity-test', storage = memory();
-		const session = (id: string): Session => ({ access_token: `token-${id}`, refresh_token: `refresh-${id}`,
-			expires_at: Math.floor(Date.now() / 1000) + 3600, expires_in: 3600, token_type: 'bearer',
-			user: { id, app_metadata: {}, user_metadata: {}, aud: 'authenticated', created_at: '2026-10-02T00:00:00Z' } });
-		const setUser = (id: string) => storage.setItem(storageKey, JSON.stringify(session(id)));
-		setUser(userId);
-		const client = createClient(config.url, config.publishableKey, { auth: {
-			persistSession: true, autoRefreshToken: false, detectSessionInUrl: false, storageKey, storage
-		} });
-		await client.auth.getSession();
-		let switchAfterRead = false, calls = 0;
-		const auth = { getSession: async () => {
-			const result = await client.auth.getSession();
-			if (switchAfterRead) setUser(otherId);
-			return result;
-		} };
-		const fetcher = async (input: RequestInfo | URL, init?: RequestInit) => {
-			calls++;
-			expect(new URL(String(input)).pathname).toBe('/auth/v1/user');
-			expect(init?.method).toBe('PUT');
-			expect(init?.redirect).toBe('manual');
-			expect(new Headers(init?.headers).get('Authorization')).toBe(`Bearer token-${userId}`);
-			expect(JSON.parse(String(init?.body))).toEqual({ password: 'new-password' });
-			return Response.json(session(userId).user);
-		};
-		setUser(otherId);
-		await expect(updateAdminPassword(config, auth, userId, 'new-password', fetcher)).rejects.toThrow('identity');
-		expect(calls).toBe(0);
-		setUser(userId); switchAfterRead = true;
-		await updateAdminPassword(config, auth, userId, 'new-password', fetcher);
-		expect(calls).toBe(1);
-		expect((await client.auth.getSession()).data.session?.user.id).toBe(otherId);
-	});
-});
+const url = 'https://happy-otter-123.convex.cloud';
+const keys = authStorageKeys(url);
+function memoryStorage(initial: Record<string, string> = {}): AuthStorage & { values: Record<string, string> } {
+	const values = { ...initial };
+	return { values, getItem: (k) => values[k] ?? null, setItem: (k, v) => { values[k] = v; }, removeItem: (k) => { delete values[k]; } };
+}
+/** One lock at a time, like navigator.locks within a browser. */
+function locks() {
+	let chain = Promise.resolve();
+	return { request<T>(_name: string, callback: () => Promise<T>) { const result = chain.then(callback); chain = result.then(() => {}, () => {}); return result; } };
+}
 
 test('sign-in failures separate a refused login from an unreachable service', () => {
-	expect(signInFailure({ status: 400, code: 'invalid_credentials' })).toBe('invalid');
-	expect(signInFailure({ status: 429, code: 'over_request_rate_limit' })).toBe('rateLimited');
-	expect(signInFailure({ status: 0, name: 'AuthRetryableFetchError' })).toBe('unavailable');
-	expect(signInFailure({ status: 503 })).toBe('unavailable');
+	expect(signInFailure(rejection('INVALID_CREDENTIALS'))).toBe('invalid');
+	expect(signInFailure(rejection('SOMETHING_ELSE'))).toBe('unavailable');
 	expect(signInFailure(new TypeError('Failed to fetch'))).toBe('unavailable');
+	expect(signInFailure(new Error('[Request ID: x] Server Error'))).toBe('unavailable');
 	expect(signInFailure(null)).toBe('unavailable');
+});
+
+test('password links carry exactly one 64-hex token and a known type', () => {
+	const link = (query: string) => passwordLinkToken(new URL(`https://ampoteket.no/admin/password${query}`));
+	expect(link('')).toBeNull();
+	expect(link('?next=%2Fadmin')).toBeNull();
+	expect(link(`?token_hash=${'a'.repeat(64)}&type=invite`)).toEqual({ token: 'a'.repeat(64), type: 'invite' });
+	expect(link(`?token_hash=${'b'.repeat(64)}&type=recovery`)).toEqual({ token: 'b'.repeat(64), type: 'recovery' });
+	for (const bad of [`?token_hash=${'a'.repeat(63)}&type=invite`, `?token_hash=${'a'.repeat(64)}&type=signup`, `?token_hash=${'A'.repeat(64)}&type=invite`,
+		`?token_hash=${'a'.repeat(64)}&token_hash=${'a'.repeat(64)}&type=invite`, '?code=abc', '?error=access_denied', `?token_hash=${'a'.repeat(64)}`]) {
+		expect(link(bad)).toBe('invalid');
+	}
+});
+
+describe('Convex Auth session', () => {
+	const tokens = (n: number) => ({ token: `jwt-${n}`, refreshToken: `refresh-${n}` });
+	function harness(storage = memoryStorage(), refreshResult: () => Promise<unknown> = async () => ({ tokens: tokens(2) })) {
+		const calls: string[] = [];
+		const http = { action: (async (fn: never, args: Record<string, unknown>) => {
+			const name = getFunctionName(fn);
+			calls.push(name);
+			if (name === 'session:signIn') return args.password === 'right' ? tokens(1) : Promise.reject(rejection('INVALID_CREDENTIALS'));
+			if (name === 'auth:signIn') return refreshResult();
+			throw new Error(name);
+		}) as never };
+		const lock = locks();
+		const session = new ConvexAuthSession(url, http, () => storage, () => lock, async () => {});
+		const seen: (string | null)[] = [];
+		session.subscribe((token) => seen.push(token));
+		return { session, storage, calls, seen };
+	}
+
+	test('sign-in stores both tokens under the deployment namespace; sign-out forgets them', async () => {
+		const { session, storage, seen } = harness();
+		expect(mayHaveSession(url, storage)).toBe(false);
+		await expect(session.signIn('staff@example.no', 'wrong')).rejects.toThrow();
+		expect(storage.values).toEqual({});
+		await session.signIn(' staff@example.no ', 'right');
+		expect(storage.values).toEqual({ [keys.jwt]: 'jwt-1', [keys.refresh]: 'refresh-1' });
+		expect(mayHaveSession(url, storage)).toBe(true);
+		expect(await session.fetchAccessToken({ forceRefreshToken: false })).toBe('jwt-1');
+		await session.signOut({ action: async () => { throw new Error('offline'); } });
+		expect(storage.values).toEqual({});
+		expect(seen).toEqual(['jwt-1', null]);
+	});
+
+	test('concurrent refreshes spend the refresh token once and share the result', async () => {
+		const { session, calls } = harness(memoryStorage({ [keys.jwt]: 'jwt-1', [keys.refresh]: 'refresh-1' }));
+		session.load();
+		const results = await Promise.all([1, 2, 3].map(() => session.fetchAccessToken({ forceRefreshToken: true })));
+		expect(results).toEqual(['jwt-2', 'jwt-2', 'jwt-2']);
+		expect(calls.filter((name) => name === 'auth:signIn')).toHaveLength(1);
+	});
+
+	test("a token another tab stored is adopted without refreshing", async () => {
+		const storage = memoryStorage({ [keys.jwt]: 'jwt-1', [keys.refresh]: 'refresh-1' });
+		const { session, calls } = harness(storage);
+		session.load();
+		storage.values[keys.jwt] = 'jwt-from-other-tab';
+		expect(session.isTokenEvent(keys.jwt)).toBe(true);
+		expect(await session.fetchAccessToken({ forceRefreshToken: true })).toBe('jwt-from-other-tab');
+		expect(calls).toEqual([]);
+	});
+
+	test('a rejected refresh signs out; a network failure keeps the session for a later retry', async () => {
+		const rejected = harness(memoryStorage({ [keys.jwt]: 'jwt-1', [keys.refresh]: 'refresh-1' }), async () => { throw new Error('Invalid refresh token'); });
+		rejected.session.load();
+		await expect(rejected.session.fetchAccessToken({ forceRefreshToken: true })).rejects.toThrow();
+		expect(rejected.storage.values).toEqual({});
+		expect(rejected.session.token).toBeNull();
+		const offline = harness(memoryStorage({ [keys.jwt]: 'jwt-1', [keys.refresh]: 'refresh-1' }), async () => { throw new TypeError('Failed to fetch'); });
+		offline.session.load();
+		await expect(offline.session.fetchAccessToken({ forceRefreshToken: true })).rejects.toThrow();
+		expect(offline.storage.values[keys.refresh]).toBe('refresh-1');
+		expect(offline.calls.filter((name) => name === 'auth:signIn')).toHaveLength(3);
+	});
 });

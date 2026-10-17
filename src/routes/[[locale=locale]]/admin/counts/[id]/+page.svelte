@@ -12,11 +12,13 @@
 	import { Textarea } from '#lib/components/ui/textarea/index.js';
 	import * as Field from '#lib/components/ui/field/index.js';
 	import * as RadioGroup from '#lib/components/ui/radio-group/index.js';
-	import { onMount, untrack } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
+	import { useQuery } from 'convex-svelte';
 	import { page } from '$app/state';
 	import { getI18n } from '#lib/i18n/index.js';
 	import { getAdminContext } from '#lib/admin-context.svelte.js';
-	import { readShelfTopology, type ShelfTopology } from '#lib/shelf-map.js';
+	import { parseShelfTopology } from '#lib/shelf-map.js';
+	import { api } from '#lib/convex.js';
 	import { uuidPattern } from '#lib/api.js';
 	import { compareDecimals } from '#lib/decimal.js';
 	import { formatCountedAt, formatDecimal, gridCell, gridRange, unitLabel } from '#lib/format.js';
@@ -24,14 +26,35 @@
 	import OrderProductCombobox from '#lib/OrderProductCombobox.svelte';
 	import AdminProductScanner from '#lib/AdminProductScanner.svelte';
 	import ShelfPlacementPicker from '#lib/ShelfPlacementPicker.svelte';
-	import { clearCountCommand, countBatchAccess, countCommandPath, countDifference, countRejection, countStorageEvent, formatSignedDifference, readCountDetail, readCountCommand, runCountCommand, saveCountCommand, updateCountStorage, type CountBatch, type CountCommand, type CountObservation, type CountOwner, type CountProductChoice } from '#lib/admin-counts.js';
+	import { clearCountCommand, countBatchAccess, countCommandPath, countDifference, countRejection, countStorageEvent, formatSignedDifference, readCountCommand, runCountCommand, saveCountCommand, updateCountStorage, type CountCommand } from '#lib/admin-counts.js';
 	const fieldId = $props.id();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.adminCounts);
-	let batch = $state<CountBatch | null>(null); let owners = $state<CountOwner[]>([]); let products = $state<CountProductChoice[]>([]); let observations = $state<CountObservation[]>([]);
-	let topology = $state<ShelfTopology | null>(null); let drawerFilter = $state<string | null>(null);
-	let loading = $state(true); let failed = $state(false); let busy = $state(false); let storageReady = $state(false); let selected = $state('');
+	let drawerFilter = $state<string | null>(null);
+	let busy = $state(false); let storageReady = $state(false); let selected = $state('');
 	let command = $state<CountCommand | null>(null); let reason = $state(''); let finishOpen = $state(false); let finishTrigger = $state<HTMLButtonElement | null>(null); let outcome = $state<'idle' | 'unknown' | 'failed' | 'owner' | 'saved'>('idle');
-	let mounted = false; let generation = 0; let displayedId = '';
+	let mounted = false; let displayedId = '';
+	// Live: observations, closure and ownership changes appear as they happen, in
+	// every tab. Each count form keeps the revision its person counted against.
+	const batchId = $derived(page.params.id ?? '');
+	// A count pending in this browser needs its product even once the batch is read-only.
+	const pendingProductId = $derived(command?.kind === 'count' && command.batchId === batchId ? command.productId : undefined);
+	let resubscribing = $state(false);
+	const live = useQuery(api.stock.countDetail, () => admin.status === 'ready' && uuidPattern.test(batchId) && !resubscribing
+		? { batchId, ...(pendingProductId ? { productId: pendingProductId } : {}) } : 'skip', { keepPreviousData: true });
+	// undefined while unknown, null when missing; never another batch's data while the next one loads.
+	const current = $derived(!uuidPattern.test(batchId) ? null : live.data === null ? (live.isStale ? undefined : null)
+		: live.data?.batch.id === batchId ? live.data : undefined);
+	const failed = $derived(Boolean(live.error) && !resubscribing);
+	const loading = $derived(current === undefined && !failed);
+	const batch = $derived(current?.batch ?? null); const owners = $derived(current?.owners ?? []);
+	const products = $derived(current?.products ?? []); const observations = $derived(current?.observations ?? []);
+	$effect(() => { if (live.error) void admin.permissionFailure(live.error); });
+	// A failed read is retried with a fresh subscription.
+	async function resubscribe() { resubscribing = true; await tick(); resubscribing = false; }
+	// The drawer filter is optional: an unreadable shelf map only hides it.
+	const shelf = useQuery(api.catalog.shelfMap, {});
+	const topology = $derived.by(() => { try { return shelf.data ? parseShelfTopology(shelf.data) : null; } catch { return null; } });
+	$effect(() => { if (drawerFilter && topology && !topology.bins.some((bin) => bin.id === drawerFilter)) drawerFilter = null; });
 	const ownerById = $derived(new Map(owners.map(owner => [owner.id, owner])));
 	const productById = $derived(new Map(products.map(product => [product.id, product])));
 	const owner = $derived(batch ? ownerById.get(batch.ownerId) : undefined);
@@ -71,43 +94,17 @@
 		syncPending();
 		void updateCountStorage((storage) => { readCountCommand(storage); const key = 'ampoteket:count-storage-check'; storage.setItem(key, '1'); if (storage.getItem(key) !== '1') throw new Error(); storage.removeItem(key); }).then(() => { if (mounted) storageReady = true; }).catch(() => { if (mounted) storageReady = false; });
 		window.addEventListener('storage', syncPending); window.addEventListener(countStorageEvent, syncPending);
-		return () => { mounted = false; generation++; window.removeEventListener('storage', syncPending); window.removeEventListener(countStorageEvent, syncPending); };
+		return () => { mounted = false; window.removeEventListener('storage', syncPending); window.removeEventListener(countStorageEvent, syncPending); };
 	});
 	$effect(() => {
 		const id = page.params.id;
 		if (id) untrack(() => {
 			if (displayedId !== id) {
-				displayedId = id; batch = null; owners = []; products = []; observations = [];
+				displayedId = id;
 				selected = ''; drawerFilter = null; finishOpen = false; reason = ''; outcome = 'idle';
 				if (mounted) syncPending();
 			}
-			void load(id);
 		});
-	});
-	async function load(id = page.params.id!) {
-		if (admin.status !== 'ready') return;
-		const version = ++generation; loading = true; failed = false;
-		if (!uuidPattern.test(id)) { batch = null; loading = false; return; }
-		try {
-			const session = admin.credentials();
-			const [detail, shelf] = await Promise.all([readCountDetail(session, id, admin.membership!.id, {
-				productId: pendingCount && command?.kind === 'count' ? command.productId : undefined
-			}), readShelfTopology(session.config)]);
-			if (!mounted || version !== generation || admin.userId !== session.userId) return;
-			batch = detail.batch; owners = detail.owners; products = detail.products; observations = detail.observations; topology = shelf;
-			if (drawerFilter && !shelf.bins.some((bin) => bin.id === drawerFilter)) drawerFilter = null;
-		} catch (error) { if (mounted && version === generation) failed = true; await admin.permissionFailure(error); }
-		finally { if (mounted && version === generation) loading = false; }
-	}
-	// The app owns freshness (design-system.md §4.2): re-read on return to the
-	// tab instead of offering a manual refresh button.
-	let revalidateQueued = $state(false);
-	function revalidate() { revalidateQueued = document.visibilityState === 'visible'; }
-	$effect(() => {
-		if (revalidateQueued && admin.status === 'ready' && !(loading || busy)) {
-			revalidateQueued = false;
-			untrack(() => { void load(); });
-		}
 	});
 	// Finishing is final: confirm first. A pending command was already confirmed, so its retry goes straight through.
 	function requestFinish(event: SubmitEvent) {
@@ -128,10 +125,10 @@
 			: { kind: 'close', userId: session.userId, requestId: crypto.randomUUID(), batchId: batch.id, reason: reason.trim() });
 			frozen = await updateCountStorage((storage) => saveCountCommand(storage, candidate)); command = frozen;
 			await runCountCommand(session, frozen); await updateCountStorage((storage) => clearCountCommand(storage, frozen!));
-			if (mounted && admin.userId === session.userId) { command = null; outcome = 'saved'; await load(); }
+			if (mounted && admin.userId === session.userId) { command = null; outcome = 'saved'; }
 		} catch (error) {
 			if (frozen && countRejection(error)) {
-				try { await updateCountStorage((storage) => clearCountCommand(storage, frozen!)); if (mounted) { command = null; outcome = 'owner'; await load(); } }
+				try { await updateCountStorage((storage) => clearCountCommand(storage, frozen!)); if (mounted) { command = null; outcome = 'owner'; } }
 				catch { if (mounted) outcome = 'unknown'; }
 			} else if (mounted) outcome = frozen ? 'unknown' : 'failed';
 			await admin.permissionFailure(error);
@@ -140,8 +137,6 @@
 </script>
 
 <svelte:head><title>{m.detailTitle(batchName)}</title></svelte:head>
-<svelte:window onfocus={revalidate} ononline={revalidate} />
-<svelte:document onvisibilitychange={revalidate} />
 <header class={pageHeader}>
 	<h1 class={pageHeading}>{batchName}</h1>
 	{#if batch && batch.id === page.params.id && access}
@@ -156,7 +151,7 @@
 <div class={formStatus} aria-live="polite">
 	{#if failed}<Alert.Message appearance="inline" variant="destructive">{m.detailLoadFailed}</Alert.Message>{:else if !batch && !loading}<Alert.Message appearance="inline" variant="default">{m.missing}</Alert.Message>{/if}{#if !storageReady}<Alert.Message appearance="inline" variant="destructive">{m.storageUnavailable}</Alert.Message>{:else if wrongIdentity}<Alert.Message appearance="inline" variant="destructive">{m.wrongIdentity}</Alert.Message>{:else if command && !pendingHere}<Alert.Message appearance="inline" variant="default">{m.pendingElsewhere}</Alert.Message>{/if}
 </div>
-{#if failed}<Button variant="outline" type="button" disabled={loading || busy} onclick={() => load()}>{m.retryLoad}</Button>{/if}
+{#if failed}<Button variant="outline" type="button" disabled={resubscribing || busy} onclick={resubscribe}>{m.retryLoad}</Button>{/if}
 {#if storageReady && !wrongIdentity && command && !pendingHere}<Button variant="link" href={i18n.href(countCommandPath(command))}>{m.resumePending}</Button>{/if}
 {#if !batch && loading}
 	<span class="sr-only" role="status">{m.loading}</span>
@@ -197,7 +192,7 @@
 				</Field.Group>
 				{#if !matches.length}<Empty.Root><Empty.Description>{m.noProducts}</Empty.Description></Empty.Root>{/if}
 			</div>
-			{#if selectedProduct}{#key `${batch.id}:${selectedProduct.id}`}<CountForm product={selectedProduct} batchId={batch.id} submissionBlocked={loading || failed} onsaved={() => { void load(); }} />{/key}{/if}
+			{#if selectedProduct}{#key `${batch.id}:${selectedProduct.id}`}<CountForm product={selectedProduct} batchId={batch.id} submissionBlocked={loading || failed} />{/key}{/if}
 		</section>
 	{/if}
 	{#if access === 'owner' || access === 'abandoned' || (pendingHere && !pendingCount)}

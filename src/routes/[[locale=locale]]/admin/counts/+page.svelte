@@ -9,17 +9,27 @@
 	import { Button, ButtonLabel } from '#lib/components/ui/button/index.js';
 	import StateBadge from '#lib/StateBadge.svelte';
 	import * as Field from '#lib/components/ui/field/index.js';
-	import { untrack, onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
+	import { useQuery } from 'convex-svelte';
 	import { goto } from '$app/navigation';
 	import { getI18n } from '#lib/i18n/index.js';
 	import { getAdminContext } from '#lib/admin-context.svelte.js';
 	import { formatCountedAt } from '#lib/format.js';
-	import { clearCountCommand, countBatchAccess, countCommandPath, countStorageEvent, readCountBatches, readCountCommand, runCountCommand, saveCountCommand, updateCountStorage, type CountBatch, type CountCommand, type CountOwner } from '#lib/admin-counts.js';
+	import { api } from '#lib/convex.js';
+	import { clearCountCommand, countBatchAccess, countCommandPath, countStorageEvent, readCountCommand, runCountCommand, saveCountCommand, updateCountStorage, type CountCommand } from '#lib/admin-counts.js';
 	const fieldId = $props.id();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.adminCounts);
-	let batches = $state<CountBatch[]>([]); let owners = $state<CountOwner[]>([]); let title = $state('');
-	let loaded = $state(false); let loading = $state(true); let failed = $state(false); let busy = $state(false); let storageReady = $state(false);
-	let command = $state<CountCommand | null>(null); let outcome = $state<'idle' | 'failed' | 'unknown'>('idle'); let mounted = false; let generation = 0;
+	let title = $state(''); let busy = $state(false); let storageReady = $state(false);
+	let command = $state<CountCommand | null>(null); let outcome = $state<'idle' | 'failed' | 'unknown'>('idle'); let mounted = false;
+	// Live: batches started, finished or closed elsewhere appear without a reload.
+	// Earlier data stays on screen while access is re-checked, so nothing shifts.
+	let resubscribing = $state(false);
+	const live = useQuery(api.stock.countBatches, () => admin.status === 'ready' && !resubscribing ? {} : 'skip', { keepPreviousData: true });
+	const batches = $derived(live.data?.batches ?? []); const owners = $derived(live.data?.owners ?? []);
+	const loaded = $derived(live.data !== undefined); const loading = $derived(live.isLoading || resubscribing); const failed = $derived(Boolean(live.error));
+	$effect(() => { if (live.error) void admin.permissionFailure(live.error); });
+	// A failed read is retried with a fresh subscription.
+	async function resubscribe() { resubscribing = true; await tick(); resubscribing = false; }
 	const wrongIdentity = $derived(Boolean(command && command.userId !== admin.userId));
 	const ownerById = $derived(new Map(owners.map((owner) => [owner.id, owner])));
 	const batchTone = { owner: 'success', other: 'neutral', abandoned: 'warning', finished: 'neutral' } as const;
@@ -28,26 +38,8 @@
 		function syncPending() { if (busy) return; try { command = readCountCommand(localStorage); if (command?.kind === 'start') { title = command.title; outcome = 'unknown'; } } catch { storageReady = false; } }
 		syncPending();
 		void updateCountStorage((storage) => { readCountCommand(storage); const key = 'ampoteket:count-storage-check'; storage.setItem(key, '1'); if (storage.getItem(key) !== '1') throw new Error(); storage.removeItem(key); }).then(() => { if (mounted) storageReady = true; }).catch(() => { if (mounted) storageReady = false; });
-		window.addEventListener('storage', syncPending); window.addEventListener(countStorageEvent, syncPending); void load();
-		return () => { mounted = false; generation++; window.removeEventListener('storage', syncPending); window.removeEventListener(countStorageEvent, syncPending); };
-	});
-	async function load() {
-		if (admin.status !== 'ready') return;
-		loading = true; failed = false; const version = ++generation;
-		try {
-			const session = admin.credentials(); const result = await readCountBatches(session); if (mounted && version === generation && admin.userId === session.userId) { batches = result.batches; owners = result.owners; loaded = true; } }
-		catch (error) { if (mounted && version === generation) failed = true; await admin.permissionFailure(error); }
-		finally { if (mounted && version === generation) loading = false; }
-	}
-	// The app owns freshness (design-system.md §4.2): re-read on return to the
-	// tab instead of offering a manual refresh button.
-	let revalidateQueued = $state(false);
-	function revalidate() { revalidateQueued = document.visibilityState === 'visible'; }
-	$effect(() => {
-		if (revalidateQueued && admin.status === 'ready' && !(loading || busy)) {
-			revalidateQueued = false;
-			untrack(() => { void load(); });
-		}
+		window.addEventListener('storage', syncPending); window.addEventListener(countStorageEvent, syncPending);
+		return () => { mounted = false; window.removeEventListener('storage', syncPending); window.removeEventListener(countStorageEvent, syncPending); };
 	});
 	async function start(event: SubmitEvent) {
 		event.preventDefault(); if (admin.status !== 'ready' || busy || !storageReady || wrongIdentity || (command && command.kind !== 'start') || !title.trim()) return;
@@ -66,8 +58,6 @@
 </script>
 
 <svelte:head><title>{m.title}</title></svelte:head>
-<svelte:window onfocus={revalidate} ononline={revalidate} />
-<svelte:document onvisibilitychange={revalidate} />
 <header class={pageHeader}><h1 class={pageHeading}>{m.heading}</h1></header>
 <section class="space-y-4" aria-labelledby="start-count-title">
 	<h2 class={sectionHeading} id="start-count-title">{m.startHeading}</h2>
@@ -90,7 +80,7 @@
 	<Separator />
 	<h2 class={sectionHeading} id="count-list-title">{m.batches}</h2>
 	<div class={formStatus} aria-live="polite">{#if failed}<Alert.Message appearance="inline" variant="destructive">{m.loadFailed}</Alert.Message>{/if}</div>
-	{#if failed}<Button variant="outline" type="button" disabled={loading} onclick={load}>{m.retryLoad}</Button>
+	{#if failed}<Button variant="outline" type="button" disabled={loading} onclick={resubscribe}>{m.retryLoad}</Button>
 	{:else if loaded && !batches.length}<Empty.Root><Empty.Description>{m.empty}</Empty.Description></Empty.Root>{/if}
 	{#if loading && !loaded}
 		<span class="sr-only" role="status">{m.loading}</span>
@@ -101,7 +91,7 @@
 			{#each batches as batch, index (batch.id)}
 				{#if index > 0}<Item.Separator />{/if}
 				{@const owner = ownerById.get(batch.ownerId)}
-				{@const access = countBatchAccess(batch, owner, admin.membership!.id)}
+				{@const access = countBatchAccess(batch, owner, admin.membership?.id ?? '')}
 				<Item.Root variant="row" role="listitem">
 					<Item.Content class="min-w-0 basis-72">
 						<Item.Title><h3 class={itemTitle}><a class="text-foreground no-underline hover:underline" href={i18n.href(`/admin/counts/${batch.id}`)}>{batch.productId ? m.singleCount(batch.title) : batch.title}</a></h3></Item.Title>

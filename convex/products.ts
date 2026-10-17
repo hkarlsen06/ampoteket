@@ -79,7 +79,13 @@ async function ensureCategory(ctx: MutationCtx, actor: Actor, categoryId: string
 /** A standard specification is created on first use with its fixed ID. */
 async function ensureDefinition(ctx: MutationCtx, actor: Actor, attributeId: string) {
 	const standard = standardSpecifications.find((s) => s.id === attributeId);
-	if (!standard || await byUuid(ctx, 'attribute_definitions', standard.id)) return;
+	if (!standard) return;
+	const existing = await byUuid(ctx, 'attribute_definitions', standard.id);
+	// A value must never be stored under a standard ID that means something else.
+	if (existing) {
+		if (existing.code !== standard.code || existing.value_type !== standard.value_type || existing.canonical_unit !== standard.canonical_unit) fail('DEFINITION_ID_TAKEN');
+		return;
+	}
 	if (await ctx.db.query('attribute_definitions').withIndex('code', (q) => q.eq('code', standard.code)).unique()) fail('DEFINITION_CODE_TAKEN');
 	await insertAudited(ctx, actor, 'attribute_definitions', { id: standard.id, code: standard.code, label: standard.label, value_type: standard.value_type, canonical_unit: standard.canonical_unit });
 }
@@ -153,6 +159,23 @@ export const save = mutation({
 			if (!after.some((a) => a.attribute_id === previous.attribute_id) && !await applyAttribute(ctx, actor, product!.id, previous, null)) fail('STALE_PRODUCT');
 		}
 		return productRow(product!);
+	}
+});
+
+/**
+ * Set one specification of a saved product from the value the editor showed
+ * (`before`, null: absent) to `after` (null: remove). A retry of a change that
+ * already applied succeeds without writing again.
+ */
+export const setAttribute = mutation({
+	args: { productId: v.string(), before: v.union(attributeValue, v.null()), after: v.union(attributeValue, v.null()) },
+	handler: async (ctx, args) => {
+		const { actor } = await requireStaff(ctx);
+		if (!args.before && !args.after) fail('INVALID_ATTRIBUTE');
+		if (args.before && args.after && args.before.attribute_id !== args.after.attribute_id) fail('INVALID_ATTRIBUTE');
+		if (!await byUuid(ctx, 'products', args.productId)) fail('PRODUCT_NOT_FOUND', args.productId);
+		if (!await applyAttribute(ctx, actor, args.productId, args.before, args.after)) fail('STALE_PRODUCT');
+		return 'saved' as const;
 	}
 });
 

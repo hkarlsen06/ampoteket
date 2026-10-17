@@ -1,4 +1,5 @@
-import { forSale, lookupCatalogProduct, readCompleteCatalog, type CatalogConfig, type CatalogProduct, type SaleProduct } from './catalog';
+import { forSale, lookupCatalogProduct, readCompleteCatalog, type CatalogProduct, type SaleProduct } from './catalog';
+import type { ConvexCaller } from './convex';
 import type { CartLine } from './cart';
 
 export type CartProductFact =
@@ -10,15 +11,15 @@ export type CartProductFact =
 /** Hints are lookup aids only: a code must resolve to the saved identity.
  * Old lines without codes use a complete traversal, never a first-page guess. */
 export async function readCartProducts(
-	config: CatalogConfig | null,
+	client: ConvexCaller | null,
 	lines: CartLine[],
 	signal?: AbortSignal
 ): Promise<Record<string, CartProductFact>> {
 	const facts: Record<string, CartProductFact> = {};
-	if (!config) return Object.fromEntries(lines.map((line) => [line.product_id, { kind: 'unavailable' }]));
+	if (!client) return Object.fromEntries(lines.map((line) => [line.product_id, { kind: 'unavailable' }]));
 	if (lines.some((line) => !line.code)) {
 		try {
-			const products = new Map((await readCompleteCatalog(config, { signal })).map((product) => [product.product_id, product]));
+			const products = new Map((await readCompleteCatalog(client, { signal })).map((product) => [product.product_id, product]));
 			for (const line of lines) {
 				const product = products.get(line.product_id);
 				facts[line.product_id] = product && forSale(product) ? { kind: 'ready', product } : { kind: 'missing' };
@@ -33,7 +34,7 @@ export async function readCartProducts(
 		while (next < lines.length && !signal?.aborted) {
 			const line = lines[next++];
 			try {
-				const product = await lookupCatalogProduct(config, line.code!, { signal });
+				const product = await lookupCatalogProduct(client, line.code!, { signal });
 				facts[line.product_id] = !product || !forSale(product) ? { kind: 'missing' }
 					: product.product_id === line.product_id ? { kind: 'ready', product } : { kind: 'unavailable' };
 			} catch { facts[line.product_id] = { kind: 'unavailable' }; }

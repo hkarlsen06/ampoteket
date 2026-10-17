@@ -1,26 +1,23 @@
 import { expect, test } from 'bun:test';
-import { selectedLabelProducts, labelSpecificationLines, type LabelData } from './data';
-import { productTypes, readAllProductAttributes, type AdminProduct } from '../admin-products';
+import { getFunctionName, type FunctionReference } from 'convex/server';
+import type { ConvexCaller } from '../convex';
+import { readLabelData, selectedLabelProducts, labelSpecificationLines, type LabelData } from './data';
+import { productTypes, type AdminProduct } from '../admin-products';
 const id = (n: number) => `00000000-0000-4000-8000-${n.toString().padStart(12, '0')}`;
-const session = { userId: id(99), token: 'staff-test', config: { url: 'https://fixture.invalid', publishableKey: 'public-test' } };
 const attribute = (product: number, definition: number) => ({ product_id: id(product), attribute_id: id(definition), number_value: '0.000000000005', number_max: null, text_value: null, boolean_value: null });
-
-test('label attributes traverse a capped composite key without losing same-product or same-definition rows', async () => {
-	const pages = [[attribute(1, 10), attribute(1, 11)], [attribute(2, 10)], []];
-	const queries: URLSearchParams[] = [];
-	const values = await readAllProductAttributes(session, async (input, init) => {
-		queries.push(new URL(String(input)).searchParams);
-		expect(init?.method).toBe('GET'); expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer staff-test');
-		return new Response(JSON.stringify(pages.shift()).replaceAll('"0.000000000005"', '0.000000000005'));
-	});
-	expect(values).toHaveLength(3); expect(values[2].number_value).toBe('0.000000000005');
-	expect(queries[1].get('or')).toBe(`(product_id.gt.${id(1)},and(product_id.eq.${id(1)},attribute_id.gt.${id(11)}))`);
-	expect(queries[2].get('or')).toBe(`(product_id.gt.${id(2)},and(product_id.eq.${id(2)},attribute_id.gt.${id(10)}))`);
-});
-test('attribute pagination rejects duplicates and failed later pages rather than exporting partial specifications', async () => {
-	await expect(readAllProductAttributes(session, async () => Response.json([attribute(1, 10)]))).rejects.toThrow('Non-advancing');
-	let calls = 0;
-	await expect(readAllProductAttributes(session, async () => calls++ ? new Response('unavailable', { status: 503 }) : Response.json([attribute(1, 10)]))).rejects.toThrow();
+/** The label reads, answered from a fixture by function name. */
+function stub(data: LabelData, attributes: unknown[] = data.attributes) {
+	const { units: _, ...references } = data.references;
+	const answers: Record<string, unknown> = { 'products:list': data.products, 'products:attributes': attributes, 'products:references': { ...references, units: [] }, 'catalog:shelfMap': data.references.shelf };
+	const call = async (fn: FunctionReference<'query'>) => answers[getFunctionName(fn)];
+	return { userId: id(99), client: { query: call, mutation: call, action: call } as unknown as ConvexCaller };
+}
+test('label data keeps exact values and rejects a specification of an unknown product or definition', async () => {
+	const data = fixture();
+	expect((await readLabelData(stub(data, [attribute(1, 10)]))).attributes[0].number_value).toBe('0.000000000005');
+	await expect(readLabelData(stub(data, [attribute(9, 10)]))).rejects.toThrow('relationship');
+	await expect(readLabelData(stub(data, [attribute(1, 19)]))).rejects.toThrow('relationship');
+	await expect(readLabelData(stub({ ...data, products: [{ ...data.products[0], bin_id: id(29) }] }))).rejects.toThrow('Placement');
 });
 
 function fixture(): LabelData {

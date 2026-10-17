@@ -13,11 +13,11 @@
 	import ArrowUpIcon from 'phosphor-svelte/lib/ArrowUpIcon';
 	import ArrowDownIcon from 'phosphor-svelte/lib/ArrowDownIcon';
 	import { untrack, onMount, tick } from 'svelte';
-	import { ApiError } from '#lib/api.js';
 	import { getI18n } from '#lib/i18n/index.js';
 	import { getAdminContext } from '#lib/admin-context.svelte.js';
-	import { readAdminHelp, reorderHelpContacts, staffRequest } from '#lib/admin-api.js';
+	import { readAdminHelp, reorderHelpContacts } from '#lib/admin-api.js';
 	import { identifier, object } from '#lib/api.js';
+	import { api, errorCode } from '#lib/convex.js';
 	import { parseEditableHelpContact, parseHelpContact, reachable, type EditableHelpContact } from '#lib/help.js';
 	const fieldId = $props.id();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.admin);
@@ -30,11 +30,11 @@
 	let name = $state(''); let responsibility = $state(''); let discord = $state(''); let email = $state(''); let phone = $state(''); let url = $state(''); let published = $state(false);
 	let outcome = $state<'idle' | 'failed' | 'saved' | 'stale' | 'invalid' | 'unknown'>('idle');
 	let storageReady = $state(false); let wrongIdentity = $state(false);
-	// Order is not part of an edit: rows are moved with amp_reorder_help_contacts.
+	// Order is not part of an edit: rows are moved with help.reorder.
 	type ContactWrite = { id: string; display_name: string; responsibility: string | null; email: string | null; phone: string | null; contact_url: string | null; discord: string | null; is_published: boolean };
 	function contactWrite(value: Record<string, unknown>, is_published: boolean): ContactWrite {
 		// Drafts saved before the Discord migration carry neither field, and older ones still carry an order.
-		const c = parseHelpContact({ responsibility: null, discord: null, ...value, display_order: '0' });
+		const c = parseHelpContact({ responsibility: null, discord: null, ...value, display_order: 0 });
 		return { id: c.id, display_name: c.display_name, responsibility: c.responsibility, email: c.email, phone: c.phone, contact_url: c.contact_url, discord: c.discord, is_published };
 	}
 	type Pending = { userId: string; payload: ContactWrite; revision: string | null };
@@ -112,32 +112,19 @@
 			}
 			const saved = restore(sessionStorage.getItem(key) ?? '');
 			if (saved.userId !== session.userId || saved.payload.id !== pending.payload.id) throw new Error();
-			// Resolve a lost acknowledgement before repeating an insert or guarded edit.
-			const found = await staffRequest(session, 'amp_help_contacts', { select: 'id,display_name,responsibility,email,phone,contact_url,discord,display_order,is_published,edit_revision', id: `eq.${saved.payload.id}`, limit: '2' });
-			if (!Array.isArray(found) || found.length > 1) throw new Error();
-			let acknowledged: EditableHelpContact | null = found.length ? parseEditableHelpContact(found[0]) : null;
-			if (!acknowledged || !sameFields(acknowledged, saved.payload)) {
-				if (acknowledged && (saved.revision === null || acknowledged.edit_revision !== saved.revision)) {
-					sessionStorage.removeItem(key); pending = null; outcome = 'stale'; reviewId = saved.payload.id; current = null;
-					return;
-				}
-				const result = await staffRequest(session, 'amp_help_contacts', saved.revision ? { id: `eq.${saved.payload.id}`, edit_revision: `eq.${saved.revision}` } : {},
-					saved.revision ? { display_name: saved.payload.display_name, responsibility: saved.payload.responsibility, discord: saved.payload.discord, email: saved.payload.email, phone: saved.payload.phone, contact_url: saved.payload.contact_url, is_published: saved.payload.is_published, edit_revision: saved.revision } : saved.payload,
-					saved.revision ? 'PATCH' : 'POST');
-				if (!Array.isArray(result) || result.length > 1) throw new Error();
-				if (!result.length) {
-					sessionStorage.removeItem(key); pending = null; outcome = 'stale'; reviewId = saved.payload.id; current = null;
-					return;
-				}
-				acknowledged = parseEditableHelpContact(result[0]);
-				if (!sameFields(acknowledged, saved.payload)) throw new Error();
-			}
+			// A repeat after a lost acknowledgement finds its own fields saved and changes nothing.
+			const { id, ...contact } = saved.payload;
+			const acknowledged = parseEditableHelpContact(await session.client.mutation(api.help.save, { id, revision: saved.revision, fields: contact }));
+			if (!sameFields(acknowledged, saved.payload)) throw new Error();
 			if (admin.userId !== session.userId) return;
 			sessionStorage.removeItem(key); pending = null; selected = acknowledged; fields(acknowledged); outcome = 'saved';
 			try { contacts = await readAdminHelp(session); failed = false; }
 			catch (error) { failed = true; await admin.permissionFailure(error); }
 		} catch (error) {
-			if (error instanceof ApiError && [400, 409, 422].includes(error.status)) {
+			const code = errorCode(error);
+			if (code === 'STALE_HELP_CONTACT' && pending) {
+				reviewId = pending.payload.id; sessionStorage.removeItem(key); pending = null; outcome = 'stale'; current = null;
+			} else if (code === 'INVALID_HELP_CONTACT' || code === 'HELP_CONTACT_NOT_REACHABLE') {
 				sessionStorage.removeItem(key); pending = null; outcome = 'invalid';
 			} else outcome = pending ? 'unknown' : 'failed';
 			await admin.permissionFailure(error);
@@ -159,7 +146,7 @@
 			moveAnnouncement = m.contactMoved(row.display_name, target + 1, next.length);
 		} catch (error) {
 			contacts = previous;
-			moveFailure = error instanceof ApiError && JSON.stringify(error.body).includes('STALE_HELP_ORDER') ? 'stale' : 'failed';
+			moveFailure = errorCode(error) === 'STALE_HELP_ORDER' ? 'stale' : 'failed';
 			await admin.permissionFailure(error);
 		} finally { moving = false; }
 		if (moveFailure === 'stale') await load();

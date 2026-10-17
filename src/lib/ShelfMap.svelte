@@ -8,8 +8,10 @@
 	import * as Empty from '#lib/components/ui/empty/index.js';
 	import { codeText, itemTitle, nameWrap, sectionHeading } from '#lib/ui.js';
 	import { onMount, onDestroy, untrack } from 'svelte';
+	import { useConvexClient } from 'convex-svelte';
 	import { getI18n } from '#lib/i18n/index.js';
-	import { productName, readCompleteCatalog, type CatalogConfig, type CatalogProduct } from '#lib/catalog.js';
+	import { productName, readCompleteCatalog, type CatalogProduct } from '#lib/catalog.js';
+	import type { ConvexConfig } from '#lib/convex.js';
 	import { gridCell, gridRange } from '#lib/format.js';
 	import { cabinetInner, locateProduct, raaco, readShelfTopology, type ShelfTopology } from '#lib/shelf-map.js';
 	import LocationChips from '#lib/LocationChips.svelte';
@@ -19,10 +21,12 @@
 	// below it. Diagrams stay height-bounded, so a whole cabinet never scrolls.
 	// A product's map opens on the wall with its drawer filled on its cabinet's face.
 	let { config, product, title, labelledby, onreveal, headingLevel = 2, initialTopology = null }: {
-		config: CatalogConfig | null; product?: CatalogProduct; title?: string; labelledby?: string; headingLevel?: 2 | 3; initialTopology?: ShelfTopology | null;
+		config: ConvexConfig | null; product?: CatalogProduct; title?: string; labelledby?: string; headingLevel?: 2 | 3; initialTopology?: ShelfTopology | null;
 		onreveal?: (section: HTMLElement) => void;
 	} = $props();
 	const i18n = getI18n();
+	// The layout sets up the shared client only when the deployment is configured.
+	const client = untrack(() => config) ? useConvexClient() : null;
 	const m = $derived(i18n.m.shelfMap);
 	const uid = $props.id();
 	const initial = untrack(() => initialTopology);
@@ -77,7 +81,7 @@
 		if (document.visibilityState === 'visible') void load();
 	}
 	async function loadProducts() {
-		if (!config || !binId) return;
+		if (!client || !binId) return;
 		const selectedBin = binId;
 		const request = generation;
 		catalogController?.abort();
@@ -85,7 +89,7 @@
 		const timeout = setTimeout(() => own.abort(), 30_000);
 		catalogState = 'loading';
 		try {
-			const result = await readCompleteCatalog(config, { binId: selectedBin, signal: own.signal });
+			const result = await readCompleteCatalog(client, { binId: selectedBin, signal: own.signal });
 			if (request !== generation || catalogController !== own || selectedBin !== binId) return;
 			products = result; catalogState = 'ready';
 		} catch { if (request === generation && catalogController === own && selectedBin === binId) catalogState = 'error'; }
@@ -96,12 +100,12 @@
 		cancelReads(); const request = generation;
 		if (!topology) mapState = 'loading';
 		if (catalogState === 'loading') catalogState = products.length ? 'ready' : 'idle';
-		if (!config) { mapState = 'error'; return; }
+		if (!client) { mapState = 'error'; return; }
 		refreshing = true;
 		const own = new AbortController(); controller = own;
 		const timeout = setTimeout(() => own.abort(), 15_000);
 		try {
-			const result = await readShelfTopology(config, { signal: own.signal });
+			const result = await readShelfTopology(client, { signal: own.signal });
 			if (request !== generation) return;
 			// Keep the visitor's selection by identity, including drawers moved to
 			// another cabinet. Only fall back when the selected storage is gone.

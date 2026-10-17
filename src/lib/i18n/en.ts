@@ -147,10 +147,6 @@ export const en: Messages = {
 		unset: 'Not given', attributeChanged: (current: string) => `Someone else changed this to ${current}. Save again to replace it.`,
 		specificationsNotSaved: "Some specifications weren't saved. See Specifications above.",
 		addAttribute: 'Add specification',
-		reviewSpecifications: 'Review specifications',
-		saveReviewedSpecifications: 'Save specifications',
-		specificationMetadataKept: 'The product is saved. Check the specifications below and correct them if needed.',
-		specificationsIncomplete: "The product is saved, but some specifications aren't. Try again to finish.",
 		invalidName: 'Enter a name with 1–200 characters.',
 		invalidStockStep: 'Enter a number above 0 with at most 6 decimals. Pieces need a whole number.', invalidSaleStep: 'Enter a multiple of the stock increment, such as the same or double.', invalidPrice: 'Enter a price of 0 or more, with at most 6 decimals.', priceRequired: 'Enter a price or choose Free.', invalidMinimumStock: 'Enter 0 or a multiple of the stock increment.', invalidLink: 'Enter a web address starting with https:// or http://.',
 		referenceRecovery: 'Finish the change', referenceRecoveryStale: "This changed in the meantime, so the earlier change wasn't repeated.", referenceRecoveryRejected: 'The earlier change was rejected.', attributeInvalid: 'Enter a number in the unit shown.', attributeRangeIncomplete: 'Enter both min and max, or choose Single value.', attributeRangeOrder: 'Max must be higher than min.', rangeToggle: 'Min–max', singleValue: 'Single value', rangeMin: 'Min', rangeMax: 'Max', specificationConflict: "A saved specification doesn't match the standard setup, so specifications are locked. Contact whoever maintains the system.",
@@ -181,7 +177,6 @@ export const en: Messages = {
 			series: (value: string) => `${value} isn't an E24 or E96 value.`,
 			duplicates: 'May already exist:'
 		},
-		savedRefreshFailed: "The change is saved, but current details couldn't be loaded.",
 		newTitle: 'New product | Admin | Ampoteket', noProducts: 'No products yet.', clearSearch: 'Clear search and filters', unknownSpecification: 'Unknown specification', attributeRejected: 'This value was rejected. Check it and try again.', title: 'Products | Admin | Ampoteket', heading: 'Products',
 		newProduct: 'New product', scanProduct: 'Scan product', scanAgain: 'Scan again', scanInvalid: "This isn't a product label.", scanMissing: (code: string) => `Product code ${code} doesn't exist.`, scanCameraUnavailable: "The camera isn't available. Allow camera access and try again, or search for the product instead.", editProduct: 'Edit product', onOrder: (value: string) => `${value} on order`, stockLedger: 'Stock changes', back: 'Back to products', search: 'Search by name or product code', stateFilter: 'Status', all: 'All', active: 'Published', inactive: 'Unpublished', lowStock: 'Low stock', sortBy: 'Sort by', sortCurrent: (order: string) => `Sort: ${order}`, sort: { attention: 'Needs attention', counted: 'Least recently counted', code: 'Product code', name: 'Name' }, empty: 'No products match this search.', loading: 'Loading …', unavailable: "Products couldn't be loaded.", missing: "This product doesn't exist.", retry: 'Try again', working: 'Saving …', save: 'Save product', saveAndAddAnother: 'Save and add another', duplicate: 'Duplicate', saved: 'Saved',
 		moveTitle: 'Move this product?', confirmMove: 'Move', cancelMove: 'Cancel',

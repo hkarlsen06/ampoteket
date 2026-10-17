@@ -2,18 +2,18 @@
 	// What the chosen drawer and the drawers sharing an edge with it already hold, so a
 	// value in the wrong drawer or cabinet stands out against its series while placing a
 	// product (page-admin-stock.md#products). Drawers are often shared; nothing warns.
-	// Products load once per editor and revalidate on return to the tab, so picking
-	// another drawer never waits for a request. Only a chosen drawer is announced.
-	import { onMount, untrack } from 'svelte';
+	// The product list is a live subscription, so picking another drawer never waits
+	// for a request. Only a chosen drawer is announced.
+	import { untrack } from 'svelte';
+	import { useQuery } from 'convex-svelte';
+	import { api } from '#lib/convex.js';
 	import { getI18n } from '#lib/i18n/index.js';
 	import { getAdminContext } from '#lib/admin-context.svelte.js';
 	import { productName } from '#lib/catalog.js';
 	import { gridRange } from '#lib/format.js';
 	import { nameWrap } from '#lib/ui.js';
-	import { readAdminProducts, type AdminProduct } from '#lib/admin-products.js';
 	import { binProducts, drawerNeighbours, type DrawerSide, type ShelfTopology } from '#lib/shelf-map.js';
 	import * as Alert from '#lib/components/ui/alert/index.js';
-	import { Button } from '#lib/components/ui/button/index.js';
 	import Icon from '#lib/Icon.svelte';
 	import ArrowUpIcon from 'phosphor-svelte/lib/ArrowUpIcon';
 	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
@@ -25,23 +25,9 @@
 	} = $props();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.adminProducts);
 	const arrows = { above: ArrowUpIcon, left: ArrowLeftIcon, right: ArrowRightIcon, below: ArrowDownIcon };
-	let products = $state<AdminProduct[] | null>(null); let failed = $state(false); let loading = $state(false);
-	let alive = true;
-	onMount(() => () => { alive = false; });
-	async function load() {
-		if (loading || admin.status !== 'ready') return;
-		loading = true;
-		try {
-			const session = admin.credentials(); const next = await readAdminProducts(session);
-			if (alive && session.userId === admin.userId) { products = next; failed = false; }
-		} catch (error) {
-			// A failed background read keeps the list it already shows.
-			if (alive && !products) failed = true;
-			await admin.permissionFailure(error);
-		} finally { if (alive) loading = false; }
-	}
-	$effect(() => { if (admin.status === 'ready' && !products && !failed) untrack(() => { void load(); }); });
-	function revalidate() { if (document.visibilityState === 'visible' && products) void load(); }
+	const query = useQuery(api.products.list, () => admin.status === 'ready' ? {} : 'skip');
+	const products = $derived(query.data ?? null);
+	$effect(() => { if (query.error) void admin.permissionFailure(query.error); });
 
 	type Row = { side: DrawerSide | 'here'; id: string; label: string; names: string[] };
 	// Spatial reading order: above, left, the drawer itself, right, below.
@@ -63,13 +49,9 @@
 		? m.drawerHolds(new Intl.ListFormat(i18n.locale, { type: 'conjunction' }).format(here.names)) : m.drawerHoldsNothing);
 </script>
 
-<svelte:document onvisibilitychange={revalidate} />
 <p class="sr-only" aria-live="polite">{summary}</p>
-{#if selected && failed}
-	<div class={['grid justify-items-start gap-2', className]}>
-		<Alert.Message appearance="inline" variant="destructive" role="alert">{m.drawerContentsUnavailable}</Alert.Message>
-		<Button variant="outline" size="sm" disabled={loading} onclick={load}>{m.retry}</Button>
-	</div>
+{#if selected && query.error}
+	<Alert.Message appearance="inline" variant="destructive" role="alert" class={className}>{m.drawerContentsUnavailable}</Alert.Message>
 {:else if rows}
 	<div class={className} role="group" aria-label={m.drawerContents}>
 		<dl class="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">

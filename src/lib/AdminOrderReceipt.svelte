@@ -14,7 +14,7 @@
 	import QrCodeIcon from 'phosphor-svelte/lib/QrCodeIcon';
 	import CameraFrame from '#lib/CameraFrame.svelte';
 	import LocationChips from '#lib/LocationChips.svelte';
-	import { readAdminProducts, type AdminProduct } from '#lib/admin-products.js';
+	import { api } from '#lib/convex.js';
 	import { readShelfTopology, type ShelfTopology } from '#lib/shelf-map.js';
 	import { codeText, formStatus, nameWrap, sheetBody } from '#lib/ui.js';
 	import * as Alert from '#lib/components/ui/alert/index.js';
@@ -40,7 +40,7 @@
 	const id = $props.id();
 	let detail = $state<OrderDetail | null>(null);
 	// Where each product goes, so a delivery can be shelved from this sheet. Optional: a failed read just omits it.
-	let placement = $state<{ products: Map<string, AdminProduct>; shelf: ShelfTopology } | null>(null);
+	let placement = $state<{ products: Map<string, { bin_id: string | null; location_note: string | null }>; shelf: ShelfTopology } | null>(null);
 	let loading = $state(true);
 	let failed = $state(false);
 	let busy = $state(false);
@@ -127,7 +127,7 @@
 			if (mounted && version === generation && admin.userId === session.userId) {
 				detail = result;
 				const ids = result.products.map((product) => product.id);
-				if (ids.length) void Promise.all([readAdminProducts(session, fetch, ids), readShelfTopology(session.config)]).then(([rows, shelf]) => {
+				if (ids.length) void Promise.all([session.client.query(api.products.list, { ids }), readShelfTopology(session.client)]).then(([rows, shelf]) => {
 					if (mounted && version === generation) placement = { products: new Map(rows.map((row) => [row.id, row])), shelf };
 				}).catch(() => {});
 				if (restoredDraft) {

@@ -1,9 +1,8 @@
-import { ApiError } from './api';
-import { allStaffRows, staffRequest, type StaffSession } from './admin-api';
+import { identifier, object, text } from './api';
+import { api, errorCode, type StaffSession } from './convex';
 import { addDecimals, compareDecimals, normalizeDecimal } from './decimal';
 import { formatDecimal } from './format';
 import type { Locale } from './i18n';
-import { identifier, object, text, type Fetcher } from './api';
 
 export type CountProduct = { id: string; code: string; name_nb: string; name_en: string; unit_code: string; stock_step: string };
 export type CountProductChoice = CountProduct & { bin_id: string | null; is_active: boolean };
@@ -21,10 +20,6 @@ export type CountCommand = CommandIdentity & (
 );
 export type CountResult = { batchId: string | null; eventId: string | null; quantity: string | null; difference: string | null };
 
-function timestamp(value: unknown): string {
-	if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T/.test(value) || !Number.isFinite(Date.parse(value))) throw new Error('Invalid count timestamp');
-	return value;
-}
 function decimal(value: unknown, negative = false): string {
 	if (typeof value !== 'string' || !(negative ? /^-?\d+(?:\.\d{1,6})?$/ : /^\d+(?:\.\d{1,6})?$/).test(value)) throw new Error('Invalid count quantity');
 	return value;
@@ -54,37 +49,12 @@ export function countDifference(counted: string, expected: string): string {
 export function formatSignedDifference(difference: string, locale: Locale): string {
 	return (compareDecimals(difference, '0') > 0 ? '+' : '') + formatDecimal(difference, locale);
 }
-export async function readCountInventory(session: StaffSession, productId: string, fetcher: Fetcher = fetch): Promise<InventorySnapshot> {
-	identifier(productId);
-	const values = await staffRequest(session, 'amp_inventory', { select: 'product_id,quantity,revision,last_counted_at', product_id: `eq.${productId}`, limit: '2' }, undefined, 'POST', fetcher);
-	if (!Array.isArray(values) || values.length !== 1) throw new Error('Count inventory unavailable');
-	const row = object(values[0]);
-	if (row.product_id !== productId) throw new Error('Invalid count inventory binding');
-	return { productId, quantity: decimal(row.quantity, true), revision: revision(row.revision), lastCountedAt: row.last_counted_at === null ? null : timestamp(row.last_counted_at) };
-}
-function parseBatch(value: unknown): CountBatch {
-	const row = object(value);
-	const finishedAt = row.finished_at === null ? null : timestamp(row.finished_at);
-	const finishedBy = row.finished_by === null ? null : identifier(row.finished_by);
-	const finishReason = row.finish_reason === null ? null : text(row.finish_reason, 2000);
-	if ((finishedAt === null) !== (finishedBy === null) || (finishReason && !finishedAt)) throw new Error('Invalid batch closure');
-	return { id: identifier(row.id), ownerId: identifier(row.owner_id), title: text(row.title, 200), productId: row.product_id === null ? null : identifier(row.product_id), startedAt: timestamp(row.started_at), finishedAt, finishedBy, finishReason };
-}
-const batchFields = 'id,owner_id,title,product_id,started_at,finished_at,finished_by,finish_reason';
-function parseOwner(value: unknown): CountOwner {
-	const row = object(value);
-	if (typeof row.is_active !== 'boolean') throw new Error('Invalid count owner');
-	return { id: identifier(row.id), name: text(row.display_name, 120), active: row.is_active, authUserId: row.auth_user_id === null ? null : identifier(row.auth_user_id) };
-}
-export async function readCountBatches(session: StaffSession, fetcher: Fetcher = fetch): Promise<{ batches: CountBatch[]; owners: CountOwner[] }> {
-	const [batchRows, ownerRows] = await Promise.all([
-		// Single-product counts (opening stock, product-page counts) live in the product's stock history.
-		allStaffRows(session, 'amp_count_batches', batchFields, 'id', { product_id: 'is.null' }, fetcher),
-		allStaffRows(session, 'amp_staff_members', 'id,auth_user_id,display_name,is_active', 'id', {}, fetcher)
-	]);
-	const owners = ownerRows.map(parseOwner);
-	const batches = batchRows.map(parseBatch);
-	return { batches: batches.sort((a, b) => b.startedAt.localeCompare(a.startedAt) || b.id.localeCompare(a.id)), owners };
+/** The recorded balance and the revision a count is taken against. */
+export async function readCountInventory(session: StaffSession, productId: string): Promise<InventorySnapshot> {
+	const rows = await session.client.query(api.stock.inventory, { productIds: [identifier(productId)] });
+	if (rows.length !== 1 || rows[0].product_id !== productId) throw new Error('Count inventory unavailable');
+	const { quantity, revision, last_counted_at } = rows[0];
+	return { productId, quantity, revision: String(revision), lastCountedAt: last_counted_at };
 }
 /** An owner row that cannot be read is never treated as abandoned: only a known, lost owner can be closed over. */
 export function countBatchAccess(batch: CountBatch, owner: CountOwner | undefined, currentStaffId: string): 'finished' | 'owner' | 'other' | 'abandoned' {
@@ -92,75 +62,6 @@ export function countBatchAccess(batch: CountBatch, owner: CountOwner | undefine
 	if (batch.finishedAt) return 'finished';
 	if (batch.ownerId === currentStaffId) return 'owner';
 	return owner && (!owner.active || !owner.authUserId) ? 'abandoned' : 'other';
-}
-export async function readCountHistory(session: StaffSession, batchId: string, fetcher: Fetcher = fetch): Promise<CountObservation[]> {
-	identifier(batchId);
-	const rows = await allStaffRows(session, 'amp_stock_counts', 'event_id,batch_id,product_id,expected_quantity,counted_quantity,expected_revision', 'event_id', { batch_id: `eq.${batchId}` }, fetcher);
-	const events = new Map<string, Record<string, unknown>>();
-	for (let start = 0; start < rows.length; start += 100) {
-		const ids = rows.slice(start, start + 100).map((row) => identifier(row.event_id));
-		for (const event of await allStaffRows(session, 'amp_inventory_events', 'id,kind,recorded_at,actor_id,note', 'id', { id: `in.(${ids.join(',')})` }, fetcher)) {
-			if (!ids.includes(identifier(event.id)) || event.kind !== 'count') throw new Error('Invalid count history event');
-			events.set(identifier(event.id), event);
-		}
-	}
-	return rows.map((row): CountObservation => {
-		const eventId = identifier(row.event_id); const event = events.get(eventId);
-		if (row.batch_id !== batchId || !event) throw new Error('Incomplete count history');
-		return { eventId, batchId, productId: identifier(row.product_id), expected: decimal(row.expected_quantity, true), counted: decimal(row.counted_quantity), revision: revision(row.expected_revision), recordedAt: timestamp(event.recorded_at), actorId: identifier(event.actor_id), note: optionalNote(event.note) };
-	}).sort((a, b) => b.recordedAt.localeCompare(a.recordedAt) || b.eventId.localeCompare(a.eventId));
-}
-
-/** A detail page needs one batch and its actors, never the whole batch archive.
- * Only the active owner needs the complete, narrow product projection for search.
- * Finished/read-only batches fetch just products referenced by their history. */
-export async function readCountDetail(session: StaffSession, batchId: string, currentStaffId: string, options: { fetcher?: Fetcher; productId?: string } = {}): Promise<{
-	batch: CountBatch | null; owners: CountOwner[]; products: CountProductChoice[]; observations: CountObservation[];
-}> {
-	identifier(batchId); identifier(currentStaffId);
-	const fetcher = options.fetcher ?? fetch;
-	const [rows, observations] = await Promise.all([
-		staffRequest(session, 'amp_count_batches', { select: batchFields, id: `eq.${batchId}`, limit: '2' }, undefined, 'POST', fetcher),
-		readCountHistory(session, batchId, fetcher)
-	]);
-	if (!Array.isArray(rows) || rows.length > 1) throw new Error('Invalid count batch lookup');
-	if (!rows.length) {
-		if (observations.length) throw new Error('Missing count batch');
-		return { batch: null, owners: [], products: [], observations };
-	}
-	const batch = parseBatch(rows[0]);
-	if (batch.id !== batchId) throw new Error('Invalid count batch binding');
-	const ownerIds = [...new Set([batch.ownerId, ...(batch.finishedBy ? [batch.finishedBy] : []), ...observations.map(entry => entry.actorId)])];
-	const owners: CountOwner[] = [];
-	for (let start = 0; start < ownerIds.length; start += 100) {
-		const ids = ownerIds.slice(start, start + 100);
-		const rows = await allStaffRows(session, 'amp_staff_members', 'id,auth_user_id,display_name,is_active', 'id', { id: `in.(${ids.join(',')})` }, fetcher);
-		for (const row of rows) {
-			const owner = parseOwner(row);
-			if (!ids.includes(owner.id)) throw new Error('Invalid count owner binding');
-			owners.push(owner);
-		}
-	}
-	// A row the reader cannot see degrades to a translated name on the page, not a blank page.
-	const owner = owners.find(owner => owner.id === batch.ownerId);
-	const productIds = [...new Set([...observations.map(entry => entry.productId), ...(options.productId ? [identifier(options.productId)] : [])])];
-	const filters: Record<string, string>[] = [];
-	if (countBatchAccess(batch, owner, currentStaffId) === 'owner') filters.push({});
-	else for (let start = 0; start < productIds.length; start += 100) filters.push({ id: `in.(${productIds.slice(start, start + 100).join(',')})` });
-	const products: CountProductChoice[] = [];
-	for (const filter of filters) {
-		const rows = await allStaffRows(session, 'amp_products', 'id,code,name_nb,name_en,unit_code,stock_step,bin_id,is_active', 'id', filter, fetcher);
-		for (const row of rows) {
-			const id = identifier(row.id), code = text(row.code, 40), unit = text(row.unit_code, 24), step = decimal(row.stock_step);
-			if (!/^[A-Z0-9][A-Z0-9-]{0,39}$/.test(code) || !/^[a-z][a-z0-9_]{0,23}$/.test(unit)
-				|| compareDecimals(step, '0') <= 0 || typeof row.is_active !== 'boolean'
-				|| (filter.id && !productIds.includes(id))) throw new Error('Invalid count product');
-			products.push({ id, code, name_nb: text(row.name_nb, 200), name_en: text(row.name_en, 200), unit_code: unit,
-				stock_step: step, bin_id: row.bin_id === null ? null : identifier(row.bin_id), is_active: row.is_active });
-		}
-	}
-	if (new Set(products.map(product => product.id)).size !== products.length) throw new Error('Duplicate count products');
-	return { batch, owners, products, observations };
 }
 
 /** One unresolved count command across this browser; never replace its actor or observation. */
@@ -206,34 +107,38 @@ export async function updateCountStorage<T>(action: (storage: WriteStorage) => T
 		return result;
 	});
 }
-export async function runCountCommand(session: StaffSession, command: CountCommand, fetcher: Fetcher = fetch): Promise<CountResult> {
+export async function runCountCommand(session: StaffSession, command: CountCommand): Promise<CountResult> {
 	command = parseCommand(command);
 	if (session.userId !== command.userId) throw new Error('Count command identity changed');
-	let path: string; let body: Record<string, string | null>;
-	if (command.kind === 'start') { path = 'amp_start_count_batch'; body = { p_request_id: command.requestId, p_title: command.title }; }
-	else if (command.kind === 'finish') { path = 'amp_finish_count_batch'; body = { p_batch_id: command.batchId }; }
-	else if (command.kind === 'close') { path = 'amp_close_abandoned_count_batch'; body = { p_request_id: command.requestId, p_batch_id: command.batchId, p_reason: command.reason }; }
-	else {
-		path = command.batchId ? 'amp_record_count' : 'amp_record_single_count';
-		body = { p_request_id: command.requestId, p_product_id: command.productId, p_expected_revision: command.revision, p_counted_quantity: command.quantity, p_note: command.note, ...(command.batchId ? { p_batch_id: command.batchId } : {}) };
+	const { client } = session, { requestId } = command;
+	if (command.kind === 'start') {
+		const result = await client.mutation(api.stock.startCountBatch, { requestId, title: command.title });
+		return { batchId: identifier(result.batch_id), eventId: null, quantity: null, difference: null };
 	}
-	const result = object(await staffRequest(session, `rpc/${path}`, {}, body, 'POST', fetcher));
 	if (command.kind !== 'count') {
-		const batchId = identifier(result.batch_id);
-		if (command.kind !== 'start' && (batchId !== command.batchId || result.finished !== true)) throw new Error('Invalid count closure result');
-		return { batchId, eventId: null, quantity: null, difference: null };
+		const result = command.kind === 'finish'
+			? await client.mutation(api.stock.finishCountBatch, { batchId: command.batchId })
+			: await client.mutation(api.stock.closeAbandonedCountBatch, { requestId, batchId: command.batchId, reason: command.reason });
+		if (result.batch_id !== command.batchId || result.finished !== true) throw new Error('Invalid count closure result');
+		return { batchId: command.batchId, eventId: null, quantity: null, difference: null };
 	}
-	const quantity = decimal(result.quantity); const difference = decimal(result.difference, true);
+	const observation = { requestId, productId: command.productId, expectedRevision: command.revision, counted: command.quantity, note: command.note };
+	const result = command.batchId
+		? await client.mutation(api.stock.recordCount, { ...observation, batchId: command.batchId })
+		: await client.mutation(api.stock.recordSingleCount, observation);
+	const quantity = decimal(result.quantity), difference = decimal(result.difference, true);
 	if (compareDecimals(quantity, command.quantity) !== 0 || compareDecimals(difference, countDifference(command.quantity, command.expected)) !== 0) throw new Error('Invalid count result');
 	return { batchId: command.batchId ?? identifier(result.batch_id), eventId: identifier(result.event_id), quantity, difference };
 }
-/** Only known transaction rejections release a frozen command. Network/shape/auth failures do not. */
+/**
+ * Only a domain rejection proves the transaction rolled back, so only these
+ * release a frozen count. Unknown outcomes, lost access and a reused request ID do not.
+ */
 export function countRejection(error: unknown): 'stale' | 'closed' | 'owner' | 'invalid' | null {
-	if (!(error instanceof ApiError) || !error.body || typeof error.body !== 'object' || !('message' in error.body)) return null;
-	const message = error.body.message;
-	if (message === 'STALE_STOCK_COUNT') return 'stale';
-	if (message === 'COUNT_BATCH_FINISHED') return 'closed';
-	if (message === 'COUNT_BATCH_BELONGS_TO_ANOTHER_STAFF_MEMBER' || message === 'COUNT_BATCH_OWNER_STILL_ACTIVE') return 'owner';
-	if (['INVALID_QUANTITY_STEP', 'NEGATIVE_PHYSICAL_COUNT', 'CLOSURE_REASON_REQUIRED', 'PRODUCT_NOT_FOUND', 'COUNT_BATCH_NOT_FOUND'].includes(String(message))) return 'invalid';
+	const code = errorCode(error);
+	if (code === 'STALE_STOCK_COUNT') return 'stale';
+	if (code === 'COUNT_BATCH_FINISHED') return 'closed';
+	if (code === 'COUNT_BATCH_BELONGS_TO_ANOTHER_STAFF_MEMBER' || code === 'COUNT_BATCH_OWNER_STILL_ACTIVE') return 'owner';
+	if (code !== null && ['INVALID_QUANTITY_STEP', 'NEGATIVE_PHYSICAL_COUNT', 'CLOSURE_REASON_REQUIRED', 'PRODUCT_NOT_FOUND', 'COUNT_BATCH_NOT_FOUND'].includes(code)) return 'invalid';
 	return null;
 }

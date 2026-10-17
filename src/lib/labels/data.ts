@@ -1,17 +1,14 @@
-import type { StaffSession } from '../admin-api';
+import type { StaffSession } from '../convex';
 import { readAdminProducts, readAllProductAttributes, readProductReferences, productTypes,
 	type AdminProduct, type AttributeValue, type ProductReferences } from '../admin-products';
 import { categorySpecifications } from '../product-specifications';
 import { formatMeasurementText, formatSpecificationNumber } from '../format';
 import { messagesFor, specificationLabel, type Locale } from '../i18n';
-import type { Fetcher } from '../api';
 
 export type LabelData = { products: AdminProduct[]; references: ProductReferences; attributes: AttributeValue[] };
 
-export async function readLabelData(session: StaffSession, fetcher: Fetcher = fetch): Promise<LabelData> {
-	const [products, references, attributes] = await Promise.all([
-		readAdminProducts(session, fetcher), readProductReferences(session, fetcher), readAllProductAttributes(session, fetcher)
-	]);
+export async function readLabelData(session: StaffSession): Promise<LabelData> {
+	const [products, references, attributes] = await Promise.all([readAdminProducts(session), readProductReferences(session), readAllProductAttributes(session)]);
 	const bins = new Set(references.shelf.bins.map(bin => bin.id));
 	const productIds = new Set(products.map(product => product.id));
 	const definitions = new Map(references.definitions.map(definition => [definition.id, definition]));

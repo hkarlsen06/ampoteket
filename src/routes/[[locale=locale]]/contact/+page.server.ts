@@ -1,10 +1,10 @@
 import { readHelpDirectory } from '#lib/help.js';
-import { getCatalogConfig } from '#lib/server/catalog-config.js';
+import { serverConvex } from '#lib/server/convex.js';
 import type { PageServerLoad } from './$types';
-export const load: PageServerLoad = async ({ request, fetch, setHeaders }) => {
+export const load: PageServerLoad = async ({ setHeaders }) => {
 	setHeaders({ 'Cache-Control': 'no-store' });
-	const config = getCatalogConfig(request);
-	if (!config) return { contacts: null };
-	try { return { contacts: await readHelpDirectory(config, fetch) }; }
+	const client = serverConvex();
+	if (!client) return { contacts: null };
+	try { return { contacts: await readHelpDirectory(client) }; }
 	catch { return { contacts: null }; }
 };

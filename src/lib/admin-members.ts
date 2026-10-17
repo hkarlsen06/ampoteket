@@ -1,5 +1,5 @@
-import { ApiError, identifier, isRecord, object, requestApiJson, text, type Fetcher } from './api';
-import { staffRequest, type StaffSession } from './admin-api';
+import { identifier, object, text } from './api';
+import { api, errorCode, type StaffSession } from './convex';
 import type { Locale } from './i18n';
 
 export type AdminMember = {
@@ -12,17 +12,15 @@ export type MemberCommand = { userId: string; requestId: string } & (
 );
 export const memberStorageKey = 'ampoteket:admin-member-command:v1';
 
-export async function readAdminMembers(session: StaffSession, fetcher: Fetcher = fetch): Promise<AdminMember[]> {
-	const value = await staffRequest(session, 'rpc/amp_list_staff', {}, {}, 'POST', fetcher);
-	if (!Array.isArray(value)) throw new Error('Invalid admin list');
+export async function readAdminMembers(session: StaffSession): Promise<AdminMember[]> {
 	const seen = new Set<string>();
-	return value.map(value => {
+	return (await session.client.query(api.members.list, {})).map((value) => {
 		const row = object(value), id = identifier(row.id);
-		if (seen.has(id) || typeof row.is_active !== 'boolean' || typeof row.email_confirmed !== 'boolean') throw new Error('Invalid admin member');
+		if (seen.has(id) || typeof row.isActive !== 'boolean' || typeof row.emailConfirmed !== 'boolean') throw new Error('Invalid admin member');
 		seen.add(id);
-		return { id, authUserId: row.auth_user_id === null ? null : identifier(row.auth_user_id),
-			displayName: text(row.display_name, 120), email: row.email === null ? null : text(row.email, 254),
-			isActive: row.is_active, emailConfirmed: row.email_confirmed };
+		return { id, authUserId: row.authUserId === null ? null : identifier(row.authUserId),
+			displayName: text(row.displayName, 120), email: row.email === null ? null : text(row.email, 254),
+			isActive: row.isActive, emailConfirmed: row.emailConfirmed };
 	});
 }
 
@@ -54,31 +52,28 @@ export function clearMemberCommand(storage: Pick<Storage, 'getItem' | 'removeIte
 	if (storage.getItem(memberStorageKey) !== null) throw new Error('Admin storage unavailable');
 }
 
-export async function runMemberCommand(session: StaffSession, command: MemberCommand, fetcher: Fetcher = fetch): Promise<'invited' | 'existing_account' | 'deactivated'> {
+/**
+ * Deactivation and invitation both carry the request ID, so repeating a saved
+ * command after a lost reply returns the first result. An invitation grants
+ * access before emailing: INVITATION_EMAIL_FAILED leaves access in place and the
+ * same command sends again.
+ */
+export async function runMemberCommand(session: StaffSession, command: MemberCommand): Promise<'invited' | 'existing_account' | 'deactivated'> {
 	command = parseCommand(command);
 	if (session.userId !== command.userId) throw new Error('Admin command identity changed');
 	if (command.kind === 'deactivate') {
-		const result = await staffRequest(session, 'rpc/amp_deactivate_staff', {}, { p_request_id: command.requestId, p_staff_id: command.staffId }, 'POST', fetcher);
-		if (identifier(result) !== command.staffId) throw new Error('Invalid admin deactivation');
+		const result = await session.client.mutation(api.members.deactivate, { requestId: command.requestId, staffId: command.staffId });
+		if (result !== command.staffId) throw new Error('Invalid admin deactivation');
 		return 'deactivated';
 	}
-	const result = object(await requestApiJson('/api/admin/invitations', {
-		method: 'POST', credentials: 'same-origin', cache: 'no-store',
-		headers: { Authorization: `Bearer ${session.token}`, 'Content-Type': 'application/json', Accept: 'application/json' },
-		body: JSON.stringify({ requestId: command.requestId, email: command.email, displayName: command.displayName, locale: command.locale, targetId: command.targetId, targetActive: command.targetActive })
-	}, fetcher, 60_000));
+	const result = await session.client.action(api.members.invite, { requestId: command.requestId, email: command.email, displayName: command.displayName,
+		locale: command.locale, targetId: command.targetId, targetActive: command.targetActive });
 	identifier(result.staffId);
 	if (result.status !== 'invited' && result.status !== 'existing_account') throw new Error('Invalid invitation response');
 	return result.status;
 }
 
-export function memberErrorCode(error: unknown): string | null {
-	if (!(error instanceof ApiError) || !isRecord(error.body)) return null;
-	const value = error.body.error ?? error.body.message;
-	return typeof value === 'string' ? value.split(':')[0] : null;
-}
-
-/** What staff are told. The server and database codes differ, but a person needs only the consequence. */
+/** What staff are told: a person needs only the consequence, not the code. */
 export type MemberFailure = 'emailFailed' | 'rateLimited' | 'invalidInput' | 'notFound' | 'conflict' | 'superseded' | 'self';
 const failures: Record<string, MemberFailure> = {
 	INVITATION_EMAIL_FAILED: 'emailFailed', RATE_LIMITED: 'rateLimited',
@@ -89,7 +84,8 @@ const failures: Record<string, MemberFailure> = {
 };
 /** Null means the outcome is unknown (transport failure or an unlisted code), so the saved command stays for retry. */
 export function memberFailure(error: unknown): MemberFailure | null {
-	return failures[memberErrorCode(error) ?? ''] ?? null;
+	const code = errorCode(error);
+	return code !== null && Object.hasOwn(failures, code) ? failures[code] : null;
 }
 /** The server definitively refused these: retrying the same command cannot succeed. */
 export const retryableMemberFailures: readonly MemberFailure[] = ['emailFailed', 'rateLimited'];

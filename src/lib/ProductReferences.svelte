@@ -8,9 +8,8 @@
 	import { onMount } from 'svelte';
 	import { getI18n } from '#lib/i18n/index.js';
 	import { getAdminContext } from '#lib/admin-context.svelte.js';
-	import { definitiveProductFailure, detailCommandKey, executeDetailCommand, parseDetailCommand, readProductReferences, StaleProductError, type AttributeDefinition, type Category, type DetailCommand, type ProductReferences } from '#lib/admin-products.js';
+	import { definitiveProductFailure, detailCommandKey, executeDetailCommand, parseDetailCommand, StaleProductError, type AttributeDefinition, type Category, type DetailCommand } from '#lib/admin-products.js';
 
-	let { onrefresh }: { onrefresh: (value: ProductReferences) => void } = $props();
 	const i18n = getI18n();
 	const admin = getAdminContext();
 	const m = $derived(i18n.m.adminProducts);
@@ -67,13 +66,6 @@
 			clearPending();
 			if (!alive || session.userId !== admin.userId) return;
 			outcome = 'saved';
-			try {
-				const references = await readProductReferences(session);
-				if (alive && session.userId === admin.userId) onrefresh(references);
-			} catch (error) {
-				outcome = 'savedRefreshFailed';
-				await admin.permissionFailure(error);
-			}
 		} catch (error) {
 			if (error instanceof StaleProductError || definitiveProductFailure(error)) {
 				try {
@@ -108,7 +100,7 @@
 			{#if wrongIdentity}<Alert.Message appearance="inline" variant="destructive">{m.wrongIdentity}</Alert.Message>
 			{:else if !storageReady}<Alert.Message appearance="inline" variant="destructive">{m.storage}</Alert.Message>
 			{:else if outcome === 'saved'}<StateBadge tone="success">{m.referenceSaved}</StateBadge>
-			{:else if outcome !== 'idle' || pending}<Alert.Message appearance="inline" variant={outcome !== 'idle' ? 'destructive' : 'default'}>{outcome === 'savedRefreshFailed' ? m.savedRefreshFailed : outcome === 'stale' ? m.referenceRecoveryStale : outcome === 'invalid' ? m.referenceRecoveryRejected : m.unknown}</Alert.Message>{/if}
+			{:else if outcome !== 'idle' || pending}<Alert.Message appearance="inline" variant={outcome !== 'idle' ? 'destructive' : 'default'}>{outcome === 'stale' ? m.referenceRecoveryStale : outcome === 'invalid' ? m.referenceRecoveryRejected : m.unknown}</Alert.Message>{/if}
 		</div>
 	</section>
 {/if}

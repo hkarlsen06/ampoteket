@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
+	import { useQuery } from 'convex-svelte';
+	import { api } from '#lib/convex.js';
 	import { getI18n } from '#lib/i18n/index.js';
 	import { getAdminContext } from '#lib/admin-context.svelte.js';
-	import { auditDay, groupAudit, readAuditReferences, readAuditPage, readAuditUpdates, type AuditEntry, type AuditField, type AuditReferences } from '#lib/admin-audit.js';
+	import { auditDay, groupAudit, mergeAuditEntries, mergeAuditReferences, parseAuditPage, readAuditGap, readAuditPage, type AuditEntry, type AuditField, type AuditPage, type AuditReferences } from '#lib/admin-audit.js';
 	import { formatClock, formatDay } from '#lib/format.js';
 	import { formStatus, itemTitle, lede, pageHeader, pageHeading, sectionHeading } from '#lib/ui.js';
 	import * as Alert from '#lib/components/ui/alert/index.js';
@@ -15,50 +17,75 @@
 	import { Skeleton } from '#lib/components/ui/skeleton/index.js';
 
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.adminAudit);
+	// The newest page is live, so new entries appear as they are recorded; older pages load on request.
+	const head = useQuery(api.auditLog.page, () => admin.status === 'ready' ? {} : 'skip');
 	let entries = $state<AuditEntry[]>([]);
 	let references = $state<AuditReferences>({});
-	let loading = $state(false); let failed = $state(false); let complete = $state(false); let loaded = $state(false);
+	let loading = $state(false); let headFailed = $state(false); let olderFailed = $state(false); let complete = $state(false); let loaded = $state(false);
+	const failed = $derived(headFailed || olderFailed);
 	const grouped = $derived(groupAudit(entries, i18n.locale, references));
 	// The oldest loaded day may continue on the next page; it shows once it is whole.
 	const days = $derived(complete || grouped.length < 2 ? grouped : grouped.slice(0, -1));
 	const loadedDays = () => new Set(entries.map(entry => auditDay(entry.recordedAt))).size;
-	let cursor: string | null = null;
-	let alive = true; let failedRefresh = false;
+	let alive = true; let owner: string | null = null;
 	onMount(() => () => { alive = false; });
 
-	$effect(() => { if (admin.status === 'ready' && !loaded && !loading && !failed) void loadMore(); });
-	async function loadMore(refresh = false) {
-		if (loading || (!refresh && complete) || admin.status !== 'ready') return;
-		loading = true; failedRefresh = refresh;
+	$effect(() => {
+		const data = head.data, error = head.error;
+		untrack(() => {
+			if (error) { headFailed = true; void admin.permissionFailure(error); return; }
+			if (data === undefined) return;
+			try { absorb(parseAuditPage(data)); } catch { headFailed = true; }
+		});
+	});
+	// Updates apply in order: a gap read must finish before the next live page merges.
+	let absorbing = Promise.resolve();
+	function absorb(page: AuditPage) { absorbing = absorbing.then(() => absorbHead(page)); }
+	async function absorbHead(page: AuditPage) {
 		try {
 			const session = admin.credentials();
-			const newest = refresh ? entries[0]?.id : undefined;
-			// Older pages continue until one more day is whole, so no day stops partway through its batches.
+			if (owner !== session.userId) { owner = session.userId; entries = []; references = {}; complete = false; loaded = false; }
+			// The log is append-only: entries that leave the live page stay shown. When more than
+			// a page arrived since the last update, the ones in between are read so nothing is skipped.
+			const newest = entries[0]?.id, oldest = page.entries.at(-1)?.id;
+			const gap = newest && oldest && page.more && BigInt(oldest) > BigInt(newest) ? await readAuditGap(session, oldest, newest) : null;
+			if (!alive || admin.userId !== session.userId) return;
+			references = mergeAuditReferences(mergeAuditReferences(references, gap?.references ?? {}), page.references);
+			entries = mergeAuditEntries(entries, [...page.entries, ...gap?.entries ?? []]);
+			headFailed = false;
+			if (!loaded) {
+				complete = !page.more; loaded = true;
+				// Older pages continue until two days are whole, so no day stops partway through its batches.
+				if (!complete && loadedDays() < 2) void loadMore();
+			}
+		} catch (error) { headFailed = true; await admin.permissionFailure(error); }
+	}
+	async function loadMore() {
+		if (loading || complete || !loaded || admin.status !== 'ready') return;
+		loading = true;
+		try {
+			const session = admin.credentials();
 			const target = Math.max(2, loadedDays() + 1);
 			do {
-				const page = newest ? { entries: await readAuditUpdates(session, newest), more: !complete } : await readAuditPage(session, refresh ? null : cursor);
-				const names = await readAuditReferences(session, page.entries);
+				const page = await readAuditPage(session, entries.at(-1)?.id ?? null);
 				if (!alive || admin.userId !== session.userId) return;
-				for (const [table, rows] of Object.entries(names)) references[table] = { ...references[table], ...rows };
-				entries = newest ? [...page.entries, ...entries] : [...entries, ...page.entries];
-				if (!newest) {
-					if (page.entries.length) cursor = page.entries.at(-1)!.id;
-					complete = !page.more;
-				}
-			} while (!newest && !complete && loadedDays() < target);
-			loaded = true;
-			failed = false;
-		} catch (error) { failed = true; await admin.permissionFailure(error); }
+				references = mergeAuditReferences(references, page.references);
+				entries = mergeAuditEntries(entries, page.entries);
+				complete = !page.more;
+			} while (!complete && loadedDays() < target);
+			olderFailed = false;
+		} catch (error) { olderFailed = true; await admin.permissionFailure(error); }
 		finally { loading = false; }
 	}
-	let revalidateQueued = $state(false);
-	function revalidate() { revalidateQueued = document.visibilityState === 'visible'; }
-	$effect(() => {
-		if (revalidateQueued && admin.status === 'ready' && !loading) {
-			revalidateQueued = false;
-			untrack(() => { void loadMore(true); });
-		}
-	});
+	/** A failed live page is read once directly; the subscription keeps delivering after that. */
+	async function retry() {
+		if (!headFailed) { await loadMore(); return; }
+		if (loading || admin.status !== 'ready') return;
+		loading = true;
+		try { absorb(await readAuditPage(admin.credentials())); await absorbing; }
+		catch (error) { await admin.permissionFailure(error); }
+		finally { loading = false; }
+	}
 </script>
 
 {#snippet clock(first: string, last: string)}
@@ -83,8 +110,6 @@
 	</Collapsible.Root>
 {/snippet}
 
-<svelte:window onfocus={revalidate} ononline={revalidate} />
-<svelte:document onvisibilitychange={revalidate} />
 <svelte:head><title>{m.title}</title></svelte:head>
 <header class={pageHeader}>
 	<h1 class={pageHeading}>{m.heading}</h1>
@@ -98,8 +123,8 @@
 		</ul>
 	</nav>
 </header>
-<div class="sr-only" aria-live="polite">{#if loading && !loaded}{m.loading}{/if}</div>
-{#if loading && !loaded}
+<div class="sr-only" aria-live="polite">{#if !loaded && !failed}{m.loading}{/if}</div>
+{#if !loaded && !failed}
 	<div class="space-y-6" aria-hidden="true">{#each [1, 2, 3, 4] as row (row)}<div class="space-y-3 py-3"><div class="flex items-center gap-2"><Skeleton class="h-6 w-20" /><Skeleton class="h-5 w-40" /></div><Skeleton class="h-4 w-64 max-w-full" /><Skeleton class="h-4 w-48" /></div>{/each}</div>
 {:else if loaded && !entries.length}
 	<Empty.Root><Empty.Description>{m.empty}</Empty.Description></Empty.Root>
@@ -150,7 +175,7 @@
 {/if}
 <div class={formStatus} aria-live="polite">{#if failed}<Alert.Message appearance="inline" variant="destructive">{m.unavailable}</Alert.Message>{/if}</div>
 {#if failed || !complete}
-	<Button type="button" variant="outline" class={failed ? undefined : 'mt-5'} onclick={() => loadMore(failed && failedRefresh)} disabled={loading}>
-		<ButtonLabel pending={loading} pendingLabel={m.loading} label={failed ? m.retry : m.more} reserveLabels={[m.retry, m.more]} />
+	<Button type="button" variant="outline" class={failed ? undefined : 'mt-5'} onclick={failed ? retry : loadMore} disabled={loading || (!loaded && !failed)}>
+		<ButtonLabel pending={loading || (!loaded && !failed)} pendingLabel={m.loading} label={failed ? m.retry : m.more} reserveLabels={[m.retry, m.more]} />
 	</Button>
 {/if}

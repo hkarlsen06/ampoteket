@@ -1,5 +1,5 @@
-import { identifier, object, text, type Fetcher } from './api';
-import { staffRequest, type StaffSession } from './admin-api';
+import { identifier, object, text } from './api';
+import { api, type StaffSession } from './convex';
 import { normalizeDecimal, shiftDecimal } from './decimal';
 
 export type SalesSummary = { sale_count: string; total_nok: string; quantity: string | null };
@@ -57,9 +57,9 @@ function summary(value: unknown, scoped: boolean): SalesSummary {
 function part(row: Record<string, unknown>): Part {
 	return { product_id: identifier(row.product_id), code: text(row.code, 40), name_nb: text(row.name_nb, 1000), name_en: text(row.name_en, 1000), unit_code: text(row.unit_code, 24) };
 }
-export async function readAdminStatistics(session: StaffSession, productId: string | null = null, fetcher: Fetcher = fetch): Promise<AdminStatistics> {
+export async function readAdminStatistics(session: StaffSession, productId: string | null = null): Promise<AdminStatistics> {
 	if (productId !== null) identifier(productId);
-	const row = object(await staffRequest(session, 'rpc/amp_admin_statistics', {}, { p_product_id: productId }, 'POST', fetcher));
+	const row = object(await session.client.query(api.statistics.read, { productId }));
 	if (row.product_id !== productId) throw new Error('Invalid statistics product');
 	const start_date = date(row.start_date); const end_date = date(row.end_date);
 	const days = list(row.days, 30).map(day => ({ date: date(day.date), ...summary(day, productId !== null) }));

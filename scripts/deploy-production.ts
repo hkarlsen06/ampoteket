@@ -1,4 +1,9 @@
-/** The only production deploy: wait for this commit's CI, publish, verify, roll back on failure. */
+/**
+ * The only production deploy: wait for this commit's CI, deploy the Convex
+ * functions, publish the Worker, verify, and roll the Worker back on failure.
+ * Convex has no rollback: a backend change must keep working with the previous
+ * Worker (docs/runbook-deploy.md "Publish").
+ */
 import { unstable_readConfig } from 'wrangler';
 import { nb } from '../src/lib/i18n/nb';
 import type { Fetcher } from '../src/lib/api';
@@ -32,8 +37,15 @@ export async function requireValidation(sha: string, fetcher: Fetcher = fetch, p
 	throw new Error('Validation did not finish within 20 checks; retry after CI passes. Nothing deployed.');
 }
 
+/** A production deploy key names its deployment: `prod:<name>|<secret>` deploys to https://<name>.convex.cloud. */
+export function convexDeploymentUrl(deployKey: string | undefined): string {
+	const name = /^prod:([a-z0-9-]+)\|/.exec(deployKey ?? '')?.[1];
+	if (!name) throw new Error('CONVEX_DEPLOY_KEY must be the production deploy key; nothing deployed.');
+	return `https://${name}.convex.cloud`;
+}
+
 // Injectable process/network boundaries let tests exercise failures without contacting production.
-export async function deployProduction(command = run, fetcher: Fetcher = fetch, pause = Bun.sleep) {
+export async function deployProduction(command = run, fetcher: Fetcher = fetch, pause = Bun.sleep, deployKey = process.env.CONVEX_DEPLOY_KEY) {
 	const wrangler = (...args: string[]) => command(['bunx', '--no-install', 'wrangler', ...args, '--env', 'production'], args.includes('--json'));
 	const liveVersion = () => {
 		const deployments = JSON.parse(wrangler('deployments', 'list', '--json')) as { versions: { version_id: string; percentage: number }[] }[];
@@ -51,12 +63,17 @@ export async function deployProduction(command = run, fetcher: Fetcher = fetch, 
 	const sha = committedRevision();
 	const config = unstable_readConfig({ env: 'production' });
 	if (config.name !== 'ampoteket') throw new Error(`Unexpected production Worker name ${config.name}`);
+	const convexUrl = convexDeploymentUrl(deployKey);
+	if (config.vars.PUBLIC_CONVEX_URL !== convexUrl) throw new Error(`The deploy key is for ${convexUrl}, but wrangler.jsonc names ${String(config.vars.PUBLIC_CONVEX_URL)}; nothing deployed.`);
 	await requireValidation(sha, fetcher, pause);
 	if (committedRevision() !== sha) throw new Error('Release commit changed while waiting for CI; nothing deployed.');
 	command(['bun', 'run', 'build']);
 	if (committedRevision() !== sha) throw new Error('Release commit changed while building; nothing deployed.');
 	const previous = liveVersion();
 	console.log(`Live before deploy: ${previous}`);
+	// Backend first: the new Worker may call functions the old backend lacks.
+	command(['bunx', '--no-install', 'convex', 'deploy', '--yes']);
+	if (committedRevision() !== sha) throw new Error('Release commit changed while deploying Convex; the Worker was not published.');
 	try {
 		wrangler('deploy', '--message', sha);
 		const current = liveVersion();
@@ -72,7 +89,7 @@ export async function deployProduction(command = run, fetcher: Fetcher = fetch, 
 			if (binding?.type !== 'ratelimit' || binding.namespace_id !== limit.namespace_id
 				|| binding.simple?.limit !== limit.simple.limit || binding.simple?.period !== limit.simple.period) problems.push(`rate limit ${limit.name} does not match`);
 		}
-		for (const secret of ['SUPABASE_SECRET_KEY', 'RESEND_API_KEY']) if (!bindings.some((b) => b.name === secret && b.type === 'secret_text')) problems.push(`secret ${secret} is missing`);
+		for (const secret of ['CHECKOUT_SERVER_KEY', 'RESEND_API_KEY']) if (!bindings.some((b) => b.name === secret && b.type === 'secret_text')) problems.push(`secret ${secret} is missing`);
 
 		const options = { redirect: 'manual' as const, signal: AbortSignal.timeout(15000), headers: { 'cache-control': 'no-cache' } };
 		const help = await fetcher(`${origin}/contact`, options);

@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test';
 import { readNewProducts, readReviewPoint, reviewedThrough, reviewList, reviewSince, timestampMicros, writeReviewPoint, type NewProduct } from './admin-review';
 import { auditActor, readProductCreations, type AuditEntry } from './admin-audit';
+import { getFunctionName } from 'convex/server';
+import type { ConvexCaller } from './convex';
 import { memory } from './test-storage';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -55,25 +57,35 @@ test('the review point is stored per staff user and falls back to the last 14 da
 	expect(reviewSince('2026-10-14T10:00:00+00:00')).toBe('2026-10-14T10:00:00+00:00');
 });
 
-const session = { config: { url: 'https://fixture.invalid', publishableKey: 'sb_publishable_fixture' }, token: 'staff-jwt', userId: viewer };
+type Call = { name: string; args: Record<string, unknown> };
+function stub(handlers: Record<string, (args: Record<string, unknown>) => unknown>, calls: Call[]): ConvexCaller {
+	const call = async (fn: never, args: Record<string, unknown>) => {
+		const name = getFunctionName(fn); calls.push({ name, args });
+		if (!handlers[name]) throw new Error(`Unexpected ${name}`);
+		return handlers[name](args);
+	};
+	return { query: call, mutation: call, action: call } as unknown as ConvexCaller;
+}
 
 test('new products and their creations are read after the review point', async () => {
-	const urls: URL[] = [];
-	const fetcher = async (input: RequestInfo | URL) => {
-		const url = new URL(String(input)); urls.push(url);
-		if (url.pathname.endsWith('amp_products')) return new Response(JSON.stringify(url.searchParams.has('and') ? [] : [product(1, '2026-10-14T10:00:00.5+00:00')]));
-		const rows = url.searchParams.has('id') ? [] : [{ id: '7', table_name: 'products', row_key: { id: id(1) }, action: 'INSERT', before_data: null, after_data: { id: id(1) }, actor_id: other, database_role: 'authenticated', recorded_at: '2026-10-14T10:00:00.5+00:00' }];
-		return new Response(JSON.stringify(rows));
-	};
+	const calls: Call[] = [];
 	const since = '2026-10-14T09:00:00.123456+00:00';
-	const products = await readNewProducts(session, since, fetcher);
-	expect(products[0].created_at).toBe('2026-10-14T10:00:00.5+00:00');
-	expect(urls[0].searchParams.get('created_at')).toBe(`gt.${since}`);
-	expect(urls[0].searchParams.get('select')).toContain('created_at');
-	const creations = await readProductCreations(session, since, fetcher);
-	expect(creations.map(entry => entry.actorId)).toEqual([other]);
-	const auditUrl = urls.find(url => url.pathname.endsWith('amp_audit_log'))!;
-	expect(Object.fromEntries(['table_name', 'action', 'recorded_at'].map(key => [key, auditUrl.searchParams.get(key)]))).toEqual({ table_name: 'eq.products', action: 'eq.INSERT', recorded_at: `gte.${since}` });
-	expect(auditActor(creations[0], 'en', { staff_members: { [other]: { display_name: 'Ada' } } })).toBe('Ada');
-	expect(auditActor(creations[0], 'en', {})).toBe('Unknown admin');
+	const client = stub({
+		'products:createdSince': () => [product(1, '2026-10-14T10:00:00.500000Z')],
+		'auditLog:productCreations': () => ({
+			entries: [{ id: '7', table_name: 'products', row_key: { id: id(1) }, action: 'INSERT', before_data: null, after_data: { id: id(1) }, actor_id: other, database_role: 'authenticated', recorded_at: '2026-10-14T10:00:00.500000Z' }],
+			references: { staff_members: { [other]: { id: other, display_name: 'Ada' } } }
+		})
+	}, calls);
+	const session = { client, userId: viewer };
+	const products = await readNewProducts(session, since);
+	expect(products[0].created_at).toBe('2026-10-14T10:00:00.500000Z');
+	expect(calls[0]).toEqual({ name: 'products:createdSince', args: { since } });
+	const creations = await readProductCreations(session, since);
+	expect(calls[1]).toEqual({ name: 'auditLog:productCreations', args: { since } });
+	expect(creations.entries.map(entry => entry.actorId)).toEqual([other]);
+	expect(auditActor(creations.entries[0], 'en', creations.references)).toBe('Ada');
+	expect(auditActor(creations.entries[0], 'en', {})).toBe('Unknown admin');
+	await expect(readNewProducts(session, 'yesterday')).rejects.toThrow();
+	await expect(readNewProducts({ client: stub({ 'products:createdSince': () => [{ ...product(2, 'soon') }] }, []), userId: viewer }, since)).rejects.toThrow();
 });

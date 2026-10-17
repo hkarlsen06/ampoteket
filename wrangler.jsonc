@@ -19,7 +19,6 @@
 	"ratelimits": [
 		{ "name": "CHECKOUT_SESSION_LIMIT", "namespace_id": "4732201", "simple": { "limit": 20, "period": 60 } },
 		{ "name": "CHECKOUT_OPERATION_LIMIT", "namespace_id": "4732202", "simple": { "limit": 120, "period": 60 } },
-		{ "name": "ADMIN_INVITATION_LIMIT", "namespace_id": "4732203", "simple": { "limit": 10, "period": 60 } },
 		{ "name": "RECEIPT_LIMIT", "namespace_id": "4732204", "simple": { "limit": 3, "period": 60 } }
 	],
 	// Production, deployed only by `bun run deploy:production` (docs/runbook-deploy.md
@@ -36,8 +35,9 @@
 				"logs": { "invocation_logs": false }
 			},
 			"vars": {
-				"PUBLIC_SUPABASE_URL": "https://mqzcbdorjuefefzvuefa.supabase.co",
-				"PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_Hw7RYzd3kJ8efR-NIv5S0w_VEisoMNU",
+				// The production Convex deployment. deploy:production refuses a deploy key for any other.
+				// Set at cutover (docs/runbook-cutover.md); this placeholder matches no deployment.
+				"PUBLIC_CONVEX_URL": "https://set-at-cutover.convex.cloud",
 				"CHECKOUT_ALLOWED_ORIGIN": "https://ampoteket.no",
 				// Exactly "true" opens buying (docs/website-guide.md §1.1).
 				"SALES_OPEN": "false"
@@ -50,11 +50,10 @@
 			"ratelimits": [
 				{ "name": "CHECKOUT_SESSION_LIMIT", "namespace_id": "4732201", "simple": { "limit": 20, "period": 60 } },
 				{ "name": "CHECKOUT_OPERATION_LIMIT", "namespace_id": "4732202", "simple": { "limit": 120, "period": 60 } },
-				{ "name": "ADMIN_INVITATION_LIMIT", "namespace_id": "4732203", "simple": { "limit": 10, "period": 60 } },
 				{ "name": "RECEIPT_LIMIT", "namespace_id": "4732204", "simple": { "limit": 3, "period": 60 } }
 			]
 		}
 	},
-	// Secrets (SUPABASE_SECRET_KEY, …) are never written here: use `wrangler secret put`
+	// Secrets (CHECKOUT_SERVER_KEY, RESEND_API_KEY) are never written here: use `wrangler secret put`
 	// in production and `.dev.vars` locally. See docs/website-guide.md §1.1.
 }

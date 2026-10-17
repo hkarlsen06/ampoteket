@@ -1,5 +1,5 @@
-import { object, identifier, text, uuidPattern, type Fetcher } from './api';
-import { allStaffRows, staffRequest, type StaffSession } from './admin-api';
+import { object, identifier, text } from './api';
+import { api, type StaffSession } from './convex';
 import { categoryLabel, messagesFor, specificationLabel, type Locale } from './i18n';
 import { formatCountedAt, formatDecimal, formatMeasurement, formatMoney, gridCell, gridRange, unitLabel } from './format';
 import { productName } from './catalog';
@@ -9,6 +9,8 @@ export type AuditEntry = {
 	before: Record<string, unknown> | null; after: Record<string, unknown> | null;
 	actorId: string | null; role: string; recordedAt: string;
 };
+/** A page of entries, newest first, with the names they refer to; `more` when older entries exist. */
+export type AuditPage = { entries: AuditEntry[]; references: AuditReferences; more: boolean };
 
 const pageSize = 200;
 function auditId(value: unknown): string {
@@ -27,65 +29,73 @@ function parseEntry(value: unknown): AuditEntry {
 		after: row.after_data === null ? null : object(row.after_data), actorId: row.actor_id === null ? null : identifier(row.actor_id),
 		role: text(row.database_role, 100), recordedAt: timestamp(row.recorded_at) };
 }
-
-/** Fill a page even when PostgREST or a proxy caps individual responses. */
-export async function readAuditPage(session: StaffSession, after: string | null = null, fetcher: Fetcher = fetch): Promise<{ entries: AuditEntry[]; more: boolean }> {
-	if (after !== null) auditId(after);
-	const entries: AuditEntry[] = [];
-	let cursor = after;
-	for (;;) {
-		const rows = await staffRequest(session, 'amp_audit_log', {
-			select: 'id,table_name,row_key,action,before_data,after_data,actor_id,database_role,recorded_at',
-			order: 'id.desc', limit: String(pageSize + 1 - entries.length), ...(cursor ? { id: `lt.${cursor}` } : {})
-		}, undefined, 'POST', fetcher);
-		if (!Array.isArray(rows) || rows.length > pageSize + 1 - entries.length) throw new Error('Invalid audit page');
-		if (!rows.length) return { entries, more: false };
-		for (const value of rows) {
-			const entry = parseEntry(value);
-			if (cursor !== null && BigInt(entry.id) >= BigInt(cursor)) throw new Error('Invalid audit cursor');
-			entries.push(entry); cursor = entry.id;
-		}
-		if (entries.length === pageSize + 1) return { entries: entries.slice(0, pageSize), more: true };
-	}
+/** Entries strictly newest first, each older than `before` when given. */
+function parseEntries(value: unknown, before: string | null = null): AuditEntry[] {
+	if (!Array.isArray(value)) throw new Error('Invalid audit page');
+	let cursor = before;
+	return value.map((row) => {
+		const entry = parseEntry(row);
+		if (cursor !== null && BigInt(entry.id) >= BigInt(cursor)) throw new Error('Invalid audit cursor');
+		cursor = entry.id;
+		return entry;
+	});
+}
+/** Names by table and UUID, resolved by the backend (archived drawers carry where they used to be). */
+function parseReferences(value: unknown): AuditReferences {
+	return Object.fromEntries(Object.entries(object(value)).map(([table, rows]) =>
+		[table, Object.fromEntries(Object.entries(object(rows)).map(([id, row]) => [identifier(id), object(row)]))]));
 }
 
-/** Read all entries added since the visible head without replacing older loaded pages. */
-export async function readAuditUpdates(session: StaffSession, newestId: string, fetcher: Fetcher = fetch): Promise<AuditEntry[]> {
-	const newest = BigInt(auditId(newestId));
-	const updates: AuditEntry[] = [];
-	let cursor: string | null = null;
+/** One page of the log, newest first, older than `before` (an entry ID) when given. */
+export async function readAuditPage(session: StaffSession, before: string | null = null): Promise<AuditPage> {
+	if (before !== null) auditId(before);
+	return parseAuditPage(await session.client.query(api.auditLog.page, before === null ? {} : { before }), before);
+}
+/** Validate a page as the backend returns it, from a one-off read or a live subscription. */
+export function parseAuditPage(value: unknown, before: string | null = null): AuditPage {
+	const row = object(value);
+	const entries = parseEntries(row.entries, before);
+	if (entries.length > pageSize || typeof row.more !== 'boolean') throw new Error('Invalid audit page');
+	return { entries, references: parseReferences(row.references), more: row.more };
+}
+
+/**
+ * The entries between a live page and the newest one already shown, when more
+ * than a page arrived between two updates: older pages from `oldest` down to
+ * `newestKnown`, so the list never has a hole.
+ */
+export async function readAuditGap(session: StaffSession, oldest: string, newestKnown: string): Promise<AuditPage> {
+	const known = BigInt(auditId(newestKnown));
+	const gap: AuditPage = { entries: [], references: {}, more: false };
+	let cursor = oldest;
 	for (;;) {
-		const page = await readAuditPage(session, cursor, fetcher);
-		updates.push(...page.entries.filter(entry => BigInt(entry.id) > newest));
-		if (!page.more || page.entries.some(entry => BigInt(entry.id) <= newest)) return updates;
+		const page = await readAuditPage(session, cursor);
+		gap.entries.push(...page.entries.filter((entry) => BigInt(entry.id) > known));
+		gap.references = mergeAuditReferences(gap.references, page.references);
+		if (!page.more || page.entries.some((entry) => BigInt(entry.id) <= known)) return gap;
 		cursor = page.entries.at(-1)!.id;
 	}
 }
 
-/** Every product creation recorded since `since`, newest first: who added which product. */
-export async function readProductCreations(session: StaffSession, since: string, fetcher: Fetcher = fetch): Promise<AuditEntry[]> {
-	timestamp(since);
-	const entries: AuditEntry[] = [];
-	let cursor: string | null = null;
-	for (;;) {
-		const rows = await staffRequest(session, 'amp_audit_log', {
-			select: 'id,table_name,row_key,action,before_data,after_data,actor_id,database_role,recorded_at',
-			table_name: 'eq.products', action: 'eq.INSERT', recorded_at: `gte.${since}`,
-			order: 'id.desc', limit: '200', ...(cursor ? { id: `lt.${cursor}` } : {})
-		}, undefined, 'POST', fetcher);
-		if (!Array.isArray(rows) || rows.length > 200) throw new Error('Invalid audit page');
-		if (!rows.length) return entries;
-		for (const value of rows) {
-			const entry = parseEntry(value);
-			if (entry.table !== 'products' || entry.action !== 'INSERT' || (cursor !== null && BigInt(entry.id) >= BigInt(cursor))) throw new Error('Invalid product creation');
-			entries.push(entry); cursor = entry.id;
-		}
-	}
+/** Both lists, newest first, each entry once. The log is append-only, so a known entry never changes. */
+export function mergeAuditEntries(a: AuditEntry[], b: AuditEntry[]): AuditEntry[] {
+	const byId = new Map([...a, ...b].map((entry) => [entry.id, entry]));
+	return [...byId.values()].sort((x, y) => BigInt(x.id) > BigInt(y.id) ? -1 : BigInt(x.id) < BigInt(y.id) ? 1 : 0);
+}
+/** Later names win: a rename shows on every loaded entry. */
+export function mergeAuditReferences(a: AuditReferences, b: AuditReferences): AuditReferences {
+	const result: AuditReferences = { ...a };
+	for (const [table, rows] of Object.entries(b)) result[table] = { ...result[table], ...rows };
+	return result;
 }
 
-/** Staff names for these entries' actors only, without the rows' other references. */
-export function readActorReferences(session: StaffSession, entries: AuditEntry[], fetcher: Fetcher = fetch): Promise<AuditReferences> {
-	return readAuditReferences(session, entries.map(entry => ({ ...entry, before: null, after: null })), fetcher);
+/** Every product creation recorded since `since`, newest first, with the names of who created them. */
+export async function readProductCreations(session: StaffSession, since: string): Promise<{ entries: AuditEntry[]; references: AuditReferences }> {
+	timestamp(since);
+	const row = object(await session.client.query(api.auditLog.productCreations, { since }));
+	const entries = parseEntries(row.entries);
+	if (entries.some((entry) => entry.table !== 'products' || entry.action !== 'INSERT')) throw new Error('Invalid product creation');
+	return { entries, references: parseReferences(row.references) };
 }
 
 /** The actor as the audit page names it. */
@@ -98,48 +108,6 @@ export type AuditReferences = Record<string, Record<string, AuditRow>>;
 export type AuditDescription = { subject: string; actor: string; fields: { label: string; before: string | null; after: string | null }[] };
 
 const referenceTables: Record<string, string> = { product_id: 'products', attribute_id: 'attribute_definitions', category_id: 'categories', bin_id: 'bins', cabinet_id: 'cabinets', order_id: 'purchase_orders', owner_id: 'staff_members', created_by: 'staff_members', finished_by: 'staff_members' };
-const referenceColumns: Record<string, string> = {
-	products: 'id,code,name_nb,name_en,unit_code', attribute_definitions: 'id,code,label,value_type,canonical_unit', categories: 'id,name',
-	bins: 'id,label,inner_row,inner_col,row_span,col_span,cabinet_id', cabinets: 'id,label,outer_row,outer_col',
-	purchase_orders: 'id,supplier_name,supplier_reference', staff_members: 'id,display_name'
-};
-
-/** Fetch only the names needed by this page, never exposing unresolved foreign keys. */
-export async function readAuditReferences(session: StaffSession, entries: AuditEntry[], fetcher: Fetcher = fetch): Promise<AuditReferences> {
-	const wanted: Record<string, Set<string>> = {};
-	function want(table: string, id: unknown) {
-		if (typeof id === 'string' && uuidPattern.test(id)) (wanted[table] ??= new Set()).add(id);
-	}
-	for (const entry of entries) {
-		want('staff_members', entry.actorId);
-		for (const row of [entry.before, entry.after]) if (row) {
-			for (const [field, table] of Object.entries(referenceTables)) want(table, row[field]);
-		}
-	}
-	const references: AuditReferences = {};
-	await Promise.all(Object.entries(wanted).map(async ([table, ids]) => {
-		const rows = await allStaffRows(session, `amp_${table}`, referenceColumns[table], 'id', { id: `in.(${[...ids].join(',')})` }, fetcher);
-		references[table] = Object.fromEntries(rows.map(row => [identifier(row.id), row]));
-	}));
-	// An archived drawer has lost its coordinates; its former place comes from the archive projection.
-	const archivedBins = Object.entries(references.bins ?? {}).filter(([, row]) => coordinate(row.inner_row) === undefined).map(([id]) => id);
-	if (archivedBins.length) {
-		const rows = await allStaffRows(session, 'amp_archived_bin_locations', 'bin_id,cabinet_id,cabinet_label,cabinet_outer_row,cabinet_outer_col,inner_row,inner_col,row_span,col_span', 'bin_id', { bin_id: `in.(${archivedBins.join(',')})` }, fetcher);
-		for (const row of rows) {
-			const id = identifier(row.bin_id); const cabinet = identifier(row.cabinet_id);
-			// The cabinet's position at archive time stays with the drawer; `references.cabinets` holds current rows only.
-			references.bins![id] = { ...references.bins![id], cabinet_id: cabinet, inner_row: row.inner_row, inner_col: row.inner_col, row_span: row.row_span, col_span: row.col_span,
-				archived_cabinet: { label: row.cabinet_label, outer_row: row.cabinet_outer_row, outer_col: row.cabinet_outer_col } };
-		}
-	}
-	const cabinetIds = [...new Set(Object.values(references.bins ?? {}).map(row => row.cabinet_id).filter((id): id is string => typeof id === 'string' && uuidPattern.test(id) && !references.cabinets?.[id]))];
-	if (cabinetIds.length) {
-		const rows = await allStaffRows(session, 'amp_cabinets', referenceColumns.cabinets, 'id', { id: `in.(${cabinetIds.join(',')})` }, fetcher);
-		references.cabinets = { ...references.cabinets, ...Object.fromEntries(rows.map(row => [identifier(row.id), row])) };
-	}
-	return references;
-}
-
 const uuidInText = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 const numericFields = new Set(['stock_step', 'sale_step', 'minimum_stock', 'ordered_quantity', 'number_value', 'number_max', 'display_order', 'outer_row', 'outer_col', 'inner_row', 'inner_col', 'inner_rows', 'inner_cols', 'row_span', 'col_span']);
 const readable = (value: unknown): string | undefined => typeof value === 'string' && value.trim() && !uuidInText.test(value) ? value : undefined;
@@ -199,14 +167,16 @@ export function describeAudit(entry: AuditEntry, locale: Locale, references: Aud
 		if (field === 'value_type') return (m.valueTypes as Record<string, string>)[String(raw)];
 		if (field === 'unit_code') return typeof raw === 'string' ? unitLabel(raw, locale) : undefined;
 		if (field === 'name' && entry.table === 'categories') return readable(raw) && categoryLabel(String(raw), locale);
-		if ((numericFields.has(field) || field.endsWith('_nok')) && typeof raw === 'string' && /^-?\d+(?:\.\d+)?$/.test(raw)) {
-			if (field.endsWith('_nok')) return formatMoney(raw, locale);
+		// Imported images hold every number as a string; newer ones hold integers as numbers and decimals as strings.
+		const number = typeof raw === 'number' && Number.isSafeInteger(raw) ? String(raw) : raw;
+		if ((numericFields.has(field) || field.endsWith('_nok')) && typeof number === 'string' && /^-?\d+(?:\.\d+)?$/.test(number)) {
+			if (field.endsWith('_nok')) return formatMoney(number, locale);
 			const product = entry.table === 'products' ? data : reference('products', data.product_id);
-			const unit = product && typeof product.unit_code === 'string' ? unitLabel(product.unit_code, locale, raw) : undefined;
-			if (['stock_step', 'sale_step', 'minimum_stock', 'ordered_quantity'].includes(field)) return `${formatDecimal(raw, locale)}${unit ? ` ${unit}` : ''}`;
+			const unit = product && typeof product.unit_code === 'string' ? unitLabel(product.unit_code, locale, number) : undefined;
+			if (['stock_step', 'sale_step', 'minimum_stock', 'ordered_quantity'].includes(field)) return `${formatDecimal(number, locale)}${unit ? ` ${unit}` : ''}`;
 			const definition = reference('attribute_definitions', data.attribute_id);
-			if ((field === 'number_value' || field === 'number_max') && typeof definition?.canonical_unit === 'string') return formatMeasurement(raw, definition.canonical_unit, locale);
-			return formatDecimal(raw, locale);
+			if ((field === 'number_value' || field === 'number_max') && typeof definition?.canonical_unit === 'string') return formatMeasurement(number, definition.canonical_unit, locale);
+			return formatDecimal(number, locale);
 		}
 		if (typeof raw === 'number' && Number.isSafeInteger(raw)) return formatDecimal(String(raw), locale);
 		return readable(raw);

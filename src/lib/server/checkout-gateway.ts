@@ -1,4 +1,5 @@
-import { ApiError, requestApiJson } from '../api';
+import { ConvexHttpClient } from 'convex/browser';
+import { api, errorCode, type ConvexCaller } from '../convex';
 import { readJsonBody, RequestBodyError } from './request-body';
 import { checkoutUuid, parseCheckoutBinding, parseCheckoutSnapshot, parsePrepareRequest, parsePrepareResponse } from '../checkout-contract';
 import { receiptAddress, sendReceipt, STAFF_RECEIPT_COPY, type ReceiptConfig } from './receipt-email';
@@ -8,8 +9,12 @@ export type CheckoutOperation = 'session' | 'prepare' | 'get' | 'confirm' | 'rec
 export type CheckoutRateLimit = { limit(options: { key: string }): Promise<{ success: boolean }> };
 export type CheckoutGatewayConfig = {
 	origin: string;
-	apiUrl: string;
-	secretKey: string;
+	/** The Convex deployment URL (an origin): https, or http on this machine. */
+	convexUrl: string;
+	/** CHECKOUT_SERVER_KEY, shared with the deployment; proves the call comes from this Worker. */
+	serverKey: string;
+	/** Tests inject a stub; otherwise a ConvexHttpClient for `convexUrl`. */
+	client?: ConvexCaller;
 	sessionLimit: CheckoutRateLimit;
 	operationLimit: CheckoutRateLimit;
 	/** Absent: receipt requests fail with RECEIPT_UNAVAILABLE. */
@@ -50,20 +55,22 @@ function validateConfig(config: CheckoutGatewayConfig | null): asserts config is
 	if (!config) fail('CHECKOUT_UNAVAILABLE', 503);
 	try {
 		const origin = new URL(config.origin);
-		const api = new URL(config.apiUrl);
+		const convex = new URL(config.convexUrl);
 		if (origin.protocol !== 'https:' || origin.origin !== config.origin
-			|| api.origin !== config.apiUrl || (api.protocol !== 'https:'
-				&& !(api.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(api.hostname)))
-			|| typeof config.secretKey !== 'string' || !config.secretKey
+			|| convex.origin !== config.convexUrl || (convex.protocol !== 'https:'
+				&& !(convex.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(convex.hostname)))
+			|| typeof config.serverKey !== 'string' || config.serverKey.length < 32
 			|| !config.sessionLimit?.limit || !config.operationLimit?.limit) fail('CHECKOUT_UNAVAILABLE', 503);
-		if (!config.secretKey.startsWith('sb_secret_')) {
-			const payload = JSON.parse(atob(config.secretKey.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-			if (payload.role !== 'service_role') fail('CHECKOUT_UNAVAILABLE', 503);
-		}
 	} catch { fail('CHECKOUT_UNAVAILABLE', 503); }
 }
 
-/** Never logs request/response bodies, cookies, credentials or database diagnostics. */
+/** A silent client whose every request gives up after 15 seconds. */
+function deploymentClient(url: string): ConvexCaller {
+	return new ConvexHttpClient(url, { logger: false,
+		fetch: ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, { ...init, signal: AbortSignal.timeout(15000) })) as typeof fetch });
+}
+
+/** Never logs request/response bodies, cookies, credentials or backend diagnostics. */
 export async function checkoutGateway(operation: CheckoutOperation, context: GatewayContext,
 	config: CheckoutGatewayConfig | null): Promise<Response> {
 	try {
@@ -106,16 +113,14 @@ export async function checkoutGateway(operation: CheckoutOperation, context: Gat
 		const token = await checkoutTokenForAttempt(root, binding.request_id, binding.fingerprint);
 		if (!(await config.operationLimit.limit({ key: `session:${binding.fingerprint}` })).success) fail('CHECKOUT_RATE_LIMITED', 429);
 		cookies.set(CHECKOUT_COOKIE, root!, CHECKOUT_COOKIE_OPTIONS);
-		const rpc = operation === 'prepare' ? 'amp_prepare_checkout' : operation === 'confirm' ? 'amp_confirm_checkout' : 'amp_get_checkout';
-		const payload = prepared
-			? { p_request_id: prepared.request_id, p_token: token, p_items: prepared.items, p_contact_text: prepared.contact }
-			: { p_checkout_id: context.checkoutId, p_token: token };
-		const result = await requestApiJson(`${config.apiUrl}/rest/v1/rpc/${rpc}`, {
-			method: 'POST', headers: { apikey: config.secretKey,
-				...(config.secretKey.startsWith('sb_secret_') ? {} : { Authorization: `Bearer ${config.secretKey}` }),
-				'Content-Type': 'application/json', Accept: 'application/json' },
-			body: JSON.stringify(payload), credentials: 'omit', cache: 'no-store', signal: AbortSignal.timeout(15000)
-		}, context.fetcher);
+		const client = config.client ?? deploymentClient(config.convexUrl);
+		const { serverKey } = config;
+		const result = prepared
+			? await client.mutation(api.checkout.prepare, { serverKey, requestId: prepared.request_id, token, contact: prepared.contact,
+				items: prepared.items.map((item) => ({ productId: item.product_id, quantity: item.quantity })) })
+			: operation === 'confirm'
+				? await client.mutation(api.checkout.confirm, { serverKey, checkoutId: context.checkoutId!, token })
+				: await client.query(api.checkout.get, { serverKey, checkoutId: context.checkoutId!, token });
 		if (operation === 'prepare') return response(parsePrepareResponse(result));
 		const snapshot = parseCheckoutSnapshot(result);
 		if (snapshot.checkout_id !== context.checkoutId || (operation === 'confirm' && snapshot.status !== 'confirmed')) {
@@ -137,11 +142,9 @@ export async function checkoutGateway(operation: CheckoutOperation, context: Gat
 		if (error instanceof RequestBodyError) return response({ error: error.code === 'INVALID_REQUEST' ? 'INVALID_CHECKOUT_REQUEST' : `CHECKOUT_${error.code}` }, error.status);
 		if (error instanceof GatewayError) return response({ error: error.code }, error.status);
 		if (error instanceof Error && credentialErrors.has(error.message)) return response({ error: error.message }, 409);
-		if (error instanceof ApiError && error.body && typeof error.body === 'object' && 'message' in error.body) {
-			const raw = error.body.message;
-			const code = typeof raw === 'string' ? raw.split(':')[0] : '';
-			if (databaseErrors.has(code)) return response({ error: code }, code === 'CHECKOUT_NOT_FOUND_OR_NOT_AUTHORISED' ? 403 : 409);
-		}
+		// Only a domain rejection names its code; CHECKOUT_SERVER_REQUIRED, outages and bugs are unavailable.
+		const code = errorCode(error);
+		if (code !== null && databaseErrors.has(code)) return response({ error: code }, code === 'CHECKOUT_NOT_FOUND_OR_NOT_AUTHORISED' ? 403 : 409);
 		return response({ error: 'CHECKOUT_UNAVAILABLE' }, 503);
 	}
 }

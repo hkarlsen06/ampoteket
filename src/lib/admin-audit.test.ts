@@ -1,46 +1,58 @@
 import { expect, test } from 'bun:test';
-import { describeAudit, groupAudit, readAuditReferences, readAuditPage, readAuditUpdates, type AuditEntry, type AuditReferences } from './admin-audit';
+import { getFunctionName } from 'convex/server';
+import type { ConvexCaller, StaffSession } from './convex';
+import { describeAudit, groupAudit, mergeAuditEntries, mergeAuditReferences, parseAuditPage, readAuditGap, readAuditPage, type AuditEntry, type AuditReferences } from './admin-audit';
 
-const session = { config: { url: 'https://fixture.invalid', publishableKey: 'sb_publishable_fixture' }, token: 'staff-jwt', userId: '11111111-1111-4111-8111-111111111111' };
-const entry = (id: string) => ({ id, table_name: 'products', row_key: { id: session.userId }, action: 'UPDATE', before_data: { sale_unit_price_nok: '9007199254740993.123456' }, after_data: { sale_unit_price_nok: '9007199254740994.123456' }, actor_id: session.userId, database_role: 'authenticated', recorded_at: '2026-09-23T10:00:00Z' });
-
-test('audit refresh reads every new entry across capped pages without repeating the visible head', async () => {
-	const newest = 9007199254740994n;
-	const fetcher = async (input: RequestInfo | URL) => {
-		const url = new URL(String(input));
-		const cursor = BigInt(url.searchParams.get('id')?.slice(3) ?? String(newest + 46n));
-		const count = Math.min(Number(url.searchParams.get('limit')), 7);
-		return new Response(JSON.stringify(Array.from({ length: count }, (_, index) => entry(String(cursor - BigInt(index + 1))))));
+/** A ConvexCaller that answers by function name. */
+function stub(handlers: Record<string, (args: Record<string, unknown>) => unknown>): ConvexCaller {
+	const call = async (fn: never, args: Record<string, unknown>) => {
+		const name = getFunctionName(fn);
+		if (!handlers[name]) throw new Error(`Unexpected ${name}`);
+		return handlers[name](args);
 	};
-	const updates = await readAuditUpdates(session, String(newest), fetcher);
-	expect(updates.map(row => row.id)).toEqual(Array.from({ length: 45 }, (_, index) => String(newest + 45n - BigInt(index))));
-	expect(await readAuditUpdates(session, String(newest + 45n), fetcher)).toEqual([]);
+	return { query: call, mutation: call, action: call } as unknown as ConvexCaller;
+}
+const session = { userId: '11111111-1111-4111-8111-111111111111' };
+const staff = (client: ConvexCaller): StaffSession => ({ client, userId: session.userId });
+const entry = (id: string) => ({ id, table_name: 'products', row_key: { id: session.userId }, action: 'UPDATE', before_data: { sale_unit_price_nok: '9007199254740993.123456' }, after_data: { sale_unit_price_nok: '9007199254740994.123456' }, actor_id: session.userId, database_role: 'authenticated', recorded_at: '2026-09-23T10:00:00Z' });
+/** The backend's page query over IDs top..1, newest first, `size` at a time. */
+function log(top: bigint, size = 7) {
+	const calls: (string | undefined)[] = [];
+	const client = stub({ 'auditLog:page': (args) => {
+		const before = args.before as string | undefined; calls.push(before);
+		const start = before === undefined ? top : BigInt(before) - 1n;
+		const ids = Array.from({ length: size }, (_, index) => start - BigInt(index)).filter((id) => id > 0n);
+		return { entries: ids.map((id) => entry(String(id))), references: { staff_members: { [session.userId]: { id: session.userId, display_name: 'Ada' } } }, more: ids.at(-1)! > 1n };
+	} });
+	return { client, calls };
+}
+
+test('a live page that skipped past the shown head fills the gap page by page without repeating shown entries', async () => {
+	const newest = 9007199254740994n, { client, calls } = log(newest + 46n);
+	const live = await readAuditPage(staff(client));
+	expect(live.entries.map((row) => row.id).slice(0, 2)).toEqual([String(newest + 46n), String(newest + 45n)]);
+	const gap = await readAuditGap(staff(client), live.entries.at(-1)!.id, String(newest));
+	expect(gap.entries.map((row) => row.id)).toEqual(Array.from({ length: 39 }, (_, index) => String(newest + 39n - BigInt(index))));
+	expect(calls.slice(1)).toEqual([String(newest + 40n), String(newest + 33n), String(newest + 26n), String(newest + 19n), String(newest + 12n), String(newest + 5n)]);
+	expect(gap.references.staff_members[session.userId].display_name).toBe('Ada');
+	const merged = mergeAuditEntries([...live.entries, ...gap.entries], live.entries);
+	expect(merged).toHaveLength(46);
+	expect(merged.map((row) => row.id)).toEqual(Array.from({ length: 46 }, (_, index) => String(newest + 46n - BigInt(index))));
 });
 
-test('audit paging retains exact nested values and fills capped responses without skipping an ID', async () => {
-	const calls: string[] = [];
-	const fetcher = async (input: RequestInfo | URL) => {
-		const url = new URL(String(input));
-		calls.push(url.searchParams.get('id') ?? '');
-		const cursor = url.searchParams.get('id')?.slice(3) ?? '9007199254741194';
-		const count = Math.min(Number(url.searchParams.get('limit')), 7);
-		const rows = Array.from({ length: count }, (_, index) => entry((BigInt(cursor) - BigInt(index + 1)).toString()));
-		return new Response(JSON.stringify(rows).replaceAll('"9007199254740993.123456"', '9007199254740993.123456'));
-	};
-	const first = await readAuditPage(session, null, fetcher);
-	expect(first.entries).toHaveLength(200);
-	expect(first.more).toBe(true);
-	expect(first.entries[0].before?.sale_unit_price_nok).toBe('9007199254740993.123456');
-	expect(first.entries.at(-1)?.id).toBe('9007199254740994');
-	expect(calls.length).toBeGreaterThan(4);
-	let read = false;
-	const next = await readAuditPage(session, first.entries.at(-1)!.id, async (input) => {
-		const url = new URL(String(input));
-		if (!read) expect(url.searchParams.get('id')).toBe('lt.9007199254740994');
-		read = true;
-		return new Response(JSON.stringify(read && url.searchParams.get('id') === 'lt.9007199254740994' ? [entry('9007199254740993')] : []));
-	});
-	expect(next.entries[0].id).toBe('9007199254740993');
+test('audit pages retain exact nested values, pass the cursor and reject entries out of order', async () => {
+	let before: unknown;
+	const page = await readAuditPage(staff(stub({ 'auditLog:page': (args) => { before = args.before; return { entries: [entry('9007199254740993')], references: {}, more: false }; } })), '9007199254740994');
+	expect(before).toBe('9007199254740994');
+	expect(page.entries[0].before?.sale_unit_price_nok).toBe('9007199254740993.123456');
+	expect(page.more).toBe(false);
+	expect(() => parseAuditPage({ entries: [entry('5'), entry('6')], references: {}, more: false })).toThrow('cursor');
+	expect(() => parseAuditPage({ entries: [entry('7')], references: {}, more: false }, '7')).toThrow('cursor');
+	expect(() => parseAuditPage({ entries: [], references: { bins: { 'not-a-uuid': {} } }, more: false })).toThrow();
+	expect(() => parseAuditPage({ entries: [], references: {} })).toThrow();
+	await expect(readAuditPage(staff(stub({})), '01')).rejects.toThrow('Invalid audit ID');
+	expect(mergeAuditReferences({ products: { a: { code: 'OLD' }, b: { code: 'KEPT' } } }, { products: { a: { code: 'NEW' } } }))
+		.toEqual({ products: { a: { code: 'NEW' }, b: { code: 'KEPT' } } });
 });
 
 const audit = (table: string, before: AuditEntry['before'], after: AuditEntry['after'], actorId: string | null = session.userId, role = 'authenticated'): AuditEntry => ({ id: '569', table, key: { id: session.userId }, action: before ? after ? 'UPDATE' : 'DELETE' : 'INSERT', before, after, actorId, role, recordedAt: '2026-09-23T10:00:00Z' });
@@ -111,38 +123,34 @@ test('every audited table has a readable subject, including deletes and archived
 	expect(describeAudit(audit('cabinets', { outer_row: '2', outer_col: '3' }, { outer_row: null, outer_col: null, is_archived: true }), 'en').subject).toBe('Cabinet: C2');
 });
 
-test('audit reference reads use staff credentials and load cabinet names for referenced drawers', async () => {
-	const rows: Record<string, Record<string, unknown>[]> = {
-		amp_staff_members: [{ id: session.userId, display_name: 'Ada' }],
-		amp_bins: [{ id: session.userId, ...references.bins[session.userId] }],
-		amp_cabinets: [{ id: session.userId, ...references.cabinets[session.userId] }]
-	};
-	const loaded = await readAuditReferences(session, [audit('products', { bin_id: null }, { bin_id: session.userId })], async (input, init) => {
-		const url = new URL(String(input));
-		expect(new Headers(init?.headers).get('authorization')).toBe('Bearer staff-jwt');
-		expect(url.searchParams.get('id')).toBe(`in.(${session.userId})`);
-		return new Response(JSON.stringify(url.searchParams.has('and') ? [] : rows[url.pathname.split('/').at(-1)!]));
-	});
-	expect(loaded.cabinets[session.userId].outer_col).toBe('3');
-	expect(describeAudit(audit('products', { bin_id: null }, { bin_id: session.userId }), 'en', loaded).fields).toEqual([{ label: 'Drawer', before: 'Not set', after: 'C2 / A1–D1' }]);
+test('backend references name drawers by their cabinet, whether coordinates arrive as numbers or strings', () => {
+	const bin = '00000000-0000-4000-8000-0000000000b1', cabinet = '00000000-0000-4000-8000-0000000000c1';
+	const loaded: AuditReferences = { bins: { [bin]: { id: bin, label: null, inner_row: 1, inner_col: 1, row_span: 1, col_span: 4, cabinet_id: cabinet } },
+		cabinets: { [cabinet]: { id: cabinet, label: null, outer_row: 2, outer_col: 3 } } };
+	expect(describeAudit(audit('products', { bin_id: null }, { bin_id: bin }), 'en', loaded).fields).toEqual([{ label: 'Drawer', before: 'Not set', after: 'C2 / A1–D1' }]);
+	expect(describeAudit(audit('products', { bin_id: null }, { bin_id: session.userId }), 'en', references).fields).toEqual([{ label: 'Drawer', before: 'Not set', after: 'C2 / A1–D1' }]);
 });
 
-test('an archived drawer resolves to its former place instead of hiding the placement change', async () => {
+test('an archived drawer resolves to its former place instead of hiding the placement change', () => {
 	const archived = '00000000-0000-4000-8000-0000000000a1'; const cabinet = '00000000-0000-4000-8000-0000000000c1';
-	const rows: Record<string, Record<string, unknown>[]> = {
-		amp_bins: [{ id: archived, label: null, inner_row: null, inner_col: null, row_span: null, col_span: null, cabinet_id: null }],
-		amp_archived_bin_locations: [{ bin_id: archived, cabinet_id: cabinet, cabinet_label: null, cabinet_outer_row: 2, cabinet_outer_col: 3, inner_row: 1, inner_col: 1, row_span: 1, col_span: 1 }],
-		// The cabinet has moved to D2 since; the archived drawer still reads as C2.
-		amp_cabinets: [{ id: cabinet, label: null, outer_row: 2, outer_col: 4 }]
+	// As the backend resolves it: the former place, with the cabinet where it stood then (C2); the cabinet has moved to D2 since.
+	const loaded: AuditReferences = {
+		bins: { [archived]: { id: archived, label: null, inner_row: 1, inner_col: 1, row_span: 1, col_span: 1, cabinet_id: cabinet, archived_cabinet: { label: null, outer_row: 2, outer_col: 3 } } },
+		cabinets: { [cabinet]: { id: cabinet, label: null, outer_row: 2, outer_col: 4 } }
 	};
-	const entry = audit('products', { bin_id: archived }, { bin_id: null });
-	const moved = audit('cabinets', { cabinet_id: null }, { cabinet_id: cabinet });
-	const loaded = await readAuditReferences(session, [entry, moved], async input => {
-		const url = new URL(String(input));
-		return new Response(JSON.stringify(url.searchParams.has('and') ? [] : rows[url.pathname.split('/').at(-1)!] ?? []));
-	});
-	expect(describeAudit(entry, 'en', loaded).fields).toEqual([{ label: 'Drawer', before: 'C2 / A1', after: 'Not set' }]);
-	expect(loaded.cabinets[cabinet].outer_col).toBe('4');
+	expect(describeAudit(audit('products', { bin_id: archived }, { bin_id: null }), 'en', loaded).fields).toEqual([{ label: 'Drawer', before: 'C2 / A1', after: 'Not set' }]);
+	expect(describeAudit(audit('cabinets', { cabinet_id: null }, { cabinet_id: cabinet }), 'en', loaded).fields).toEqual([{ label: 'Cabinet', before: 'Not set', after: 'D2' }]);
+});
+
+test('imported images with string numbers and new images with integer numbers describe the same change alike', () => {
+	// An imported cabinet row moved by the new backend: the unchanged row reads as unchanged, the moved column as moved.
+	const moved = describeAudit(audit('cabinets', { outer_row: '2', outer_col: '3', inner_rows: '12' }, { outer_row: 2, outer_col: 4, inner_rows: 12 }), 'en');
+	expect(moved.fields).toEqual([{ label: 'Wall column', before: '3', after: '4' }]);
+	// Decimals stay strings in both and keep their unit.
+	expect(describeAudit(audit('products', { ...references.products[session.userId], minimum_stock: '1' }, { ...references.products[session.userId], minimum_stock: '2.5' }), 'en').fields)
+		.toEqual([{ label: 'Minimum stock', before: '1 piece', after: '2.5 pieces' }]);
+	expect(describeAudit(audit('help_contacts', { display_name: 'Ada', display_order: '1' }, { display_name: 'Ada', display_order: 2 }), 'en').fields)
+		.toEqual([{ label: expect.any(String), before: '1', after: '2' }]);
 });
 
 test('a day of catalogue entry folds into one line per person and kind, each product carrying its specifications and count', () => {

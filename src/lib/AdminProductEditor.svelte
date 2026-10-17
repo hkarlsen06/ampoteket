@@ -22,7 +22,9 @@
 	import ArrowUpRightIcon from 'phosphor-svelte/lib/ArrowUpRightIcon';
 	import CopyIcon from 'phosphor-svelte/lib/CopyIcon';
 
-	import { untrack, onMount, tick } from 'svelte';
+	import { onMount, tick } from 'svelte';
+	import { useQuery } from 'convex-svelte';
+	import { api } from '#lib/convex.js';
 	import { goto } from '$app/navigation';
 	import { getI18n, categoryLabel, messagesFor } from '#lib/i18n/index.js';
 	import { getAdminContext } from '#lib/admin-context.svelte.js';
@@ -30,7 +32,7 @@
 	import { compareDecimals, normalizeDecimal } from '#lib/decimal.js';
 	import { uuidPattern } from '#lib/api.js';
 	import { translateName } from '#lib/name-translation.js';
-	import type { StaffSession } from '#lib/admin-api.js';
+	import type { StaffSession } from '#lib/convex.js';
 	import CountForm from '#lib/CountForm.svelte';
 	import StockBadge from '#lib/StockBadge.svelte';
 	import StateBadge from '#lib/StateBadge.svelte';
@@ -38,12 +40,10 @@
 	import LabelPrintButton, { labelPrinterSupported, queueLabelPrint } from '#lib/LabelPrintButton.svelte';
 	import { choosePrinter } from '#lib/labels/ptouch.js';
 	import { clearCountCommand, readCountCommand, runCountCommand, saveCountCommand, updateCountStorage, validCountQuantity, type CountCommand } from '#lib/admin-counts.js';
-	import ProductSpecificationRecovery from '#lib/ProductSpecificationRecovery.svelte';
-	import { parseAttribute, ProductSpecificationsError, type ProductAttributeDraft } from '#lib/admin-products.js';
+	import { parseAttribute, type ProductAttributeDraft } from '#lib/admin-products.js';
 	import ShelfPlacementPicker from '#lib/ShelfPlacementPicker.svelte';
 	import DrawerNeighbours from '#lib/DrawerNeighbours.svelte';
 	import { Badge } from '#lib/components/ui/badge/index.js';
-	import { readOutstandingByProduct } from '#lib/admin-orders.js';
 	import { draftFields, readDraft, writeDraft } from '#lib/drafts.js';
 	import FieldWarning from '#lib/FieldWarning.svelte';
 	import { readAdminProducts, readAllProductAttributes } from '#lib/admin-products.js';
@@ -52,7 +52,7 @@
 	import { afterPointerRelease } from '#lib/pointer-release.js';
 	import { formatMeasurement } from '#lib/format.js';
 	import { codeText } from '#lib/ui.js';
-	import { clearProductCommand, definitiveProductFailure, executeProductCommand, sameProduct, generateCategoryProductCode, generateProductCode, isProductCodeCollision, parseProductWrite, persistProductCommand, ProductFieldError, productCategoryOptions, readProduct, readProductCommand, readProductReferences, readProductStock, StaleProductError, type AdminProduct, type ProductCommand, type ProductFamily, type ProductReferences, type ProductStock, type ProductWrite } from '#lib/admin-products.js';
+	import { clearProductCommand, definitiveProductFailure, executeProductCommand, sameProduct, generateCategoryProductCode, generateProductCode, inventoryStock, isProductCodeCollision, parseProductWrite, persistProductCommand, ProductFieldError, productCategoryOptions, readProduct, readProductCommand, readProductReferences, StaleProductError, type AdminProduct, type ProductCommand, type ProductFamily, type ProductReferences, type ProductWrite } from '#lib/admin-products.js';
 	// `oncreated` embeds a new-product editor in another page's sheet: no page heading, title,
 	// label printing or opening stock (an order's receipt brings the stock), and the created
 	// product goes to the caller instead of opening its own route. `busy` lets that sheet stay open while saving.
@@ -60,9 +60,23 @@
 	// that product was just saved with "Save and add another", so its code and label stay at hand.
 	let { id, from = null, created = false, oncreated, busy = $bindable(false) }: { id: string; from?: string | null; created?: boolean; oncreated?: (product: AdminProduct) => void; busy?: boolean } = $props();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.adminProducts);
-	let product = $state<AdminProduct | null>(null); let references = $state<ProductReferences | null>(null); let stock = $state<ProductStock | null>(null);
-	// Quantity still expected from open supplier orders; null when none or unreadable.
-	let onOrder = $state<string | null>(null);
+	let product = $state<AdminProduct | null>(null); let references = $state<ProductReferences | null>(null);
+	// The recorded balance and what open supplier orders still bring are live, so a count
+	// or sale anywhere shows at once; the draft fields are never touched.
+	const stockProductId = $derived(admin.status === 'ready' ? product?.id ?? null : null);
+	const stockRows = useQuery(api.stock.inventory, () => stockProductId ? { productIds: [stockProductId] } : 'skip');
+	const outstandingRows = useQuery(api.orders.outstandingByProduct, () => stockProductId ? {} : 'skip');
+	const stockRead = $derived.by(() => {
+		try { return stockRows.data ? inventoryStock(stockRows.data).find(row => row.product_id === stockProductId) ?? 'invalid' : null; }
+		catch { return 'invalid' as const; }
+	});
+	const stockFailed = $derived(stockRead === 'invalid' || Boolean(stockRows.error));
+	// Shown together with the on-order quantity, so its badge never pops in after the balance.
+	const stock = $derived(stockRead && stockRead !== 'invalid' && (outstandingRows.data || outstandingRows.error) ? stockRead : null);
+	const stockLoading = $derived(Boolean(stockProductId) && !stock && !stockFailed);
+	// Null when nothing is on order or the orders could not be read.
+	const onOrder = $derived(stockProductId ? outstandingRows.data?.[stockProductId] ?? null : null);
+	$effect(() => { for (const result of [stockRows, outstandingRows]) if (result.error) void admin.permissionFailure(result.error); });
 	const blank: ProductWrite = { id: '', code: '', name_nb: '', name_en: '', description: null, category_id: null, bin_id: null, location_note: null, unit_code: 'pcs', stock_step: '1', sale_step: '1', sale_unit_price_nok: '', minimum_stock: '0', datasheet_url: null, purchase_url: null, is_active: true };
 	let draft = $state<ProductWrite>({ ...blank });
 	// What an untouched new form holds: blank, or the fields copied `from` another product.
@@ -112,7 +126,6 @@
 	const openingCount = (step: string) => openingStock.trim() ? validCountQuantity(openingStock, step, i18n.locale) : null;
 	let proposedPlacement = $state<{ from: string | null; to: string } | null>(null);
 	let placementTrigger: HTMLElement | null = null;
-	let stockLoading = $state(false); let stockFailed = $state(false); let stockGeneration = 0;
 	let alive = true; let restoringCreation = $state(false);
 	const ownPending = $derived(Boolean(pending && (pending.payload.id === id || (id === 'new' && pending.revision === null))));
 	const wrongIdentity = $derived(Boolean(pending && pending.userId !== admin.userId));
@@ -173,27 +186,6 @@
 		catch { storageReady = false; }
 		void load(); return () => { alive = false; if (id !== 'new') queueLabelPrint(null); };
 	});
-	async function refreshStock() {
-		if (!product || admin.status !== 'ready') return;
-		const generation = ++stockGeneration; stockLoading = true;
-		try {
-			const session = admin.credentials();
-			// Read together so the on-order badge never pops in after the balance.
-			const [next, outstanding] = await Promise.all([readProductStock(session, product.id), readOutstandingByProduct(session).catch(() => null)]);
-			if (alive && generation === stockGeneration && admin.userId === session.userId) { stock = next; stockFailed = false; onOrder = outstanding?.get(product.id) ?? null; } }
-		catch (error) { if (alive && generation === stockGeneration) stockFailed = true; await admin.permissionFailure(error); }
-		finally { if (alive && generation === stockGeneration) stockLoading = false; }
-	}
-	// The app owns freshness (design-system.md §4.2): the recorded balance
-	// re-reads on return to the tab; the draft fields are never touched.
-	let revalidateQueued = $state(false);
-	function revalidateStock() { revalidateQueued = document.visibilityState === 'visible'; }
-	$effect(() => {
-		if (revalidateQueued && admin.status === 'ready' && !(stockLoading || busy)) {
-			revalidateQueued = false;
-			untrack(() => { void refreshStock(); });
-		}
-	});
 	async function load() {
 		if (admin.status !== 'ready') return;
 		loading = true; loadFailed = false;
@@ -230,7 +222,6 @@
 				}
 			}
 			draftLoaded = true;
-			if (product) void refreshStock();
 		} catch (error) { if (alive) loadFailed = true; await admin.permissionFailure(error); }
 		finally { if (alive) loading = false; }
 	}
@@ -317,18 +308,17 @@
 				const stored = await countOpeningStock(session, product.id, opening);
 				if (!alive || session.userId !== admin.userId) return;
 				// Unstored, the count is lost: stay, so the count button is at hand.
-				if (!stored) { outcome = 'openingNotCounted'; void refreshStock(); return; }
+				if (!stored) { outcome = 'openingNotCounted'; return; }
 			}
 			if (id === 'new' && product && oncreated) oncreated(product);
 			else if (id === 'new' && product) {
 				if (printLabel) queueLabelPrint({ productId: product.id, userId: session.userId });
 				void goto(i18n.href(addAnother ? `/admin/products/new?from=${product.id}&created` : `/admin/products/${product.id}`), { replace: true });
-			} else void refreshStock();
+			}
 		} catch (error) {
-			if (error instanceof ProductSpecificationsError) outcome = 'specificationsIncomplete';
-			else if (pending && (error instanceof StaleProductError || definitiveProductFailure(error))) { clearProductCommand(sessionStorage, pending); pending = null; outcome = error instanceof StaleProductError ? 'stale' : 'failed'; }
+			if (pending && (error instanceof StaleProductError || definitiveProductFailure(error))) { clearProductCommand(sessionStorage, pending); pending = null; outcome = error instanceof StaleProductError ? 'stale' : 'failed'; }
 			else outcome = pending ? 'unknown' : 'storage';
-			await admin.permissionFailure(error instanceof ProductSpecificationsError ? error.cause : error);
+			await admin.permissionFailure(error);
 		} finally { if (alive) busy = false; }
 	}
 	// A new product holds 0 at revision 0, so its first count needs no read. Once stored,
@@ -467,8 +457,6 @@
 	}
 </script>
 <svelte:head>{#if !oncreated}<title>{productCode ? `${productCode} | ${m.title}` : id === 'new' ? m.newTitle : m.title}</title>{/if}</svelte:head>
-<svelte:window onfocus={revalidateStock} ononline={revalidateStock} />
-<svelte:document onvisibilitychange={revalidateStock} />
 {#if !oncreated}
 <div class={[pageHeader, 'product-editor-heading grid-cols-[minmax(0,1fr)_auto] items-center']}>
 	<div class="grid min-w-0 justify-items-start gap-1">
@@ -506,9 +494,9 @@
 				{:else if stockLoading}<span class="sr-only">{m.loading}</span><Skeleton class="h-16 w-40" />
 				{/if}
 			</div>
-			<div class="grid shrink-0 justify-items-start gap-1 md:justify-items-end"><CountForm modal {product} onsaved={refreshStock} /><Button variant="link" size="sm" href={i18n.href(`/admin/stock?product=${product.id}`)}>{m.stockLedger}</Button></div>
+			<div class="grid shrink-0 justify-items-start gap-1 md:justify-items-end"><CountForm modal {product} /><Button variant="link" size="sm" href={i18n.href(`/admin/stock?product=${product.id}`)}>{m.stockLedger}</Button></div>
 		</div>
-		{#if stockFailed}<div class="mb-6 grid justify-items-start gap-2"><Alert.Message appearance="inline" variant="destructive" role="alert">{m.inventoryUnavailable}</Alert.Message><Button variant="outline" size="sm" disabled={stockLoading} onclick={refreshStock}>{m.retry}</Button></div>{/if}
+		{#if stockFailed}<Alert.Message appearance="inline" variant="destructive" role="alert" class="mb-6">{m.inventoryUnavailable}</Alert.Message>{/if}
 	{/if}
 	<Tabs.Root value="details">
 		{#if product}
@@ -590,12 +578,7 @@
 				{#if !namesLocked}
 					<!-- A saved product changes price far more often than its specifications or drawer. -->
 					{#if product}{@render saleSection()}{/if}
-					{#if ownPending && pending?.attributes !== undefined}
-						<ProductSpecificationRecovery command={pending} bind:definitions={references.definitions} family={family} disabled={busy}
-							onreviewed={(command) => { pending = command; adopt(command.payload); staged = command.attributes ?? []; void save(); }} />
-					{:else}
-						{#key attributeProductId}<ProductAttributes bind:this={attributesEditor} productId={attributeProductId} drafts={!(ownPending && pending?.revision === null)} bind:staged bind:definitions={references.definitions} family={family} disabled={blocked} onvalue={(code, value) => { specificationValues[code] = value; checkDuplicates(); }} />{/key}
-					{/if}
+					{#key attributeProductId}<ProductAttributes bind:this={attributesEditor} productId={attributeProductId} drafts={!(ownPending && pending?.revision === null)} bind:staged bind:definitions={references.definitions} family={family} disabled={blocked} onvalue={(code, value) => { specificationValues[code] = value; checkDuplicates(); }} />{/key}
 					<section class={section({ spacing: 'divided' })} aria-labelledby="product-placement-section-title">
 						<Separator />
 						<h2 class={sectionHeading} id="product-placement-section-title">{m.placementHeading}</h2>
@@ -647,7 +630,7 @@
 			<div class={formStatus} aria-live="polite">
 				{#if !storageReady}<Alert.Message appearance="inline" variant="destructive">{m.storage}</Alert.Message>
 				{:else if outcome === 'saved'}<StateBadge tone="success">{m.saved}</StateBadge>
-				{:else if outcome !== 'idle'}<Alert.Message appearance="inline" variant="destructive">{outcome === 'specificationsIncomplete' ? m.specificationsIncomplete : outcome === 'specificationsNotSaved' ? m.specificationsNotSaved : outcome === 'invalid' ? m.invalid : outcome === 'stale' ? m.stale : outcome === 'countPending' ? i18n.m.adminCounts.pendingElsewhere : outcome === 'openingNotCounted' ? m.openingNotCounted : outcome === 'unknown' ? m.unknown : outcome === 'storage' ? m.storage : m.failed}</Alert.Message>{/if}
+				{:else if outcome !== 'idle'}<Alert.Message appearance="inline" variant="destructive">{outcome === 'specificationsNotSaved' ? m.specificationsNotSaved : outcome === 'invalid' ? m.invalid : outcome === 'stale' ? m.stale : outcome === 'countPending' ? i18n.m.adminCounts.pendingElsewhere : outcome === 'openingNotCounted' ? m.openingNotCounted : outcome === 'unknown' ? m.unknown : outcome === 'storage' ? m.storage : m.failed}</Alert.Message>{/if}
 			</div>
 			{#if outcome === 'stale'}{#if reviewFailed}<Alert.Message appearance="inline" role="alert" variant="destructive" class="mb-2">{m.unavailable}</Alert.Message>{/if}<Button variant="outline" disabled={busy} onclick={review}>{m.review}</Button>{/if}
 			{#if current}

@@ -7,6 +7,7 @@
 	import { Button, ButtonLabel } from '#lib/components/ui/button/index.js';
 	import { formActions, formStatus, pageContainer, pageHeader, pageHeading, section } from '#lib/ui.js';
 	import { onMount, tick, untrack } from 'svelte';
+	import { useConvexClient } from 'convex-svelte';
 	import { goto } from '$app/navigation';
 	import { getI18n } from '#lib/i18n/index.js';
 	import { CartError, getCartContext, readActiveAttempt, type CartErrorCode } from '#lib/cart.js';
@@ -19,6 +20,8 @@
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
+	// The layout sets up the shared client only when the deployment is configured.
+	const client = untrack(() => data.convex) ? useConvexClient() : null;
 	const i18n = getI18n();
 	const m = $derived(i18n.m.cart);
 	const cart = getCartContext();
@@ -96,7 +99,7 @@
 		// Retain matching facts while refreshing so existing rows do not collapse.
 		facts = untrack(() => Object.fromEntries(lines.filter((line: { product_id: string }) => facts[line.product_id]).map((line: { product_id: string }) => [line.product_id, facts[line.product_id]])));
 		factsPending = true;
-		void readCartProducts(data.catalogConfig, lines, controller.signal).then((next) => {
+		void readCartProducts(client, lines, controller.signal).then((next) => {
 			if (!controller.signal.aborted) {
 				for (const [id, fact] of Object.entries(next)) {
 					const previous = facts[id];

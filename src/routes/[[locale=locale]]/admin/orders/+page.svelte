@@ -10,7 +10,8 @@
 	import { osloInstant, osloLocal, possibleOsloOffsets } from '#lib/oslo-time.js';
 	import { currencySymbol, formatCountedAt, formatDecimal, unitLabel } from '#lib/format.js';
 	import { clearOrderCommand, orderProductName, orderCommandPath, orderRejection, orderStorageEvent, readOrderCommand, readOrderProducts, readOrders, readOutstandingByProduct, readUnplannedReceipts, runOrderCommand, saveOrderCommand, updateOrderStorage, type Order, type OrderCommand, type OrderProduct, type OrderReceipt } from '#lib/admin-orders.js';
-	import { compareAttention, readInventory, stockRank } from '#lib/admin-products.js';
+	import { compareAttention, stockRank } from '#lib/admin-products.js';
+	import { api } from '#lib/convex.js';
 	import { Toggle, toggleVariants } from '#lib/components/ui/toggle/index.js';
 	import ListBulletsIcon from 'phosphor-svelte/lib/ListBulletsIcon';
 	import StockBadge from '#lib/StockBadge.svelte';
@@ -198,7 +199,7 @@
 		const version = ++generation; loading = true; failed = false;
 		try {
 			const session = admin.credentials();
-			const [orderRows, productRows, receiptRows, inventory, onOrder] = await Promise.all([readOrders(session), readOrderProducts(session), readUnplannedReceipts(session), readInventory(session), readOutstandingByProduct(session)]);
+			const [orderRows, productRows, receiptRows, inventory, onOrder] = await Promise.all([readOrders(session), readOrderProducts(session), readUnplannedReceipts(session), session.client.query(api.stock.inventory, {}), readOutstandingByProduct(session)]);
 			if (mounted && version === generation && session.userId === admin.userId) {
 				orders = orderRows; products = productRows; unplanned = receiptRows; loaded = true;
 				stock = new Map(inventory.map((item) => [item.product_id, item.quantity])); outstanding = onOrder;

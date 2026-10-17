@@ -11,14 +11,14 @@ const draftKey = (userId: string, name: string) => `ampoteket:draft:v1:${userId}
 const resolve = (storage: DraftStorage | 'session' | undefined) => storage === 'session' ? sessionStorage : storage ?? localStorage;
 
 /** `'session'` keeps the draft for the tab only. */
-export function readDraft(userId: string | undefined, name: string, storage?: DraftStorage | 'session'): unknown {
+export function readDraft(userId: string | null | undefined, name: string, storage?: DraftStorage | 'session'): unknown {
 	if (!userId) return null;
 	try { const raw = resolve(storage).getItem(draftKey(userId, name)); return raw === null ? null : JSON.parse(raw); }
 	catch { return null; }
 }
 
 /** Saves `value`, or removes the draft when it is null. */
-export function writeDraft(userId: string | undefined, name: string, value: unknown, storage?: DraftStorage | 'session') {
+export function writeDraft(userId: string | null | undefined, name: string, value: unknown, storage?: DraftStorage | 'session') {
 	if (!userId) return;
 	try {
 		if (value === null) resolve(storage).removeItem(draftKey(userId, name));

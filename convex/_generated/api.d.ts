@@ -32,6 +32,7 @@ import type * as migration from "../migration.js";
 import type * as orders from "../orders.js";
 import type * as passwords from "../passwords.js";
 import type * as products from "../products.js";
+import type * as seed from "../seed.js";
 import type * as session from "../session.js";
 import type * as shelf from "../shelf.js";
 import type * as statistics from "../statistics.js";
@@ -68,6 +69,7 @@ declare const fullApi: ApiFromModules<{
   orders: typeof orders;
   passwords: typeof passwords;
   products: typeof products;
+  seed: typeof seed;
   session: typeof session;
   shelf: typeof shelf;
   statistics: typeof statistics;

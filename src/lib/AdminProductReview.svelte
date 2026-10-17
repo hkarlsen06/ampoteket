@@ -3,7 +3,7 @@
 	import { getI18n } from '#lib/i18n/index.js';
 	import { getAdminContext } from '#lib/admin-context.svelte.js';
 	import { readInventory, readProductReferences, type ProductReferences, type ProductStock } from '#lib/admin-products.js';
-	import { auditActor, readActorReferences, readProductCreations, type AuditEntry, type AuditReferences } from '#lib/admin-audit.js';
+	import { auditActor, readProductCreations, type AuditEntry, type AuditReferences } from '#lib/admin-audit.js';
 	import { readNewProducts, readReviewPoint, reviewedThrough, reviewList, reviewSince, timestampMicros, writeReviewPoint, type NewProduct } from '#lib/admin-review.js';
 	import { formatCountedAt, formatDecimal } from '#lib/format.js';
 	import { cardGrid, formActions, formStatus, section, sectionHeading } from '#lib/ui.js';
@@ -17,7 +17,7 @@
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.adminReview);
 	let products = $state<NewProduct[] | null>(null); let since = $state<string | null>(null);
 	let references = $state<ProductReferences | null>(null); let stock = $state<Map<string, ProductStock> | null>(null);
-	let creations = $state<{ entries: AuditEntry[]; actors: AuditReferences } | null>(null);
+	let creations = $state<{ entries: AuditEntry[]; references: AuditReferences } | null>(null);
 	let loading = $state(true); let failed = $state(false); let stockFailed = $state(false); let creatorsFailed = $state(false);
 	let reviewed = $state(false); let visibleCount = $state(12); let heading = $state<HTMLHeadingElement | null>(null);
 	let mounted = false; let generation = 0;
@@ -35,9 +35,8 @@
 			const [refs, inventory, created] = items.length ? await Promise.all([
 				readProductReferences(session),
 				readInventory(session).catch(error => { void admin.permissionFailure(error); return null; }),
-				readProductCreations(session, point).then(async entries => ({ entries, actors: await readActorReferences(session, entries) }))
-					.catch(error => { void admin.permissionFailure(error); return null; })
-			]) : [null, [] as ProductStock[], { entries: [], actors: {} }];
+				readProductCreations(session, point).catch(error => { void admin.permissionFailure(error); return null; })
+			]) : [null, [] as ProductStock[], { entries: [], references: {} }];
 			if (mounted && version === generation && admin.userId === session.userId) {
 				// A review marked while this read ran stays marked; the point only moves forward.
 				products = items; since = since && timestampMicros(since) > timestampMicros(point) ? since : point; references = refs;
@@ -87,7 +86,7 @@
 				{#each list.slice(0, visibleCount) as { product, creation } (product.id)}
 					{@const time = formatCountedAt(product.created_at, i18n.locale)}
 					<AdminProductCard {product} {references} quantity={stock?.get(product.id)?.quantity ?? null} headingLevel={3}>
-						<p class="m-0 text-sm text-muted-foreground">{creation && creations ? m.addedBy(time, auditActor(creation, i18n.locale, creations.actors)) : m.added(time)}</p>
+						<p class="m-0 text-sm text-muted-foreground">{creation && creations ? m.addedBy(time, auditActor(creation, i18n.locale, creations.references)) : m.added(time)}</p>
 					</AdminProductCard>
 				{/each}
 			</ul>

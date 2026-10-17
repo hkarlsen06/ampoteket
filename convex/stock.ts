@@ -287,9 +287,13 @@ function batchRow(b: Doc<'count_batches'>) {
 		finishedAt: b.finished_at, finishedBy: b.finished_by, finishReason: b.finish_reason };
 }
 
-/** One batch, its observations (newest first), the people involved and the products the page needs. */
+/**
+ * One batch, its observations (newest first), the people involved and the
+ * products the page needs. `productId` adds the product of a count still
+ * pending in this browser, so it can be retried or released after the batch closed.
+ */
 export const countDetail = query({
-	args: { batchId: v.string() },
+	args: { batchId: v.string(), productId: v.optional(v.string()) },
 	handler: async (ctx, args) => {
 		await requireStaff(ctx);
 		const viewer = (await currentStaff(ctx))!;
@@ -312,7 +316,7 @@ export const countDetail = query({
 		// The open batch's owner searches every product; others need only the counted ones.
 		const ownerView = batch.finished_at === null && batch.owner_id === viewer.id;
 		const products = ownerView ? await ctx.db.query('products').collect()
-			: (await Promise.all([...new Set(observations.map((o) => o.productId))].map((id) => byUuid(ctx, 'products', id)))).filter((p) => p !== null);
+			: (await Promise.all([...new Set([...observations.map((o) => o.productId), ...(args.productId ? [args.productId] : [])])].map((id) => byUuid(ctx, 'products', id)))).filter((p) => p !== null);
 		return { batch: batchRow(batch), owners, observations,
 			products: products.map((p) => ({ id: p.id, code: p.code, name_nb: p.name_nb, name_en: p.name_en, unit_code: p.unit_code, stock_step: p.stock_step, bin_id: p.bin_id, is_active: p.is_active })) };
 	}

@@ -9,10 +9,12 @@
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Button, ButtonLabel } from '#lib/components/ui/button/index.js';
 	import { formActions } from '#lib/ui.js';
-	import { onMount, tick } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
+	import { useConvexClient } from 'convex-svelte';
 	import { beforeNavigate } from '$app/navigation';
 	import { getI18n } from '#lib/i18n/index.js';
-	import { forSale, lookupCatalogProduct, productName, type CatalogConfig, type CatalogProduct } from '#lib/catalog.js';
+	import { forSale, lookupCatalogProduct, productName, type CatalogProduct } from '#lib/catalog.js';
+	import type { ConvexConfig } from '#lib/convex.js';
 	import { productCodeFromEntry, productCodeFromQr } from '#lib/scanner/payload.js';
 	import type { CameraSession, CameraState } from '#lib/scanner/session.js';
 	import ProductIdentity from '#lib/ProductIdentity.svelte';
@@ -24,7 +26,9 @@
 
 	// One layout-owned buyer scanner: review quantities before adding on shopping pages.
 	// Its own trigger floats on phones; above 40rem the header menu calls show().
-	let { config }: { config: CatalogConfig | null } = $props();
+	let { config }: { config: ConvexConfig | null } = $props();
+	// The layout sets up the shared client only when the deployment is configured.
+	const client = untrack(() => config) ? useConvexClient() : null;
 	const id = $props.id();
 	const i18n = getI18n();
 	const cart = getCartContext();
@@ -106,12 +110,12 @@
 		code = nextCode; allowCompactCode = compact; product = null; added = false;
 		if (!code) { workflow = 'invalid'; return; }
 		workflow = 'resolving';
-		if (!config) { workflow = 'unavailable'; return; }
+		if (!client) { workflow = 'unavailable'; return; }
 		const current = operation;
 		const controller = lookup = new AbortController();
 		const deadline = setTimeout(() => controller.abort(), 15000);
 		try {
-			const found = await lookupCatalogProduct(config, code, { signal: controller.signal, allowCompactCode });
+			const found = await lookupCatalogProduct(client, code, { signal: controller.signal, allowCompactCode });
 			if (!mounted || current !== operation) return;
 			product = found;
 			workflow = found ? 'product' : 'missing';

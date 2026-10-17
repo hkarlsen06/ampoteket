@@ -1,11 +1,14 @@
 import { expect, test } from 'bun:test';
 import { unstable_readConfig } from 'wrangler';
-import { deployProduction, requireValidation } from './deploy-production';
+import { convexDeploymentUrl, deployProduction, requireValidation } from './deploy-production';
 import type { Fetcher } from '../src/lib/api';
 
 const sha = 'a'.repeat(40);
 const passed = { head_sha: sha, event: 'push', status: 'completed', conclusion: 'success', html_url: 'https://github.com/example/validation' };
 const noWait = async () => {};
+const config = unstable_readConfig({ env: 'production' });
+/** A deploy key for the deployment wrangler.jsonc names. */
+const deployKey = `prod:${new URL(String(config.vars.PUBLIC_CONVEX_URL)).hostname.split('.')[0]}|secret`;
 
 test('deployment waits for this exact commit and rejects failed, unavailable or missing validation', async () => {
 	const states = [[], [{ ...passed, head_sha: 'b'.repeat(40) }], [{ ...passed, status: 'in_progress', conclusion: null }], [passed]];
@@ -25,16 +28,16 @@ test('deployment waits for this exact commit and rejects failed, unavailable or 
 function harness(failure = '') {
 	const calls: string[][] = [];
 	let deploymentReads = 0;
-	const config = unstable_readConfig({ env: 'production' });
 	const bindings = [
 		...Object.entries(config.vars).map(([name, text]) => ({ name, text, type: 'plain_text' })),
 		...(config.ratelimits ?? []).map((limit: { name: string }) => ({ ...limit, type: 'ratelimit' })),
-		...['SUPABASE_SECRET_KEY', 'RESEND_API_KEY'].map((name) => ({ name, type: 'secret_text' }))
+		...['CHECKOUT_SERVER_KEY', 'RESEND_API_KEY'].map((name) => ({ name, type: 'secret_text' }))
 	];
 	const command = (args: string[]) => {
 		calls.push(args);
 		if (args.includes('rev-parse')) return sha;
-		if (args.includes('deploy') && failure === 'publish') throw new Error('lost upload response');
+		if (args.includes('wrangler') && args.includes('deploy') && failure === 'publish') throw new Error('lost upload response');
+		if (args.includes('convex') && failure === 'convex') throw new Error('convex push failed');
 		if (args.includes('deployments')) {
 			if (++deploymentReads > 1 && failure === 'deployment-list') throw new Error('metadata unavailable');
 			return JSON.stringify([{ versions: [{ version_id: deploymentReads === 1 ? 'previous' : 'new', percentage: 100 }] }]);
@@ -59,18 +62,33 @@ function harness(failure = '') {
 
 test('failed CI never uploads; successful verification keeps the new release', async () => {
 	const failed = harness('ci');
-	await expect(deployProduction(failed.command, failed.fetcher, noWait)).rejects.toThrow();
+	await expect(deployProduction(failed.command, failed.fetcher, noWait, deployKey)).rejects.toThrow();
 	expect(failed.calls.some((args) => args.includes('deploy'))).toBe(false);
 	const good = harness();
-	await deployProduction(good.command, good.fetcher, noWait);
-	expect(good.calls.some((args) => args.includes('deploy'))).toBe(true);
+	await deployProduction(good.command, good.fetcher, noWait, deployKey);
+	const convexAt = good.calls.findIndex((args) => args.includes('convex') && args.includes('deploy'));
+	const workerAt = good.calls.findIndex((args) => args.includes('wrangler') && args.includes('deploy'));
+	expect(convexAt).toBeGreaterThan(-1);
+	expect(workerAt).toBeGreaterThan(convexAt);
 	expect(good.calls.some((args) => args.includes('rollback'))).toBe(false);
+});
+
+test('a deploy key for another deployment, or none, deploys nothing; a failed Convex push leaves the Worker alone', async () => {
+	expect(convexDeploymentUrl('prod:happy-otter-123|abc')).toBe('https://happy-otter-123.convex.cloud');
+	for (const key of [undefined, 'dev:happy-otter-123|abc', 'prod:someone-else-1|abc']) {
+		const probe = harness();
+		await expect(deployProduction(probe.command, probe.fetcher, noWait, key)).rejects.toThrow('nothing deployed');
+		expect(probe.calls.some((args) => args.includes('deploy'))).toBe(false);
+	}
+	const probe = harness('convex');
+	await expect(deployProduction(probe.command, probe.fetcher, noWait, deployKey)).rejects.toThrow('convex push failed');
+	expect(probe.calls.some((args) => args.includes('wrangler') && args.includes('deploy'))).toBe(false);
 });
 
 test('all post-publish failures roll back to the recorded prior version', async () => {
 	for (const failure of ['publish', 'deployment-list', 'version', 'json', 'bindings', 'network', 'help', 'http', 'hsts']) {
 		const probe = harness(failure);
-		await expect(deployProduction(probe.command, probe.fetcher, noWait)).rejects.toThrow();
+		await expect(deployProduction(probe.command, probe.fetcher, noWait, deployKey)).rejects.toThrow();
 		const rollback = probe.calls.find((args) => args.includes('rollback'));
 		expect(rollback).toContain('previous');
 		expect(rollback).toContain('--yes');
@@ -89,7 +107,7 @@ test('changes during CI or build cannot borrow another revision\'s validation', 
 			if (args.includes('rev-parse') && inspections === inspection && mutation === 'head') return 'b'.repeat(40);
 			return probe.command(args);
 		};
-		await expect(deployProduction(command, probe.fetcher, noWait)).rejects.toThrow();
+		await expect(deployProduction(command, probe.fetcher, noWait, deployKey)).rejects.toThrow();
 		expect(probe.calls.some((args) => args.includes('deploy'))).toBe(false);
 	}
 });
@@ -100,7 +118,7 @@ test('failed rollback preserves both errors and the prior version for recovery',
 		await deployProduction((args) => {
 			if (args.includes('rollback')) throw new Error('rollback unavailable');
 			return probe.command(args);
-		}, probe.fetcher, noWait);
+		}, probe.fetcher, noWait, deployKey);
 		throw new Error('deployment unexpectedly passed');
 	} catch (error) {
 		expect(error).toBeInstanceOf(AggregateError);

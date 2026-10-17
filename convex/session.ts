@@ -17,7 +17,8 @@ export const signIn = action({
 		try {
 			result = await ctx.runAction(api.auth.signIn, { provider: 'password', params: { email, password, flow: 'signIn' } });
 		} catch (error) {
-			if (error instanceof Error && error.message.includes('Invalid credentials')) fail('INVALID_CREDENTIALS');
+			// Wrong password, unknown address and the failed-attempt limit all read the same.
+			if (error instanceof Error && /InvalidSecret|InvalidAccountId|TooManyFailedAttempts|Invalid credentials/.test(error.message)) fail('INVALID_CREDENTIALS');
 			throw error;
 		}
 		if (!result.tokens) fail('INVALID_CREDENTIALS');

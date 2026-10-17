@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { ApiError, parseApiJson } from './api';
+import { getFunctionName, type FunctionReference } from 'convex/server';
 import {
 	CatalogResponseError,
 	forSale,
@@ -8,14 +8,35 @@ import {
 	productVariants,
 	readCatalogPage,
 	readCatalogFacets,
-	readCompleteCatalog,
-	type CatalogConfig
+	readCompleteCatalog
 } from './catalog';
 import { CatalogQueryError, parseCatalogQuery } from './catalog-search';
-import { catalogSort } from './product-specifications';
+import { rejection, type ConvexCaller } from './convex';
 import { productCodeFromEntry } from './scanner/payload';
 
-const config: CatalogConfig = { url: 'https://catalog.example.invalid', publishableKey: 'sb_publishable_test' };
+type Args = Record<string, unknown>;
+/** A stub client answering public catalog queries by function name, recording each call. */
+function stub(answer: (name: string, args: Args) => unknown) {
+	const calls: { name: string; args: Args }[] = [];
+	const unexpected = async () => { throw new Error('Unexpected write'); };
+	const client = {
+		query: async (fn: FunctionReference<'query'>, args: Args) => {
+			const name = getFunctionName(fn);
+			calls.push({ name, args });
+			return answer(name, args);
+		},
+		mutation: unexpected, action: unexpected
+	} as unknown as ConvexCaller;
+	return { client, calls };
+}
+/** Pages answered in turn, each `complete` only when it is the last. */
+function pages(...rows: unknown[][]) {
+	let index = 0;
+	return stub(() => {
+		const products = rows[index++] as { code: string }[];
+		return { products, complete: index >= rows.length, nextAfterCode: products.at(-1)?.code ?? null };
+	});
+}
 
 function fixture(code = 'RES-A3F09', id = 1): Record<string, unknown> {
 	return {
@@ -30,7 +51,7 @@ function fixture(code = 'RES-A3F09', id = 1): Record<string, unknown> {
 		sale_step: '1',
 		sale_unit_price_nok: '0.005',
 		quantity: '-9007199254740993.000001',
-		last_counted_at: '2026-09-19T12:34:56.123456+00:00',
+		last_counted_at: '2026-09-19T12:34:56.123Z',
 		cabinet_code: 'internal-cabinet-1',
 		outer_row: 2,
 		outer_col: 3,
@@ -48,19 +69,16 @@ function fixture(code = 'RES-A3F09', id = 1): Record<string, unknown> {
 			resistance: { label: 'Resistance', unit: 'ohm', value_type: 'number', value: '1000', max: null },
 			capacitance: { label: 'Capacitance', unit: 'F', value_type: 'number', value: '0.000000000005', max: null },
 			large_value: { label: 'Exact value', unit: null, value_type: 'number', value: '9007199254740993.000000000001', max: null },
-			package: { label: 'Package', unit: null, value_type: 'text', value: '0603', max: null },
-			polarized: { label: 'Polarized', unit: null, value_type: 'boolean', value: false, max: null }
+			// The backend sends no upper bound for text and booleans.
+			package: { label: 'Package', unit: null, value_type: 'text', value: '0603' },
+			polarized: { label: 'Polarized', unit: null, value_type: 'boolean', value: false }
 		},
 		distinguishing: ['package', 'tolerance']
 	};
 }
 
 function decode(rows: unknown) {
-	return parseCatalogProducts(parseApiJson(JSON.stringify(rows)));
-}
-
-function responding(body: unknown, status = 200) {
-	return async () => new Response(JSON.stringify(body), { status });
+	return parseCatalogProducts(structuredClone(rows));
 }
 
 describe('look-alike products', () => {
@@ -102,7 +120,7 @@ describe('catalog response boundary', () => {
 		expect(product.inner_row).toBe(4);
 		expect(product.description).toBeNull();
 		expect(product.bin_label).toBeNull();
-		expect(product.last_counted_at).toBe('2026-09-19T12:34:56.123456+00:00');
+		expect(product.last_counted_at).toBe('2026-09-19T12:34:56.123Z');
 	});
 
 	test('allows known zero, never-counted, missing optional details and empty attributes', () => {
@@ -149,7 +167,7 @@ describe('catalog response boundary', () => {
 			{ code: 'res-a3f09' }, { unit_code: 'PCS' },
 			{ inner_row: null }, { inner_row: 0 }, { row_span: 10 },
 			{ bin_code: null }, { location_note: 'Filamenthylla' }, { location_note: undefined },
-			{ outer_row: '9007199254740993' }, { inner_cols: 2 },
+			{ outer_row: '2' }, { outer_row: 2147483648 }, { inner_row: 1.5 }, { inner_cols: 2 },
 			{ last_counted_at: 'not-a-timestamp' },
 			{ datasheet_url: 'javascript:alert(1)' },
 			{ datasheet_url: 'https://user:password@example.invalid/file' }
@@ -180,6 +198,11 @@ describe('catalog response boundary', () => {
 		}
 	});
 
+	test('text and booleans may carry a null upper bound but never a value', () => {
+		const [product] = decode([{ ...fixture(), attributes: { package: { label: 'Package', unit: null, value_type: 'text', value: '0603', max: null } } }]);
+		expect(product.attributes.package).toEqual({ label: 'Package', unit: null, value_type: 'text', value: '0603' });
+	});
+
 	test('a range keeps both exact bounds', () => {
 		const [product] = decode([{ ...fixture(), attributes: { voltage: { label: 'Voltage', unit: 'V', value_type: 'number', value: '250', max: '400.000' } } }]);
 		expect(product.attributes.voltage).toEqual({ label: 'Voltage', unit: 'V', value_type: 'number', value: '250', max: '400.000' });
@@ -187,179 +210,148 @@ describe('catalog response boundary', () => {
 	});
 });
 
-describe('catalog HTTP reads and completeness', () => {
+describe('catalog reads and completeness', () => {
 	test('manual compact codes resolve through exact validated lookups, preserving legacy identities', async () => {
 		for (const [input, canonical] of [['res00026', 'RES-00026'], [' RES00026 ', 'RES-00026'],
 			['res-00026', 'RES-00026'], ['resa3f09', 'RES-A3F09'], ['amp00123', 'AMP-00123']]) {
 			const code = productCodeFromEntry(input)!;
-			const requested: string[] = [];
-			const result = await lookupCatalogProduct(config, code, { allowCompactCode: true, fetcher: async (_, init) => {
-				const { p_code } = JSON.parse(String(init?.body)); requested.push(p_code);
-				return Response.json(p_code === canonical ? [fixture(canonical)] : []);
-			} });
+			const { client, calls } = stub((_, args) => args.code === canonical ? fixture(canonical) : null);
+			const result = await lookupCatalogProduct(client, code, { allowCompactCode: true });
 			expect(result?.code).toBe(canonical);
-			expect(requested).toEqual(code === canonical ? [code] : [code, canonical]);
+			expect(calls.map((call) => call.args.code)).toEqual(code === canonical ? [code] : [code, canonical]);
 		}
-		let requests = 0;
-		const exact = await lookupCatalogProduct(config, 'RES00026', { allowCompactCode: true, fetcher: async () => {
-			requests++; return Response.json([fixture('RES00026')]);
-		} });
-		expect(exact?.code).toBe('RES00026');
-		expect(requests).toBe(1);
+		const { client, calls } = stub(() => fixture('RES00026'));
+		expect((await lookupCatalogProduct(client, 'RES00026', { allowCompactCode: true }))?.code).toBe('RES00026');
+		expect(calls).toEqual([{ name: 'catalog:product', args: { code: 'RES00026' } }]);
 	});
 
 	test('compact fallback is opt-in, bounded, and never hides failed or mismatched reads', async () => {
 		for (const [code, allowCompactCode, expectedCalls] of [
 			['RES00026', false, 1], ['RES00026', true, 2], ['A', true, 1], ['LM358', true, 1], ['RES26', true, 1]
 		] as const) {
-			let calls = 0;
-			expect(await lookupCatalogProduct(config, code, { allowCompactCode, fetcher: async () => {
-				calls++; return Response.json([]);
-			} })).toBeNull();
-			expect(calls).toBe(expectedCalls);
+			const { client, calls } = stub(() => null);
+			expect(await lookupCatalogProduct(client, code, { allowCompactCode })).toBeNull();
+			expect(calls).toHaveLength(expectedCalls);
 		}
-		for (const body of [{ message: 'Unavailable' }, [fixture('RES-00026')]]) {
-			let calls = 0;
-			await expect(lookupCatalogProduct(config, 'RES00026', { allowCompactCode: true, fetcher: async () => {
-				calls++; return Response.json(body, { status: Array.isArray(body) ? 200 : 503 });
-			} })).rejects.toBeInstanceOf(Array.isArray(body) ? CatalogResponseError : ApiError);
-			expect(calls).toBe(1);
-		}
-		await expect(lookupCatalogProduct(config, 'RES00026', { allowCompactCode: true, fetcher: async (_, init) =>
-			Response.json(JSON.parse(String(init?.body)).p_code === 'RES00026' ? [] : [fixture('RES-00027')])
-		})).rejects.toBeInstanceOf(CatalogResponseError);
+		const outage = stub(() => { throw new Error('Network'); });
+		await expect(lookupCatalogProduct(outage.client, 'RES00026', { allowCompactCode: true })).rejects.toThrow('Network');
+		expect(outage.calls).toHaveLength(1);
+		const mismatch = stub(() => fixture('RES-00026'));
+		await expect(lookupCatalogProduct(mismatch.client, 'RES00026', { allowCompactCode: true })).rejects.toBeInstanceOf(CatalogResponseError);
+		expect(mismatch.calls).toHaveLength(1);
+		const wrongFallback = stub((_, args) => args.code === 'RES00026' ? null : fixture('RES-00027'));
+		await expect(lookupCatalogProduct(wrongFallback.client, 'RES00026', { allowCompactCode: true })).rejects.toBeInstanceOf(CatalogResponseError);
 	});
 
-	test('direct lookup sends only its code with the public key and supports cancellation', async () => {
+	test('cancelling a lookup rejects at once, and a cancelled one never calls', async () => {
 		const controller = new AbortController();
-		let requestSignal: AbortSignal | null | undefined;
-		const result = await lookupCatalogProduct(config, 'RES-A3F09', {
-			signal: controller.signal,
-			fetcher: async (input, init) => {
-				expect(String(input)).toBe('https://catalog.example.invalid/rest/v1/rpc/amp_catalog');
-				expect(init?.body).toBe('{"p_code":"RES-A3F09"}');
-				expect(init?.method).toBe('POST');
-				requestSignal = init?.signal;
-				expect(requestSignal?.aborted).toBe(false);
-				expect(init?.credentials).toBe('omit');
-				expect(init?.cache).toBe('no-store');
-				expect(init?.redirect).toBe('manual');
-				const headers = new Headers(init?.headers);
-				expect(headers.get('apikey')).toBe(config.publishableKey);
-				expect(headers.has('Authorization')).toBe(false);
-				return new Response(JSON.stringify([fixture()]));
-			}
-		});
-		expect(result?.code).toBe('RES-A3F09');
+		const pending = stub(() => new Promise(() => {}));
+		const lookup = lookupCatalogProduct(pending.client, 'RES-A3F09', { signal: controller.signal });
 		controller.abort();
-		expect(requestSignal?.aborted).toBe(true);
+		await expect(lookup).rejects.toThrow();
+		const { client, calls } = stub(() => fixture());
+		await expect(lookupCatalogProduct(client, 'RES-A3F09', { signal: controller.signal })).rejects.toThrow();
+		expect(calls).toHaveLength(0);
 	});
 
-	test('search and scoped drawer reads stay paginated and map typed filter errors', async () => {
+	test('search and scoped drawer reads send the parsed query and map rejected filters', async () => {
 		const query = parseCatalogQuery(new URLSearchParams('q=1+kΩ&category=Resistors&min.resistance=1000&after=RES-A0001&cabinet=00000000-0000-4000-8000-000000000002&bin=00000000-0000-4000-8000-000000000003'));
-		await readCatalogPage(config, { query, limit: 50, binId: '00000000-0000-4000-8000-000000000001', fetcher: async (_, init) => {
-			const body = JSON.parse(String(init?.body));
-			expect(body).toMatchObject({ p_q: '1 kΩ', p_categories: ['Resistors'], p_conditions: { resistance: { min: '1000' } },
-				p_after_code: 'RES-A0001', p_limit: 50, p_bin_id: '00000000-0000-4000-8000-000000000001',
-				p_cabinet_ids: ['00000000-0000-4000-8000-000000000002'], p_bin_ids: ['00000000-0000-4000-8000-000000000003'] });
-			expect(body.p_labels.units.ohm).toContainEqual({ symbol: 'kΩ', exponent: 3 });
-			return new Response('[]');
-		} });
-		await expect(readCatalogPage(config, { query, fetcher: responding({ message: 'UNKNOWN_CATALOG_ATTRIBUTE' }, 400) })).rejects.toEqual(new CatalogQueryError('unknownAttribute'));
+		const { client, calls } = stub(() => ({ products: [], complete: true, nextAfterCode: null }));
+		expect(await readCatalogPage(client, { query, limit: 50, binId: '00000000-0000-4000-8000-000000000001' }))
+			.toEqual({ products: [], complete: true, nextAfterCode: null });
+		expect(calls).toEqual([{ name: 'catalog:page', args: { q: '1 kΩ', categories: ['Resistors'], conditions: { resistance: { min: '1000' } },
+			afterCode: 'RES-A0001', limit: 50, binId: '00000000-0000-4000-8000-000000000001',
+			cabinetIds: ['00000000-0000-4000-8000-000000000002'], binIds: ['00000000-0000-4000-8000-000000000003'] } }]);
+		for (const [code, issue] of [['UNKNOWN_CATALOG_ATTRIBUTE', 'unknownAttribute'], ['UNKNOWN_CATALOG_CATEGORY', 'unknownCategory'],
+			['INVALID_CATALOG_FILTER', 'invalidFilter'], ['INVALID_CATALOG_QUERY', 'invalidQuery'], ['CATALOG_CURSOR_MISSING', 'missingCursor']] as const) {
+			await expect(readCatalogPage(stub(() => { throw rejection(code); }).client, { query })).rejects.toEqual(new CatalogQueryError(issue));
+		}
+		// Other rejections and outages stay unavailable rather than becoming a query problem.
+		for (const error of [rejection('INVALID_CATALOG_PAGE_SIZE'), new Error('Server error')]) {
+			const failure = await readCatalogPage(stub(() => { throw error; }).client, { query }).catch((cause: unknown) => cause);
+			expect(failure).toBe(error);
+		}
 	});
 
 	test('facet reads preserve exact sorted values and reject malformed or duplicate choices', async () => {
 		const facet = { code: 'capacitance', definition: decode([fixture()])[0].attributes.capacitance,
 			values: ['0.000000000005', '9007199254740993.000000000001'] };
 		const raw = { categories: ['Capacitors'], attributes: [facet] };
-		expect(await readCatalogFacets(config, { categories: ['Capacitors'], fetcher: async (url, init) => {
-			expect(String(url)).toEndWith('/rpc/amp_catalog_facets');
-			expect(init?.body).toBe('{"p_categories":["Capacitors"]}');
-			return new Response(JSON.stringify(raw));
-		} })).toEqual(raw);
+		const { client, calls } = stub(() => structuredClone(raw));
+		expect(await readCatalogFacets(client, { categories: ['Capacitors'] })).toEqual(raw);
+		expect(calls).toEqual([{ name: 'catalog:facets', args: { categories: ['Capacitors'] } }]);
 		for (const invalid of [
 			{ ...raw, categories: ['Capacitors', 'Capacitors'] }, { ...raw, attributes: [facet, facet] },
 			{ ...raw, attributes: [{ ...facet, values: [...facet.values].reverse() }] },
 			{ ...raw, attributes: [{ ...facet, values: ['0.000000000005', '0.000000000005000'] }] }
-		]) await expect(readCatalogFacets(config, { fetcher: responding(invalid) })).rejects.toBeInstanceOf(CatalogResponseError);
+		]) await expect(readCatalogFacets(stub(() => invalid).client)).rejects.toBeInstanceOf(CatalogResponseError);
 	});
 
-	test('valid missing product is null; failed or mismatched reads are unavailable errors', async () => {
-		expect(await lookupCatalogProduct(config, 'RES-A3F09', { fetcher: responding([]) })).toBeNull();
-		await expect(lookupCatalogProduct(config, 'RES-A3F09', { fetcher: responding({ message: 'Unavailable' }, 503) })).rejects.toBeInstanceOf(ApiError);
-		await expect(lookupCatalogProduct(config, 'RES-A3F09', { fetcher: responding([fixture('CAP-A3F09')]) })).rejects.toBeInstanceOf(CatalogResponseError);
-		await expect(lookupCatalogProduct(config, 'RES-A3F09', { fetcher: responding([fixture(), fixture('CAP-A3F09', 2)]) })).rejects.toBeInstanceOf(CatalogResponseError);
-		await expect(lookupCatalogProduct(config, 'RES-A3F09', { fetcher: async () => new Response('{') })).rejects.toThrow();
+	test('a missing product is null; failed or mismatched reads are errors', async () => {
+		expect(await lookupCatalogProduct(stub(() => null).client, 'RES-A3F09')).toBeNull();
+		await expect(lookupCatalogProduct(stub(() => { throw new Error('Unavailable'); }).client, 'RES-A3F09')).rejects.toThrow('Unavailable');
+		await expect(lookupCatalogProduct(stub(() => fixture('CAP-A3F09')).client, 'RES-A3F09')).rejects.toBeInstanceOf(CatalogResponseError);
+		await expect(lookupCatalogProduct(stub(() => [fixture()]).client, 'RES-A3F09')).rejects.toBeInstanceOf(CatalogResponseError);
 	});
 
-	test('short pages remain incomplete and traversal requests the final empty page', async () => {
-		const short = await readCatalogPage(config, { limit: 200, fetcher: responding([fixture()]) });
-		expect(short.complete).toBe(false);
+	test('the server says when a page is the last; traversal follows its cursor', async () => {
+		const short = await readCatalogPage(stub(() => ({ products: [fixture()], complete: true, nextAfterCode: 'RES-A3F09' })).client, { limit: 200 });
+		expect(short.complete).toBe(true);
 		expect(short.nextAfterCode).toBe('RES-A3F09');
-		const seen: unknown[] = [];
-		const pages = [[fixture('RES-00001', 1)], [fixture('RES-00002', 2)], []];
-		const products = await readCompleteCatalog(config, { limit: 200, fetcher: async (_input, init) => {
-			seen.push(JSON.parse(String(init?.body)));
-			return new Response(JSON.stringify(pages[seen.length - 1]));
-		} });
+		const { client, calls } = pages([fixture('RES-00001', 1)], [fixture('RES-00002', 2)]);
+		const products = await readCompleteCatalog(client, { limit: 200 });
 		expect(products.map((product) => product.code)).toEqual(['RES-00001', 'RES-00002']);
-		expect(seen).toEqual([
-			{ p_after_code: null, p_limit: 200, p_sort: catalogSort },
-			{ p_after_code: 'RES-00001', p_limit: 200, p_sort: catalogSort },
-			{ p_after_code: 'RES-00002', p_limit: 200, p_sort: catalogSort }
-		]);
-		expect(catalogSort.slice(0, 2)).toEqual([['Resistors', 'resistance', ['power', 'tolerance', 'package', 'model']],
-			['Capacitors', 'capacitance', ['voltage', 'voltage_ac', 'tolerance', 'polarised', 'package', 'model']]]);
-		expect(catalogSort.at(-1)?.slice(0, 2)).toEqual(['Miscellaneous', null]);
+		expect(calls.map((call) => call.args)).toEqual([{ limit: 200 }, { limit: 200, afterCode: 'RES-00001' }]);
+		expect(await readCompleteCatalog(pages([]).client)).toEqual([]);
 	});
 
-	test('rejects repeated cursors, cycles and duplicate identities rather than completing', async () => {
-		await expect(readCatalogPage(config, { afterCode: 'RES-A3F09', fetcher: responding([fixture()]) })).rejects.toBeInstanceOf(CatalogResponseError);
-		for (const pages of [
+	test('rejects repeated cursors, cycles, duplicate identities and inconsistent page ends', async () => {
+		await expect(readCatalogPage(pages([fixture()]).client, { afterCode: 'RES-A3F09' })).rejects.toBeInstanceOf(CatalogResponseError);
+		for (const rows of [
 			[[fixture()], [fixture()]],
 			[[fixture('RES-00001', 1)], [fixture('RES-00002', 2)], [fixture('RES-00001', 1)]],
 			[[fixture('RES-00001', 1)], [fixture('RES-00002', 1)]]
-		]) {
-			let index = 0;
-			await expect(readCompleteCatalog(config, { fetcher: async () => new Response(JSON.stringify(pages[index++])) })).rejects.toBeInstanceOf(CatalogResponseError);
-		}
+		]) await expect(readCompleteCatalog(pages(...rows).client)).rejects.toBeInstanceOf(CatalogResponseError);
+		for (const page of [
+			{ products: [], complete: false, nextAfterCode: null },
+			{ products: [fixture()], complete: false, nextAfterCode: 'RES-00009' },
+			{ products: [fixture()], complete: 'true', nextAfterCode: 'RES-A3F09' },
+			{ products: [fixture(), fixture('RES-00002', 2)], complete: true, nextAfterCode: 'RES-00002' }
+		]) await expect(readCatalogPage(stub(() => page).client, { limit: page.products.length === 2 ? 1 : 200 })).rejects.toBeInstanceOf(CatalogResponseError);
 	});
 
-	test('retains SQL ordering without imposing JavaScript punctuation collation', async () => {
-		const rows = [fixture('A1', 1), fixture('A-2', 2)];
-		const page = await readCatalogPage(config, { fetcher: responding(rows) });
+	test('retains the server order without imposing JavaScript punctuation collation', async () => {
+		const page = await readCatalogPage(pages([fixture('A1', 1), fixture('A-2', 2)]).client);
 		expect(page.products.map((product) => product.code)).toEqual(['A1', 'A-2']);
 	});
 
 	test('a failed later page never returns partial success', async () => {
 		let count = 0;
-		await expect(readCompleteCatalog(config, { fetcher: async () => {
-			count++;
-			return count === 1 ? new Response(JSON.stringify([fixture()])) : new Response('{}', { status: 503 });
-		} })).rejects.toBeInstanceOf(ApiError);
+		const { client } = stub(() => {
+			if (++count > 1) throw new Error('Unavailable');
+			return { products: [fixture()], complete: false, nextAfterCode: 'RES-A3F09' };
+		});
+		await expect(readCompleteCatalog(client)).rejects.toThrow('Unavailable');
 		expect(count).toBe(2);
 	});
 
 	test('aborts between pages before making another request', async () => {
 		const controller = new AbortController();
-		let count = 0;
-		await expect(readCompleteCatalog(config, { signal: controller.signal, fetcher: async () => {
-			count++;
+		const { client, calls } = stub(() => {
 			controller.abort();
-			return new Response(JSON.stringify([fixture()]));
-		} })).rejects.toThrow();
-		expect(count).toBe(1);
+			return { products: [fixture()], complete: false, nextAfterCode: 'RES-A3F09' };
+		});
+		await expect(readCompleteCatalog(client, { signal: controller.signal })).rejects.toThrow();
+		expect(calls).toHaveLength(1);
 	});
 
-	test('validates request bounds and configuration before sending a request', async () => {
-		let called = false;
-		const fetcher = async () => { called = true; return new Response('[]'); };
+	test('validates request bounds before sending a request', async () => {
+		const { client, calls } = pages([]);
 		for (const limit of [0, 201, 1.5, NaN]) {
-			await expect(readCatalogPage(config, { limit, fetcher })).rejects.toBeInstanceOf(TypeError);
+			await expect(readCatalogPage(client, { limit })).rejects.toBeInstanceOf(TypeError);
 		}
-		await expect(lookupCatalogProduct(config, '../admin', { fetcher })).rejects.toBeInstanceOf(TypeError);
-		await expect(readCatalogPage({ ...config, url: 'https://example.invalid/?secret=bad' }, { fetcher })).rejects.toBeInstanceOf(TypeError);
-		await expect(readCatalogPage({ ...config, publishableKey: 'sb_secret_never_public' }, { fetcher })).rejects.toBeInstanceOf(TypeError);
-		expect(called).toBe(false);
+		await expect(lookupCatalogProduct(client, '../admin')).rejects.toBeInstanceOf(TypeError);
+		await expect(readCatalogPage(client, { binId: 'not-a-drawer' })).rejects.toBeInstanceOf(TypeError);
+		expect(calls).toHaveLength(0);
 	});
 });

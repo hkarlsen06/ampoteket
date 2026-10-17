@@ -9,8 +9,10 @@
 	import ArrowUpRightIcon from 'phosphor-svelte/lib/ArrowUpRightIcon';
 	import { codeText, pageContainer, pageHeader, pageHeading, sectionHeading } from '#lib/ui.js';
 	import { specificationLabel, getI18n } from '#lib/i18n/index.js';
-	import { onDestroy, untrack } from 'svelte';
-	import { forSale, lookupCatalogProduct, productName } from '#lib/catalog.js';
+	import { untrack } from 'svelte';
+	import { useConvexClient, useQuery } from 'convex-svelte';
+	import { api } from '#lib/convex.js';
+	import { forSale, lookupCatalogProduct, parseCatalogProduct, productName } from '#lib/catalog.js';
 	import { formatSpecificationNumber } from '#lib/format.js';
 	import { compareDecimals } from '#lib/decimal.js';
 	import ProductIdentity from '#lib/ProductIdentity.svelte';
@@ -23,43 +25,45 @@
 	let { data }: { data: PageData } = $props();
 	const i18n = getI18n();
 	const m = $derived(i18n.m.product);
+	// The layout sets up the shared client only when the deployment is configured.
+	const client = untrack(() => data.convex) ? useConvexClient() : null;
+	// Stock, price and placement stay current through a subscription seeded with the server's read.
+	const live = client ? useQuery(api.catalog.product, () => ({ code: data.code }), { initialData: untrack(() => data.product) ?? undefined }) : null;
 	let product = $state.raw(untrack(() => data.product));
 	let unavailable = $state(untrack(() => data.unavailable));
-	let refreshing = $state(false);
-	let refreshQueued = false;
-	let controller: AbortController | undefined;
+	let retrying = $state(false);
+	$effect(() => { product = data.product; unavailable = data.unavailable; retrying = false; });
 	$effect(() => {
-		product = data.product; unavailable = data.unavailable;
-		controller?.abort(); controller = undefined; refreshing = false; refreshQueued = false;
+		if (!live) return;
+		const latest = live.data, failed = live.error;
+		untrack(() => {
+			if (failed) unavailable = true;
+			else if (latest !== undefined) accept(latest);
+		});
 	});
-	onDestroy(() => { controller?.abort(); controller = undefined; refreshQueued = false; });
-	async function refreshProduct() {
-		if (document.visibilityState !== 'visible' || !data.catalogConfig) return;
-		if (refreshing) { refreshQueued = true; return; }
-		const own = controller = new AbortController();
-		const deadline = setTimeout(() => own.abort(), 15000);
-		refreshing = true;
+	/** A deactivated product keeps its last known details but can no longer be added. */
+	function accept(raw: unknown) {
 		try {
-			const latest = await lookupCatalogProduct(data.catalogConfig, product?.code ?? data.code, { signal: own.signal });
-			if (controller !== own) return;
+			const latest = raw === null ? null : parseCatalogProduct(raw);
+			if (latest && latest.code !== data.code) throw new Error('Mismatched product');
 			if (latest) product = latest;
 			unavailable = !latest;
-		} catch { if (controller === own) unavailable = true; }
-		finally {
-			clearTimeout(deadline);
-			if (controller === own) {
-				refreshing = false;
-				if (refreshQueued) { refreshQueued = false; void refreshProduct(); }
-			}
-		}
+		} catch { unavailable = true; }
+	}
+	async function retry() {
+		if (!client || retrying) return;
+		const code = data.code;
+		retrying = true;
+		try {
+			const latest = await lookupCatalogProduct(client, code, { signal: AbortSignal.timeout(15000) });
+			if (code === data.code) accept(latest);
+		} catch { if (code === data.code) unavailable = true; }
+		finally { if (code === data.code) retrying = false; }
 	}
 	const name = $derived(product ? productName(product, i18n.locale) : null);
 	const balanceState = $derived(product ? compareDecimals(product.quantity, '0') : null);
 
 </script>
-
-<svelte:window onfocus={refreshProduct} ononline={refreshProduct} />
-<svelte:document onvisibilitychange={refreshProduct} />
 
 <!-- Closed by default below 48rem; the two-column layout, and pages without
 JavaScript, always show the content with a plain heading. -->
@@ -94,11 +98,11 @@ JavaScript, always show the content with a plain heading. -->
 				{#if !forSale(product)}<p class="mt-3">{m.borrowNote}</p>
 				{:else}
 					{#if balanceState !== null && balanceState <= 0}<p class="mt-3 text-sm text-muted-foreground">{m.stockNote}</p>{/if}
-					{#key product.product_id}<ProductPurchase {product} unavailable={unavailable || refreshing} />{/key}
+					{#key product.product_id}<ProductPurchase {product} unavailable={unavailable || retrying} />{/key}
 				{/if}
 				{#if unavailable}
 					<Alert.Message appearance="inline" variant="destructive" role="alert">{m.unavailable}</Alert.Message>
-					<Button variant="outline" class="mt-3" disabled={refreshing} onclick={refreshProduct}>{m.retry}</Button>
+					<Button variant="outline" class="mt-3" disabled={retrying} onclick={retry}>{m.retry}</Button>
 				{/if}
 				{#if forSale(product)}<noscript><p class="text-sm text-muted-foreground">{m.noJavascript}</p></noscript>{/if}
 			</div>
@@ -107,7 +111,7 @@ JavaScript, always show the content with a plain heading. -->
 				{@render disclosure('description-title', m.description, description)}
 			{/if}
 			<div class="product-location min-w-0 md:col-start-2 md:row-span-3 md:row-start-1">
-				{#key product.product_id}<ShelfMap initialTopology={data.shelfTopology} config={data.catalogConfig} {product} />{/key}
+				{#key product.product_id}<ShelfMap initialTopology={data.shelfTopology} config={data.convex} {product} />{/key}
 			</div>
 			<div class="details grid min-w-0 gap-6 md:col-start-1">
 				{#if Object.keys(product.attributes).length}

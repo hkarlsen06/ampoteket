@@ -1,16 +1,16 @@
-import { CHECKOUT_ALLOWED_ORIGIN as origin, SUPABASE_SECRET_KEY as secretKey, RESEND_API_KEY as resendApiKey } from '$app/env/private';
+import { CHECKOUT_ALLOWED_ORIGIN as origin, CHECKOUT_SERVER_KEY as serverKey, RESEND_API_KEY as resendApiKey } from '$app/env/private';
 import { env, waitUntil } from 'cloudflare:workers';
-import { getCatalogConfig } from './catalog-config';
+import { getConvexConfig } from './convex';
 import { checkoutGateway, type CheckoutGatewayConfig, type CheckoutOperation } from './checkout-gateway';
 import type { ReceiptConfig } from './receipt-email';
 import { salesOpen } from './sales';
 import type { RequestEvent } from '@sveltejs/kit';
 
 export function handleCheckout(operation: CheckoutOperation, event: RequestEvent): Promise<Response> {
-	const publicConfig = getCatalogConfig();
+	const convex = getConvexConfig();
 	// Closed sales answer like a missing configuration: 503 CHECKOUT_UNAVAILABLE.
-	const config = salesOpen() && publicConfig && typeof origin === 'string' && typeof secretKey === 'string' ? {
-		origin, apiUrl: publicConfig.url, secretKey,
+	const config = salesOpen() && convex && typeof origin === 'string' && typeof serverKey === 'string' ? {
+		origin, convexUrl: convex.url, serverKey,
 		sessionLimit: env.CHECKOUT_SESSION_LIMIT,
 		operationLimit: env.CHECKOUT_OPERATION_LIMIT,
 		receipt: typeof resendApiKey === 'string' && resendApiKey && env.RECEIPT_LIMIT

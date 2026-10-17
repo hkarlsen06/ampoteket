@@ -1,7 +1,6 @@
-import { allStaffRows, type StaffSession } from './admin-api';
-import { parseAdminProduct, productSelect, type AdminProduct } from './admin-products';
+import { api, type StaffSession } from './convex';
+import { parseAdminProduct, type AdminProduct } from './admin-products';
 import type { AuditEntry } from './admin-audit';
-import type { Fetcher } from './api';
 import { readDraft, writeDraft } from './drafts';
 
 /**
@@ -18,7 +17,7 @@ export const firstReviewDays = 14;
 const timestampPattern = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}(?::?\d{2})?)$/;
 
 /**
- * Microseconds since the epoch. PostgreSQL keeps microseconds that `Date` drops,
+ * Microseconds since the epoch. Stored timestamps keep microseconds that `Date` drops,
  * and the review point is a product's exact `created_at`, so compare at full precision.
  */
 export function timestampMicros(value: string): bigint {
@@ -28,16 +27,16 @@ export function timestampMicros(value: string): bigint {
 	return BigInt(millis) * 1000n + BigInt((match[2] ?? '').padEnd(6, '0').slice(0, 6));
 }
 
-export function readReviewPoint(userId: string | undefined, storage?: ReviewStorage): string | null {
-	const saved = readDraft(userId, 'product-review', storage) as { since?: unknown } | null;
+export function readReviewPoint(userId: string | null | undefined, storage?: ReviewStorage): string | null {
+	const saved = readDraft(userId ?? undefined, 'product-review', storage) as { since?: unknown } | null;
 	const since = saved?.since;
 	if (typeof since !== 'string') return null;
 	try { timestampMicros(since); return since; } catch { return null; }
 }
 
-export function writeReviewPoint(userId: string | undefined, since: string, storage?: ReviewStorage) {
+export function writeReviewPoint(userId: string | null | undefined, since: string, storage?: ReviewStorage) {
 	timestampMicros(since);
-	writeDraft(userId, 'product-review', { since }, storage);
+	writeDraft(userId ?? undefined, 'product-review', { since }, storage);
 }
 
 /** The stored point, or `firstReviewDays` before `now` on a first visit. */
@@ -46,10 +45,9 @@ export function reviewSince(stored: string | null, now = Date.now()): string {
 }
 
 /** Every product, published or not, created after `since`. */
-export async function readNewProducts(session: StaffSession, since: string, fetcher: Fetcher = fetch): Promise<NewProduct[]> {
+export async function readNewProducts(session: StaffSession, since: string): Promise<NewProduct[]> {
 	timestampMicros(since);
-	const rows = await allStaffRows(session, 'amp_products', `${productSelect},created_at`, 'id', { created_at: `gt.${since}` }, fetcher);
-	return rows.map(row => {
+	return (await session.client.query(api.products.createdSince, { since })).map((row) => {
 		if (typeof row.created_at !== 'string') throw new Error('Invalid product creation time');
 		timestampMicros(row.created_at);
 		return { ...parseAdminProduct(row), created_at: row.created_at };

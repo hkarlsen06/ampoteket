@@ -24,7 +24,6 @@
 	import { readLabelData, selectedLabelProducts, labelSpecificationLines, type LabelData } from '#lib/labels/data.js';
 	import { proportionalLabelSettings } from '#lib/labels/settings.js';
 	import type { PreparedLabels } from '#lib/labels/render.js';
-	import type { Fetcher } from '#lib/api.js';
 	import { readDraft, writeDraft } from '#lib/drafts.js';
 	const fieldId = $props.id();
 	const i18n = getI18n(), admin = getAdminContext();
@@ -94,30 +93,12 @@
 	});
 
 	async function read(signal: AbortSignal): Promise<LabelData> {
-		const session = admin.credentials(), cleanups: (() => void)[] = [], requests: AbortController[] = [];
-		// Link navigation cancellation to each request while retaining its existing
-		// 15-second timeout, including response-body reads on older phone browsers.
-		const fetcher: Fetcher = (input, init) => {
-			signal.throwIfAborted();
-			const linked = new AbortController();
-			requests.push(linked);
-			for (const source of [signal, init?.signal]) if (source) {
-				const abort = () => linked.abort();
-				if (source.aborted) abort(); else source.addEventListener('abort', abort, { once: true });
-				cleanups.push(() => source.removeEventListener('abort', abort));
-			}
-			return fetch(input, { ...init, signal: linked.signal });
-		};
-		try {
-			const next = await readLabelData(session, fetcher);
-			signal.throwIfAborted();
-			if (!alive || session.userId !== admin.userId || admin.status !== 'ready') throw new Error('Label read identity changed');
-			return next;
-		} catch (cause) {
-			// One failed branch must also stop its parallel reads before removing
-			// their parent/timeout links. Preserve the original diagnostic.
-			requests.forEach(request => request.abort()); throw cause;
-		} finally { cleanups.forEach(cleanup => cleanup()); }
+		const session = admin.credentials();
+		const next = await readLabelData(session);
+		// Leaving the page or starting another read discards a result that arrives late.
+		signal.throwIfAborted();
+		if (!alive || session.userId !== admin.userId || admin.status !== 'ready') throw new Error('Label read identity changed');
+		return next;
 	}
 	async function load(inBackground = false) {
 		if (generating || controller) return;

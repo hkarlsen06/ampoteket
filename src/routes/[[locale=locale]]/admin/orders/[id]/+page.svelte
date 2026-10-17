@@ -4,13 +4,12 @@
 	import { page } from '$app/state';
 	import { getI18n } from '#lib/i18n/index.js';
 	import { getAdminContext } from '#lib/admin-context.svelte.js';
-	import { ApiError, uuidPattern } from '#lib/api.js';
+	import { uuidPattern } from '#lib/api.js';
 	import { compareDecimals, normalizeDecimal, validQuantity } from '#lib/decimal.js';
 	import { currencySymbol, formatCountedAt, formatDecimal, formatMoney, unitLabel } from '#lib/format.js';
 	import { osloInstant, osloLocal, possibleOsloOffsets } from '#lib/oslo-time.js';
-	import { staffEquals, staffRequest } from '#lib/admin-api.js';
 	import AdminOrderReceipt from '#lib/AdminOrderReceipt.svelte';
-	import { clearOrderCommand, orderProductName, orderCommandPath, orderRejection, orderStorageEvent, readOrderCommand, readOrderDetail, runOrderCommand, saveOrderCommand, updateOrderStorage, type Order, type OrderCommand, type OrderDetail, type OrderLine } from '#lib/admin-orders.js';
+	import { clearOrderCommand, metadataRejected, orderProductName, orderCommandPath, orderRejection, orderStorageEvent, readOrderCommand, readOrderDetail, runOrderCommand, saveOrderCommand, updateOrderLineMetadata, updateOrderMetadata, updateOrderStorage, type Order, type OrderCommand, type OrderDetail, type OrderLine, type OrderLineMetadata, type OrderMetadata } from '#lib/admin-orders.js';
 	import { codeText, formActions, formLayout, formStatus, itemTitle, nameWrap, pageHeader, pageHeading, section, sectionHeading } from '#lib/ui.js';
 	import * as Alert from '#lib/components/ui/alert/index.js';
 	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
@@ -205,7 +204,7 @@
 		event.preventDefault();
 		if (admin.status !== 'ready' || loading || failed || !order || !headerBasis || busy || command || !editingHeader) return;
 		const basis = headerBasis; invalidInput = ''; invalidMessage = '';
-		let target: { supplier_name: string; supplier_reference: string | null; placed_at: string; additional_cost_nok: string; note: string | null };
+		let target: OrderMetadata;
 		try {
 			const supplier = headerDraft.supplierName.trim();
 			checked('supplier', m.invalidMetadata, () => { if (!supplier || [...supplier].length > 200) throw new Error(); });
@@ -216,22 +215,15 @@
 			});
 			const additionalCost = checked('additional', m.invalidCost(2), () => boundedAmount(headerDraft.additionalCostNok, 2));
 			checked('header-note', m.invalidMetadata, () => { if ([...headerDraft.note].length > 2000) throw new Error(); });
-			target = { supplier_name: supplier, supplier_reference: headerDraft.supplierReference.trim() || null, placed_at: placedAt,
-				additional_cost_nok: additionalCost, note: headerDraft.note.trim() || null };
+			target = { supplierName: supplier, supplierReference: headerDraft.supplierReference.trim() || null, placedAt,
+				additionalCostNok: additionalCost, note: headerDraft.note.trim() || null };
 		} catch { metadataOutcome = 'invalid'; focusInvalid(); return; }
 		busy = true; metadataOutcome = 'idle';
 		try {
 			const session = admin.credentials();
-			const rows = await staffRequest(session, 'amp_purchase_orders', {
-				select: 'id', id: staffEquals(basis.id), supplier_name: staffEquals(basis.supplierName),
-				supplier_reference: staffEquals(basis.supplierReference), placed_at: staffEquals(basis.placedAt),
-				additional_cost_nok: staffEquals(basis.additionalCostNok), note: staffEquals(basis.note)
-			}, target, 'PATCH');
-			if (!Array.isArray(rows) || rows.length > 1) throw new Error('Invalid order update');
-			if (!rows.length) { metadataOutcome = 'conflict'; await load(); if (order) headerBasis = order; return; }
-			if (rows[0]?.id !== basis.id) throw new Error('Invalid order update binding');
+			if (await updateOrderMetadata(session, basis, target) === 'stale') { metadataOutcome = 'conflict'; await load(); if (order) headerBasis = order; return; }
 			editingHeader = false; metadataOutcome = 'saved'; await load();
-		} catch (error) { metadataOutcome = error instanceof ApiError && [400, 409, 422].includes(error.status) ? 'invalid' : 'unknown'; await admin.permissionFailure(error); }
+		} catch (error) { metadataOutcome = metadataRejected(error) ? 'invalid' : 'unknown'; await admin.permissionFailure(error); }
 		finally { busy = false; }
 	}
 	async function saveLine(event: SubmitEvent) {
@@ -239,7 +231,7 @@
 		const line = lineBasis;
 		if (admin.status !== 'ready' || loading || failed || !line || !order || busy || command) return;
 		invalidInput = ''; invalidMessage = '';
-		let target: { unit_cost_nok: string; purchase_url: string | null; supplier_sku: string | null };
+		let target: OrderLineMetadata;
 		try {
 			const unitCost = checked(`cost-${line.id}`, m.invalidCost(6), () => boundedAmount(lineDraft.unitCostNok, 6));
 			checked(`sku-${line.id}`, m.invalidMetadata, () => { if ([...lineDraft.supplierSku].length > 2000) throw new Error(); });
@@ -247,20 +239,14 @@
 				const value = lineDraft.purchaseUrl.trim(); if (!value) return value; const url = new URL(value);
 				if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || /[\s\\]/.test(value)) throw new Error(); return value;
 			});
-			target = { unit_cost_nok: unitCost, purchase_url: purchaseUrl || null, supplier_sku: lineDraft.supplierSku.trim() || null };
+			target = { unitCostNok: unitCost, purchaseUrl: purchaseUrl || null, supplierSku: lineDraft.supplierSku.trim() || null };
 		} catch { metadataOutcome = 'invalid'; focusInvalid(); return; }
 		busy = true; metadataOutcome = 'idle';
 		try {
 			const session = admin.credentials();
-			const rows = await staffRequest(session, 'amp_purchase_order_lines', {
-				select: 'id', id: staffEquals(line.id), order_id: staffEquals(order.id), unit_cost_nok: staffEquals(line.unitCostNok),
-				purchase_url: staffEquals(line.purchaseUrl), supplier_sku: staffEquals(line.supplierSku)
-			}, target, 'PATCH');
-			if (!Array.isArray(rows) || rows.length > 1) throw new Error('Invalid order line update');
-			if (!rows.length) { metadataOutcome = 'conflict'; await load(); lineBasis = lines.find((fresh) => fresh.id === line.id) ?? line; return; }
-			if (rows[0]?.id !== line.id) throw new Error('Invalid order line update binding');
+			if (await updateOrderLineMetadata(session, line, target) === 'stale') { metadataOutcome = 'conflict'; await load(); lineBasis = lines.find((fresh) => fresh.id === line.id) ?? line; return; }
 			editingLineId = null; metadataOutcome = 'saved'; await load();
-		} catch (error) { metadataOutcome = error instanceof ApiError && [400, 409, 422].includes(error.status) ? 'invalid' : 'unknown'; await admin.permissionFailure(error); }
+		} catch (error) { metadataOutcome = metadataRejected(error) ? 'invalid' : 'unknown'; await admin.permissionFailure(error); }
 		finally { busy = false; }
 	}
 	async function submit(kind: 'cancel' | 'reverse', event?: SubmitEvent) {

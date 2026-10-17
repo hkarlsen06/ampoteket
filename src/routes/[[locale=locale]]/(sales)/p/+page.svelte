@@ -19,6 +19,7 @@
 	import { goto, refreshAll, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import { untrack } from 'svelte';
+	import { useConvexClient } from 'convex-svelte';
 	import { readCatalogPage, readCatalogFacets, type CatalogProduct } from '#lib/catalog.js';
 	import {
 		canonicalFilterNumber, CatalogQueryError, hasCatalogFilters,
@@ -37,6 +38,8 @@
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
+	// The layout sets up the shared client only when the deployment is configured.
+	const client = untrack(() => data.convex) ? useConvexClient() : null;
 	const i18n = getI18n();
 	const m = $derived(i18n.m.catalog);
 	const shop = $derived(i18n.m.shop);
@@ -80,7 +83,6 @@
 	// Search text typed but not yet submitted survives Back and reload.
 	export const snapshot = { capture: () => q, restore: (value: string) => { q = value; } };
 	let invalidField = $state<string | null>(null);
-	const configKey = $derived(data.config ? `${data.config.url}\n${data.config.publishableKey}` : '');
 	const submitted = $derived.by(() => {
 		try { return parseCatalogQuery(new URLSearchParams(data.queryString)); }
 		catch { return null; }
@@ -121,13 +123,12 @@
 	});
 
 	$effect(() => {
-		void configKey; void facetsCycle;
+		void facetsCycle;
 		const selected = categories.length === 1 ? [...categories] : [];
-		const config = untrack(() => data.config);
-		if (!config) { facetsLoading = false; return; }
+		if (!client) { facetsLoading = false; return; }
 		const controller = new AbortController();
 		facetsLoading = true; facetsFailed = false;
-		readCatalogFacets(config, { categories: selected, signal: controller.signal }).then((result) => {
+		readCatalogFacets(client, { categories: selected, signal: controller.signal }).then((result) => {
 			if (!controller.signal.aborted) { facets = result; facetsLoading = false; }
 		}).catch(() => {
 			if (!controller.signal.aborted) { facetsFailed = true; facetsLoading = false; }
@@ -136,13 +137,11 @@
 	});
 
 	$effect(() => {
-		void configKey; void topologyCycle;
-		if (!locationsOpen) return;
-		const config = untrack(() => data.config);
-		if (!config) return;
+		void topologyCycle;
+		if (!locationsOpen || !client) return;
 		const controller = new AbortController();
 		topologyLoading = true; topologyFailed = false;
-		readShelfTopology(config, { signal: controller.signal }).then((result) => {
+		readShelfTopology(client, { signal: controller.signal }).then((result) => {
 			if (!controller.signal.aborted) { topology = result; topologyLoading = false; }
 		}).catch(() => {
 			if (!controller.signal.aborted) { topologyFailed = true; topologyLoading = false; }
@@ -161,12 +160,12 @@
 	}
 
 	async function showMore() {
-		if (!data.config || !submitted || loading || queryError || !nextAfter) return;
+		if (!client || !submitted || loading || queryError || !nextAfter) return;
 		const own = new AbortController(); pagingController = own;
 		const previous = displayed;
 		loading = true; failed = false;
 		try {
-			const following = await readCatalogPage(data.config, {
+			const following = await readCatalogPage(client, {
 				query: { ...submitted, after: nextAfter }, limit: 50, signal: own.signal
 			});
 			if (own.signal.aborted) return;
@@ -263,7 +262,7 @@
 
 	async function submitSearch(event: SubmitEvent, applyFilters = false) {
 		event.preventDefault();
-		if (!data.config || (applyFilters && (facetsLoading || facetsFailed))) return;
+		if (!client || (applyFilters && (facetsLoading || facetsFailed))) return;
 		invalidField = null;
 		const canonical: CatalogConditions = Object.create(null);
 		try {
@@ -350,7 +349,7 @@
 				<InputGroup.Root>
 					<InputGroup.Input id="catalog-search" class="min-w-0" name="q" type="search" inputmode="search" autocomplete="off" autocapitalize="none" enterkeyhint="search" maxlength={200} placeholder={m.searchPlaceholder} bind:value={q} />
 					<InputGroup.Addon align="inline-end">
-						<InputGroup.Button class="search-submit" type="submit" disabled={!data.config}><Icon icon={MagnifyingGlassIcon} aria-hidden="true" />{m.search}</InputGroup.Button>
+						<InputGroup.Button class="search-submit" type="submit" disabled={!client}><Icon icon={MagnifyingGlassIcon} aria-hidden="true" />{m.search}</InputGroup.Button>
 					</InputGroup.Addon>
 				</InputGroup.Root>
 			</Field.Field>
@@ -360,9 +359,9 @@
 			<Separator class="flex-1 lg:hidden" /><span>{m.or}</span><Separator class="flex-1 lg:hidden" />
 		</div>
 		<Dialog.Root bind:open={locationsOpen}>
-			<Dialog.Trigger disabled={!data.config}>
+			<Dialog.Trigger disabled={!client}>
 				{#snippet child({ props })}
-					<Button {...props} variant="outline" class="location-toggle no-js:hidden w-full lg:w-auto" aria-controls="catalog-locations" disabled={!data.config}>
+					<Button {...props} variant="outline" class="location-toggle no-js:hidden w-full lg:w-auto" aria-controls="catalog-locations" disabled={!client}>
 						<Icon icon={MapPinIcon} aria-hidden="true" />
 						{locationCount ? m.locationSelected(locationCount) : m.location}
 					</Button>
@@ -397,9 +396,9 @@
 	</div>
 	<div class={[formActions, "mt-3"]}>
 		<Dialog.Root open={filtersOpen} onOpenChange={(open) => { if (open) openFilters(); else cancelFilters(); }}>
-			<Dialog.Trigger disabled={!data.config}>
+			<Dialog.Trigger disabled={!client}>
 				{#snippet child({ props })}
-					<Button {...props} variant="outline" class="filter-toggle no-js:hidden" aria-controls="catalog-filters" disabled={!data.config}>
+					<Button {...props} variant="outline" class="filter-toggle no-js:hidden" aria-controls="catalog-filters" disabled={!client}>
 						<Icon icon={SlidersHorizontalIcon} aria-hidden="true" />
 						{categories.length ? m.filtersSelected(categories.length) : m.filters}
 					</Button>

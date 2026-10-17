@@ -31,7 +31,8 @@ export async function sendPasswordEmail(kind: 'invite' | 'recovery', to: string,
 	const html = (kind === 'invite' ? inviteHtml : recoveryHtml)(origin, escape(to), escape(link));
 	const subject = kind === 'invite' ? 'Ampoteket: Invitasjon / Invitation' : 'Ampoteket: Velg passord / Choose password';
 	try {
-		const response = await fetch('https://api.resend.com/emails', {
+		// Tests point EMAIL_API_URL at a local stub to capture links; production leaves it unset.
+		const response = await fetch(process.env.EMAIL_API_URL ?? 'https://api.resend.com/emails', {
 			method: 'POST', signal: AbortSignal.timeout(15_000),
 			headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
 			body: JSON.stringify({ from: FROM, to: [to], subject, html, text: `${subject}\n\n${link}\n` })

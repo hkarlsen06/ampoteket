@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { getFunctionName, type FunctionReference } from 'convex/server';
+import { rejection, type ConvexCaller } from '../convex';
 import { checkoutGateway, CHECKOUT_COOKIE, type CheckoutGatewayConfig } from './checkout-gateway';
 import { checkoutSessionFingerprint, checkoutTokenForAttempt } from './checkout-credentials';
 import { parseCheckoutSnapshot, parsePrepareRequest, type CheckoutSnapshot } from '../checkout-contract';
@@ -14,13 +16,21 @@ const snapshot: CheckoutSnapshot = {
 	items: [{ product_id, code: 'RES-A1234', name_nb: 'Motstand', name_en: 'Resistor', unit: 'pcs',
 		quantity: '1', unit_price_nok: '999999999998.999999', line_total_nok: '999999999998.99' }]
 };
+const serverKey = 'k'.repeat(32);
 function harness() {
 	const jar = new Map<string, string>();
-	const calls: { url: string; init?: RequestInit }[] = [];
+	const calls: { name: string; args: Record<string, unknown> }[] = [];
+	const fetches: { url: string; init?: RequestInit }[] = [];
 	const cookieWrites: unknown[] = [];
 	const background: Promise<unknown>[] = [];
+	let answer: () => unknown = () => snapshot;
+	const call = async (fn: FunctionReference<'query' | 'mutation'>, args: Record<string, unknown>) => {
+		calls.push({ name: getFunctionName(fn), args });
+		return structuredClone(answer());
+	};
+	const client = { query: call, mutation: call, action: async () => { throw new Error('Unexpected action'); } } as unknown as ConvexCaller;
 	const config: CheckoutGatewayConfig = {
-		origin, apiUrl: 'https://database.example.test', secretKey: 'sb_secret_disposable-test-value',
+		origin, convexUrl: 'https://deployment.example.test', serverKey, client,
 		sessionLimit: { limit: async () => ({ success: true }) },
 		operationLimit: { limit: async () => ({ success: true }) }
 	};
@@ -28,8 +38,6 @@ function harness() {
 		get: (name: string) => jar.get(name),
 		set: (name: string, value: string, options: unknown) => { jar.set(name, value); cookieWrites.push(options); }
 	};
-	let rpcBody: unknown = snapshot;
-	let rpcStatus = 200;
 	const post = async (operation: 'session' | 'prepare' | 'get' | 'confirm' | 'receipt', body: unknown,
 		init: RequestInit = {}, id = checkout_id) => {
 		const response = await checkoutGateway(operation, {
@@ -38,14 +46,16 @@ function harness() {
 				body: JSON.stringify(body), ...init
 			}), cookies, clientAddress: '127.0.0.1', checkoutId: id,
 			fetcher: (async (url, init) => {
-				calls.push({ url: String(url), init });
-				return new Response(JSON.stringify(rpcBody), { status: rpcStatus });
+				fetches.push({ url: String(url), init });
+				return new Response('{}');
 			}) as typeof fetch,
 			waitUntil: (promise) => background.push(promise)
 		}, config);
 		return { response, body: await response.json() as Record<string, unknown> };
 	};
-	return { jar, calls, cookieWrites, background, config, post, rpc: (body: unknown, status = 200) => { rpcBody = body; rpcStatus = status; } };
+	return { jar, calls, fetches, cookieWrites, background, config, post,
+		respond: (body: unknown) => { answer = () => body; },
+		reject: (error: unknown) => { answer = () => { throw error; }; } };
 }
 const binding = { request_id, fingerprint: await checkoutSessionFingerprint(root) };
 const prepare = { ...binding, items: [{ product_id, quantity: '0.000001' }], contact: 'Optional contact' };
@@ -72,7 +82,7 @@ describe('checkout gateway trust boundary', () => {
 		expect(h.cookieWrites).toHaveLength(0);
 		expect(h.calls).toHaveLength(0);
 	});
-	test('rejects origin, content type, method, excess bytes and unexpected fields before RPCs', async () => {
+	test('rejects origin, content type, method, excess bytes and unexpected fields before backend calls', async () => {
 		const h = harness();
 		const invalidOrigins: RequestInit[] = [
 			{ headers: { 'Content-Type': 'application/json' } },
@@ -115,47 +125,51 @@ describe('checkout gateway trust boundary', () => {
 	});
 	test('same frozen retry derives the same server token; response exposes only reviewed fields', async () => {
 		const h = harness(); h.jar.set(CHECKOUT_COOKIE, root);
-		h.rpc({ checkout_id, token: root });
+		h.respond({ checkout_id, token: root });
 		expect((await h.post('prepare', prepare)).body).toEqual({ checkout_id });
 		await h.post('prepare', prepare);
-		expect(h.calls[0].init?.body).toBe(h.calls[1].init?.body);
-		expect(JSON.parse(h.calls[0].init!.body as string)).toEqual({
-			p_request_id: request_id, p_token: await checkoutTokenForAttempt(root, request_id, binding.fingerprint),
-			p_items: prepare.items, p_contact_text: prepare.contact
-		});
-		expect(h.calls[0].init?.redirect).toBe('manual');
-		expect(new Headers(h.calls[0].init?.headers).has('Authorization')).toBe(false);
-		h.rpc({ ...snapshot, token_digest: root });
+		expect(h.calls[0]).toEqual(h.calls[1]);
+		expect(h.calls[0]).toEqual({ name: 'checkout:prepare', args: {
+			serverKey, requestId: request_id, token: await checkoutTokenForAttempt(root, request_id, binding.fingerprint),
+			contact: prepare.contact, items: [{ productId: product_id, quantity: '0.000001' }]
+		} });
+		h.respond({ ...snapshot, token_digest: root });
 		expect((await h.post('get', binding)).body).toEqual(snapshot);
+		expect(h.calls[2]).toEqual({ name: 'checkout:get', args: { serverKey, checkoutId: checkout_id, token: h.calls[0].args.token } });
+		expect(h.fetches).toHaveLength(0);
 	});
-	test('legacy service JWTs retain their bearer header; public JWTs are refused', async () => {
-		const h = harness(); h.jar.set(CHECKOUT_COOKIE, root);
-		h.config.secretKey = `test.${btoa(JSON.stringify({ role: 'service_role' }))}.test`;
-		await h.post('get', binding);
-		expect(new Headers(h.calls[0].init?.headers).get('Authorization')).toBe(`Bearer ${h.config.secretKey}`);
-		h.config.secretKey = `test.${btoa(JSON.stringify({ role: 'anon' }))}.test`;
-		expect((await h.post('get', binding)).response.status).toBe(503);
-		expect(h.calls).toHaveLength(1);
+	test('an unsafe deployment URL or short server key fails closed before any call', async () => {
+		for (const patch of [{ convexUrl: 'http://deployment.example.test' }, { convexUrl: 'https://deployment.example.test/path' },
+			{ convexUrl: 'https://user:pass@deployment.example.test' }, { serverKey: 'k'.repeat(31) }]) {
+			const h = harness(); h.jar.set(CHECKOUT_COOKIE, root);
+			Object.assign(h.config, patch);
+			expect((await h.post('get', binding)).body).toEqual({ error: 'CHECKOUT_UNAVAILABLE' });
+			expect(h.calls).toHaveLength(0);
+		}
+		const local = harness(); local.jar.set(CHECKOUT_COOKIE, root);
+		local.config.convexUrl = 'http://127.0.0.1:3210';
+		expect((await local.post('get', binding)).body).toEqual(snapshot);
 	});
 	test('invalid or mismatched snapshots cannot become payment instructions', async () => {
 		const h = harness(); h.jar.set(CHECKOUT_COOKIE, root);
 		for (const bad of [{ ...snapshot, checkout_id: product_id }, { ...snapshot, items: [] },
 			{ ...snapshot, payment_required: false }, { ...snapshot, status: 'confirmed' }]) {
-			h.rpc(bad); expect((await h.post('get', binding)).response.status).toBe(503);
+			h.respond(bad); expect((await h.post('get', binding)).response.status).toBe(503);
 		}
-		h.rpc(snapshot); expect((await h.post('confirm', binding)).response.status).toBe(503);
+		h.respond(snapshot); expect((await h.post('confirm', binding)).response.status).toBe(503);
 		const confirmed = { ...snapshot, status: 'confirmed', confirmed_at: snapshot.created_at, registration_method: 'buyer' };
-		h.rpc(confirmed); expect((await h.post('confirm', binding)).body).toEqual(confirmed);
+		h.respond(confirmed); expect((await h.post('confirm', binding)).body).toEqual(confirmed);
 		expect(h.background).toHaveLength(0);
 	});
 	test('a registration sends the staff archive a receipt copy in the background', async () => {
 		const h = harness(); h.jar.set(CHECKOUT_COOKIE, root);
 		h.config.receipt = { resendApiKey: 're_test', limit: { limit: async () => ({ success: false }) } };
 		const confirmed = { ...snapshot, status: 'confirmed', confirmed_at: snapshot.created_at, registration_method: 'buyer' };
-		h.rpc(confirmed); expect((await h.post('confirm', binding)).body).toEqual(confirmed);
+		h.respond(confirmed); expect((await h.post('confirm', binding)).body).toEqual(confirmed);
 		expect(await Promise.all(h.background)).toEqual([true]);
-		expect(h.calls.map((call) => call.url)).toEqual(['https://database.example.test/rest/v1/rpc/amp_confirm_checkout', 'https://api.resend.com/emails']);
-		expect(JSON.parse(String(h.calls[1].init?.body)).to).toEqual(['ampoteket.kvittering@outlook.com']);
+		expect(h.calls.map((call) => call.name)).toEqual(['checkout:confirm']);
+		expect(h.fetches.map((call) => call.url)).toEqual(['https://api.resend.com/emails']);
+		expect(JSON.parse(String(h.fetches[0].init?.body)).to).toEqual(['ampoteket.kvittering@outlook.com']);
 	});
 	test('receipts go only to a registered checkout, validated address and within the limit', async () => {
 		const h = harness(); h.jar.set(CHECKOUT_COOKIE, root);
@@ -167,21 +181,32 @@ describe('checkout gateway trust boundary', () => {
 		expect((await h.post('receipt', { ...binding, email: '98765432' })).response.status).toBe(400);
 		expect((await h.post('receipt', { ...binding, email: 'a@b.no', extra: 1 })).response.status).toBe(400);
 		expect(h.calls).toHaveLength(0);
-		h.rpc(snapshot); expect((await h.post('receipt', request)).body).toEqual({ error: 'CHECKOUT_NOT_REGISTERED' });
-		h.rpc(confirmed); expect((await h.post('receipt', request)).body).toEqual({ sent: true });
-		expect(h.calls.map((call) => call.url)).toEqual(['https://database.example.test/rest/v1/rpc/amp_get_checkout',
-			'https://database.example.test/rest/v1/rpc/amp_get_checkout', 'https://api.resend.com/emails']);
-		expect(JSON.parse(String(h.calls[2].init?.body)).to).toEqual(['buyer@example.test']);
+		h.respond(snapshot); expect((await h.post('receipt', request)).body).toEqual({ error: 'CHECKOUT_NOT_REGISTERED' });
+		h.respond(confirmed); expect((await h.post('receipt', request)).body).toEqual({ sent: true });
+		expect(h.calls.map((call) => call.name)).toEqual(['checkout:get', 'checkout:get']);
+		expect(h.fetches.map((call) => call.url)).toEqual(['https://api.resend.com/emails']);
+		expect(JSON.parse(String(h.fetches[0].init?.body)).to).toEqual(['buyer@example.test']);
 		allowed = false; expect((await h.post('receipt', request)).response.status).toBe(429);
-		allowed = true; h.rpc(confirmed, 500);
+		allowed = true; h.reject(new Error('fetch failed'));
 		expect((await h.post('receipt', request)).response.status).toBe(503);
 	});
-	test('database errors never leak details, tokens or contact', async () => {
+	test('backend rejections never leak details, tokens or contact', async () => {
 		const h = harness(); h.jar.set(CHECKOUT_COOKIE, root);
-		h.rpc({ message: 'PRODUCT_NOT_FOR_SALE: private detail', details: root }, 400);
-		expect((await h.post('prepare', prepare)).body).toEqual({ error: 'PRODUCT_NOT_FOR_SALE' });
-		h.rpc({ message: 'unknown error: private detail', details: root }, 500);
-		expect((await h.post('prepare', prepare)).body).toEqual({ error: 'CHECKOUT_UNAVAILABLE' });
+		h.reject(rejection('PRODUCT_NOT_FOR_SALE', `PRODUCT_NOT_FOR_SALE: ${root}`));
+		const refused = await h.post('prepare', prepare);
+		expect(refused.response.status).toBe(409);
+		expect(refused.body).toEqual({ error: 'PRODUCT_NOT_FOR_SALE' });
+		h.reject(rejection('CHECKOUT_NOT_FOUND_OR_NOT_AUTHORISED'));
+		const forbidden = await h.post('get', binding);
+		expect(forbidden.response.status).toBe(403);
+		expect(forbidden.body).toEqual({ error: 'CHECKOUT_NOT_FOUND_OR_NOT_AUTHORISED' });
+		// A wrong server key, an unknown rejection, an outage or a server bug: the outcome is unknown.
+		for (const error of [rejection('CHECKOUT_SERVER_REQUIRED'), rejection('SOMETHING_NEW', root), new Error(`Server error: ${root}`)]) {
+			h.reject(error);
+			const unavailable = await h.post('confirm', binding);
+			expect(unavailable.response.status).toBe(503);
+			expect(unavailable.body).toEqual({ error: 'CHECKOUT_UNAVAILABLE' });
+		}
 	});
 	test('zero totals require the saved flag and valid nonempty immutable items', () => {
 		const free = { ...snapshot, total_nok: '0.00', payment_required: false,

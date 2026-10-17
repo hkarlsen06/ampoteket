@@ -7,7 +7,7 @@
 import { v } from 'convex/values';
 import { internalMutation, internalQuery } from './_generated/server';
 import type { TableNames } from './_generated/dataModel';
-import { addDecimals, compareDecimals } from './lib/decimal';
+import { addDecimals, compareDecimals, trimScale } from './lib/decimal';
 import { canonicalJson, sha256Hex } from './lib/commands';
 import { image } from './lib/audit';
 
@@ -77,7 +77,7 @@ export const rebuildStockLevels = internalMutation({
 				if (event && (lastCounted === null || event.recorded_at > lastCounted)) lastCounted = event.recorded_at;
 			}
 			const level = await ctx.db.query('stock_levels').withIndex('product_id', (q) => q.eq('product_id', productId)).unique();
-			const row = { product_id: productId, quantity, revision, last_counted_at: lastCounted };
+			const row = { product_id: productId, quantity: trimScale(quantity), revision, last_counted_at: lastCounted };
 			if (level) await ctx.db.replace(level._id, row);
 			else await ctx.db.insert('stock_levels', row);
 		}

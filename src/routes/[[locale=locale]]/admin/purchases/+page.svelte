@@ -15,8 +15,8 @@
 	import { onMount } from 'svelte';
 	import { getI18n } from '#lib/i18n/index.js';
 	import { getAdminContext } from '#lib/admin-context.svelte.js';
-	import { clearRecoveryCommand, readRecoveryCommand, saveRecoveryCommand, readStaffCheckout, recoverStaffCheckout, staffRequest, type StaffCheckout, type RecoveryCommand } from '#lib/admin-api.js';
-	import { object, uuidPattern } from '#lib/api.js';
+	import { clearCheckoutContact, clearRecoveryCommand, readCheckoutContact, readRecoveryCommand, saveRecoveryCommand, readStaffCheckout, recoverStaffCheckout, type StaffCheckout, type RecoveryCommand } from '#lib/admin-api.js';
+	import { uuidPattern } from '#lib/api.js';
 	import { formatCountedAt, formatDecimal, formatMoney, unitLabel } from '#lib/format.js';
 	const fieldId = $props.id();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.admin);
@@ -73,10 +73,7 @@
 		if (admin.status !== 'ready' || !snapshot || busy) return; busy = true; outcome = 'idle';
 		try {
 			const session = admin.credentials();
-			const rows = await staffRequest(session, 'amp_checkout_contacts', { select: 'checkout_id,contact_text', checkout_id: `eq.${snapshot.id}`, limit: '2' });
-			if (!Array.isArray(rows) || rows.length > 1) throw new Error();
-			let value: string | null = null;
-			if (rows.length) { const row = object(rows[0]); if (row.checkout_id !== snapshot.id || typeof row.contact_text !== 'string' || [...row.contact_text].length > 300) throw new Error(); value = row.contact_text; }
+			const value = await readCheckoutContact(session, snapshot.id);
 			if (admin.userId === session.userId) { contact = value; contactShown = true; }
 		} catch (error) { outcome = 'failed'; await admin.permissionFailure(error); } finally { busy = false; }
 	}
@@ -84,8 +81,7 @@
 		if (admin.status !== 'ready' || !snapshot || busy) return; clearOpen = false; busy = true;
 		try {
 			const session = admin.credentials();
-			const result = object(await staffRequest(session, 'rpc/amp_clear_checkout_contact', {}, { p_checkout_id: snapshot.id }));
-			if (result.checkout_id !== snapshot.id || typeof result.contact_removed !== 'boolean') throw new Error();
+			await clearCheckoutContact(session, snapshot.id);
 			if (admin.userId === session.userId) { contact = null; contactErased = true; }
 		} catch (error) { outcome = 'failed'; await admin.permissionFailure(error); } finally { busy = false; }
 	}

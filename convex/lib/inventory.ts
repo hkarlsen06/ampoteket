@@ -13,7 +13,7 @@
  */
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 import type { Doc } from '../_generated/dataModel';
-import { addDecimals, checkedQuantity, checkedStockQuantity, compareDecimals, isMultipleOf, subtractDecimals, sumDecimals } from './decimal';
+import { addDecimals, checkedQuantity, checkedStockQuantity, compareDecimals, isMultipleOf, subtractDecimals, sumDecimals, trimScale } from './decimal';
 import { fail } from './errors';
 import { byUuid, newUuid } from './ids';
 import { nextSequence } from './sequence';
@@ -70,8 +70,8 @@ export async function insertMovement(ctx: MutationCtx, event: Doc<'inventory_eve
 	const id = await nextSequence(ctx, 'inventory_movements');
 	await ctx.db.insert('inventory_movements', { id, event_id: event.id, product_id: product.id, quantity_delta: delta });
 	const level = await ctx.db.query('stock_levels').withIndex('product_id', (q) => q.eq('product_id', product.id)).unique();
-	if (level) await ctx.db.patch(level._id, { quantity: addDecimals(level.quantity, delta), revision: id });
-	else await ctx.db.insert('stock_levels', { product_id: product.id, quantity: delta, revision: id, last_counted_at: null });
+	if (level) await ctx.db.patch(level._id, { quantity: trimScale(addDecimals(level.quantity, delta)), revision: id });
+	else await ctx.db.insert('stock_levels', { product_id: product.id, quantity: trimScale(delta), revision: id, last_counted_at: null });
 	return id;
 }
 

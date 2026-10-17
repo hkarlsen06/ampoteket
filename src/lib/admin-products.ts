@@ -1,14 +1,13 @@
-import { ApiError } from './api';
-import { allStaffRows, staffEquals, staffRequest, type StaffSession } from './admin-api';
+import { api, errorCode, type StaffSession } from './convex';
+import type { FunctionReturnType } from 'convex/server';
 import { compareDecimals, multiplyDecimals, normalizeDecimal, validQuantity } from './decimal';
-import { identifier, object, text, type Fetcher } from './api';
-import { readShelfTopology, type ShelfTopology } from './shelf-map';
-import { productFamilies, productTypes, standardSpecifications, type ProductFamily } from './product-specifications';
+import { identifier, object, text } from './api';
+import type { ShelfTopology } from './shelf-map';
+import { productFamilies, productTypes, type ProductFamily } from './product-specifications';
 export { productFamilies, productTypes, type ProductFamily } from './product-specifications';
 import { catalogSearchText } from './catalog-search';
 import type { CatalogAttribute } from './catalog';
 
-export const productSelect = 'id,code,name_nb,name_en,description,category_id,bin_id,location_note,unit_code,stock_step,sale_step,sale_unit_price_nok,minimum_stock,datasheet_url,purchase_url,is_active,metadata_revision';
 export type ProductWrite = { id: string; code: string; name_nb: string; name_en: string; description: string | null; category_id: string | null; bin_id: string | null; location_note: string | null; unit_code: string; stock_step: string; sale_step: string; sale_unit_price_nok: string | null; minimum_stock: string; datasheet_url: string | null; purchase_url: string | null; is_active: boolean };
 export type AdminProduct = ProductWrite & { metadata_revision: string };
 export type Category = { id: string; name: string };
@@ -126,20 +125,23 @@ export function parseStock(value: unknown): ProductStock {
 		|| (r.last_counted_at !== null && (typeof r.last_counted_at !== 'string' || !Number.isFinite(Date.parse(r.last_counted_at))))) throw new Error('Invalid stock');
 	return { product_id: identifier(r.product_id), quantity, revision: r.revision, last_counted_at: r.last_counted_at as string | null };
 }
-export async function readAdminProducts(session: StaffSession, fetcher: Fetcher = fetch, ids?: string[]): Promise<AdminProduct[]> {
-	return (await allStaffRows(session, 'amp_products', productSelect, 'id', ids ? { id: `in.(${ids.map(identifier).join(',')})` } : {}, fetcher)).map(parseAdminProduct);
+/** `stock.inventory` rows carry the revision as a number; the client keeps it a string. */
+export function inventoryStock(rows: { product_id: string; quantity: string; revision: number; last_counted_at: string | null }[]): ProductStock[] {
+	return rows.map(row => parseStock({ ...row, revision: String(row.revision) }));
 }
-export async function readProduct(session: StaffSession, id: string, fetcher: Fetcher = fetch): Promise<AdminProduct | null> {
-	identifier(id); const raw = await staffRequest(session, 'amp_products', { select: productSelect, id: `eq.${id}`, limit: '2' }, undefined, 'POST', fetcher);
-	if (!Array.isArray(raw) || raw.length > 1) throw new Error('Invalid product lookup');
-	const product = raw.length ? parseAdminProduct(raw[0]) : null;
+export async function readAdminProducts(session: StaffSession, ids?: string[]): Promise<AdminProduct[]> {
+	return (await session.client.query(api.products.list, ids ? { ids: ids.map(identifier) } : {})).map(parseAdminProduct);
+}
+export async function readProduct(session: StaffSession, id: string): Promise<AdminProduct | null> {
+	const raw = await session.client.query(api.products.get, { id: identifier(id) });
+	const product = raw ? parseAdminProduct(raw) : null;
 	if (product && product.id !== id) throw new Error('Invalid product binding');
 	return product;
 }
-export async function readProductStock(session: StaffSession, id: string, fetcher: Fetcher = fetch): Promise<ProductStock> {
-	identifier(id); const raw = await staffRequest(session, 'amp_inventory', { select: 'product_id,quantity,revision,last_counted_at', product_id: `eq.${id}`, limit: '2' }, undefined, 'POST', fetcher);
-	if (!Array.isArray(raw) || raw.length !== 1) throw new Error('Missing inventory');
-	const stock = parseStock(raw[0]); if (stock.product_id !== id) throw new Error('Invalid inventory binding'); return stock;
+export async function readProductStock(session: StaffSession, id: string): Promise<ProductStock> {
+	const rows = inventoryStock(await session.client.query(api.stock.inventory, { productIds: [identifier(id)] }));
+	if (rows.length !== 1 || rows[0].product_id !== id) throw new Error('Invalid inventory binding');
+	return rows[0];
 }
 // Matches the admin overview: active sold out, active below minimum, other active, then
 // inactive. Unknown stock is never sold out.
@@ -154,47 +156,34 @@ export function compareAttention(a: Pick<AdminProduct, 'is_active' | 'minimum_st
 	return rank - stockRank(b, bQuantity)
 		|| (rank === 1 ? compareDecimals(multiplyDecimals(aQuantity!, b.minimum_stock), multiplyDecimals(bQuantity!, a.minimum_stock)) : 0);
 }
-export async function readInventory(session: StaffSession, fetcher: Fetcher = fetch): Promise<ProductStock[]> {
-	return (await allStaffRows(session, 'amp_inventory', 'product_id,quantity,revision,last_counted_at', 'product_id', {}, fetcher)).map(parseStock);
+export async function readInventory(session: StaffSession): Promise<ProductStock[]> {
+	return inventoryStock(await session.client.query(api.stock.inventory, {}));
 }
-export async function readProductAttributes(session: StaffSession, id: string, fetcher: Fetcher = fetch): Promise<AttributeValue[]> {
-	identifier(id);
-	return (await allStaffRows(session, 'amp_product_attributes', 'product_id,attribute_id,number_value,number_max,text_value,boolean_value', 'attribute_id', { product_id: `eq.${id}` }, fetcher)).map(value => { const v = parseAttribute(value); if (v.product_id !== id) throw new Error('Invalid attribute binding'); return v; });
+/** One product's specification values, or with no ID every product's (labels, staff search). */
+export function productAttributes(rows: unknown[], productId?: string): AttributeValue[] {
+	return rows.map(value => {
+		const row = parseAttribute(value);
+		if (productId !== undefined && row.product_id !== productId) throw new Error('Invalid attribute binding');
+		return row;
+	});
 }
-/** Attributes have a composite key: paging on either UUID alone loses rows. */
-export async function readAllProductAttributes(session: StaffSession, fetcher: Fetcher = fetch): Promise<AttributeValue[]> {
-	const result: AttributeValue[] = [];
-	let after: AttributeValue | undefined;
-	for (;;) {
-		const raw = await staffRequest(session, 'amp_product_attributes', {
-			select: 'product_id,attribute_id,number_value,number_max,text_value,boolean_value',
-			order: 'product_id.asc,attribute_id.asc', limit: '200',
-			...(after ? { or: `(product_id.gt.${after.product_id},and(product_id.eq.${after.product_id},attribute_id.gt.${after.attribute_id}))` } : {})
-		}, undefined, 'GET', fetcher);
-		if (!Array.isArray(raw) || raw.length > 200) throw new Error('Invalid attribute page');
-		if (!raw.length) return result;
-		for (const value of raw) {
-			const row = parseAttribute(value);
-			if (after && (row.product_id < after.product_id || row.product_id === after.product_id && row.attribute_id <= after.attribute_id)) throw new Error('Non-advancing attribute page');
-			result.push(row); after = row;
-		}
-	}
+export async function readProductAttributes(session: StaffSession, id: string): Promise<AttributeValue[]> {
+	return productAttributes(await session.client.query(api.products.attributes, { productId: identifier(id) }), id);
 }
-
-export async function readProductReferences(session: StaffSession, fetcher: Fetcher = fetch): Promise<ProductReferences> {
-	const [categories, definitions, shelf] = await Promise.all([
-		allStaffRows(session, 'amp_categories', 'id,name', 'id', {}, fetcher),
-		allStaffRows(session, 'amp_attribute_definitions', 'id,code,label,value_type,canonical_unit', 'id', {}, fetcher),
-		readShelfTopology(session.config, { fetcher })
-	]);
-	const units: ProductReferences['units'] = []; let after = '';
-	for (;;) {
-		const page = await staffRequest(session, 'amp_units', { select: 'code,name,symbol,is_discrete', order: 'code.asc', limit: '200', ...(after ? { code: `gt.${after}` } : {}) }, undefined, 'POST', fetcher);
-		if (!Array.isArray(page) || page.length > 200) throw new Error('Invalid units');
-		if (!page.length) break;
-		for (const value of page) { const r = object(value); const code = text(r.code, 24); if (!unitPattern.test(code) || code <= after || typeof r.is_discrete !== 'boolean') throw new Error('Invalid unit cursor'); units.push({ code, name: text(r.name, 200), symbol: text(r.symbol, 100), is_discrete: r.is_discrete }); after = code; }
-	}
-	return { categories: categories.map(parseCategory), definitions: definitions.map(parseDefinition), units, shelf };
+export async function readAllProductAttributes(session: StaffSession): Promise<AttributeValue[]> {
+	return productAttributes(await session.client.query(api.products.attributes, {}));
+}
+/** Categories, specification types and units (`products.references`) with the live wall (`catalog.shelfMap`). */
+export function productReferences(raw: FunctionReturnType<typeof api.products.references>, shelf: ShelfTopology): ProductReferences {
+	const units = raw.units.map(unit => {
+		if (!unitPattern.test(unit.code)) throw new Error('Invalid unit');
+		return { code: unit.code, name: text(unit.name, 200), symbol: text(unit.symbol, 100), is_discrete: unit.is_discrete };
+	});
+	return { categories: raw.categories.map(parseCategory), definitions: raw.definitions.map(parseDefinition), units, shelf };
+}
+export async function readProductReferences(session: StaffSession): Promise<ProductReferences> {
+	const [raw, shelf] = await Promise.all([session.client.query(api.products.references, {}), session.client.query(api.catalog.shelfMap, {})]);
+	return productReferences(raw, shelf);
 }
 export function generateProductCode(family: ProductFamily, cryptoSource: Pick<Crypto, 'getRandomValues'> = crypto): string {
 	if (!productFamilies.includes(family)) throw new Error('Invalid product family');
@@ -202,10 +191,7 @@ export function generateProductCode(family: ProductFamily, cryptoSource: Pick<Cr
 }
 export type ProductAttributeDraft = Omit<AttributeValue, 'product_id'>;
 // `opening` is a new product's first count, posted once the creation is acknowledged.
-export type ProductCommand = { userId: string; payload: ProductWrite; revision: string | null; attributes?: ProductAttributeDraft[]; attributeBefore?: ProductAttributeDraft[]; opening?: string };
-export class ProductSpecificationsError extends Error {
-	constructor(cause: unknown) { super('Product saved; specifications incomplete', { cause }); }
-}
+export type ProductCommand = { userId: string; payload: ProductWrite; revision: string | null; attributes?: ProductAttributeDraft[]; opening?: string };
 function commandAttributes(command: ProductCommand): ProductAttributeDraft[] | undefined {
 	if (command.attributes === undefined) return undefined;
 	if (command.revision !== null || !Array.isArray(command.attributes)) throw new Error('Invalid product specifications');
@@ -216,18 +202,12 @@ function commandAttributes(command: ProductCommand): ProductAttributeDraft[] | u
 	if (new Set(rows.map(row => row.attribute_id)).size !== rows.length) throw new Error('Duplicate product specification');
 	return rows;
 }
-function commandAttributeBefore(command: ProductCommand): ProductAttributeDraft[] | undefined {
-	if (command.attributeBefore === undefined) return undefined;
-	if (!command.attributes) throw new Error('Missing intended specifications');
-	return commandAttributes({ ...command, attributes: command.attributeBefore });
-}
 export const productCommandKey = 'ampoteket:admin-product:v1';
 export function readProductCommand(storage: Pick<Storage, 'getItem'>): ProductCommand | null {
 	const raw = storage.getItem(productCommandKey); if (!raw) return null; const c = object(JSON.parse(raw));
 	if (c.revision !== null && (typeof c.revision !== 'string' || !/^[1-9]\d*$/.test(c.revision))) throw new Error('Invalid command revision');
 	const command: ProductCommand = { userId: identifier(c.userId), payload: parseProductWrite(c.payload), revision: c.revision as string | null };
 	if ('attributes' in c) command.attributes = commandAttributes({ ...command, attributes: c.attributes as ProductAttributeDraft[] });
-	if ('attributeBefore' in c) command.attributeBefore = commandAttributeBefore({ ...command, attributeBefore: c.attributeBefore as ProductAttributeDraft[] });
 	if ('opening' in c) {
 		if (command.revision !== null || typeof c.opening !== 'string' || !/^\d+(\.\d+)?$/.test(c.opening)) throw new Error('Invalid opening stock');
 		command.opening = c.opening;
@@ -237,108 +217,47 @@ export function readProductCommand(storage: Pick<Storage, 'getItem'>): ProductCo
 export function persistProductCommand(storage: Pick<Storage, 'getItem' | 'setItem'>, command: ProductCommand): void {
 	const previous = readProductCommand(storage);
 	if (previous && !sameCommand(previous, command)) throw new Error('Unresolved product command');
-	const serialized = JSON.stringify({ ...command, payload: parseProductWrite(command.payload), ...(command.attributes === undefined ? {} : { attributes: commandAttributes(command) }), ...(command.attributeBefore === undefined ? {} : { attributeBefore: commandAttributeBefore(command) }) }); storage.setItem(productCommandKey, serialized);
+	const serialized = JSON.stringify({ ...command, payload: parseProductWrite(command.payload), ...(command.attributes === undefined ? {} : { attributes: commandAttributes(command) }) }); storage.setItem(productCommandKey, serialized);
 	if (storage.getItem(productCommandKey) !== serialized) throw new Error('Product persistence unavailable');
 }
 export function clearProductCommand(storage: Pick<Storage, 'getItem' | 'removeItem'>, command: ProductCommand): void {
 	const current = readProductCommand(storage); if (current && sameCommand(current, command)) storage.removeItem(productCommandKey);
 }
-function sameCommand(a: ProductCommand, b: ProductCommand): boolean { return a.userId === b.userId && a.revision === b.revision && JSON.stringify(parseProductWrite(a.payload)) === JSON.stringify(parseProductWrite(b.payload)) && JSON.stringify(commandAttributes(a)) === JSON.stringify(commandAttributes(b)) && JSON.stringify(commandAttributeBefore(a)) === JSON.stringify(commandAttributeBefore(b)) && a.opening === b.opening; }
-export type ProductSpecificationReview = { product: AdminProduct; attributes: AttributeValue[] };
-function reviewProductIdentity(command: ProductCommand, product: AdminProduct) {
-	if (command.revision !== null || command.attributes === undefined || ['id', 'code', 'unit_code', 'stock_step'].some(key => command.payload[key as keyof ProductWrite] !== product[key as keyof ProductWrite])) throw new Error('Product review identity changed');
-}
-export async function readProductSpecificationReview(session: StaffSession, command: ProductCommand, fetcher: Fetcher = fetch): Promise<ProductSpecificationReview> {
-	if (session.userId !== command.userId) throw new Error('Product identity changed');
-	const [product, attributes] = await Promise.all([readProduct(session, command.payload.id, fetcher), readProductAttributes(session, command.payload.id, fetcher)]);
-	if (!product) throw new StaleProductError();
-	reviewProductIdentity(command, product);
-	return { product, attributes };
-}
-/** Called only after the operator has reviewed current values and their draft.
- * Replace in one storage write; a failed write must retain the original retry. */
-export function replaceReviewedProductCommand(storage: Pick<Storage, 'getItem' | 'setItem'>, original: ProductCommand, review: ProductSpecificationReview, attributes: ProductAttributeDraft[]): ProductCommand {
-	const current = readProductCommand(storage);
-	if (!current || !sameCommand(current, original)) throw new Error('Product command changed');
-	reviewProductIdentity(original, review.product);
-	const reviewedIds = new Set([...(original.attributes ?? []), ...(original.attributeBefore ?? []), ...attributes].map(value => value.attribute_id));
-	const attributeBefore = review.attributes.map(value => {
-		const { product_id, ...row } = parseAttribute(value);
-		if (product_id !== original.payload.id) throw new Error('Specification review identity changed');
-		return row;
-	}).filter(value => reviewedIds.has(value.attribute_id));
-	const replacement: ProductCommand = { ...original, payload: parseProductWrite(review.product), attributes, attributeBefore };
-	replacement.attributes = commandAttributes(replacement);
-	replacement.attributeBefore = commandAttributeBefore(replacement);
-	const raw = JSON.stringify(replacement);
-	storage.setItem(productCommandKey, raw);
-	if (storage.getItem(productCommandKey) !== raw) throw new Error('Product persistence unavailable');
-	return replacement;
-}
+function sameCommand(a: ProductCommand, b: ProductCommand): boolean { return a.userId === b.userId && a.revision === b.revision && JSON.stringify(parseProductWrite(a.payload)) === JSON.stringify(parseProductWrite(b.payload)) && JSON.stringify(commandAttributes(a)) === JSON.stringify(commandAttributes(b)) && a.opening === b.opening; }
 export class StaleProductError extends Error {}
 export function sameProduct(product: AdminProduct, payload: ProductWrite): boolean { return (Object.keys(payload) as (keyof ProductWrite)[]).every(key => product[key] === payload[key]); }
-/** The original product command is persisted before this auxiliary write. A
- * lost category reply is reconciled by its stable ID on the same product retry. */
-async function ensureProductCategory(session: StaffSession, categoryId: string | null, fetcher: Fetcher): Promise<void> {
-	const type = productTypes.find(type => type.id === categoryId);
-	if (!type) return; // Existing categories keep their original database identity.
-	const category = { id: type.id, name: type.name };
-	const query = { select: 'id,name', id: `eq.${category.id}`, limit: '2' };
-	function matches(raw: unknown): boolean {
-		if (!Array.isArray(raw) || raw.length > 1) throw new Error('Invalid category acknowledgement');
-		if (!raw.length) return false;
-		const row = parseCategory(raw[0]);
-		if (row.id !== category.id || row.name !== category.name) throw new Error('Category identity differs');
-		return true;
-	}
-	if (matches(await staffRequest(session, 'amp_categories', query, undefined, 'POST', fetcher))) return;
-	try {
-		if (!matches(await staffRequest(session, 'amp_categories', { select: 'id,name' }, category, 'POST', fetcher))) throw new Error('Missing category acknowledgement');
-	} catch (error) {
-		// Concurrent first uses may insert the same category. Only a definite
-		// unique violation allows reconciliation within this attempt.
-		if (!(error instanceof ApiError) || error.status !== 409 || !error.body || typeof error.body !== 'object' || !('code' in error.body) || error.body.code !== '23505') throw error;
-		if (!matches(await staffRequest(session, 'amp_categories', query, undefined, 'POST', fetcher))) throw error;
-	}
-}
-export async function executeProductCommand(session: StaffSession, command: ProductCommand, fetcher: Fetcher = fetch): Promise<AdminProduct> {
-	const attributes = commandAttributes(command);
-	const before = commandAttributeBefore(command);
-	const product = await executeProductMetadata(session, command, fetcher);
-	try {
-		for (const value of attributes ?? []) {
-			const previous = before?.find(row => row.attribute_id === value.attribute_id);
-			await executeDetailCommand(session, { userId: command.userId, kind: 'attribute', before: previous ? { ...previous, product_id: product.id } : null, after: { ...value, product_id: product.id } }, fetcher);
-		}
-		for (const previous of before ?? []) {
-			if (!attributes?.some(value => value.attribute_id === previous.attribute_id)) await executeDetailCommand(session, { userId: command.userId, kind: 'attribute', before: { ...previous, product_id: product.id }, after: null }, fetcher);
-		}
-	} catch (error) { throw new ProductSpecificationsError(error); }
-	return product;
-}
-async function executeProductMetadata(session: StaffSession, command: ProductCommand, fetcher: Fetcher): Promise<AdminProduct> {
+/**
+ * One transaction (`products.save`): a standard category on first use, the
+ * product, and a new product's specifications. A retry of a command that
+ * already applied returns the product without writing again.
+ */
+export async function executeProductCommand(session: StaffSession, command: ProductCommand): Promise<AdminProduct> {
 	if (session.userId !== command.userId) throw new Error('Product identity changed');
-	const current = await readProduct(session, command.payload.id, fetcher);
-	if (current && sameProduct(current, command.payload)) return current;
-	if (current && command.revision === null && command.attributes !== undefined) throw new ProductSpecificationsError(new StaleProductError());
-	if ((command.revision === null && current) || (command.revision !== null && (!current || current.metadata_revision !== command.revision))) throw new StaleProductError();
-	await ensureProductCategory(session, command.payload.category_id, fetcher);
-	const { id, code, stock_step, unit_code, ...editable } = command.payload;
-	const raw = await staffRequest(session, 'amp_products', command.revision === null ? { select: productSelect } : { select: productSelect, id: `eq.${id}`, metadata_revision: `eq.${command.revision}` }, command.revision === null ? command.payload : editable, command.revision === null ? 'POST' : 'PATCH', fetcher);
-	if (!Array.isArray(raw) || raw.length > 1) throw new Error('Invalid product write acknowledgement');
-	if (!raw.length) throw new StaleProductError();
-	const result = parseAdminProduct(raw[0]); if (!sameProduct(result, command.payload)) throw new Error('Product write differs'); return result;
+	const payload = parseProductWrite(command.payload); const attributes = commandAttributes(command);
+	let raw: unknown;
+	try {
+		raw = await session.client.mutation(api.products.save, { payload, revision: command.revision, ...(attributes ? { attributes } : {}) });
+	} catch (error) {
+		if (errorCode(error) !== 'STALE_PRODUCT') throw error;
+		// A creation's ID is minted for that command alone and applies whole or not at
+		// all, so an existing product means this creation saved and was edited since.
+		const created = command.revision === null ? await readProduct(session, payload.id) : null;
+		if (created) return created;
+		throw new StaleProductError();
+	}
+	const result = parseAdminProduct(raw);
+	if (!sameProduct(result, payload)) throw new Error('Product write differs');
+	return result;
 }
-export function isProductCodeCollision(error: unknown): boolean {
-	if (!(error instanceof ApiError) || error.status !== 409 || !error.body || typeof error.body !== 'object') return false;
-	const body = error.body as Record<string, unknown>; return body.code === '23505' && typeof body.message === 'string' && /\bproducts_code_key\b/.test(body.message);
-}
+export function isProductCodeCollision(error: unknown): boolean { return errorCode(error) === 'PRODUCT_CODE_TAKEN'; }
+/** The backend rejected the command, so nothing changed. Lost access keeps it for a retry once restored. */
 export function definitiveProductFailure(error: unknown): boolean {
-	return error instanceof ApiError && [400, 404, 409, 422].includes(error.status) && Boolean(error.body && typeof error.body === 'object' && 'code' in error.body);
+	const code = errorCode(error);
+	return code !== null && code !== 'STAFF_REQUIRED';
 }
 
 /** These independent metadata edits use the shown value as a compare-and-set guard.
- * No delete+insert replacement: an unknown response is resolved by re-reading the same key. */
+ * An unknown response is resolved by sending the same command again. */
 export type DetailCommand = { userId: string; kind: 'category' | 'definition' | 'attribute'; before: Category | AttributeDefinition | AttributeValue | null; after: Category | AttributeDefinition | AttributeValue | null };
 export const detailCommandKey = 'ampoteket:admin-product-detail:v1';
 export function parseDetailCommand(value: unknown): DetailCommand {
@@ -350,54 +269,34 @@ export function parseDetailCommand(value: unknown): DetailCommand {
 	return { userId: identifier(r.userId), kind: r.kind as DetailCommand['kind'], before, after };
 }
 function detailIdentity(value: NonNullable<DetailCommand['before']>): string { return 'id' in value ? value.id : `${value.product_id}:${value.attribute_id}`; }
-function sameDetail(a: unknown, b: unknown): boolean { return JSON.stringify(a) === JSON.stringify(b); }
-async function ensureProductSpecification(session: StaffSession, attributeId: string, fetcher: Fetcher): Promise<void> {
-	const standard = standardSpecifications.find(definition => definition.id === attributeId);
-	if (!standard) return;
-	const expected: AttributeDefinition = standard;
-	const select = 'id,code,label,value_type,canonical_unit';
-	const query = { select, id: `eq.${standard.id}`, limit: '2' };
-	function matches(raw: unknown): boolean {
-		if (!Array.isArray(raw) || raw.length > 1) throw new Error('Invalid specification acknowledgement');
-		if (!raw.length) return false;
-		const row = parseDefinition(raw[0]);
-		if (row.id !== expected.id || row.code !== expected.code || row.value_type !== expected.value_type || row.canonical_unit !== expected.canonical_unit) throw new Error('Specification identity differs');
-		return true;
-	}
-	if (matches(await staffRequest(session, 'amp_attribute_definitions', query, undefined, 'POST', fetcher))) return;
-	try {
-		if (!matches(await staffRequest(session, 'amp_attribute_definitions', { select }, standard, 'POST', fetcher))) throw new Error('Missing specification acknowledgement');
-	} catch (error) {
-		if (!(error instanceof ApiError) || error.status !== 409 || !error.body || typeof error.body !== 'object' || !('code' in error.body) || error.body.code !== '23505') throw error;
-		if (!matches(await staffRequest(session, 'amp_attribute_definitions', query, undefined, 'POST', fetcher))) throw error;
+function attributeDraft(value: AttributeValue | null): ProductAttributeDraft | null {
+	if (!value) return null;
+	const { product_id, ...draft } = value;
+	return draft;
+}
+async function sendDetailCommand(session: StaffSession, c: DetailCommand): Promise<void> {
+	if (c.kind === 'attribute') {
+		const subject = (c.after ?? c.before) as AttributeValue;
+		await session.client.mutation(api.products.setAttribute, { productId: subject.product_id, before: attributeDraft(c.before as AttributeValue | null), after: attributeDraft(c.after as AttributeValue | null) });
+	} else if (c.kind === 'definition' && !c.before) {
+		const { id, code, label, value_type, canonical_unit } = c.after as AttributeDefinition;
+		await session.client.mutation(api.products.createDefinition, { id, code, label, value_type, canonical_unit });
+	} else if (c.kind === 'definition') {
+		await session.client.mutation(api.products.rename, { kind: 'definition', id: (c.after as AttributeDefinition).id, before: (c.before as AttributeDefinition).label, after: (c.after as AttributeDefinition).label });
+	} else if (c.before) {
+		await session.client.mutation(api.products.rename, { kind: 'category', id: (c.after as Category).id, before: (c.before as Category).name, after: (c.after as Category).name });
+	} else {
+		// Custom categories are no longer created. A creation saved before then
+		// finishes only if it already applied; otherwise it is not repeated.
+		const category = c.after as Category;
+		const { categories } = await session.client.query(api.products.references, {});
+		if (!categories.some(row => row.id === category.id && row.name === category.name)) throw new StaleProductError();
 	}
 }
-export async function executeDetailCommand(session: StaffSession, command: DetailCommand, fetcher: Fetcher = fetch): Promise<void> {
+export async function executeDetailCommand(session: StaffSession, command: DetailCommand): Promise<void> {
 	if (session.userId !== command.userId) throw new Error('Detail identity changed');
-	const c = parseDetailCommand(command); const key = (c.after ?? c.before)!;
-	const view = c.kind === 'category' ? 'amp_categories' : c.kind === 'definition' ? 'amp_attribute_definitions' : 'amp_product_attributes';
-	const parse = c.kind === 'category' ? parseCategory : c.kind === 'definition' ? parseDefinition : parseAttribute;
-	const select = c.kind === 'category' ? 'id,name' : c.kind === 'definition' ? 'id,code,label,value_type,canonical_unit' : 'product_id,attribute_id,number_value,number_max,text_value,boolean_value';
-	const query: Record<string, string> = 'id' in key ? { id: `eq.${key.id}` } : { product_id: `eq.${key.product_id}`, attribute_id: `eq.${key.attribute_id}` };
-	const raw = await staffRequest(session, view, { ...query, select, limit: '2' }, undefined, 'POST', fetcher);
-	if (!Array.isArray(raw) || raw.length > 1) throw new Error('Invalid detail read');
-	const current = raw.length ? parse(raw[0]) : null;
-	if (sameDetail(current, c.after)) return;
-	if (!sameDetail(current, c.before)) throw new StaleProductError();
-	// The caller has already frozen this attribute command. Create only its
-	// missing predefined definition; a lost reply is reconciled on the same retry.
-	if (c.kind === 'attribute' && c.after) await ensureProductSpecification(session, (c.after as AttributeValue).attribute_id, fetcher);
-	const filters = { ...query }; if (c.before) for (const [k, v] of Object.entries(c.before)) if (!(k in query)) filters[k] = staffEquals(v);
-	let payload: unknown = c.after;
-	if (c.before && c.after) {
-		if (c.kind === 'category') payload = { name: (c.after as Category).name };
-		else if (c.kind === 'definition') payload = { label: (c.after as AttributeDefinition).label };
-		else { const a = c.after as AttributeValue; payload = { number_value: a.number_value, number_max: a.number_max, text_value: a.text_value, boolean_value: a.boolean_value }; }
-	}
-	const saved = await staffRequest(session, view, c.before ? { ...filters, select } : { select }, c.after ? payload : undefined, !c.after ? 'DELETE' : c.before ? 'PATCH' : 'POST', fetcher);
-	if (!Array.isArray(saved) || saved.length > 1) throw new Error('Invalid detail acknowledgement');
-	if (!saved.length) throw new StaleProductError();
-	if (!sameDetail(parse(saved[0]), c.after ?? c.before)) throw new Error('Detail acknowledgement differs');
+	try { await sendDetailCommand(session, parseDetailCommand(command)); }
+	catch (error) { throw errorCode(error) === 'STALE_PRODUCT' ? new StaleProductError() : error; }
 }
 /** Staff search reads the same fields as the shop catalog, unpublished products included. */
 export function adminSearchTexts(products: AdminProduct[], references: ProductReferences, values: AttributeValue[]): Map<string, string> {

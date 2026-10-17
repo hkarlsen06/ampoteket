@@ -1,13 +1,22 @@
 import { describe, expect, test } from 'bun:test';
-import { parseApiJson } from './api';
+import { getFunctionName, type FunctionReference } from 'convex/server';
 import type { CatalogProduct } from './catalog';
+import type { ConvexCaller } from './convex';
 import { binProducts, cabinetInner, diagramRect, drawerFront, drawerNeighbours, freeCellCount, locateProduct, parseShelfTopology, readShelfTopology, ShelfResponseError } from './shelf-map';
 
 const id = (n: number) => `00000000-0000-4000-8000-${n.toString(16).padStart(12, '0')}`;
 const cabinet = (n = 1, row = 1) => ({ id: id(n), code: `CAB-${n}`, outer_row: row, outer_col: 1, inner_rows: 4, inner_cols: 10, label: null });
 const bin = (n = 11) => ({ id: id(n), code: `BIN-${n}`, cabinet_id: id(1), inner_row: 1, inner_col: 1, row_span: 1, col_span: 1, label: null, has_products: false });
-const decode = (value: unknown) => parseShelfTopology(parseApiJson(JSON.stringify(value)));
-const config = { url: 'https://shelf.example.invalid', publishableKey: 'sb_publishable_test' };
+const decode = (value: unknown) => parseShelfTopology(structuredClone(value));
+/** A stub client whose shelf query answers with `answer`. */
+function stub(answer: () => unknown) {
+	const calls: { name: string; args: unknown }[] = [];
+	const unexpected = async () => { throw new Error('Unexpected write'); };
+	const client = { query: async (fn: FunctionReference<'query'>, args: unknown) => {
+		calls.push({ name: getFunctionName(fn), args }); return answer();
+	}, mutation: unexpected, action: unexpected } as unknown as ConvexCaller;
+	return { client, calls };
+}
 
 describe('complete shelf topology', () => {
 	test('retains empty cabinets and bins independently of published products', () => {
@@ -22,7 +31,8 @@ describe('complete shelf topology', () => {
 	});
 	test('rejects missing fields, wrong structural types, unknown parents and impossible spans', () => {
 		for (const patch of [{ id: 'bad' }, { code: '' }, { inner_rows: 0 }, { outer_col: null },
-			{ outer_row: '2147483648' }, { inner_cols: 1.5 }, { label: undefined }]) {
+			{ outer_row: 2147483648 }, { outer_row: '2147483648' }, { outer_row: '02' }, { outer_row: -1 },
+			{ inner_cols: 1.5 }, { label: undefined }]) {
 			expect(() => decode({ cabinets: [{ ...cabinet(), ...patch }], bins: [] })).toThrow(ShelfResponseError);
 		}
 		for (const patch of [{ cabinet_id: id(3) }, { inner_row: 5 }, { inner_col: 10, col_span: 2 },
@@ -32,8 +42,9 @@ describe('complete shelf topology', () => {
 		for (const value of [null, [], {}, { cabinets: [], bins: null }, { cabinets: [], bins: [bin()] }]) {
 			expect(() => decode(value)).toThrow(ShelfResponseError);
 		}
-		// Valid numeric tokens must pass through the lossless boundary first.
-		expect(() => parseShelfTopology({ cabinets: [cabinet()], bins: [] })).toThrow(ShelfResponseError);
+		// Callers holding lossless JSON may still pass digit strings.
+		expect(parseShelfTopology({ cabinets: [{ ...cabinet(), outer_row: '3', inner_rows: '4' }], bins: [] }).cabinets[0])
+			.toMatchObject({ outer_row: 3, inner_rows: 4 });
 	});
 	test('rejects duplicate identities/codes/positions and overlapping rectangles', () => {
 		for (const other of [cabinet(), { ...cabinet(2, 2), code: 'CAB-1' }, cabinet(2, 1)]) {
@@ -67,23 +78,16 @@ describe('complete shelf topology', () => {
 		expect(location?.bin.inner_row).toBe(3);
 		expect(locateProduct({ ...moved, bins: [] }, product)).toBeNull();
 	});
-	test('requests only the public topology RPC, supports abort and rejects errors rather than emptying storage', async () => {
+	test('reads only the public shelf query, supports abort and rejects errors rather than emptying the map', async () => {
+		const { client, calls } = stub(() => ({ cabinets: [cabinet()], bins: [bin()] }));
+		expect((await readShelfTopology(client)).bins[0].code).toBe('BIN-11');
+		expect(calls).toEqual([{ name: 'catalog:shelfMap', args: {} }]);
 		const controller = new AbortController();
-		let requestSignal: AbortSignal | null | undefined;
-		const map = await readShelfTopology(config, { signal: controller.signal, fetcher: async (input, init) => {
-			expect(String(input)).toBe('https://shelf.example.invalid/rest/v1/rpc/amp_shelf_map');
-			expect(init?.body).toBe('{}'); expect(init?.method).toBe('POST');
-			expect(init?.credentials).toBe('omit'); expect(init?.cache).toBe('no-store');
-			requestSignal = init?.signal; expect(requestSignal?.aborted).toBe(false); expect(init?.redirect).toBe('manual');
-			expect(new Headers(init?.headers).get('apikey')).toBe(config.publishableKey);
-			expect(new Headers(init?.headers).has('Authorization')).toBe(false);
-			return new Response(JSON.stringify({ cabinets: [cabinet()], bins: [bin()] }));
-		} });
-		expect(map.bins[0].code).toBe('BIN-11');
-		controller.abort(); expect(requestSignal?.aborted).toBe(true);
-		await expect(readShelfTopology(config, { fetcher: async () => new Response('{}', { status: 503 }) })).rejects.toThrow();
-		await expect(readShelfTopology(config, { fetcher: async () => new Response('{}') })).rejects.toThrow(ShelfResponseError);
-		await expect(readShelfTopology({ ...config, publishableKey: 'sb_secret_wrong' })).rejects.toThrow(TypeError);
+		const pending = readShelfTopology(stub(() => new Promise(() => {})).client, { signal: controller.signal });
+		controller.abort();
+		await expect(pending).rejects.toThrow();
+		await expect(readShelfTopology(stub(() => { throw new Error('Unavailable'); }).client)).rejects.toThrow('Unavailable');
+		await expect(readShelfTopology(stub(() => ({})).client)).rejects.toThrow(ShelfResponseError);
 	});
 });
 

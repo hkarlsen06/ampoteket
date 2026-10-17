@@ -10,7 +10,9 @@
 	import * as Popover from '#lib/components/ui/popover/index.js';
 	import * as RadioGroup from '#lib/components/ui/radio-group/index.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
-	import { untrack, onMount } from 'svelte';
+	import { onMount } from 'svelte';
+	import { useQuery } from 'convex-svelte';
+	import { api } from '#lib/convex.js';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { Toggle } from '#lib/components/ui/toggle/index.js';
@@ -25,18 +27,43 @@
 	import { getAdminContext } from '#lib/admin-context.svelte.js';
 	import AdminProductCard from '#lib/AdminProductCard.svelte';
 	import AdminProductScanner from '#lib/AdminProductScanner.svelte';
-	import { adminSearchTexts, compareAttention, stockRank, readAdminProducts, readAllProductAttributes, readInventory, readProductCommand, readProductReferences, type AdminProduct, type ProductCommand, type ProductStock, type ProductReferences } from '#lib/admin-products.js';
+	import { adminSearchTexts, compareAttention, inventoryStock, parseAdminProduct, productAttributes, productReferences, readProductCommand, stockRank, type AdminProduct, type ProductCommand } from '#lib/admin-products.js';
 	import ProductReferencesEditor from '#lib/ProductReferences.svelte';
 	import { readDraft, writeDraft } from '#lib/drafts.js';
 	const fieldId = $props.id();
 	const i18n = getI18n(); const admin = getAdminContext(); const m = $derived(i18n.m.adminProducts);
-	let products = $state<AdminProduct[] | null>(null); let references = $state<ProductReferences | null>(null); let searchTexts = new Map<string, string>(); let stock = $state<Map<string, ProductStock> | null>(null); let stockFailed = $state(false); let busy = $state(false); let failed = $state(false); let query = $state(''); let lowStock = $state(false); let activity = $state('all'); let sort = $state<keyof typeof sorters>('attention'); let sortOpen = $state(false); let bins = $state<string[]>([]); let locationsOpen = $state(false); let pending = $state<ProductCommand | null>(null); let alive = true;
+	// Live subscriptions: products, stock and specifications stay current without re-reading.
+	const live = () => admin.status === 'ready' ? {} : 'skip' as const;
+	const productRows = useQuery(api.products.list, live); const referenceRows = useQuery(api.products.references, live);
+	const shelfRows = useQuery(api.catalog.shelfMap, live); const attributeRows = useQuery(api.products.attributes, live);
+	const inventoryRows = useQuery(api.stock.inventory, live);
+	const catalog = $derived.by(() => {
+		if (!productRows.data || !referenceRows.data || !shelfRows.data || !attributeRows.data) return null;
+		try {
+			const items = productRows.data.map(parseAdminProduct).sort((a, b) => a.code.localeCompare(b.code));
+			const refs = productReferences(referenceRows.data, shelfRows.data);
+			return { products: items, references: refs, searchTexts: adminSearchTexts(items, refs, productAttributes(attributeRows.data)) };
+		} catch { return 'invalid' as const; }
+	});
+	const stock = $derived.by(() => {
+		try { return inventoryRows.data ? new Map(inventoryStock(inventoryRows.data).map(s => [s.product_id, s])) : null; }
+		catch { return 'invalid' as const; }
+	});
+	const products = $derived(catalog && catalog !== 'invalid' ? catalog.products : null);
+	const references = $derived(catalog && catalog !== 'invalid' ? catalog.references : null);
+	// A failed stock read shows as unavailable per card instead of hiding the product list.
+	const failed = $derived(catalog === 'invalid' || Boolean(productRows.error || referenceRows.error || shelfRows.error || attributeRows.error));
+	const stockFailed = $derived(stock === 'invalid' || Boolean(inventoryRows.error));
+	const busy = $derived(products === null && !failed);
+	$effect(() => { for (const result of [productRows, referenceRows, shelfRows, attributeRows, inventoryRows]) if (result.error) void admin.permissionFailure(result.error); });
+	let query = $state(''); let lowStock = $state(false); let activity = $state('all'); let sort = $state<keyof typeof sorters>('attention'); let sortOpen = $state(false); let bins = $state<string[]>([]); let locationsOpen = $state(false); let pending = $state<ProductCommand | null>(null);
 	// Products load in code order and sorting is stable, so code breaks every tie.
-	const quantity = (p: AdminProduct) => stock?.get(p.id)?.quantity;
+	const counted = (p: AdminProduct) => stock === 'invalid' ? undefined : stock?.get(p.id)?.last_counted_at;
+	const quantity = (p: AdminProduct) => stock === 'invalid' ? undefined : stock?.get(p.id)?.quantity;
 	const sorters = {
 		attention: (a: AdminProduct, b: AdminProduct) => compareAttention(a, quantity(a), b, quantity(b)),
 		// Never-counted products first; ISO timestamps compare as text.
-		counted: (a: AdminProduct, b: AdminProduct) => (stock?.get(a.id)?.last_counted_at ?? '').localeCompare(stock?.get(b.id)?.last_counted_at ?? ''),
+		counted: (a: AdminProduct, b: AdminProduct) => (counted(a) ?? '').localeCompare(counted(b) ?? ''),
 		code: () => 0,
 		name: (a: AdminProduct, b: AdminProduct) => productName(a, i18n.locale).localeCompare(productName(b, i18n.locale), i18n.locale),
 	};
@@ -52,9 +79,7 @@
 	const terms = $derived(searchTerms(query));
 	// A drawer archived since the view was saved drops out instead of hiding every product.
 	const liveBins = $derived(references ? bins.filter(id => references!.shelf.bins.some(bin => bin.id === id)) : bins);
-	const filtered = $derived((products ?? []).filter(p => (activity === 'all' || p.is_active === (activity === 'active')) && (!lowStock || stockRank(p, quantity(p)) <= 1) && (!liveBins.length || liveBins.includes(p.bin_id ?? '')) && matchesSearch(searchTexts.get(p.id) ?? '', terms)).sort(sorters[sort]));
-	let reading = $state(false);
-	let currentRead: Promise<void> | null = null;
+	const filtered = $derived((products ?? []).filter(p => (activity === 'all' || p.is_active === (activity === 'active')) && (!lowStock || stockRank(p, quantity(p)) <= 1) && (!liveBins.length || liveBins.includes(p.bin_id ?? '')) && matchesSearch(catalog && catalog !== 'invalid' ? catalog.searchTexts.get(p.id) ?? '' : '', terms)).sort(sorters[sort]));
 	onMount(() => {
 		try { pending = readProductCommand(sessionStorage); } catch { /* The editor reports blocked persistence before any write. */ }
 		const view = readDraft(admin.userId, 'products-view', 'session') as Record<string, unknown> | null;
@@ -66,48 +91,10 @@
 		// The overview links here for everything needing attention, not only its first eight.
 		if (page.url.searchParams.get('stock') === 'low') { query = ''; activity = 'all'; lowStock = true; bins = []; sort = 'attention'; visibleCount = 50; }
 		viewLoaded = true;
-		void load();
-		return () => { alive = false; };
 	});
 	function openProduct(id: string) { void goto(i18n.href(`/admin/products/${id}`)); }
-	function load(background = false) {
-		if (admin.status !== 'ready') return Promise.resolve();
-		if (reading) { if (!background) busy = true; return currentRead ?? Promise.resolve(); }
-		reading = true; busy = !background;
-		return currentRead = loadProducts();
-	}
-	async function loadProducts() {
-		// A failed stock read shows as unavailable per card instead of hiding the product list.
-		try { const session = admin.credentials(); const [items, refs, attributes, inventory] = await Promise.all([readAdminProducts(session), readProductReferences(session), readAllProductAttributes(session), readInventory(session).catch(error => { void admin.permissionFailure(error); return null; })]); if (alive && session.userId === admin.userId) { searchTexts = adminSearchTexts(items, refs, attributes); products = items.sort((a, b) => a.code.localeCompare(b.code)); references = refs; if (inventory) stock = new Map(inventory.map(s => [s.product_id, s])); stockFailed = inventory === null; failed = false; } }
-		catch (error) { if (alive) failed = true; await admin.permissionFailure(error); } finally { if (alive) { busy = false; reading = false; } }
-	}
-	function retryInventory() {
-		if (admin.status !== 'ready') return Promise.resolve();
-		if (reading) { busy = true; return currentRead ?? Promise.resolve(); }
-		reading = true; busy = true;
-		return currentRead = loadInventory();
-	}
-	async function loadInventory() {
-		try {
-			const session = admin.credentials(); const inventory = await readInventory(session);
-			if (alive && session.userId === admin.userId) { stock = new Map(inventory.map(item => [item.product_id, item])); stockFailed = false; }
-		} catch (error) { stockFailed = true; await admin.permissionFailure(error); }
-		finally { if (alive) { busy = false; reading = false; } }
-	}
-	// The app owns freshness (design-system.md §4.2): re-read when the tab
-	// becomes relevant again instead of offering a manual refresh button.
-	let revalidateQueued = $state(false);
-	function revalidate() { revalidateQueued = document.visibilityState === 'visible'; }
-	$effect(() => {
-		if (revalidateQueued && admin.status === 'ready' && !reading) {
-			revalidateQueued = false;
-			untrack(() => { void load(true); });
-		}
-	});
 </script>
 <svelte:head><title>{m.title}</title></svelte:head>
-<svelte:window onfocus={revalidate} ononline={revalidate} />
-<svelte:document onvisibilitychange={revalidate} />
 <div class={pageHeader}>
 	<h1 class={pageHeading}>{m.heading}</h1>
 	<div class={formActions}>
@@ -166,7 +153,7 @@
 		</Popover.Content>
 	</Popover.Root>
 </Field.Group>
-{#if failed || stockFailed}<Alert.Message appearance="inline" variant="destructive" role="alert">{failed ? m.unavailable : m.inventoryUnavailable}</Alert.Message><Button type="button" variant="outline" disabled={busy} onclick={() => failed ? load() : retryInventory()}>{m.retry}</Button>{/if}
+{#if failed || stockFailed}<Alert.Message appearance="inline" variant="destructive" role="alert">{failed ? m.unavailable : m.inventoryUnavailable}</Alert.Message>{/if}
 {#if products === null && busy}
 	<span class="sr-only" role="status">{m.loading}</span>
 	<div class={[cardGrid, 'min-h-80 content-start']} aria-busy={busy}>
@@ -185,4 +172,4 @@
 		{#if filtered.length > visibleCount}<div class="mt-6"><Button variant="outline" onclick={() => { visibleCount += 50; }}>{i18n.m.catalog.showMore}</Button></div>{/if}
 	{/if}
 {/if}
-{#if references}<ProductReferencesEditor onrefresh={(value) => { references = value; }} />{/if}
+{#if references}<ProductReferencesEditor />{/if}

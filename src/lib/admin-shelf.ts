@@ -1,6 +1,5 @@
-import { ApiError } from './api';
-import { allStaffRows, staffEquals, staffRequest, type StaffSession } from './admin-api';
-import { identifier, object, text, type Fetcher } from './api';
+import { api, errorCode, type StaffSession } from './convex';
+import { identifier, object, text } from './api';
 import { parseShelfTopology, type ShelfBin, type ShelfCabinet, type ShelfTopology } from './shelf-map';
 
 export type AdminCabinet = Omit<ShelfCabinet, 'outer_row' | 'outer_col'> & {
@@ -11,22 +10,23 @@ export type AdminBin = Omit<ShelfBin, 'cabinet_id' | 'inner_row' | 'inner_col'> 
 };
 export type AssignedProduct = { id: string; code: string; name_nb: string; name_en: string; bin_id: string | null; is_active: boolean };
 export type AdminShelf = { cabinets: AdminCabinet[]; bins: AdminBin[]; products: AssignedProduct[]; live: ShelfTopology };
-const cabinetSelect = 'id,code,outer_row,outer_col,inner_rows,inner_cols,label,is_archived';
-const binSelect = 'id,code,cabinet_id,inner_row,inner_col,row_span,col_span,label,is_archived';
 
-/** Only bounded structural coordinates become numbers. Stock and money never do. */
+const maxCoordinate = 2147483647;
+/** A typed wall row: only bounded structural coordinates become numbers. Stock and money never do. */
 export function shelfInteger(value: unknown): number {
 	if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value)) throw new Error('Invalid shelf coordinate');
-	const result = Number(value);
-	if (!Number.isSafeInteger(result) || result > 2147483647) throw new Error('Invalid shelf coordinate');
-	return result;
+	return coordinate(Number(value));
+}
+function coordinate(value: unknown): number {
+	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1 || value > maxCoordinate) throw new Error('Invalid shelf coordinate');
+	return value;
 }
 export function shelfColumn(value: string): number {
 	if (!/^[A-Za-z]+$/.test(value)) throw new Error('Invalid shelf column');
 	let result = 0;
 	for (const character of value.toUpperCase()) {
 		result = result * 26 + character.charCodeAt(0) - 64;
-		if (result > 2147483647) throw new Error('Invalid shelf column');
+		if (result > maxCoordinate) throw new Error('Invalid shelf column');
 	}
 	return result;
 }
@@ -42,18 +42,15 @@ export function parseAdminCabinet(value: unknown): AdminCabinet {
 	const row = object(value), is_archived = archived(row.is_archived);
 	if (is_archived && (row.outer_row !== null || row.outer_col !== null)) throw new Error('Archived cabinet has placement');
 	return { id: identifier(row.id), code: text(row.code, 64), label: label(row.label), is_archived,
-		outer_row: is_archived ? null : shelfInteger(row.outer_row), outer_col: is_archived ? null : shelfInteger(row.outer_col),
-		inner_rows: shelfInteger(row.inner_rows), inner_cols: shelfInteger(row.inner_cols) };
+		outer_row: is_archived ? null : coordinate(row.outer_row), outer_col: is_archived ? null : coordinate(row.outer_col),
+		inner_rows: coordinate(row.inner_rows), inner_cols: coordinate(row.inner_cols) };
 }
 export function parseAdminBin(value: unknown): AdminBin {
 	const row = object(value), is_archived = archived(row.is_archived);
 	if (is_archived && (row.cabinet_id !== null || row.inner_row !== null || row.inner_col !== null)) throw new Error('Archived drawer has placement');
 	return { id: identifier(row.id), code: text(row.code, 64), label: label(row.label), is_archived,
-		cabinet_id: is_archived ? null : identifier(row.cabinet_id), inner_row: is_archived ? null : shelfInteger(row.inner_row),
-		inner_col: is_archived ? null : shelfInteger(row.inner_col), row_span: shelfInteger(row.row_span), col_span: shelfInteger(row.col_span) };
-}
-function apiCoordinates(value: AdminCabinet | AdminBin): Record<string, unknown> {
-	return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, typeof item === 'number' ? String(item) : item]));
+		cabinet_id: is_archived ? null : identifier(row.cabinet_id), inner_row: is_archived ? null : coordinate(row.inner_row),
+		inner_col: is_archived ? null : coordinate(row.inner_col), row_span: coordinate(row.row_span), col_span: coordinate(row.col_span) };
 }
 function parseAssignment(value: unknown): AssignedProduct {
 	const row = object(value), code = text(row.code, 40);
@@ -61,18 +58,14 @@ function parseAssignment(value: unknown): AssignedProduct {
 	return { id: identifier(row.id), code, name_nb: text(row.name_nb, 200), name_en: text(row.name_en, 200),
 		bin_id: row.bin_id === null ? null : identifier(row.bin_id), is_active: row.is_active };
 }
-export async function readAdminShelf(session: StaffSession, fetcher: Fetcher = fetch): Promise<AdminShelf> {
-	const [cabinetRows, binRows, productRows] = await Promise.all([
-		allStaffRows(session, 'amp_cabinets', cabinetSelect, 'id', {}, fetcher),
-		allStaffRows(session, 'amp_bins', binSelect, 'id', {}, fetcher),
-		// Inactive assignments prevent retirement too. Never use the public catalog here.
-		allStaffRows(session, 'amp_products', 'id,code,name_nb,name_en,bin_id,is_active', 'id', {}, fetcher)
-	]);
-	const cabinets = cabinetRows.map(parseAdminCabinet), bins = binRows.map(parseAdminBin), products = productRows.map(parseAssignment);
+/** Every cabinet and drawer, archived too, and every product's drawer, inactive ones included: they block retirement too. */
+export async function readAdminShelf(session: StaffSession): Promise<AdminShelf> {
+	const raw = await session.client.query(api.shelf.admin, {});
+	const cabinets = raw.cabinets.map(parseAdminCabinet), bins = raw.bins.map(parseAdminBin), products = raw.products.map(parseAssignment);
 	if (new Set(cabinets.map((row) => row.code)).size !== cabinets.length || new Set(bins.map((row) => row.code)).size !== bins.length) throw new Error('Duplicate storage code');
 	const assigned = new Set(products.flatMap((row) => row.bin_id ? [row.bin_id] : []));
-	const live = parseShelfTopology({ cabinets: cabinets.filter((row) => !row.is_archived).map(apiCoordinates),
-		bins: bins.filter((row) => !row.is_archived).map((row) => ({ ...apiCoordinates(row), has_products: assigned.has(row.id) })) });
+	const live = parseShelfTopology({ cabinets: cabinets.filter((row) => !row.is_archived),
+		bins: bins.filter((row) => !row.is_archived).map((row) => ({ ...row, has_products: assigned.has(row.id) })) });
 	const liveBins = new Set(live.bins.map((row) => row.id));
 	if (products.some((row) => row.bin_id && !liveBins.has(row.bin_id))) throw new Error('Inconsistent storage assignments');
 	return { cabinets, bins, products, live };
@@ -90,12 +83,7 @@ export type ShelfCommand = ActorCommand & (
 const commandKey = 'ampoteket:admin-shelf:v1';
 type CommandStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 function storageRow(value: unknown, kind: 'cabinet' | 'bin') {
-	const row = object(value);
-	for (const key of kind === 'cabinet' ? ['outer_row', 'outer_col', 'inner_rows', 'inner_cols'] : ['inner_row', 'inner_col', 'row_span', 'col_span']) {
-		if (row[key] !== null && (typeof row[key] !== 'number' || !Number.isInteger(row[key]))) throw new Error('Invalid saved coordinate');
-	}
-	const converted = Object.fromEntries(Object.entries(row).map(([key, item]) => [key, typeof item === 'number' ? String(item) : item]));
-	return kind === 'cabinet' ? parseAdminCabinet(converted) : parseAdminBin(converted);
+	return kind === 'cabinet' ? parseAdminCabinet(value) : parseAdminBin(value);
 }
 export function parseShelfCommand(value: unknown): ShelfCommand {
 	const row = object(value), actor = { userId: identifier(row.userId), requestId: identifier(row.requestId) };
@@ -119,8 +107,8 @@ export function parseShelfCommand(value: unknown): ShelfCommand {
 				if (parsed.length) throw new Error('Layout drawers require a live cabinet');
 			} else {
 				if (parsed.some((bin) => bin.is_archived || bin.cabinet_id !== cabinet.id)) throw new Error('Invalid layout drawer placement');
-				// This validates draft geometry only; product assignments are rechecked by the RPC.
-				parseShelfTopology({ cabinets: [apiCoordinates(cabinet)], bins: parsed.map((bin) => ({ ...apiCoordinates(bin), has_products: false })) });
+				// This validates draft geometry only; product assignments are rechecked by the backend.
+				parseShelfTopology({ cabinets: [cabinet], bins: parsed.map((bin) => ({ ...bin, has_products: false })) });
 			}
 			return parsed;
 		}
@@ -164,82 +152,56 @@ export function clearShelfCommand(storage: CommandStorage, command: ShelfCommand
 	storage.removeItem(commandKey);
 	if (storage.getItem(commandKey) !== null) throw new Error('Shelf command remains unresolved');
 }
-function same(a: AdminCabinet | AdminBin, b: AdminCabinet | AdminBin): boolean {
-	return Object.entries(a).every(([key, value]) => b[key as keyof typeof b] === value);
-}
-function guards(row: AdminCabinet | AdminBin): Record<string, string> {
-	return Object.fromEntries(Object.entries(row).map(([key, value]) => [key, staffEquals(value)]));
-}
-/** Read back an uncertain direct write; never replace the original preconditions. */
-export async function executeShelfCommand(session: StaffSession, input: ShelfCommand, fetcher: Fetcher = fetch): Promise<'saved' | 'stale'> {
+/**
+ * Run a saved command. Layouts, archives and swaps carry their request ID, so a
+ * retry after a lost reply returns the first result. A direct move is a
+ * compare-and-set against the row as shown: the backend answers 'saved' when the
+ * row already matches the target and 'stale' when it no longer matches the original.
+ */
+export async function executeShelfCommand(session: StaffSession, input: ShelfCommand): Promise<'saved' | 'stale'> {
 	const command = parseShelfCommand(input);
 	if (session.userId !== command.userId) throw new Error('Shelf command identity changed');
+	const { client } = session;
 	if (command.kind === 'archive-cabinet') {
-		const result = object(await staffRequest(session, 'rpc/amp_archive_empty_cabinet', {}, {
-			p_request_id: command.requestId, p_before: command.before, p_before_bins: command.beforeBins
-		}, 'POST', fetcher));
-		if (result.cabinet_id !== command.before.id || result.archived_bins !== String(command.beforeBins.length)) throw new Error('Invalid archive acknowledgement');
+		const result = await client.mutation(api.shelf.archiveCabinet, { requestId: command.requestId, before: command.before, beforeBins: command.beforeBins });
+		if (result.cabinet_id !== command.before.id || result.archived_bins !== command.beforeBins.length) throw new Error('Invalid archive acknowledgement');
 		return 'saved';
 	}
 	if (command.kind === 'layout') {
-		const result = object(await staffRequest(session, 'rpc/amp_save_shelf_layout', {}, {
-			p_request_id: command.requestId, p_before: command.before, p_cabinet: command.after,
-			p_before_bins: command.beforeBins, p_bins: command.bins
-		}, 'POST', fetcher));
+		const result = await client.mutation(api.shelf.saveLayout, { requestId: command.requestId, before: command.before,
+			cabinet: command.after, beforeBins: command.beforeBins, bins: command.bins });
 		if (result.cabinet_id !== command.after.id || result.saved !== true) throw new Error('Invalid layout acknowledgement');
 		return 'saved';
 	}
-	if (command.kind === 'cabinet' || command.kind === 'bin') {
-		const path = command.kind === 'cabinet' ? 'amp_cabinets' : 'amp_bins';
-		const select = command.kind === 'cabinet' ? cabinetSelect : binSelect;
-		const parse = command.kind === 'cabinet' ? parseAdminCabinet : parseAdminBin;
-		const read = await staffRequest(session, path, { select, id: `eq.${command.after.id}`, limit: '2' }, undefined, 'POST', fetcher);
-		if (!Array.isArray(read) || read.length > 1) throw new Error('Invalid storage readback');
-		const current = read.length ? parse(read[0]) : null;
-		if (current && same(current, command.after)) return 'saved';
-		if (!current || !same(current, command.before)) return 'stale';
-		const { id: _id, code: _code, ...changes } = command.after;
-		const result = await staffRequest(session, path, { select, ...guards(command.before) }, changes, 'PATCH', fetcher);
-		if (!Array.isArray(result) || result.length > 1) throw new Error('Invalid storage write response');
-		if (!result.length) return 'stale';
-		if (!same(parse(result[0]), command.after)) throw new Error('Storage acknowledgement mismatch');
-		return 'saved';
-	}
-	let path: string, payload: Record<string, unknown>, expected: Record<string, string | number | null>;
+	if (command.kind === 'cabinet') return await client.mutation(api.shelf.updateCabinet, { before: command.before, after: command.after });
+	if (command.kind === 'bin') return await client.mutation(api.shelf.updateBin, { before: command.before, after: command.after });
+	let result: Record<string, unknown>, expected: Record<string, string | number | null>;
 	if (command.kind === 'swap-cabinets') {
 		const a = command.first, b = command.second;
-		path = 'rpc/amp_swap_cabinets';
-		payload = { p_request_id: command.requestId, p_first_cabinet_id: a.id, p_second_cabinet_id: b.id,
-			p_expected_first_outer_row: a.outer_row, p_expected_first_outer_col: a.outer_col,
-			p_expected_second_outer_row: b.outer_row, p_expected_second_outer_col: b.outer_col };
+		result = await client.mutation(api.shelf.swapCabinets, { requestId: command.requestId, first: a, second: b });
 		expected = { first_cabinet_id: a.id, first_outer_row: b.outer_row, first_outer_col: b.outer_col,
 			second_cabinet_id: b.id, second_outer_row: a.outer_row, second_outer_col: a.outer_col };
 	} else {
 		const a = command.first, b = command.second;
-		path = 'rpc/amp_swap_bins';
-		payload = { p_request_id: command.requestId, p_first_bin_id: a.id, p_second_bin_id: b.id,
-			p_expected_first_cabinet_id: a.cabinet_id, p_expected_first_inner_row: a.inner_row, p_expected_first_inner_col: a.inner_col,
-			p_expected_first_row_span: a.row_span, p_expected_first_col_span: a.col_span,
-			p_expected_second_cabinet_id: b.cabinet_id, p_expected_second_inner_row: b.inner_row, p_expected_second_inner_col: b.inner_col,
-			p_expected_second_row_span: b.row_span, p_expected_second_col_span: b.col_span };
+		result = await client.mutation(api.shelf.swapBins, { requestId: command.requestId, first: a, second: b });
 		expected = { first_bin_id: a.id, first_cabinet_id: b.cabinet_id, first_inner_row: b.inner_row, first_inner_col: b.inner_col,
 			second_bin_id: b.id, second_cabinet_id: a.cabinet_id, second_inner_row: a.inner_row, second_inner_col: a.inner_col };
 	}
-	const result = object(await staffRequest(session, path, {}, payload, 'POST', fetcher));
-	if (!Object.entries(expected).every(([key, value]) => result[key] === (typeof value === 'number' ? String(value) : value))) throw new Error('Invalid swap acknowledgement');
+	if (!Object.entries(expected).every(([key, value]) => result[key] === value)) throw new Error('Invalid swap acknowledgement');
 	return 'saved';
 }
 
-/** Only definite database rejections release a command; transport failures stay retryable. */
+const failures: Record<string, 'stale' | 'occupied' | 'fit' | 'notEmpty' | 'invalid'> = {
+	STALE_SHELF_LAYOUT: 'stale', STALE_BIN_POSITION: 'stale', STALE_CABINET_POSITION: 'stale', BIN_ARCHIVED: 'stale',
+	CABINET_ARCHIVED: 'stale', BIN_NOT_FOUND: 'stale', CABINET_NOT_FOUND: 'stale',
+	BIN_POSITION_OCCUPIED: 'occupied', CABINET_POSITION_OCCUPIED: 'occupied',
+	BIN_DOES_NOT_FIT_CABINET_GRID: 'fit',
+	LAYOUT_HAS_PRODUCTS: 'notEmpty', BIN_STILL_HAS_PRODUCTS: 'notEmpty', CABINET_STILL_HAS_BINS: 'notEmpty',
+	INVALID_SHELF_LAYOUT: 'invalid', STORAGE_IDENTITY_IS_IMMUTABLE: 'invalid',
+	TWO_DISTINCT_BINS_AND_POSITIONS_REQUIRED: 'invalid', TWO_DISTINCT_CABINETS_AND_POSITIONS_REQUIRED: 'invalid'
+};
+/** Only definite rejections release a command; an unknown outcome (network, server bug) stays retryable. */
 export function shelfFailure(error: unknown): 'stale' | 'occupied' | 'fit' | 'notEmpty' | 'invalid' | null {
-	if (!(error instanceof ApiError) || ![400, 409, 422].includes(error.status)) return null;
-	const body = error.body && typeof error.body === 'object' ? error.body as Record<string, unknown> : {};
-	const message = typeof body.message === 'string' ? body.message : '';
-	if (/^(STALE_SHELF_LAYOUT|STALE_(BIN|CABINET)_POSITION|BIN_ARCHIVED|CABINET_ARCHIVED|BIN_NOT_FOUND|CABINET_NOT_FOUND)(:|$)/.test(message)) return 'stale';
-	if (message.startsWith('BIN_POSITION_OCCUPIED') || (body.code === '23505' && message.includes('cabinets_position_key'))) return 'occupied';
-	if (/^(BIN_DOES_NOT_FIT_CABINET_GRID|CABINET_SHRINK_WOULD_ORPHAN_BINS)(:|$)/.test(message)) return 'fit';
-	if (/^(LAYOUT_HAS_PRODUCTS|BIN_STILL_HAS_PRODUCTS|CABINET_STILL_HAS_BINS)(:|$)/.test(message)) return 'notEmpty';
-	if (message.startsWith('INVALID_SHELF_LAYOUT')) return 'invalid';
-	if (typeof body.code === 'string' && ['23502', '23505', '23514', '22P02', '22003'].includes(body.code)) return 'invalid';
-	return null;
+	const code = errorCode(error);
+	return code !== null && Object.hasOwn(failures, code) ? failures[code] : null;
 }

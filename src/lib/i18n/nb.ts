@@ -147,10 +147,6 @@ export const nb = {
 		unset: 'Ikke oppgitt', attributeChanged: (current: string) => `Noen andre endret verdien til ${current}. Lagre igjen for å erstatte den.`,
 		specificationsNotSaved: 'Noen spesifikasjoner ble ikke lagret. Se Spesifikasjoner ovenfor.',
 		addAttribute: 'Legg til spesifikasjon',
-		reviewSpecifications: 'Gjennomgå spesifikasjoner',
-		saveReviewedSpecifications: 'Lagre spesifikasjonene',
-		specificationMetadataKept: 'Produktet er lagret. Se over spesifikasjonene nedenfor og rett dem ved behov.',
-		specificationsIncomplete: 'Produktet er lagret, men ikke alle spesifikasjonene. Prøv igjen for å fullføre.',
 		invalidName: 'Angi et navn med 1–200 tegn.',
 		invalidStockStep: 'Oppgi et tall større enn 0, med høyst 6 desimaler. For stk må det være et heltall.', invalidSaleStep: 'Oppgi et multiplum av lagersteget, for eksempel det samme eller det dobbelte.', invalidPrice: 'Oppgi en pris på 0 eller mer, med høyst 6 desimaler.', priceRequired: 'Skriv inn en pris eller velg Gratis.', invalidMinimumStock: 'Oppgi 0 eller et multiplum av lagersteget.', invalidLink: 'Oppgi en nettadresse som begynner med https:// eller http://.',
 		referenceRecovery: 'Fullfør endringen', referenceRecoveryStale: 'Dette er endret i mellomtiden, så den tidligere endringen ble ikke gjentatt.', referenceRecoveryRejected: 'Den tidligere endringen ble avvist.', attributeInvalid: 'Skriv et tall i enheten som vises.', attributeRangeIncomplete: 'Fyll inn både min og maks, eller velg Én verdi.', attributeRangeOrder: 'Maks må være høyere enn min.', rangeToggle: 'Min–maks', singleValue: 'Én verdi', rangeMin: 'Min', rangeMax: 'Maks', specificationConflict: 'En lagret spesifikasjon passer ikke med standardoppsettet, så spesifikasjonene er låst. Kontakt den som drifter systemet.',
@@ -182,7 +178,6 @@ export const nb = {
 			series: (value: string) => `${value} er ikke en E24- eller E96-verdi.`,
 			duplicates: 'Finnes kanskje allerede:'
 		},
-		savedRefreshFailed: 'Endringen er lagret, men gjeldende opplysninger kunne ikke hentes.',
 		newTitle: 'Nytt produkt | Admin | Ampoteket', noProducts: 'Ingen produkter ennå.', clearSearch: 'Fjern søk og filtre', unknownSpecification: 'Ukjent spesifikasjon', attributeRejected: 'Verdien ble avvist. Kontroller den og prøv igjen.', title: 'Produkter | Admin | Ampoteket', heading: 'Produkter',
 		newProduct: 'Nytt produkt', scanProduct: 'Skann produkt', scanAgain: 'Skann igjen', scanInvalid: 'Dette er ikke en produktetikett.', scanMissing: (code: string) => `Produktkode ${code} finnes ikke.`, scanCameraUnavailable: 'Kameraet er ikke tilgjengelig. Gi nettleseren tilgang til kameraet og prøv igjen, eller søk etter produktet.', editProduct: 'Rediger produkt', onOrder: (value: string) => `${value} på bestilling`, stockLedger: 'Beholdningsendringer', back: 'Tilbake til produkter', search: 'Søk etter navn eller produktkode', stateFilter: 'Status', all: 'Alle', active: 'Publisert', inactive: 'Upublisert', lowStock: 'Lav beholdning', sortBy: 'Sorter etter', sortCurrent: (order: string) => `Sortering: ${order}`, sort: { attention: 'Trenger oppmerksomhet', counted: 'Lengst siden telling', code: 'Produktkode', name: 'Navn' }, empty: 'Ingen produkter passer søket.', loading: 'Laster …', unavailable: 'Produktene kunne ikke lastes.', missing: 'Produktet finnes ikke.', retry: 'Prøv igjen', working: 'Lagrer …', save: 'Lagre produkt', saveAndAddAnother: 'Lagre og legg til nytt', duplicate: 'Dupliser', saved: 'Lagret',
 		moveTitle: 'Flytte produktet?', confirmMove: 'Flytt', cancelMove: 'Avbryt',

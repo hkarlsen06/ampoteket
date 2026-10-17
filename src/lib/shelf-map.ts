@@ -1,5 +1,6 @@
-import { isRecord, requestApiJson } from './api';
-import type { CatalogConfig, CatalogProduct, CatalogRequestOptions } from './catalog';
+import { isRecord } from './api';
+import { abortable, type CatalogProduct, type CatalogRequestOptions } from './catalog';
+import { api, type ConvexCaller } from './convex';
 
 export type ShelfCabinet = {
 	id: string; code: string; outer_row: number; outer_col: number;
@@ -31,16 +32,15 @@ function code(value: unknown): string {
 	return result;
 }
 function coordinate(value: unknown): number {
-	// requestApiJson preserves raw numeric tokens as strings. Only these bounded
-	// structural int4 values become JS numbers, never prices or quantities.
-	if (typeof value !== 'string' || !/^[1-9][0-9]*$/.test(value)) invalid();
-	const result = Number(value);
-	if (!Number.isSafeInteger(result) || result > 2147483647) invalid();
+	// A bounded structural integer: a number from Convex, or a digit string from
+	// callers that still hold lossless JSON. Never prices or quantities.
+	const result = typeof value === 'string' && /^[1-9][0-9]*$/.test(value) ? Number(value) : value;
+	if (typeof result !== 'number' || !Number.isSafeInteger(result) || result < 1 || result > 2147483647) invalid();
 	return result;
 }
 function label(value: unknown): string | null { return value === null ? null : text(value); }
 
-/** A complete topology is a single JSON value, unaffected by the API row cap. */
+/** Validate a complete wall: unique identities, known parents, drawers inside their cabinet and never overlapping. */
 export function parseShelfTopology(value: unknown): ShelfTopology {
 	const raw = object(value);
 	if (!Array.isArray(raw.cabinets) || !Array.isArray(raw.bins)) invalid();
@@ -81,17 +81,10 @@ export function parseShelfTopology(value: unknown): ShelfTopology {
 	return { cabinets, bins };
 }
 
-export async function readShelfTopology(config: CatalogConfig, options: CatalogRequestOptions = {}): Promise<ShelfTopology> {
-	const url = new URL(config.url);
-	if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.pathname !== '/'
-		|| url.search || url.hash || !config.publishableKey.trim() || config.publishableKey.startsWith('sb_secret_')) {
-		throw new TypeError('Invalid public shelf configuration');
-	}
-	url.pathname = '/rest/v1/rpc/amp_shelf_map';
-	return parseShelfTopology(await requestApiJson(url, {
-		method: 'POST', headers: { apikey: config.publishableKey, 'Content-Type': 'application/json', Accept: 'application/json' },
-		body: '{}', credentials: 'omit', cache: 'no-store', signal: options.signal
-	}, options.fetcher));
+/** The complete live wall, validated; a failed read rejects rather than emptying the map. */
+export async function readShelfTopology(client: ConvexCaller, options: CatalogRequestOptions = {}): Promise<ShelfTopology> {
+	options.signal?.throwIfAborted();
+	return parseShelfTopology(await abortable(client.query(api.catalog.shelfMap, {}), options.signal));
 }
 
 /** Match stable bin identity even after it moves to another cabinet. */
@@ -145,7 +138,7 @@ export function cabinetInner(cabinet: { id: string; inner_rows: number; inner_co
 	return { rows: cabinet.inner_rows, cols: cabinet.inner_cols, drawers, ...(occupancy && { occupancy }) };
 }
 
-/** Exact even for the largest legal int4 grid, without allocating every free cell. */
+/** Exact even for the largest legal grid (2147483647 × 2147483647), without allocating every free cell. */
 export function freeCellCount(cabinet: ShelfCabinet, bins: ShelfBin[]): string {
 	return (BigInt(cabinet.inner_rows) * BigInt(cabinet.inner_cols)
 		- bins.filter((bin) => bin.cabinet_id === cabinet.id)

@@ -198,7 +198,7 @@
 		layoutBins = value ? beforeBins.map((bin) => ({ ...bin })) : resizeLayout([], layoutId, null, layoutSize, assignedIds);
 		layoutVersion++;
 		draftStart = JSON.stringify(draftFields()); draftStored = false;
-		const saved = readDraft(admin.userId, 'shelf') as { editor?: unknown; before?: unknown; beforeBins?: unknown; fields?: Record<string, unknown> } | null;
+		const saved = readDraft(admin.userId ?? undefined, 'shelf') as { editor?: unknown; before?: unknown; beforeBins?: unknown; fields?: Record<string, unknown> } | null;
 		const fields = saved?.fields, size = fields?.layoutSize as Record<string, unknown> | undefined;
 		if (saved?.editor === 'cabinet' && JSON.stringify(saved.before) === JSON.stringify(before) && JSON.stringify(saved.beforeBins) === JSON.stringify(beforeBins)
 			&& ['row', 'column', 'layoutId'].every(name => typeof fields?.[name] === 'string')
@@ -214,14 +214,14 @@
 	// began; Discard and an acknowledged save drop it.
 	let draftStart = '', draftStored = false;
 	function draftFields() { return { row, column, layoutId, layoutSize: $state.snapshot(layoutSize), layoutBins: $state.snapshot(layoutBins) }; }
-	function discardDraft() { writeDraft(admin.userId, 'shelf', null); draftStored = false; }
+	function discardDraft() { writeDraft(admin.userId ?? undefined, 'shelf', null); draftStored = false; }
 	$effect(() => {
 		if (!editor || editorMode !== 'edit' || busy || pending) return;
 		const fields = draftFields();
 		untrack(() => {
 			// Only this unit's own draft is removed when its edits are undone by hand.
 			if (JSON.stringify(fields) === draftStart) { if (draftStored) discardDraft(); return; }
-			writeDraft(admin.userId, 'shelf', { editor: 'cabinet', before: $state.snapshot(before), beforeBins: $state.snapshot(beforeBins), fields });
+			writeDraft(admin.userId ?? undefined, 'shelf', { editor: 'cabinet', before: $state.snapshot(before), beforeBins: $state.snapshot(beforeBins), fields });
 			draftStored = true;
 		});
 	});
