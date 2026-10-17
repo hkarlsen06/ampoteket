@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import {
-	addMonths, eventDays, formatEventHours, formatEventWhen, monthGrid, osloMidnight, paragraphs, parseMonth, parseNewsArticle,
+	addMonths, eventDays, formatEventHours, formatEventShort, formatEventWhen, monthGrid, osloMidnight, paragraphs, parseMonth, parseNewsArticle,
 	readEventCalendar, readNewsFeed, slugify, uniqueSlug
 } from './news';
 import { clearNewsCommand, newsError, readNewsCommand, saveNewsCommand, type NewsCommand } from './admin-news';
@@ -54,6 +54,9 @@ test('events cover the Oslo days they touch, and an end at midnight stays on its
 	expect(eventDays({ starts_at: '2026-11-05T17:00:00Z', ends_at: '2026-11-07T11:00:00Z' })).toEqual(['2026-11-05', '2026-11-06', '2026-11-07']);
 	expect(formatEventHours(event, 'nb')).toBe('18:00–21:00');
 	expect(formatEventWhen(event, 'en')).toContain('5 November 2026');
+	expect(formatEventShort(event, 'nb')).toBe('Torsdag 18:00–21:00');
+	expect(formatEventShort({ starts_at: '2026-11-14T09:00:00Z', ends_at: '2026-11-15T15:00:00Z' }, 'en')).toBe('Sat 10:00–Sun 16:00');
+	expect(formatEventShort({ starts_at: '2026-11-14T09:00:00Z', ends_at: '2026-11-15T15:00:00Z' }, 'nb')).toBe('Lør. 10:00–søn. 16:00');
 });
 
 test('calendar traversal continues through full pages and rejects a cursor that does not advance', async () => {

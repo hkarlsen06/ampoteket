@@ -219,6 +219,24 @@ export function formatEventHours(event: { starts_at: string; ends_at: string | n
 	const format = new Intl.DateTimeFormat(intlLocale(locale), { timeZone: OSLO, hour: '2-digit', minute: '2-digit' });
 	return event.ends_at ? format.formatRange(new Date(event.starts_at), new Date(event.ends_at)) : format.format(new Date(event.starts_at));
 }
+/**
+ * Beside a date mark that already shows the first day: «Torsdag 18:00–21:00»; within
+ * a week the weekdays tell the days apart («Lør. 10:00–søn. 16:00»); longer, the dates.
+ */
+export function formatEventShort(event: { starts_at: string; ends_at: string | null }, locale: Locale): string {
+	const start = new Date(event.starts_at), end = event.ends_at ? new Date(event.ends_at) : null;
+	const days = eventDays(event).length;
+	if (end && days > 7) {
+		return capitalize(new Intl.DateTimeFormat(intlLocale(locale), { timeZone: OSLO, weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).formatRange(start, end));
+	}
+	if (end && days > 1) {
+		const weekday = new Intl.DateTimeFormat(intlLocale(locale), { timeZone: OSLO, weekday: 'short' });
+		const time = new Intl.DateTimeFormat(intlLocale(locale), { timeZone: OSLO, hour: '2-digit', minute: '2-digit' });
+		return capitalize(`${weekday.format(start)} ${time.format(start)}–${weekday.format(end)} ${time.format(end)}`);
+	}
+	const weekday = new Intl.DateTimeFormat(intlLocale(locale), { timeZone: OSLO, weekday: 'long' }).format(start);
+	return capitalize(`${weekday} ${formatEventHours(event, locale)}`);
+}
 /** «5. november 2026» */
 export function formatNewsDate(instant: string, locale: Locale): string {
 	return new Intl.DateTimeFormat(intlLocale(locale), { timeZone: OSLO, dateStyle: 'long' }).format(new Date(instant));

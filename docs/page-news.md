@@ -29,12 +29,16 @@ Hard constraints:
 
 ## 2. `/news`
 
-Phone first: the heading, «Kommende arrangementer» with the next three events that
-have not ended (a date tile, title, time and place), the calendar link, then «Nyheter»:
-one card per article with its cover, date, title, summary and, when linked, the event
-time. From 48rem the events sit in three columns and the cards fill the width. Twelve
-articles per page; «Eldre nyheter» continues from the last one shown
-(`?before=<published_at>&id=<id>`, not indexed).
+Phone first: «Kommende arrangementer» with the next three events that
+have not ended, the calendar link, then «Nyheter». Both are flat lists with one
+separator between rows (`Item`), no cards. An event row has a borderless date mark
+(month over day), the title, the weekday and hours (the full date for screen readers)
+and the place. An article row has its cover, date, title, summary and, when linked, the
+event time; from 48rem the cover sits beside the text. Each row's title link covers the
+row. From 64rem the articles take the main column and the events a 23rem column beside
+them. Twelve articles per page; «Eldre nyheter» continues from the last one shown
+(`?before=<published_at>&id=<id>`, not indexed). The page's h1 («Nyheter og
+arrangementer») is visually hidden: the two section headings already name the page.
 
 `/news/[slug]` shows the title, summary and date, the cover, a bordered box with the
 linked event, the body (a blank line starts a paragraph), the remaining images, then
