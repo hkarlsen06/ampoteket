@@ -119,7 +119,7 @@ labels always use the Norwegian, unprefixed address.
 | `GET /api/discord`, `/api/discord/avatar/…` | Online members of the Ampoteket Discord server and their avatars, proxied and edge-cached so browsers never contact Discord |
 
 Until `SALES_OPEN=true` is deployed, the buyer routes and the checkout API are closed
-behind a "shop opens soon" page ([website-guide.md](website-guide.md#11-environments-and-secrets)).
+behind a "closed for maintenance" page ([website-guide.md](website-guide.md#11-environments-and-secrets)).
 The buyer pages live in the `src/routes/[[locale=locale]]/(sales)/` route group, whose
 layout enforces this.
 

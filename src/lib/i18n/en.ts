@@ -641,7 +641,7 @@ export const en: Messages = {
 			title: 'Solder, build and get your own parts',
 			lede: 'Soldering stations, oscilloscopes, two 3D printers and a shelf of parts, right in Pilestredet 35.',
 			parts: 'Browse parts catalog',
-			soon: 'The shop opens soon',
+			maintenance: 'The shop is closed for maintenance',
 			place: 'PS126 · Pilestredet 35',
 			map: 'Show the room in MazeMap',
 			clock: 'Time in Oslo',
@@ -787,9 +787,9 @@ export const en: Messages = {
 		errorBody: 'The fault is on our side, but your cart is still saved in this browser.',
 		retry: 'Try again',
 		help: 'Get help',
-		soonTitle: 'The shop opens soon | Ampoteket',
-		soonHeading: 'The shop opens soon',
-		soonBody: "The parts catalog, cart and checkout aren't open yet."
+		maintenanceTitle: 'Closed for maintenance | Ampoteket',
+		maintenanceHeading: 'The shop is closed for maintenance',
+		maintenanceBody: 'The parts catalog, cart and checkout are back shortly.'
 	},
 	receipt: {
 		subject: 'Receipt from Ampoteket',

@@ -649,7 +649,7 @@ export const nb = {
 			title: 'Lodd, bygg og hent delene selv',
 			lede: 'Loddeplasser, oscilloskop, to 3D‑printere og en hylle med deler, midt i Pilestredet 35.',
 			parts: 'Se delekatalogen',
-			soon: 'Nettbutikken åpner snart',
+			maintenance: 'Nettbutikken er stengt for vedlikehold',
 			place: 'PS126 · Pilestredet 35',
 			map: 'Vis rommet i MazeMap',
 			clock: 'Klokka i Oslo',
@@ -795,9 +795,9 @@ export const nb = {
 		errorBody: 'Feilen ligger hos oss, men handlekurven din er fortsatt lagret i denne nettleseren.',
 		retry: 'Prøv igjen',
 		help: 'Få hjelp',
-		soonTitle: 'Nettbutikken åpner snart | Ampoteket',
-		soonHeading: 'Nettbutikken åpner snart',
-		soonBody: 'Delekatalogen, handlekurven og betalingen er ikke åpnet ennå.'
+		maintenanceTitle: 'Stengt for vedlikehold | Ampoteket',
+		maintenanceHeading: 'Nettbutikken er stengt for vedlikehold',
+		maintenanceBody: 'Delekatalogen, handlekurven og betalingen er snart tilbake.'
 	},
 	/** Receipt email, rendered on the server. The one email carries both languages. */
 	receipt: {
