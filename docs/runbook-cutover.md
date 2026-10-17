@@ -25,7 +25,7 @@ sign in once more, because sessions do not move.
 
    | Name | Value |
    | --- | --- |
-   | `JWT_PRIVATE_KEY`, `JWKS` | A fresh key pair: `bun scripts/convex-cutover/auth-keys.ts` prints both. |
+   | `JWT_PRIVATE_KEY`, `JWKS` | Set by `CONVEX_DEPLOY_KEY='<prod key>' bun scripts/convex-cutover/auth-keys.ts`, which generates a fresh key pair and writes both to the deployment; nothing to copy. |
    | `SITE_URL` | `https://ampoteket.no` (invitation and reset links). |
    | `CHECKOUT_SERVER_KEY` | 64 random hex characters (`openssl rand -hex 32`). The Worker gets the same value. |
    | `RESEND_API_KEY` | A Resend API key allowed to send from `notify.ampoteket.no`. |
