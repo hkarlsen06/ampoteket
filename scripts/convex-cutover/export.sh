@@ -27,8 +27,8 @@ fi
   echo "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;"
   cat scripts/convex-cutover/export.sql
   echo "COMMIT;"
-} | psql -X -v ON_ERROR_STOP=1 -At "${connection[@]}" -o "$out" >/dev/null
-# psql prints the SET/BEGIN/COMMIT tags into the file; keep only the JSON line.
-grep '^{' "$out" > "$out.tmp" && mv "$out.tmp" "$out"
+} | psql -X -q -v ON_ERROR_STOP=1 -At "${connection[@]}" -o "$out" >/dev/null
+# Quiet mode keeps SET/BEGIN/COMMIT out of the file; the JSON itself spans many lines.
+bun -e 'JSON.parse(await Bun.file(process.argv[1]).text())' "$out" || { echo "Export is not valid JSON: $out" >&2; exit 1; }
 bytes=$(wc -c < "$out")
 echo "Exported $bytes bytes to $out"
