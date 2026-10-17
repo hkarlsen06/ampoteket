@@ -170,7 +170,8 @@ or suppresses it.
 - **Scroll-linked motion is homepage-only**, driven by native document scroll,
   reversing with it, with a still fallback for reduced motion or no
   `animation-timeline` support. The complete list:
-  - hero storefront walk-in (stage pins while the storefront grows into the room);
+  - hero hand-over: the storefront drifts and darkens as it leaves, and the room opens
+    out from under the link strip while its quote rises;
   - bench photograph power-on (switches on like a CRT);
   - P2S printer rotation, plus a hover-follow tilt within its range;
   - soldering-iron movement from holder to board, with the withdrawn iron following
@@ -178,13 +179,11 @@ or suppresses it.
   - header scroll meter, a primary hairline filling along the header's bottom edge
     (`scroll-meter` in `app.css`), unlit without support, hidden for reduced motion.
 
-  CSS lives in `app.css` (`scroll-motion:`/`walk-motion:` variants, `walk-*`/`power-on`).
-  The homepage observer enables the walk only when the natural copy fits its CSS
-  height budget; enlarged text otherwise retains the static layout. CSS owns the
-  breakpoints and reduced-motion fallback;
-  details in [page-home.md](page-home.md). Nothing else moves with scroll.
+  CSS lives in `app.css` (`scroll-motion:` variant, the hand-over utilities, `power-on`). CSS owns the
+  reduced-motion fallback; details in [page-home.md](page-home.md). Nothing else moves with scroll.
 - **Anchors respect the header.** `scroll-padding-top` in `app.css` keeps anchors
-  and focus targets below it. New sticky surfaces update the `--header-h` math.
+  and focus targets below it. New sticky surfaces update the `--header-h` math, unless nothing focusable can sit
+  under them (the homepage link strip, sticky only over the room photograph).
 - **Never scroll the user programmatically**, except the skip link, focus moving to
   `#main` after navigation, and focusing the first invalid field. No
   `scrollIntoView` choreography, no global `scroll-behavior: smooth`. The shelf
@@ -347,9 +346,10 @@ decorative transparent WebP per category (source notes:
 use a generic IC. Callers reserve its dimensions; no animation, no bordered surface.
 
 **Header and menu:** one DOM with CSS-only presentation (`Collapsible.Content
-forceMount`). The row holds the wordmark, icon-only links in gapless groups (Admin;
-Discord and Instagram; catalog and cart) and a 48 px menu button. The menu holds Contact at every width; at
-≤ 40rem the catalog, Instagram and Admin links join it above Contact. It floats over the page (a 16rem panel
+forceMount`). The row holds the wordmark, icon-only links (Admin; catalog and cart as a
+gapless pair) and a 48 px menu button; Discord and Instagram live in the homepage's link strip and the footer,
+not the header. The menu holds Contact at every width; at
+≤ 40rem the catalog and Admin links join it above Contact. It floats over the page (a 16rem panel
 on desktop, full width at ≤ 40rem) and closes on Escape, outside tap or navigation;
 with `html.no-js` it is the header's second row, so links work without JavaScript.
 Icon buttons have an accessible name and a matching `Tooltip`. The current link has
@@ -358,7 +358,7 @@ icon, a thick underline under a menu row or language name. Admin appears only af
 never moves the catalog link. The cart's neutral count badge appears only when it has
 lines («?» when unreadable) and overlaps the icon so nothing moves. **On `/admin/**` the
 header keeps the same sticky row and height but holds only the wordmark and a menu with
-the language picker: no buyer, social or Admin links, no scanner and no public footer,
+the language picker: no buyer or Admin links, no scanner and no public footer,
 so the staff workspace has one frame.** The admin `Sidebar` is a modal sheet below
 48rem and a collapsible rail above; its entries are grouped by job under group labels
 (daily work, shelf and labels, reports, help and access; a hairline replaces the labels

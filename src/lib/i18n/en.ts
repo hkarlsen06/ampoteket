@@ -556,8 +556,6 @@ export const en: Messages = {
 		contact: 'Contact us',
 		news: 'News',
 		calendar: 'Calendar',
-		discord: 'Ampoteket on Discord',
-		instagram: 'Ampoteket on Instagram',
 		cartLines: (n: number) => (n === 1 ? ', 1 part' : `, ${n} parts`)
 	},
 	footer: {
@@ -566,7 +564,8 @@ export const en: Messages = {
 		help: 'Contact us',
 		news: 'News and events',
 		privacy: 'Privacy',
-		discord: 'Discord'
+		discord: 'Discord',
+		instagram: 'Instagram'
 	},
 	product: {
 		title: (name: string) => `${name} | Ampoteket`,
@@ -714,6 +713,8 @@ export const en: Messages = {
 			hours: 'OsloMet opening hours',
 			hoursSource: 'https://student.oslomet.no/en/opening-hours',
 		},
+		/** The link strip right under the hero's first screen; brand names stay as written. */
+		links: { label: 'Find us', discord: 'Discord', instagram: 'Instagram', maps: 'Google Maps', linkedin: 'LinkedIn' },
 		photos: {
 			storefront:
 				'Ampoteket from the street at night: the lit AMPOTEKET sign hangs in the window, with worktables, soldering stations and instruments inside.',

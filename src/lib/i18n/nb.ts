@@ -564,8 +564,6 @@ export const nb = {
 		contact: 'Kontakt oss',
 		news: 'Nyheter',
 		calendar: 'Kalender',
-		discord: 'Ampoteket på Discord',
-		instagram: 'Ampoteket på Instagram',
 		cartLines: (n: number) => (n === 1 ? ', 1 del' : `, ${n} deler`)
 	},
 	footer: {
@@ -574,7 +572,8 @@ export const nb = {
 		help: 'Kontakt oss',
 		news: 'Nyheter og arrangementer',
 		privacy: 'Personvern',
-		discord: 'Discord'
+		discord: 'Discord',
+		instagram: 'Instagram'
 	},
 	product: {
 		title: (name: string) => `${name} | Ampoteket`,
@@ -722,6 +721,8 @@ export const nb = {
 			hours: 'OsloMets åpningstider',
 			hoursSource: 'https://student.oslomet.no/apningstider',
 		},
+		/** The link strip right under the hero's first screen; brand names stay as written. */
+		links: { label: 'Finn oss', discord: 'Discord', instagram: 'Instagram', maps: 'Google Maps', linkedin: 'LinkedIn' },
 		photos: {
 			storefront:
 				'Ampoteket sett fra gata om kvelden: det lysende AMPOTEKET-skiltet henger i vinduet, og innenfor står arbeidsbord, loddeplasser og instrumenter.',

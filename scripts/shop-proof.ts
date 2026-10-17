@@ -323,10 +323,8 @@ try {
 		await page.evaluate(() => document.fonts.ready);
 		const hero = page.locator('section[aria-labelledby="hero-title"]');
 		const catalog = hero.getByRole('link', { name: messages.home.hero.parts, exact: true });
-		await expect(hero).toHaveAttribute('data-walk-fits', 'true');
 		try {
 			await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
-			await expect.poll(() => hero.getAttribute('data-walk-fits')).toBeNull();
 			for (const content of [hero.locator('#hero-title'), hero.getByText(messages.home.hero.lede, { exact: true }), catalog]) {
 				assert.ok(await content.evaluate(element => {
 					const frame = document.getElementById('hero-title')!.parentElement!.parentElement!.getBoundingClientRect();
@@ -341,9 +339,8 @@ try {
 			await expect(catalog).toBeFocused();
 			await expect(catalog).toBeInViewport({ ratio: 1 });
 		} finally { await page.evaluate(() => document.documentElement.style.removeProperty('font-size')); }
-		await expect(hero).toHaveAttribute('data-walk-fits', 'true');
 	}
-	console.log('PASS: landscape and enlarged-text hero copy/actions remain reachable; motion eligibility returns after font restoration');
+	console.log('PASS: landscape and enlarged-text hero copy/actions remain reachable');
 	// The home picker has no current product. Its contents come from a complete
 	// drawer-scoped catalog read only after a visitor selects an assigned drawer.
 	const homeDrawerCodes = await catalogCodes(crowdedBin);

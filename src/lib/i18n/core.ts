@@ -35,6 +35,12 @@ export const MAZEMAP = 'https://use.mazemap.com/#v=1&campusid=53&sharepoitype=id
 
 export const INSTAGRAM = 'https://www.instagram.com/ampoteket';
 
+/** Ampoteket's place on Google Maps; the room itself is on MAZEMAP. */
+export const GOOGLE_MAPS = 'https://maps.app.goo.gl/FZbPGb9qGZVeGX7JA';
+
+/** Ampoteket's LinkedIn profile. */
+export const LINKEDIN = 'https://www.linkedin.com/in/ampoteket-studentverksted-6a1655435/';
+
 export const THE_RESISTANCE = 'https://foreninger.sio.no/foreninger/the-resistance';
 
 export function messagesFor(locale: Locale): Messages {

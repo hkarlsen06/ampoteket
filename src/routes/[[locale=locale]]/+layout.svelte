@@ -7,11 +7,9 @@
 	import TranslateIcon from 'phosphor-svelte/lib/TranslateIcon';
 	import XIcon from 'phosphor-svelte/lib/XIcon';
 	import QrCodeIcon from 'phosphor-svelte/lib/QrCodeIcon';
-	import InstagramLogoIcon from 'phosphor-svelte/lib/InstagramLogoIcon';
 	import ChatsIcon from 'phosphor-svelte/lib/ChatsIcon';
 	import NewspaperIcon from 'phosphor-svelte/lib/NewspaperIcon';
 	import CalendarDotsIcon from 'phosphor-svelte/lib/CalendarDotsIcon';
-	import DiscordLogo from '#lib/DiscordLogo.svelte';
 	import { onMount, setContext, untrack } from 'svelte';
 	import { AdminContext, setAdminContext } from '#lib/admin-context.svelte.js';
 	import { ConvexAuthClient } from '#lib/convex-auth.svelte.js';
@@ -73,10 +71,8 @@
 	const bare = $derived(stripLocale(page.url.pathname));
 	const privatePage = $derived(isPrivateRoute(page.route.id, page.url.pathname));
 	// Admin is its own workspace: the header keeps the wordmark and menu but drops the buyer
-	// and social links, and no public footer follows the page.
+	// links, and no public footer follows the page.
 	const adminPage = $derived(isCurrent('/admin'));
-	// Discord and Instagram stay off the cart and checkout, where a leaving link costs a purchase in progress.
-	const showSocial = $derived(!adminPage && !isCurrent('/cart') && !isCurrent('/checkout'));
 	const buyerScanPage = $derived(data.salesOpen && !adminPage && (bare === '/' || bare === '/p' || bare.startsWith('/p/') || bare === '/cart'));
 
 	/** Always the production URL, never a preview origin; see PROD_ORIGIN. */
@@ -117,8 +113,6 @@
 			// A neutral count, only when there is something to count; red means error or empty stock.
 			badge: $cart.status !== 'initializing' && cartCount !== 0 ? String(cartCount ?? '?') : undefined
 		},
-		discord: { href: DISCORD_INVITE, label: m.header.discord, icon: DiscordLogo, external: true },
-		instagram: { href: INSTAGRAM, label: m.header.instagram, icon: InstagramLogoIcon, external: true },
 		news: { href: '/news', label: m.header.news, icon: NewspaperIcon },
 		calendar: { href: '/events', label: m.header.calendar, icon: CalendarDotsIcon },
 		contact: { href: '/contact', label: m.header.contact, icon: ChatsIcon }
@@ -133,8 +127,8 @@
 			: { href: i18n.href(link.href), 'aria-current': isCurrent(link.href) ? ('page' as const) : undefined };
 	}
 
-	// Above 40rem the header row holds the wordmark, then icon links grouped as Admin,
-	// social and shop, then the menu button; the menu holds Contact, the scanner and the language picker. On phones the
+	// Above 40rem the header row holds the wordmark, then icon links grouped as Admin
+	// and shop, then the menu button; the menu holds Contact, the scanner and the language picker. On phones the
 	// destinations move into the menu and the scanner floats (Scanner.svelte).
 	// Pure enhancement: `html.no-js` (src/app.html) hides the button and leaves
 	// the menu open, so the links are reachable without JavaScript.
@@ -243,13 +237,12 @@
 				<img class="h-auto w-44 phone:w-36" src="/brand/wordmark.svg" alt="Ampoteket" width="756" height="139" />
 			</picture>
 		</a>
-		<!-- Groups, each with no gap inside: Admin, then Discord and Instagram (off cart and checkout),
-		     then catalog and cart. Admin enters on the left once confirmed, so nothing else moves. On
-		     phones only Discord and the cart stay; the rest are menu rows. -->
+		<!-- Admin, then catalog and cart with no gap between them. Admin enters on the left once
+		     confirmed, so nothing else moves. On phones only the cart stays; the rest are menu rows.
+		     Discord and Instagram live in the homepage's link strip and the footer. -->
 		{#if !adminPage}
 		<Tooltip.Provider>
 			{#if showAdmin}{@render iconLink(links.admin, 'phone:hidden')}{/if}
-			{#if showSocial}<div class="flex">{@render iconLink(links.discord)}{@render iconLink(links.instagram, 'phone:hidden')}</div>{/if}
 			{#if data.salesOpen}<div class="flex">{@render iconLink(links.catalog, 'phone:hidden')}{@render iconLink(links.cart, 'header-cart')}</div>{/if}
 		</Tooltip.Provider>
 		{/if}
@@ -265,12 +258,11 @@
 			</Collapsible.Trigger>
 			<Collapsible.Content forceMount id="site-menu" class="menu absolute top-[calc(50%+var(--header-h)/2+1px)] right-0 z-10 hidden w-64 rounded-lg border bg-card p-2 shadow-card data-[state=open]:block phone:inset-x-0 phone:top-full phone:w-auto phone:rounded-none phone:border-0 phone:px-[calc(var(--gutter)-0.75rem)] phone:pt-2 phone:pb-3 phone:shadow-none no-js:relative no-js:inset-auto no-js:block no-js:w-full no-js:rounded-none no-js:border-0 no-js:px-0 no-js:pt-2 no-js:pb-3 no-js:shadow-none">
 			<Separator class="absolute inset-x-0 top-0 hidden no-js:block" />
-			<!-- Phone: catalog, Instagram and Admin, which desktop has in the header row; then News, Calendar and Contact at every width. -->
+			<!-- Phone: catalog and Admin, which desktop has in the header row; then News, Calendar and Contact at every width. -->
 			{#if !adminPage}
 			<nav aria-label={m.header.menu}>
 				<ul class="m-0 flex list-none flex-col p-0">
 					{#if data.salesOpen}{@render menuLink(links.catalog, true)}{/if}
-					{#if showSocial}{@render menuLink(links.instagram, true)}{/if}
 					{#if showAdmin}{@render menuLink(links.admin, true)}{/if}
 					{@render menuLink(links.news)}
 					{@render menuLink(links.calendar)}
@@ -334,6 +326,7 @@
 				<li><a href={i18n.href('/contact')}>{m.footer.help}</a></li>
 				<li><a href={i18n.href('/privacy')}>{m.footer.privacy}</a></li>
 				<li><a href={DISCORD_INVITE} target="_blank" rel="external noopener">{m.footer.discord}<span class="sr-only"> {m.newTab}</span></a></li>
+				<li><a href={INSTAGRAM} target="_blank" rel="external noopener">{m.footer.instagram}<span class="sr-only"> {m.newTab}</span></a></li>
 				<li><a href={i18n.href('/admin')}>{m.header.admin}</a></li>
 			</ul>
 		</nav>

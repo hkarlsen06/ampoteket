@@ -8,6 +8,9 @@
 	import CpuIcon from 'phosphor-svelte/lib/CpuIcon';
 	import ClockIcon from 'phosphor-svelte/lib/ClockIcon';
 	import NewspaperIcon from 'phosphor-svelte/lib/NewspaperIcon';
+	import InstagramLogoIcon from 'phosphor-svelte/lib/InstagramLogoIcon';
+	import LinkedinLogoIcon from 'phosphor-svelte/lib/LinkedinLogoIcon';
+	import MapPinIcon from 'phosphor-svelte/lib/MapPinIcon';
 	import DiscordLogo from '#lib/DiscordLogo.svelte';
 	import * as Alert from '#lib/components/ui/alert/index.js';
 	import StateBadge from '#lib/StateBadge.svelte';
@@ -26,7 +29,7 @@
 	// The page renders without API reads, so nothing delays its first byte; the shelf
 	// picker loads live topology and drawer contents in the browser when opened.
 	import { goto } from '$app/navigation';
-	import { DISCORD_INVITE, INSTAGRAM, MAZEMAP, PROD_ORIGIN, THE_RESISTANCE, getI18n } from '#lib/i18n/index.js';
+	import { DISCORD_INVITE, GOOGLE_MAPS, INSTAGRAM, LINKEDIN, MAZEMAP, PROD_ORIGIN, THE_RESISTANCE, getI18n } from '#lib/i18n/index.js';
 
 	let { data }: { data: PageData } = $props();
 	const i18n = getI18n();
@@ -63,28 +66,18 @@
 	// (Scanner.svelte) stays hidden until this one scrolls out of view.
 	let scanDock = $state<HTMLElement | null>(null);
 	let scanDocked = $state(true);
-	let heroCopy = $state<HTMLDivElement | null>(null), heroFrame = $state<HTMLDivElement | null>(null);
-	let walkFits = $state(false);
-	// Shown only while the hero runs its scroll scene (CSS decides).
-	let walkMark = $state<HTMLElement | null>(null);
 	$effect(() => {
-		if (!scanDock || !walkMark || !heroCopy || !heroFrame) return;
-		const dock = scanDock, mark = walkMark, copy = heroCopy, frame = heroFrame;
+		if (!scanDock) return;
+		const dock = scanDock;
 		let observer: IntersectionObserver | undefined;
-		// CSS switches the mark on/off when height or motion preferences change.
-		// Reobserve after rotation so docking follows the currently visible layout.
+		// Reobserve after rotation: the header height, and so the margin, follows the width.
 		const resize = new ResizeObserver(() => {
-			const style = getComputedStyle(frame);
-			// Natural height and CSS's viewport budget are identical in both layouts.
-			// Animated transforms never affect the fit test or cause observer feedback.
-			walkFits = copy.offsetHeight + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) <= parseFloat(style.minHeight);
 			observer?.disconnect();
 			const header = getComputedStyle(document.documentElement).getPropertyValue('--header-h') || '0px';
-			const walking = getComputedStyle(mark).display !== 'none';
-			observer = new IntersectionObserver(([entry]) => { scanDocked = walking ? entry.isIntersecting : entry.intersectionRatio === 1; }, { rootMargin: `-${header} 0px 0px`, threshold: walking ? 0 : 1 });
-			observer.observe(walking ? mark : dock);
+			observer = new IntersectionObserver(([entry]) => { scanDocked = entry.intersectionRatio === 1; }, { rootMargin: `-${header} 0px 0px`, threshold: 1 });
+			observer.observe(dock);
 		});
-		resize.observe(dock); resize.observe(mark); resize.observe(copy); resize.observe(frame);
+		resize.observe(dock);
 		return () => { resize.disconnect(); observer?.disconnect(); };
 	});
 	// Discord's online members load through the Worker once their card is about a screen
@@ -112,6 +105,14 @@
 		observer.observe(discordCard);
 		return () => observer.disconnect();
 	});
+
+	// The link strip under the hero.
+	const stripLinks = $derived([
+		{ href: DISCORD_INVITE, label: m.links.discord, icon: DiscordLogo },
+		{ href: INSTAGRAM, label: m.links.instagram, icon: InstagramLogoIcon },
+		{ href: GOOGLE_MAPS, label: m.links.maps, icon: MapPinIcon },
+		{ href: LINKEDIN, label: m.links.linkedin, icon: LinkedinLogoIcon }
+	]);
 	// Photograph derivatives from scripts/build-photos.ts.
 	const photoSrcset = (name: string) => [960, 1280, 1920, 2560].map((width) => `/photos/${name}-${width}.webp ${width}w`).join(', ');
 
@@ -322,7 +323,7 @@
 			{ '@type': 'WebSite', name: 'Ampoteket', url: `${PROD_ORIGIN}/`, inLanguage: ['nb', 'en'] },
 			{
 				'@type': 'Organization', name: 'Ampoteket', url: `${PROD_ORIGIN}/`, logo: `${PROD_ORIGIN}/brand/mark-square-180.png`,
-				description: m.description, sameAs: [INSTAGRAM],
+				description: m.description, sameAs: [INSTAGRAM, LINKEDIN],
 				address: { '@type': 'PostalAddress', streetAddress: 'Pilestredet 35', addressLocality: 'Oslo', addressCountry: 'NO' }
 			}
 		]
@@ -339,37 +340,34 @@
 	{@html structuredData}
 </svelte:head>
 
-<!-- The storefront act. Where scroll-driven animations run, motion is welcome
-     and the viewport is tall enough, a --walk timeline pins the stage: the
-     storefront grows toward its window and dissolves into the room inside,
-     where the quote appears. Elsewhere the same DOM stacks as two still
-     figures: storefront with the copy, then the room with the quote. -->
-<section class="focus-night relative isolate bg-night walk-motion:walk-scene walk-motion:h-[250svh]" data-walk-fits={walkFits || undefined} aria-labelledby="hero-title">
-	<!-- In the scene the scanner dock fades instead of scrolling away; the floating
-	     trigger takes over when this mark, placed where the fade ends, passes the header. -->
-	<div bind:this={walkMark} class="pointer-events-none absolute top-[calc(27svh+var(--header-h))] hidden size-px walk-motion:block" aria-hidden="true"></div>
-	<div class="relative grid overflow-hidden walk-motion:sticky walk-motion:top-[var(--header-h)] walk-motion:h-[calc(100svh-var(--header-h))]">
+<!-- The storefront, the link strip, then the room with the quote: three rows of one
+     night stage. Where scroll-driven animation runs and motion is welcome, the storefront
+     recedes as it leaves and the room opens out from under the strip (app.css). -->
+<section class="focus-night relative isolate bg-night" aria-labelledby="hero-title">
+	<!-- Clip, not hidden: a scroll container would capture the photographs' view timelines. -->
+	<div class="relative grid overflow-clip">
 		<!-- Phones: the window between the status strip and the copy, fading into the
 		     night; short screens give it less height so the headline stays on the
 		     feathered floor. From 64rem: the
 		     photograph fills the right of the stage, feathered on three sides, and is
 		     lowered 12% so the lit window is centred on the copy rather than riding high.
 		     The mask sits on the image, so the feather moves with it. -->
-		<figure class="relative col-start-1 row-start-1 m-0 h-[clamp(10rem,100svh-24rem,56svh)] origin-[46%_38%] max-lg:mt-15 md:max-lg:mt-19 lg:ml-[40%] lg:h-auto lg:origin-center walk-motion:walk-approach">
+		<figure class="relative col-start-1 row-start-1 m-0 h-[clamp(10rem,100svh-24rem,56svh)] origin-[46%_38%] max-lg:mt-15 md:max-lg:mt-19 lg:ml-[40%] lg:h-auto lg:origin-[35%_50%] scroll-motion:storefront-leave">
 			<img class="absolute inset-0 size-full object-cover object-[28%_50%] mask-b-from-55% max-lg:mask-t-from-85% lg:translate-y-[12%] lg:object-[0%_50%] lg:mask-l-from-75% lg:mask-y-from-75%"
 				srcset={photoSrcset('storefront')} sizes="(min-width: 64rem) 60vw, 130vw" src="/photos/storefront-1280.webp" width="4066" height="3100"
 				alt={m.photos.storefront} fetchpriority="high" />
+			<div class="absolute inset-0 bg-night opacity-0 scroll-motion:storefront-dim" aria-hidden="true"></div>
 		</figure>
 		<!-- Viewfinder corners around the scene; artwork only. -->
 		<div class="pointer-events-none relative z-30 col-start-1 row-start-1 hidden lg:block" aria-hidden="true"><Brackets class="inset-4 text-night-muted" /></div>
-		<div bind:this={heroFrame} class={pageContainer({ class: 'relative z-10 col-start-1 row-start-1 grid min-h-[calc(100svh-var(--header-h))] w-full grid-cols-[minmax(0,1fr)] content-end pt-16 pb-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:content-center lg:py-24 walk-motion:walk-away' })}>
+		<div class={pageContainer({ class: 'relative z-10 col-start-1 row-start-1 grid min-h-[calc(100svh-var(--header-h))] w-full grid-cols-[minmax(0,1fr)] content-end pt-16 pb-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:content-center lg:py-24' })}>
 			<!-- Sized to its own column, so a wide fallback font cannot push the headline
 			     or lede into the photograph; smaller on short screens, where the pinned
 			     stage cannot grow and the copy would reach the status strip. -->
-			<div bind:this={heroCopy} class="@container grid min-w-0 grid-cols-[minmax(0,1fr)] justify-items-start gap-5 md:gap-6">
+			<div class="@container grid min-w-0 grid-cols-[minmax(0,1fr)] justify-items-start gap-5 md:gap-6 scroll-motion:copy-leave">
 				<h1 id="hero-title" class="w-full min-w-0 max-w-[16ch] text-[clamp(2.25rem,12.5cqi,5.25rem)] text-night-foreground [@media(max-height:40rem)]:text-[clamp(1.75rem,10cqi,3rem)]">{m.hero.title}</h1>
 				<p class="w-full min-w-0 max-w-[var(--measure-lede)] text-[clamp(1.125rem,1rem+0.6vw,1.375rem)] text-night-muted">{m.hero.lede}</p>
-				<div class={[formActions, 'min-w-0 max-w-full phone:items-stretch walk-motion:walk-hide']}>
+				<div class={[formActions, 'min-w-0 max-w-full phone:items-stretch']}>
 					{#if !data.salesOpen}
 					<!-- Holds the scan dock's place so the hero's fit test still runs. -->
 					<Badge bind:ref={scanDock} variant="outline" class="min-h-11 h-auto gap-2 border-transparent px-0 text-base text-night-foreground"><Icon icon={ClockIcon} />{m.hero.maintenance}</Badge>
@@ -381,16 +379,26 @@
 				</div>
 			</div>
 		</div>
-		<!-- Inside: the room at night, and the page's best sentence over its dark floor.
-		     It holds nothing interactive, so while faded out it lets taps through. -->
-		<div class="relative z-20 col-start-1 row-start-2 grid min-h-[85svh] content-end walk-motion:pointer-events-none walk-motion:row-start-1 walk-motion:min-h-0">
-			<figure class="absolute inset-0 m-0 walk-motion:walk-inside">
+		<!-- The link strip: a quiet seam between the storefront and the room, below the first
+		     screen, in the voice of the place/clock row. Phones show the symbols only. It sticks
+		     under the header through the room and leaves with it (the stage is its containing
+		     block); nothing focusable sits beneath it, so scroll padding stays the header's. -->
+		<nav class="sticky top-[var(--header-h)] z-30 col-start-1 row-start-2 self-start border-y border-night-border bg-night" aria-label={m.links.label}>
+			<ul class={pageContainer({ class: 'flex list-none flex-wrap items-center justify-center gap-x-10 py-1 text-sm phone:gap-x-6' })}>
+				{#each stripLinks as link (link.href)}
+					<li><a href={link.href} target="_blank" rel="external noopener" class="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-sm text-night-muted no-underline hover:text-night-foreground"><Icon icon={link.icon} class="size-4 text-current phone:size-5" /><span class="phone:sr-only">{link.label}</span><span class="sr-only"> {i18n.m.newTab}</span></a></li>
+				{/each}
+			</ul>
+		</nav>
+		<!-- Inside: the room at night, and the page's best sentence over its dark floor. -->
+		<div class="relative z-20 col-start-1 row-start-3 grid min-h-[85svh] content-end">
+			<figure class="absolute inset-0 m-0 scroll-motion:room-open">
 				<img class="absolute inset-0 size-full object-cover object-[30%_40%] lg:object-[50%_35%]"
 					srcset={photoSrcset('workshop')} sizes="(min-width: 64rem) 100vw, 230vw" src="/photos/workshop-1280.webp" width="5425" height="3876"
 					alt={m.photos.workshop} loading="lazy" decoding="async" />
 				<div class="absolute inset-0 bg-[linear-gradient(to_top,var(--night),color-mix(in_srgb,var(--night)_55%,transparent)_40%,transparent_70%)]" aria-hidden="true"></div>
 			</figure>
-			<figure class={pageContainer({ class: 'relative m-0 w-full pt-24 pb-24 max-md:pr-10 md:pb-16 lg:pb-24 walk-motion:walk-quote' })}>
+			<figure class={pageContainer({ class: 'relative m-0 w-full pt-24 pb-24 max-md:pr-10 md:pb-16 lg:pb-24 scroll-motion:quote-rise' })}>
 				<blockquote class="m-0 border-l-2 border-night-accent pl-6 md:pl-8"><p class="max-w-[24ch] text-[clamp(1.75rem,1.1rem+2.6vw,3.5rem)] leading-[1.1] font-light tracking-tight text-night-foreground">{m.about.quote}</p></blockquote>
 				<figcaption class="mt-5 pl-6 text-sm text-night-muted md:pl-8">{m.about.quoteBy}</figcaption>
 			</figure>

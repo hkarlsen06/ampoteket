@@ -45,29 +45,26 @@ eyebrows or section numbers.
 
 ### 2.1 Header and footer (`+layout.svelte`)
 
-The header holds the wordmark, Discord's official symbol (`DiscordLogo.svelte`, foreground
-colour only, per Discord's brand rules, left of the catalog icon) linking the permanent invite
-(`DISCORD_INVITE` in `src/lib/i18n/index.ts`), the cart icon (badge from
-`localStorage["ampoteket:cart"]`) and a menu button. An Instagram icon (`INSTAGRAM`) follows
-Discord above 40rem and becomes a menu row after the catalog on phones. Discord and Instagram
-are left out of the header and menu on `/cart` and `/checkout`. Above 40rem, Admin, catalog (storefront) and cart are icon-only header links with
-tooltips; Discord with Instagram and catalog with cart sit in gapless pairs. The menu holds News, Calendar, Contact, scanning and the language picker. At phone
+The header holds the wordmark, the cart icon (badge from `localStorage["ampoteket:cart"]`)
+and a menu button; it carries no Discord or Instagram links (those are the link strip, §2.2,
+and the footer). Above 40rem, Admin, catalog (storefront) and cart are icon-only header links with
+tooltips; catalog and cart sit in a gapless pair. The menu holds News, Calendar, Contact, scanning and the language picker. At phone
 widths, catalog and Admin move into the menu and scanning follows the placement below.
 The same DOM adapts through CSS, and opening the menu does not move the header.
 Without JavaScript the button is hidden and the panel is the
 header's second row (`html.no-js`, set in `src/app.html`). The Admin link appears only
 after active staff membership is confirmed; the footer login link is always there. The
-footer also names the operators and photographer (`footer.about`) and links news, help, `/privacy` and
-Discord. On
+footer also names the operators and photographer (`footer.about`) and links news, help, `/privacy`,
+Discord and Instagram. On
 phones (≤ 40rem) the scanner is a Scan button in the hero, then a floating button once
 that scrolls under the header. The layout emits site-wide link-preview metadata; this
 page adds `og:title`, `og:description` and schema.org `WebSite` and `Organization`
-JSON-LD (name, logo, address, Instagram) for search results.
+JSON-LD (name, logo, address, Instagram, LinkedIn) for search results.
 
 ### 2.2 Hero
 
-A scheme-stable `--night` stage telling one walk: up to the lit storefront window, then
-inside. The copy names the workshop, what is in the room and where, and leads to `/p`.
+A scheme-stable `--night` stage in three still rows: the lit storefront window with the
+copy, the link strip, then the room inside with the quote. The copy names the workshop, what is in the room and where, and leads to `/p`.
 Beside the catalog, a `night-outline` secondary («Hva skjer») leads to `/news`
 ([page-news.md](page-news.md)) while an article is published (§1); the catalog stays the
 hero's one primary action, and the secondary shows nothing live.
@@ -78,24 +75,19 @@ gives way to the copy on short screens, so the headline sits on its feathered fl
 the actions keep whole labels and stack full width when they do not fit side by side. Holding it for 600 ms opens `/admin` instead: a hidden staff shortcut,
 not an access control (the admin layout still requires sign-in).
 
-**Walk-in.** With scroll-driven animation support, motion allowed and a viewport at
-least 40rem high (`walk-motion:` in `app.css`), the walk is eligible only when its copy
-and padding fit the viewport space. The first render is static. The existing
-`ResizeObserver` measures natural copy height against the frame's CSS `min-height`,
-without animated transforms. This accessibility guard qualifies motion only; CSS
-still owns the breakpoints and the single DOM. The first row keeps the same geometry
-when motion becomes eligible, and font enlargement can restore the static layout.
-
-The animated section is a tall `view-timeline` with a pinned stage: the copy fades,
-the storefront grows and dissolves into the room photograph, and Eirik Holm's quote
-rises in. CSS drives the animation; no scroll listener. At the end the action row turns
-`visibility: hidden` so a faded button takes no taps or focus. On phones the scanner
-dock fades, so the floating trigger takes over when a mark 27svh below the section top
-passes the header. With insufficient room, without JavaScript or animation support,
-or with reduced motion, the same DOM stacks as two still figures and grows with its
-text. Actions remain reachable by
-ordinary document scrolling in landscape and at high zoom. Scanner docking follows
-the active CSS layout after rotation or a change in motion preferences.
+**Hand-over.** With scroll-driven animation support and motion allowed (`scroll-motion:` in
+`app.css`), the stage hands the storefront over to the room across the link strip. Nothing
+pins and the strip never crosses a photograph: each part runs on its own `view()` timeline.
+As the storefront row leaves, its photograph drifts slower than the page, eases toward the
+window and darkens under a `--night` overlay, and the copy rises a little faster. As the room
+enters it opens out from under the strip (a clip widening from the centre while it settles
+from a slight zoom), and the quote rises in. Only transforms, clips and the overlay animate;
+no filter touches the graded photographs, and the first screen is identical at rest. The
+stage clips with `overflow: clip`, never `hidden`, which would make it the scroll container
+and freeze the timelines. Reduced motion and browsers without support get the still rows.
+On phones the scanner sits
+beside the catalog button and the floating trigger takes over once that button is no longer
+wholly below the header; docking follows the layout after rotation.
 
 The frame is decorative (`aria-hidden`) except two links. The room (PS126 · Pilestredet 35)
 opens MazeMap behind MazeMap's own logo, which students already know from campus; the
@@ -110,6 +102,17 @@ legible through the feathered photograph and the `--night` surface alone, and th
 glow belongs to `Led.svelte` only. Copy is specific to the place (the shelf you take
 parts from yourself, the printers and instruments actually there) and counts the
 printers: there are two Bambu Lab P2S, never «a 3D printer».
+
+**Link strip.** A quiet seam between the storefront and the room, so it starts just below
+the first screen: «we are here if you need us», never a call to action. One slim centred row
+between `night-border` hairlines, named «Finn oss» / “Find us”, in the voice of the
+place/clock row: small `night-muted` symbol and label pairs that brighten to
+`night-foreground` on hover. Links: Discord (`DISCORD_INVITE`, Discord's official symbol),
+Instagram (`INSTAGRAM`), Google Maps (`GOOGLE_MAPS`, Ampoteket's place) and LinkedIn
+(`LINKEDIN`), all in `src/lib/i18n/core.ts`. Phones show
+the symbols only, with the names for screen readers. It sticks under the header (`sticky`,
+`top: var(--header-h)`) while the room scrolls past and leaves with it, since the stage is its
+containing block. Nothing focusable sits under it, so scroll padding stays the header's.
 
 ### 2.3 «Dette er Ampoteket»
 
@@ -248,7 +251,7 @@ in Discord (Server Settings, Engagement, Server Widget).
 - One `h1`, an `h2` per section, `h3` inside. No «staff» in user-facing copy.
 - Check both languages at 320 × 568, 360 × 640, 768 and 1280, both schemes, and with
   JavaScript off. Also check short viewports at 320 × 256, 667 × 375 and 844 × 390,
-  enlarged text, and rotation between the still and animated layouts. The hero
+  enlarged text, and rotation. The hero
   headline breaks first.
 
 ## 4. Acceptance
@@ -257,7 +260,6 @@ in Discord (Server Settings, Engagement, Server Widget).
 models against the dev server. Executed checks are in [VALIDATION.md](../VALIDATION.md).
 Still open:
 
-- The walk-in on a real iPhone (Safari) and Android phone.
 - Lighthouse (mobile and desktop).
 - Link preview in a real sharing debugger (checked only in source).
 - External phone cameras opening the scheme-less label QR address.
