@@ -57,6 +57,8 @@ jobs:
           BROWSERS: firefox ${{ matrix.proof == 'scanner' && 'webkit' || '' }}
         run: |
           read -ra names <<< "$BROWSERS"
+          # Without a pty, dpkg stays in the capped process group, so a timeout also stops it and frees the dpkg lock for the retry.
+          echo 'Dpkg::Use-Pty "0";' | sudo tee /etc/apt/apt.conf.d/90-ci-no-pty >/dev/null
           attempt() {
             sudo timeout -k 10s 2m env "PATH=$PATH" bash -ec "
               bunx --no-install playwright install-deps ${names[*]}
@@ -65,7 +67,7 @@ jobs:
           }
           attempt || {
             echo '::warning::Install failed or stalled; retrying without the Azure apt mirror'
-            sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+            if [ -f /etc/apt/apt-mirrors.txt ]; then sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt; fi
             sudo dpkg --configure -a
             attempt
           }
