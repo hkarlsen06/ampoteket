@@ -145,6 +145,11 @@ links or copy. The colour scheme follows the OS; there is no theme toggle.
 
 ## Git history
 
+Push a topic branch and open a pull request with `gh pr create`. A pull request runs
+Validation and never deploys, because `Deploy` runs only after Validation passes for a push to
+`main`. Merging into `main` or pushing to it deploys production, so do either only when the
+owner says so.
+
 Prefer rebasing over merge commits when integrating branches. Rebase the topic branch onto the
 current target branch, then use a fast-forward merge so history stays linear. Do not create a
 merge commit unless the user explicitly requests one or rebasing would rewrite shared history.
@@ -177,7 +182,8 @@ Several sessions often share this worktree at once:
 - Stage only the paths you changed (`git add <path>`), never `git add -A` or
   `git commit -a`. Another session's half-finished work must not ride along into a
   commit, since a push deploys it.
-- The dev server (5174) and local Convex backend (54329) ports are pinned. Before starting one,
+- The dev server (5174) and local Convex backend (54329) ports are pinned, so one dev server
+  runs per machine, whatever the worktree. Before starting one,
   check whether it is already serving (`ss -ltnp | grep -E ':(5174|54329) '`); a
   running server may be the owner's or another session's, so do not kill it or
   assume it runs your code.
@@ -185,6 +191,14 @@ Several sessions often share this worktree at once:
   (the owner's tailnet Caddy in front of 5174) instead.
 - `node_modules` is shared too. If `svelte-kit sync` or a check fails right after
   a dependency change landed, run `bun install --frozen-lockfile` before debugging.
+
+Code-writing subagents each work in their own git worktree:
+
+- Run `bun install --frozen-lockfile` in a new worktree before any check.
+- `./scripts/test-convex.sh` and `./scripts/test-web.sh` start their own disposable Convex
+  backend on free ports, so any agent may run them in its own worktree.
+- Run one `./scripts/test-web.sh` at a time across all agents. Concurrent browser runs
+  ran one-m (8 GB) out of memory.
 
 ## UI rules
 
@@ -249,8 +263,3 @@ headers.
 
 Complete and verify the requested scope before stopping. An audit produces findings;
 apply changes when the user requests fixes.
-
-## Keep going without input
-
-When a step doesn't need my input, keep going. Put status notes in the same message as your next action.
-Stop and ask only when you can't continue without me, or before anything destructive: deleting data, force-pushing, or changing anything outside this repository.
