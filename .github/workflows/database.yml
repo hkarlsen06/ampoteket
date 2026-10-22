@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   backend:
-    runs-on: ubuntu-24.04
+    runs-on: one-m
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -31,7 +31,7 @@ jobs:
         run: ./scripts/test-convex.sh
 
   web:
-    runs-on: ubuntu-24.04
+    runs-on: one-m
     timeout-minutes: 30
     strategy:
       fail-fast: false
