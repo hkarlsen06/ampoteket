@@ -35,7 +35,7 @@ provider configuration and the verified import into the production Convex deploy
 | Hosted database | Convex project `ampoteket`, production deployment `useful-bass-249` (`https://useful-bass-249.eu-west-1.convex.cloud`, EU West, Ireland) is **production with real data**. It was imported at 16:40 UTC on 2026-10-17 from a read-only export of Supabase taken with sales closed, and the import verified every table, the stock projection and every product balance against the export: 149 active products (151 in all), 5 active admins with their Supabase password hashes (the owner signed in on the live site afterwards), 9 checkouts, 158 stock events, 558 audit rows (the audit log runs from its truncation on 2026-10-02). The same data was rehearsed on the development deployment `rosy-ostrich-835` first, where the owner signed in with an existing password and saved a count. Seven capacitors have look-alikes; `CAP-C1B5B` and `CAP-49067` still differ in nothing until a volunteer enters a specification. One product (the ST-Link programmer) is borrow-only. The Supabase project `mqzcbdorjuefefzvuefa` (Stockholm) was unchanged between the export and the switch and was paused on 2026-10-17 as the rollback copy ([runbook-cutover.md §5](docs/runbook-cutover.md#5-rollback)); deleting it is a separate owner decision. The export files were deleted after the cutover. Connection methods: [reaching the hosted project](docs/runbook-deploy.md#reaching-the-hosted-project). Read-only checks are fine; writes, imports and deletions only at the owner's explicit request. |
 | Email | Convex Auth sends invitations and password resets through the Resend API as `Ampoteket <noreply@notify.ampoteket.no>` (`convex/lib/email.ts`); the Worker sends buyer receipts the same way. The domain is verified in Resend. Convex variables `SITE_URL` (`https://ampoteket.no`) and `RESEND_API_KEY` are set; sign-up is refused. No invitation or reset has been sent through Convex yet, no buyer receipt has been delivered, and no real message's DKIM/SPF alignment has been checked. |
 | Stock and labels | Opening counts entered for 148 of 149 active products (133 with stock on hand); many are estimates rather than exact counts. No labels printed or attached. |
-| Operations | Hjalmar Karlsen (`hkarlsen06`) is the primary operator for account access, backups and contact retention. An independent backup operator, accepted recovery targets, storage and schedules remain open. Main protection requires no status checks since 2026-10-04 (owner's choice, so changes can go straight to `main`); linear history is required and force pushes/deletion are blocked. Deploy still waits for Validation to pass. Vulnerability alerts, automated security fixes, secret scanning and push protection are enabled. |
+| Operations | Hjalmar Karlsen (`hkarlsen06`) is the primary operator for account access, backups and contact retention. An independent backup operator, accepted recovery targets, storage and schedules remain open. Main protection requires no status checks since 2026-10-04 (owner's choice, so the owner can push straight to `main`); linear history is required and force pushes/deletion are blocked. Deploy still waits for Validation to pass. Vulnerability alerts, automated security fixes, secret scanning and push protection are enabled. |
 | Open launch checks | Still open in `VALIDATION.md`: phones (P01–P19), labels, hosted email (no Convex invitation or reset and no buyer receipt delivered yet), independent backup operator and RPO/RTO, restore drill. |
 
 ## Read relevant guidance first
@@ -145,6 +145,11 @@ links or copy. The colour scheme follows the OS; there is no theme toggle.
 
 ## Git history
 
+Push a topic branch and open a pull request with `gh pr create`. A pull request runs
+Validation and never deploys, because `Deploy` runs only after Validation passes for a push to
+`main`. Merging into `main` or pushing to it deploys production, so do either only when the
+owner says so.
+
 Prefer rebasing over merge commits when integrating branches. Rebase the topic branch onto the
 current target branch, then use a fast-forward merge so history stays linear. Do not create a
 merge commit unless the user explicitly requests one or rebasing would rewrite shared history.
@@ -177,7 +182,8 @@ Several sessions often share this worktree at once:
 - Stage only the paths you changed (`git add <path>`), never `git add -A` or
   `git commit -a`. Another session's half-finished work must not ride along into a
   commit, since a push deploys it.
-- The dev server (5174) and local Convex backend (54329) ports are pinned. Before starting one,
+- The dev server (5174) and local Convex backend (54329) ports are pinned, so one dev server
+  runs per machine, whatever the worktree. Before starting one,
   check whether it is already serving (`ss -ltnp | grep -E ':(5174|54329) '`); a
   running server may be the owner's or another session's, so do not kill it or
   assume it runs your code.
@@ -185,6 +191,14 @@ Several sessions often share this worktree at once:
   (the owner's tailnet Caddy in front of 5174) instead.
 - `node_modules` is shared too. If `svelte-kit sync` or a check fails right after
   a dependency change landed, run `bun install --frozen-lockfile` before debugging.
+
+Code-writing subagents each work in their own git worktree:
+
+- Run `bun install --frozen-lockfile` in a new worktree before any check.
+- `./scripts/test-convex.sh` and `./scripts/test-web.sh` start their own disposable Convex
+  backend on free ports, so any agent may run them in its own worktree.
+- Run one `./scripts/test-web.sh` at a time across all agents. Concurrent browser runs
+  ran one-m (8 GB) out of memory.
 
 ## UI rules
 
@@ -249,8 +263,3 @@ headers.
 
 Complete and verify the requested scope before stopping. An audit produces findings;
 apply changes when the user requests fixes.
-
-## Keep going without input
-
-When a step doesn't need my input, keep going. Put status notes in the same message as your next action.
-Stop and ask only when you can't continue without me, or before anything destructive: deleting data, force-pushing, or changing anything outside this repository.
