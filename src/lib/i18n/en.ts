@@ -239,7 +239,7 @@ export const en: Messages = {
 				resistance: (value: string, restated: string | null) => restated ? `${value} is ${restated}, an unusually large resistor.` : `${value} is an unusually large resistor.`,
 				capacitance: (value: string, restated: string | null) => restated ? `${value} is ${restated}, an unusually large capacitor.` : `${value} is an unusually large capacitor.`
 			},
-			series: (value: string) => `${value} isn't an E24 or E96 value.`,
+			series: (value: string) => `${value} is an uncommon value. You can still save if it matches the component.`,
 			duplicates: 'May already exist:'
 		},
 		newTitle: 'New product | Admin | Ampoteket', noProducts: 'No products yet.', clearSearch: 'Clear search and filters', unknownSpecification: 'Unknown specification', attributeRejected: 'This value was rejected. Check it and try again.', title: 'Products | Admin | Ampoteket', heading: 'Products',

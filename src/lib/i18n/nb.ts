@@ -240,7 +240,7 @@ export const nb = {
 				resistance: (value: string, restated: string | null) => restated ? `${value} er ${restated}, en uvanlig stor motstand.` : `${value} er en uvanlig stor motstand.`,
 				capacitance: (value: string, restated: string | null) => restated ? `${value} er ${restated}, en uvanlig stor kondensator.` : `${value} er en uvanlig stor kondensator.`
 			},
-			series: (value: string) => `${value} er ikke en E24- eller E96-verdi.`,
+			series: (value: string) => `${value} er en uvanlig verdi. Du kan likevel lagre hvis den stemmer med komponenten.`,
 			duplicates: 'Finnes kanskje allerede:'
 		},
 		newTitle: 'Nytt produkt | Admin | Ampoteket', noProducts: 'Ingen produkter ennå.', clearSearch: 'Fjern søk og filtre', unknownSpecification: 'Ukjent spesifikasjon', attributeRejected: 'Verdien ble avvist. Kontroller den og prøv igjen.', title: 'Produkter | Admin | Ampoteket', heading: 'Produkter',
