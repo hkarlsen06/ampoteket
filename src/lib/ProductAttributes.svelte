@@ -196,10 +196,6 @@
 	// (product-warnings.ts). It never blocks saving and changes only as the field is left.
 	const checkedCode = $derived(family === 'RES' ? 'resistance' : family === 'CAP' ? 'capacitance' : null);
 	let valueWarnings = $state<Record<string, ValueWarning | null>>({});
-	const checkedValue = $derived.by(() => {
-		const definition = layout.fields.find(field => field.code === checkedCode);
-		return definition ? { warning: valueWarnings[definition.id] ?? null } : null;
-	});
 	function check(definition: AttributeDefinition) {
 		if (definition.value_type !== 'number') return;
 		const read = (input: string) => {
@@ -298,6 +294,7 @@
 			{:else}<Skeleton class="h-12 w-full max-w-68 justify-self-stretch" aria-hidden="true" /><span class="sr-only" role="status">{m.loading}</span>{/if}
 		</div>
 	{:else}
+		{#if layout.fields.some(definition => definition.value_type === 'number')}<Field.Description id={`${uid}-hint`}>{m.attributesHint}</Field.Description>{/if}
 		<!-- Rows align at the top: number fields carry «Min–maks» under their input. -->
 		<div class={[formGrid, 'items-start']}>
 			{#each layout.fields as definition (definition.id)}
@@ -306,7 +303,7 @@
 				{@const locked = disabled || definitionState.conflict || definition.id === pendingId}
 				{@const error = errors[definition.id]}
 				{@const warning = definition.code === checkedCode ? valueWarnings[definition.id] : null}
-				{@const describedBy = [error && `${id}-error`, warning && `${uid}-warning`, definition.value_type === 'number' && `${uid}-hint`].filter(Boolean).join(' ') || undefined}
+				{@const describedBy = [error && `${id}-error`, warning && `${id}-warning`, definition.value_type === 'number' && `${uid}-hint`].filter(Boolean).join(' ') || undefined}
 				{@const range = isRange(definition)}
 				{@const name = `${specificationLabel(definition.code, definition, i18n.locale)}${unit ? ` (${unit})` : ''}`}
 				<!-- A range takes two columns, so Min and Max sit side by side, even at 360 px. -->
@@ -343,12 +340,10 @@
 					{#if definition.value_type === 'number'}<div><Button type="button" variant="link" size="sm" disabled={locked} onclick={() => toggleRange(definition)}>{range ? m.singleValue : m.rangeToggle}</Button></div>{/if}
 					{#if error}<Field.Error id={`${id}-error`}>{error === 'stale' ? m.attributeChanged(display(saved(definition.id), unit)) : error === 'rejected' ? m.attributeRejected
 						: error === 'incomplete' ? m.attributeRangeIncomplete : error === 'order' ? m.attributeRangeOrder : m.attributeInvalid}</Field.Error>{/if}
+					{#if definition.code === checkedCode}<FieldWarning id={`${id}-warning`} show={Boolean(warning)}>{warning ? warningText(warning) : ''}</FieldWarning>{/if}
 				</Field.Field>
 			{/each}
 		</div>
-		<!-- Below the grid, so a row of fields never grows unevenly; the text names the value. -->
-		{#if checkedValue}<FieldWarning id={`${uid}-warning`} show={Boolean(checkedValue.warning)}>{checkedValue.warning ? warningText(checkedValue.warning) : ''}</FieldWarning>{/if}
-		{#if layout.fields.some(definition => definition.value_type === 'number')}<Field.Description id={`${uid}-hint`}>{m.attributesHint}</Field.Description>{/if}
 		<div class={formGrid}>
 			{#if layout.addable.length}
 				<Field.Field class="col-span-2 md:col-span-1">
