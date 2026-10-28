@@ -151,8 +151,8 @@ settings and a deploy without `--env production` cannot replace the live Worker.
 Use the locked Wrangler (`bunx --no-install`) and check the account with
 `wrangler whoami`.
 
-`SALES_OPEN` set to `"true"` opens buying; anything else shows the shop as opening
-soon. Change it in `wrangler.jsonc` and push: every deploy replaces the vars, so a
+`SALES_OPEN` set to `"true"` opens buying; anything else closes buyer routes for
+maintenance with HTTP 503. Change it in `wrangler.jsonc` and push: every deploy replaces the vars, so a
 dashboard edit lasts only until the next one.
 
 The Worker secrets are `CHECKOUT_SERVER_KEY` (the same value as the Convex
