@@ -123,12 +123,13 @@
 				{#if snapshot.lastCountedAt}<p class="text-muted-foreground">{m.lastCount(formatCountedAt(snapshot.lastCountedAt, i18n.locale))}</p>{/if}
 			</div>
 			<form id={`${id}-form`} class={formLayout} onsubmit={submit}>
-				<Field.Group layout="row">
-					<Field.Field width="medium"><Field.Label for={`${id}-1`}>{m.observed} <span class="sr-only">({unitLabel(product.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id={`${id}-1`} bind:ref={quantityField} inputmode="decimal" autocomplete="off" enterkeyhint="next" required bind:value={quantity} disabled={busy || Boolean(command)} aria-invalid={status === 'invalid'} aria-describedby={`${id}-quantity-hint${status === 'invalid' ? ` ${id}-quantity-error` : ''}`} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(product.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root></Field.Field>
+				<Field.Group layout="row" class="items-start">
+					<Field.Field width="medium"><Field.Label for={`${id}-1`}>{m.observed} <span class="sr-only">({unitLabel(product.unit_code, i18n.locale)})</span></Field.Label><InputGroup.Root><InputGroup.Input id={`${id}-1`} bind:ref={quantityField} inputmode="decimal" autocomplete="off" enterkeyhint="next" required bind:value={quantity} disabled={busy || Boolean(command)} aria-invalid={status === 'invalid'} aria-describedby={`${id}-quantity-hint${status === 'invalid' ? ` ${id}-quantity-error` : ''}`} /><InputGroup.Addon align="inline-end" aria-hidden="true"><InputGroup.Text>{unitLabel(product.unit_code, i18n.locale)}</InputGroup.Text></InputGroup.Addon></InputGroup.Root>
+						<Field.Description id={`${id}-quantity-hint`}>{m.quantityHint(formatDecimal(product.stock_step, i18n.locale), unitLabel(product.unit_code, i18n.locale, product.stock_step))}</Field.Description>
+						{#if status === 'invalid'}<Field.Error id={`${id}-quantity-error`}>{m.invalidQuantity(formatDecimal(product.stock_step, i18n.locale))}</Field.Error>{/if}
+					</Field.Field>
 					<Field.Field width="medium"><Field.Label for={`${id}-difference`}>{m.difference}</Field.Label><output id={`${id}-difference`} class="difference flex min-h-12 items-center font-mono wrap-anywhere" class:text-destructive={difference !== null && compareDecimals(difference, '0') !== 0} class:font-semibold={difference !== null && compareDecimals(difference, '0') !== 0}>{difference === null ? m.enterQuantity : `${formatSignedDifference(difference, i18n.locale)} ${unitLabel(product.unit_code, i18n.locale, difference)}`}</output></Field.Field>
 				</Field.Group>
-				<Field.Description id={`${id}-quantity-hint`}>{m.quantityHint(formatDecimal(product.stock_step, i18n.locale), unitLabel(product.unit_code, i18n.locale, product.stock_step))}</Field.Description>
-				{#if status === 'invalid'}<Field.Error id={`${id}-quantity-error`}>{m.invalidQuantity(formatDecimal(product.stock_step, i18n.locale))}</Field.Error>{/if}
 				<Field.Field width="grow"><Field.Label for={`${id}-2`}>{m.note}</Field.Label><Textarea id={`${id}-2`} rows={3} maxlength={2000} bind:value={note} disabled={busy || Boolean(command)} aria-describedby={`${id}-note-hint`}></Textarea></Field.Field>
 				<Field.Description id={`${id}-note-hint`}>{m.noteHint}</Field.Description>
 				<Field.Field orientation="horizontal"><Checkbox id={`${id}-paused`} name={`${id}-paused`} required bind:checked={paused} disabled={busy || Boolean(command)} /><Field.Label for={`${id}-paused`} class="cursor-pointer">{m.pauseConfirmed}</Field.Label></Field.Field>

@@ -50,6 +50,7 @@
 	let headerDraft = $state({ supplierName: '', supplierReference: '', placedAt: '', offset: '', additionalCostNok: '', note: '' });
 	let lineDraft = $state({ unitCostNok: '', purchaseUrl: '', supplierSku: '' });
 	let metadataOutcome = $state<'idle' | 'saved' | 'unknown' | 'invalid' | 'conflict'>('idle');
+	let metadataLineId = $state<string | null>(null);
 	let receiptOpen = $state(page.url.searchParams.has('receive'));
 	let receiptTrigger = $state<HTMLButtonElement | null>(null);
 	let cancellationOpen = $state(false);
@@ -135,6 +136,7 @@
 				headerBasis = null;
 				lineBasis = null;
 				metadataOutcome = 'idle';
+				metadataLineId = null;
 				if (mounted) syncPending();
 			}
 			void load(id);
@@ -186,6 +188,7 @@
 	}
 	function openHeader(value: Order) {
 		editingLineId = null;
+		metadataLineId = null;
 		headerBasis = value;
 		const placedAt = osloLocal(new Date(value.placedAt));
 		const offset = possibleOsloOffsets(placedAt).find((choice) => Math.floor(Date.parse(`${placedAt}:00${choice}`) / 60000) === Math.floor(Date.parse(value.placedAt) / 60000)) ?? '';
@@ -195,6 +198,7 @@
 	}
 	function openLine(value: OrderLine) {
 		editingHeader = false;
+		metadataLineId = value.id;
 		lineBasis = value;
 		lineDraft = { unitCostNok: value.unitCostNok, purchaseUrl: value.purchaseUrl ?? '', supplierSku: value.supplierSku ?? '' };
 		metadataOutcome = 'idle';
@@ -323,6 +327,10 @@
 </script>
 
 {#snippet fieldError(id: string)}{#if invalidInput === id}<Field.Error id={`${id}-error`}>{invalidMessage}</Field.Error>{/if}{/snippet}
+{#snippet metadataStatus()}
+	<div class={formStatus} aria-live="polite">{#if metadataOutcome === 'saved'}<StateBadge tone="success">{m.metadataSaved}</StateBadge>{:else if metadataOutcome === 'invalid'}<Alert.Message appearance="inline" variant="destructive">{m.invalidMetadata}</Alert.Message>{:else if metadataOutcome === 'conflict'}<Alert.Message appearance="inline" variant="destructive">{m.metadataConflict}</Alert.Message>{:else if metadataOutcome === 'unknown'}<Alert.Message appearance="inline" variant="destructive">{m.metadataUnknown}</Alert.Message>{/if}</div>
+	{#if metadataOutcome === 'unknown'}<Button type="button" variant="outline" disabled={loading || busy} onclick={() => load()}>{m.reviewMetadata}</Button>{/if}
+{/snippet}
 <svelte:head><title>{m.detailTitle(order?.supplierName ?? m.detailHeading)}</title></svelte:head>
 <svelte:window onfocus={revalidate} ononline={revalidate} />
 <svelte:document onvisibilitychange={revalidate} />
@@ -364,8 +372,7 @@
 			</form>
 		</Collapsible.Content>
 	</Collapsible.Root>
-	<div class={formStatus} aria-live="polite">{#if metadataOutcome === 'saved'}<StateBadge tone="success">{m.metadataSaved}</StateBadge>{:else if metadataOutcome === 'invalid'}<Alert.Message appearance="inline" variant="destructive">{m.invalidMetadata}</Alert.Message>{:else if metadataOutcome === 'conflict'}<Alert.Message appearance="inline" variant="destructive">{m.metadataConflict}</Alert.Message>{:else if metadataOutcome === 'unknown'}<Alert.Message appearance="inline" variant="destructive">{m.metadataUnknown}</Alert.Message>{/if}</div>
-	{#if metadataOutcome === 'unknown'}<Button type="button" variant="outline" disabled={loading || busy} onclick={() => load()}>{m.reviewMetadata}</Button>{/if}
+	{#if metadataLineId === null}{@render metadataStatus()}{/if}
 	<section class={section({ spacing: 'divided' })} aria-labelledby="order-lines-title">
 		<Separator />
 		<h2 class={sectionHeading} id="order-lines-title">{m.orderLines}</h2>
@@ -401,6 +408,7 @@
 								</form>
 							</Collapsible.Content>
 						</Collapsible.Root>
+							{#if metadataLineId === line.id}{@render metadataStatus()}{/if}
 					</Item.Content>
 				</Item.Root>
 			{/each}

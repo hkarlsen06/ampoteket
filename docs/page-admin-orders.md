@@ -61,6 +61,9 @@ once by a new audited record; its confirmation explains that the reversal cannot
 itself be undone. Both confirmations use the destructive action style.
 No history is overwritten. Metadata edits are limited to the fields in
 [website-guide.md](website-guide.md) §5.5.
+Metadata feedback appears beside the edited header or line, including after a
+successful save closes the editor. Uncertain results show the review action in
+the same place.
 
 ## Retry and conflicts
 

@@ -129,6 +129,8 @@ remain outside the scrolling region.
   balance, never an editable field or a zero shown for a failed read. Zero price is
   valid and is what «Gratis» saves; an empty price is a field error, never borrow-only. Unit prices use `formatMoney`, with at least two decimals and all stored
   significant digits. New products start published. Unpublishing keeps identity and history.
+  On new products, the unit selector and the counting step field each explain
+  that the setting cannot change after saving.
 - Minimum stock (default 0), «Minstebeholdning», drives «Lite igjen» on staff views only.
 - A product may be published without a drawer, with an optional public location note;
   choosing a drawer clears the note.
@@ -139,6 +141,8 @@ remain outside the scrolling region.
   shows any quantity still on open supplier orders, both kept current by live
   subscriptions (`stock.inventory`, `orders.outstandingByProduct`), and links to the product's
   [stock changes](#stock-changes), which links back.
+  Counting guidance and quantity errors sit directly beneath the quantity input,
+  before the calculated difference on phones.
 - A new product takes its opening stock and a **Print label** choice in the same
   form. The quantity travels in the creation command and is posted once that command is
   acknowledged, as a single count against balance 0 at revision 0 (empty means never
