@@ -74,7 +74,7 @@
 		const resize = new ResizeObserver(() => {
 			observer?.disconnect();
 			const header = getComputedStyle(document.documentElement).getPropertyValue('--header-h') || '0px';
-			observer = new IntersectionObserver(([entry]) => { scanDocked = entry.intersectionRatio === 1; }, { rootMargin: `-${header} 0px 0px`, threshold: 1 });
+			observer = new IntersectionObserver(([entry]) => { scanDocked = entry.boundingClientRect.bottom >= (entry.rootBounds?.top ?? 0); }, { rootMargin: `-${header} 0px 0px`, threshold: 0 });
 			observer.observe(dock);
 		});
 		resize.observe(dock);

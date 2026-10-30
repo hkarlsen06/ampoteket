@@ -315,6 +315,24 @@ try {
 	await expect(page.locator('[data-scanner-dock]')).toBeEnabled({ timeout: 30000 });
 	await expect(page.locator('[data-scanner-dock]')).toBeVisible();
 	await expect(page.locator('.scanner-trigger')).toBeHidden();
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	const dockPosition = await page.locator('[data-scanner-dock]').evaluate((element) => {
+		const box = element.getBoundingClientRect();
+		const header = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--header-h'));
+		return { bottom: box.bottom + window.scrollY, header };
+	});
+	await page.evaluate(async ({ bottom, header }) => {
+		window.scrollTo(0, bottom - header - 12);
+		await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+	}, dockPosition);
+	await expect(page.locator('[data-scanner-dock]')).toBeVisible();
+	await expect(page.locator('.scanner-trigger')).toBeHidden();
+	await page.evaluate(({ bottom, header }) => window.scrollTo(0, bottom - header + 12), dockPosition);
+	await expect(page.locator('.scanner-trigger')).toBeVisible();
+	await page.evaluate(() => window.scrollTo(0, 0));
+	await expect(page.locator('[data-scanner-dock]')).toBeVisible();
+	await expect(page.locator('.scanner-trigger')).toBeHidden();
+	await page.emulateMedia({ reducedMotion: 'no-preference' });
 	const homeEntry = page.locator('.code-form input');
 	await homeEntry.fill('RES-UNSAVED');
 	await expect(page.locator('.scanner-trigger')).toBeHidden();

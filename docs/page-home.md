@@ -86,8 +86,9 @@ no filter touches the graded photographs, and the first screen is identical at r
 stage clips with `overflow: clip`, never `hidden`, which would make it the scroll container
 and freeze the timelines. Reduced motion and browsers without support get the still rows.
 On phones the scanner sits
-beside the catalog button and the floating trigger takes over once that button is no longer
-wholly below the header; docking follows the layout after rotation.
+beside the catalog button and the floating trigger takes over once that button has scrolled fully above
+the header's bottom edge. Partial visibility or clipping at the viewport bottom
+keeps the floating trigger hidden; docking follows the layout after rotation.
 
 The frame is decorative (`aria-hidden`) except two links. The room (PS126 · Pilestredet 35)
 opens MazeMap behind MazeMap's own logo, which students already know from campus; the
