@@ -29,14 +29,16 @@ Hard constraints:
 
 ## 2. `/news`
 
-Phone first: «Kommende arrangementer» with the next three events that
-have not ended, the calendar link, then «Nyheter». Both are flat lists with one
-separator between rows (`Item`), no cards. An event row has a borderless date mark
-(month over day), the title, the weekday and hours (the full date for screen readers)
-and the place. An article row has its cover, date, title, summary and, when linked, the
-event time; from 48rem the cover sits beside the text. Each row's title link covers the
-row. From 64rem the articles take the main column and the events a 23rem column beside
-them. Twelve articles per page; «Eldre nyheter» continues from the last one shown
+Phone first: «Nyheter» is a single-column feed of article cards, followed by
+«Kommende arrangementer» with the next three events that have not ended and the
+calendar link. Each article has its own subtle surface and border, including posts
+without a cover. A cover spans the card above the text; the headline comes before
+the publish date, time and author, then the summary and any linked event time.
+The title link covers the card, with a visible focus ring around the whole card.
+Events stay a flat list with separators (`Item`): a borderless date mark (month over
+day), title, weekday and hours (the full date for screen readers), and place.
+From 64rem the feed takes the main column and events a secondary 18rem column beside
+it. Twelve articles per page; «Eldre nyheter» continues from the last one shown
 (`?before=<published_at>&id=<id>`, not indexed). The page's h1 («Nyheter og
 arrangementer») is visually hidden: the two section headings already name the page.
 
@@ -44,7 +46,7 @@ arrangementer») is visually hidden: the two section headings already name the p
 time (Oslo), the cover, a bordered box with the linked event, the body (a blank line
 starts a paragraph; an image placed in the text shows there at the article's width),
 the images not placed in the text, then «Folk» and «Lenker» sections when they have
-entries. The cover opens the article unless it is placed in the text. Article rows on
+entries. The cover opens the article unless it is placed in the text. Article cards on
 `/news` show the publish date and time and the author.
 
 ## 3. `/events`

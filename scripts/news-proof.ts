@@ -10,6 +10,7 @@ import { mkdir } from 'node:fs/promises';
 import { captureFailure, fieldLabel, fits, proofEnvironment, signIn, waitForHydration } from './web-proof/harness';
 import { interceptConvex } from './web-proof/convex-socket';
 import { en } from '../src/lib/i18n/en';
+import { nb } from '../src/lib/i18n/nb';
 
 const m = en.adminNews;
 const artifacts = 'test-results/news';
@@ -182,6 +183,58 @@ try {
 	await expect(visitor.getByText(en.news.empty, { exact: true })).toBeVisible();
 	console.log('PASS: unpublishing hides the article, the event and the image; nothing is deleted');
 	expect(await fixtures.rows('news_articles')).toHaveLength(1);
+
+	// A text-only announcement must work on its own and beside a photo article.
+	const announcement = 'Leie av skap ved Ampoteket!';
+	await page.goto(`${origin}/en/admin/news/new?with=article`);
+	await waitForHydration(page);
+	await article.getByLabel(fieldLabel(m.titleLabel)).fill(announcement);
+	await article.getByLabel(fieldLabel(m.author)).fill('Alexander Rocha Rosenkilde');
+	await article.getByLabel(fieldLabel(m.summary)).fill('Er du interessert i å leie et skap, send meg en melding, så kan jeg fikse registrering.');
+	await article.getByRole('textbox', { name: fieldLabel(m.body) }).fill('Ta kontakt for å leie et skap.');
+	await page.getByRole('switch', { name: m.publishArticle, exact: true }).click();
+	await page.getByRole('button', { name: m.save, exact: true }).click();
+	await expect(page.getByText(en.admin.saved, { exact: true })).toBeVisible();
+	for (const locale of ['nb', 'en'] as const) {
+		const copy = locale === 'nb' ? nb : en;
+		for (const colorScheme of ['dark', 'light'] as const) {
+			await visitor.emulateMedia({ colorScheme });
+			for (const width of [360, 768, 1280]) {
+				await visitor.setViewportSize({ width, height: 900 });
+				await visitor.goto(`${origin}${locale === 'en' ? '/en' : ''}/news`);
+				const post = visitor.getByRole('article', { name: announcement });
+				await expect(post).toBeVisible();
+				await expect(visitor.getByText(copy.news.noUpcoming, { exact: true })).toBeVisible();
+				await fits(visitor);
+				const feed = await visitor.getByRole('region', { name: copy.news.articles, exact: true }).boundingBox();
+				const upcoming = await visitor.getByRole('region', { name: copy.news.upcoming, exact: true }).boundingBox();
+				if (!feed || !upcoming) throw new Error('Missing news sections');
+				if (width < 1024) expect(upcoming.y).toBeGreaterThanOrEqual(feed.y + feed.height);
+				else expect(upcoming.x).toBeGreaterThan(feed.x + feed.width);
+				await visitor.screenshot({ path: `${artifacts}/announcement-${locale}-${colorScheme}-${width}.png`, fullPage: true });
+				const link = post.getByRole('link', { name: announcement });
+				await link.focus();
+				await expect(link).toBeFocused();
+				await visitor.keyboard.press('Enter');
+				await expect(visitor.getByRole('heading', { name: announcement, level: 1 })).toBeVisible();
+			}
+		}
+	}
+	// Restore the photo article, leaving its event unpublished to exercise the empty sidebar.
+	await page.goto(`${origin}/en/admin/news/${articleRow.id}`);
+	await waitForHydration(page);
+	await page.getByRole('switch', { name: m.publishArticle, exact: true }).click();
+	await page.getByRole('button', { name: m.save, exact: true }).click();
+	await expect(page.getByText(en.admin.saved, { exact: true })).toBeVisible();
+	for (const colorScheme of ['dark', 'light'] as const) {
+		await visitor.emulateMedia({ colorScheme });
+		await geometry(visitor, '/en/news', `mixed-feed-${colorScheme}`, async (tab) => {
+			await expect(tab.getByRole('article')).toHaveCount(2);
+			await expect(tab.getByRole('link', { name: announcement })).toBeVisible();
+			await expect(tab.getByRole('img', { name: 'Two people soldering at a bench' })).toBeVisible();
+		});
+	}
+	console.log('PASS: text-only feed in both locales and themes at 360, 768 and 1280 px; news first on phones, secondary events on desktop, keyboard article navigation and mixed photo/text posts');
 } catch (error) {
 	for (const [index, tab] of (context?.pages() ?? []).entries()) {
 		console.error(`Open tab ${index}: ${tab.url()}`);
